@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1777920238927,
+      "tag": "0000_messy_the_call",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1777920400131,
+      "tag": "0001_amusing_banshee",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1777934019390,
+      "tag": "0002_mixed_whistler",
+      "breakpoints": true
+    }
+  ]
+}

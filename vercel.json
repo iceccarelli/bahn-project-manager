@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "installCommand": "pnpm install",
+  "buildCommand": "vite build",
+  "outputDirectory": "dist/public",
+  "framework": null,
+  "rewrites": [
+    { "source": "/((?!data\\.json|assets/).*)", "destination": "/index.html" }
+  ]
+}
