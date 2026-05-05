@@ -41,6 +41,7 @@ interface AppData {
   filters: Filters;
 }
 
+// Simple global cache (kept for optimistic local editing)
 let cachedData: AppData | null = null;
 let loadingPromise: Promise<AppData> | null = null;
 
@@ -68,6 +69,7 @@ export function useAllData() {
       setIsLoading(false);
       return;
     }
+
     loadData().then((d) => {
       setData(d);
       setIsLoading(false);
@@ -87,6 +89,19 @@ export function useFilters() {
   return { data: data?.filters ?? null, isLoading };
 }
 
+// Type-safe editable fields
+type EditableProjectField = keyof Omit<Project, "id" | "reviews">;
+type EditableReviewField = keyof Review;
+
+// Helper functions to safely mutate cached objects (avoids TS 2352 error)
+function updateProjectField(project: Project, field: EditableProjectField, value: string) {
+  (project as unknown as Record<string, unknown>)[field] = value;
+}
+
+function updateReviewField(review: Review, field: EditableReviewField, value: string) {
+  (review as unknown as Record<string, unknown>)[field] = value;
+}
+
 export function useProjects(params: {
   page: number;
   pageSize: number;
@@ -100,31 +115,54 @@ export function useProjects(params: {
   const { data: allData, isLoading: dataLoading } = useAllData();
   const [version, setVersion] = useState(0);
 
-  const applyEdit = useCallback((projectId: number, field: string, value: string) => {
-    if (cachedData) {
-      const project = cachedData.projects.find((p) => p.id === projectId);
-      if (project) {
-        (project as any)[field] = value;
-      }
-    }
-    setVersion((v) => v + 1);
-  }, []);
+  // Destructure for clean, exhaustive dependency array
+  const {
+    page,
+    pageSize,
+    search,
+    region,
+    projektleiter,
+    pruefer,
+    status,
+    department,
+  } = params;
 
-  const applyReviewEdit = useCallback(
-    (projectId: number, department: string, field: string, value: string) => {
+  const applyEdit = useCallback(
+    (projectId: number, field: EditableProjectField, value: string) => {
       if (cachedData) {
         const project = cachedData.projects.find((p) => p.id === projectId);
         if (project) {
-          const review = project.reviews.find((r) => r.department === department);
+          updateProjectField(project, field, value);
+        }
+      }
+      setVersion((v) => v + 1);
+    },
+    []
+  );
+
+  const applyReviewEdit = useCallback(
+    (
+      projectId: number,
+      departmentName: string,
+      field: EditableReviewField,
+      value: string
+    ) => {
+      if (cachedData) {
+        const project = cachedData.projects.find((p) => p.id === projectId);
+        if (project) {
+          let review = project.reviews.find((r) => r.department === departmentName);
+
           if (review) {
-            (review as any)[field] = value;
+            updateReviewField(review, field, value);
           } else {
-            project.reviews.push({
-              department,
+            // Create new review entry
+            const newReview: Review = {
+              department: departmentName,
               status: field === "status" ? value : null,
               prueferName: field === "prueferName" ? value : null,
               pruefDatum: field === "pruefDatum" ? value : null,
-            });
+            };
+            project.reviews.push(newReview);
           }
         }
       }
@@ -134,12 +172,15 @@ export function useProjects(params: {
   );
 
   const result = useMemo(() => {
-    if (!allData) return { projects: [], total: 0, page: params.page, pageSize: params.pageSize };
+    if (!allData) {
+      return { projects: [], total: 0, page, pageSize };
+    }
 
     let filtered = [...allData.projects];
 
-    if (params.search) {
-      const s = params.search.toLowerCase();
+    // Search
+    if (search) {
+      const s = search.toLowerCase();
       filtered = filtered.filter(
         (p) =>
           p.station?.toLowerCase().includes(s) ||
@@ -150,39 +191,53 @@ export function useProjects(params: {
       );
     }
 
-    if (params.region) {
-      filtered = filtered.filter((p) => p.bahnhofsmanagement === params.region);
+    // Region filter
+    if (region) {
+      filtered = filtered.filter((p) => p.bahnhofsmanagement === region);
     }
 
-    if (params.projektleiter) {
-      filtered = filtered.filter((p) => p.projektleiter === params.projektleiter);
+    // Projektleiter filter
+    if (projektleiter) {
+      filtered = filtered.filter((p) => p.projektleiter === projektleiter);
     }
 
-    if (params.pruefer) {
+    // Prüfer filter
+    if (pruefer) {
       filtered = filtered.filter((p) =>
-        p.reviews.some((r) => r.prueferName === params.pruefer)
+        p.reviews.some((r) => r.prueferName === pruefer)
       );
     }
 
-    if (params.status && params.department) {
+    // Status + Department filter
+    if (status && department) {
       filtered = filtered.filter((p) =>
         p.reviews.some(
-          (r) => r.department === params.department && r.status === params.status
+          (r) => r.department === department && r.status === status
         )
       );
-    } else if (params.status) {
+    } else if (status) {
       filtered = filtered.filter((p) =>
-        p.reviews.some((r) => r.status === params.status)
+        p.reviews.some((r) => r.status === status)
       );
     }
 
     const total = filtered.length;
-    const start = (params.page - 1) * params.pageSize;
-    const projects = filtered.slice(start, start + params.pageSize);
+    const start = (page - 1) * pageSize;
+    const projects = filtered.slice(start, start + pageSize);
 
-    return { projects, total, page: params.page, pageSize: params.pageSize };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allData, version, params.page, params.pageSize, params.search, params.region, params.projektleiter, params.pruefer, params.status, params.department]);
+    return { projects, total, page, pageSize };
+  }, [
+    allData,
+    version,
+    page,
+    pageSize,
+    search,
+    region,
+    projektleiter,
+    pruefer,
+    status,
+    department,
+  ]);
 
   return {
     data: result,

@@ -1,11 +1,11 @@
-import React, { useState, useCallback, useRef } from "react";
-import { useProjects, useFilters } from "@/hooks/useData";
+import React, { useState, useCallback } from "react";
+import { useProjects, useFilters, type Project, type Review } from "@/hooks/useData";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Loader2, Search, ChevronLeft, ChevronRight, Filter, X, Download, ArrowUpDown, ExternalLink, MessageSquare } from "lucide-react";
+import { Loader2, Search, ChevronLeft, ChevronRight, Filter, X, ArrowUpDown, ExternalLink, MessageSquare } from "lucide-react";
 import { DEPARTMENTS, REVIEW_STATUSES } from "@shared/types";
 import { toast } from "sonner";
 
@@ -45,9 +45,7 @@ function InlineEditCell({ value, onSave, className = "" }: { value: string | nul
         value={editValue}
         onChange={(e) => setEditValue(e.target.value)}
         onBlur={() => {
-          if (editValue !== (value || "")) {
-            onSave(editValue);
-          }
+          if (editValue !== (value || "")) onSave(editValue);
           setEditing(false);
         }}
         onKeyDown={(e) => {
@@ -70,6 +68,29 @@ function InlineEditCell({ value, onSave, className = "" }: { value: string | nul
     >
       {value || "-"}
     </span>
+  );
+}
+
+interface SortHeaderProps {
+  column: string;
+  label: string;
+  sortBy: string;
+  onSort: (column: string) => void;
+}
+
+function SortHeader({ column, label, sortBy, onSort }: SortHeaderProps) {
+  return (
+    <th
+      className="text-left py-2.5 px-3 font-medium text-muted-foreground whitespace-nowrap cursor-pointer hover:text-foreground transition-colors select-none"
+      onClick={() => onSort(column)}
+    >
+      <span className="inline-flex items-center gap-1">
+        {label}
+        {sortBy === column && (
+          <ArrowUpDown className="h-3 w-3 text-primary" />
+        )}
+      </span>
+    </th>
   );
 }
 
@@ -117,20 +138,6 @@ export default function Projects() {
       prev.includes(dept) ? prev.filter(d => d !== dept) : [...prev, dept]
     );
   };
-
-  const SortHeader = ({ column, label }: { column: string; label: string }) => (
-    <th
-      className="text-left py-2.5 px-3 font-medium text-muted-foreground whitespace-nowrap cursor-pointer hover:text-foreground transition-colors select-none"
-      onClick={() => handleSort(column)}
-    >
-      <span className="inline-flex items-center gap-1">
-        {label}
-        {sortBy === column && (
-          <ArrowUpDown className="h-3 w-3 text-primary" />
-        )}
-      </span>
-    </th>
-  );
 
   return (
     <div className="space-y-4">
@@ -243,11 +250,11 @@ export default function Projects() {
               <thead className="bg-muted/50">
                 <tr>
                   <th className="text-left py-2.5 px-3 font-medium text-muted-foreground whitespace-nowrap sticky left-0 bg-muted/50 z-10">Nr.</th>
-                  <SortHeader column="projektnummer" label="Projektnummer" />
-                  <SortHeader column="bahnhofsmanagement" label="Region" />
-                  <SortHeader column="station" label="Station" />
+                  <SortHeader column="projektnummer" label="Projektnummer" sortBy={sortBy} onSort={handleSort} />
+                  <SortHeader column="bahnhofsmanagement" label="Region" sortBy={sortBy} onSort={handleSort} />
+                  <SortHeader column="station" label="Station" sortBy={sortBy} onSort={handleSort} />
                   <th className="text-left py-2.5 px-3 font-medium text-muted-foreground whitespace-nowrap min-w-[200px]">Beschreibung</th>
-                  <SortHeader column="projektleiter" label="Projektleiter" />
+                  <SortHeader column="projektleiter" label="Projektleiter" sortBy={sortBy} onSort={handleSort} />
                   <th className="text-center py-2.5 px-2 font-medium text-muted-foreground whitespace-nowrap" title="Kommentar & Link">
                     <MessageSquare className="h-3.5 w-3.5 inline" />
                   </th>
@@ -280,7 +287,7 @@ export default function Projects() {
                 )}
               </thead>
               <tbody>
-                {data?.projects.map((project: any, idx: number) => {
+                {data?.projects.map((project: Project, idx: number) => {
                   const reviews = project.reviews || [];
                   return (
                     <tr key={project.id} className="border-t hover:bg-muted/30 transition-colors group">
@@ -368,7 +375,7 @@ export default function Projects() {
                       </td>
                       {expandedDepts.length > 0 ? (
                         expandedDepts.map(dept => {
-                          const review = reviews.find((r: any) => r.department === dept);
+                          const review = reviews.find((r: Review) => r.department === dept);
                           return (
                             <React.Fragment key={`${project.id}-${dept}`}>
                               <td className="py-1 px-2 text-xs whitespace-nowrap border-l">
@@ -406,7 +413,7 @@ export default function Projects() {
                         })
                       ) : (
                         DEPARTMENTS.map(dept => {
-                          const review = reviews.find((r: any) => r.department === dept);
+                          const review = reviews.find((r: Review) => r.department === dept);
                           return (
                             <td key={`${project.id}-${dept}`} className="py-1 px-1 text-center border-l">
                               <StatusBadge status={review?.status || null} />

@@ -84,14 +84,15 @@ function DashboardLayoutContent({
   const isMobile = useIsMobile();
   const { theme, toggleTheme } = useTheme();
 
-  useEffect(() => {
-    if (isCollapsed) {
+  const handleToggleSidebar = () => {
+    if (isResizing) {
       setIsResizing(false);
     }
-  }, [isCollapsed]);
+    toggleSidebar();
+  };
 
   useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
+    const handleMouseMove = (e: globalThis.MouseEvent) => {
       if (!isResizing) return;
       const sidebarLeft = sidebarRef.current?.getBoundingClientRect().left ?? 0;
       const newWidth = e.clientX - sidebarLeft;
@@ -130,7 +131,7 @@ function DashboardLayoutContent({
           <SidebarHeader className="h-16 justify-center">
             <div className="flex items-center gap-3 px-2 transition-all w-full">
               <button
-                onClick={toggleSidebar}
+                onClick={handleToggleSidebar}
                 className="h-8 w-8 flex items-center justify-center hover:bg-accent rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring shrink-0"
                 aria-label="Navigation umschalten"
               >

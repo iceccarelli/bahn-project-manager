@@ -173,11 +173,20 @@ import { useState } from "react";
 import { toast as sonnerToast } from "sonner";
 import { AIChatBox, type Message } from "@/components/AIChatBox";
 
-export default function ComponentsShowcase() {
+const frameworks = [
+  { value: "react", label: "React" },
+  { value: "vue", label: "Vue" },
+  { value: "angular", label: "Angular" },
+  { value: "svelte", label: "Svelte" },
+  { value: "nextjs", label: "Next.js" },
+  { value: "nuxt", label: "Nuxt" },
+  { value: "remix", label: "Remix" },
+] as const;
+
+export default function ComponentShowcase() {
   const { theme, toggleTheme } = useTheme();
   const [date, setDate] = useState<Date | undefined>(new Date());
   const [datePickerDate, setDatePickerDate] = useState<Date>();
-  const [selectedFruits, setSelectedFruits] = useState<string[]>([]);
   const [progress, setProgress] = useState(33);
   const [currentPage, setCurrentPage] = useState(2);
   const [openCombobox, setOpenCombobox] = useState(false);
@@ -210,11 +219,9 @@ export default function ComponentsShowcase() {
   };
 
   const handleChatSend = (content: string) => {
-    // Add user message
     const newMessages: Message[] = [...chatMessages, { role: "user", content }];
     setChatMessages(newMessages);
 
-    // Simulate AI response with delay
     setIsChatLoading(true);
     setTimeout(() => {
       const aiResponse: Message = {
@@ -229,7 +236,7 @@ export default function ComponentsShowcase() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <main className="container max-w-6xl mx-auto">
-        <div className="space-y-2 justify-between flex">
+        <div className="flex items-center justify-between">
           <h2 className="text-3xl font-bold tracking-tight mb-6">
             Shadcn/ui Component Library
           </h2>
@@ -544,15 +551,7 @@ export default function ComponentsShowcase() {
                         className="w-full justify-between"
                       >
                         {selectedFramework
-                          ? [
-                              { value: "react", label: "React" },
-                              { value: "vue", label: "Vue" },
-                              { value: "angular", label: "Angular" },
-                              { value: "svelte", label: "Svelte" },
-                              { value: "nextjs", label: "Next.js" },
-                              { value: "nuxt", label: "Nuxt" },
-                              { value: "remix", label: "Remix" },
-                            ].find(fw => fw.value === selectedFramework)?.label
+                          ? frameworks.find(fw => fw.value === selectedFramework)?.label
                           : "Select framework..."}
                         <CalendarIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
@@ -563,15 +562,7 @@ export default function ComponentsShowcase() {
                         <CommandList>
                           <CommandEmpty>No framework found</CommandEmpty>
                           <CommandGroup>
-                            {[
-                              { value: "react", label: "React" },
-                              { value: "vue", label: "Vue" },
-                              { value: "angular", label: "Angular" },
-                              { value: "svelte", label: "Svelte" },
-                              { value: "nextjs", label: "Next.js" },
-                              { value: "nuxt", label: "Nuxt" },
-                              { value: "remix", label: "Remix" },
-                            ].map(framework => (
+                            {frameworks.map(framework => (
                               <CommandItem
                                 key={framework.value}
                                 value={framework.value}
@@ -602,17 +593,7 @@ export default function ComponentsShowcase() {
                   {selectedFramework && (
                     <p className="text-sm text-muted-foreground">
                       Selected:{" "}
-                      {
-                        [
-                          { value: "react", label: "React" },
-                          { value: "vue", label: "Vue" },
-                          { value: "angular", label: "Angular" },
-                          { value: "svelte", label: "Svelte" },
-                          { value: "nextjs", label: "Next.js" },
-                          { value: "nuxt", label: "Nuxt" },
-                          { value: "remix", label: "Remix" },
-                        ].find(fw => fw.value === selectedFramework)?.label
-                      }
+                      {frameworks.find(fw => fw.value === selectedFramework)?.label}
                     </p>
                   )}
                 </div>
@@ -669,7 +650,7 @@ export default function ComponentsShowcase() {
                   </div>
                   {selectedMonth && selectedYear && (
                     <p className="text-sm text-muted-foreground">
-                      Selected: {selectedYear}/{selectedMonth}/
+                      Selected: {selectedYear}-{selectedMonth}
                     </p>
                   )}
                 </div>
@@ -970,13 +951,13 @@ export default function ComponentsShowcase() {
                 <AccordionTrigger>Is it styled?</AccordionTrigger>
                 <AccordionContent>
                   Yes. It comes with default styles that matches the other
-                  components' aesthetic.
+                  components&apos; aesthetic.
                 </AccordionContent>
               </AccordionItem>
               <AccordionItem value="item-3">
                 <AccordionTrigger>Is it animated?</AccordionTrigger>
                 <AccordionContent>
-                  Yes. It's animated by default, but you can disable it if you
+                  Yes. It&apos;s animated by default, but you can disable it if you
                   prefer.
                 </AccordionContent>
               </AccordionItem>
@@ -1065,7 +1046,7 @@ export default function ComponentsShowcase() {
                         <SheetTitle>Edit profile</SheetTitle>
                         <SheetDescription>
                           Make changes to your profile here. Click save when
-                          you're done.
+                          you&apos;re done.
                         </SheetDescription>
                       </SheetHeader>
                     </SheetContent>
@@ -1403,7 +1384,7 @@ export default function ComponentsShowcase() {
                       Features markdown rendering, auto-scrolling, and loading states.
                     </p>
                     <p className="mt-2">
-                      This is a demo with simulated responses. In a real app, you'd connect it to a tRPC mutation.
+                      This is a demo with simulated responses. In a real app, you&apos;d connect it to a tRPC mutation.
                     </p>
                   </div>
                   <AIChatBox
