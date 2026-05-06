@@ -18,6 +18,10 @@ import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useTheme } from "@/contexts/ThemeContext";
 
+// NEW: AWS Console components
+import Header from "./Header";
+import Footer from "./Footer";
+
 const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
   { icon: Table2, label: "Projekte", path: "/projects" },
@@ -122,6 +126,10 @@ function DashboardLayoutContent({
 
   return (
     <>
+      {/* NEW: Full AWS Console Header – fixed at top, 50px height, dark navy background */}
+      <Header />
+
+      {/* Sidebar container (resizable + collapsible) */}
       <div className="relative" ref={sidebarRef}>
         <Sidebar
           collapsible="icon"
@@ -157,7 +165,7 @@ function DashboardLayoutContent({
                       isActive={isActive}
                       onClick={() => setLocation(item.path)}
                       tooltip={item.label}
-                      className="h-10 transition-all font-normal"
+                      className="h-10 transition-all font-normal aws-nav-link"
                     >
                       <item.icon
                         className={`h-4 w-4 ${isActive ? "text-primary" : ""}`}
@@ -173,7 +181,7 @@ function DashboardLayoutContent({
           <SidebarFooter className="p-3 space-y-2">
             <button
               onClick={toggleTheme}
-              className="flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-accent/50 transition-colors w-full text-left group-data-[collapsible=icon]:justify-center"
+              className="flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-accent/50 transition-colors w-full text-left group-data-[collapsible=icon]:justify-center aws-button"
             >
               {theme === 'dark' ? (
                 <Sun className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -184,6 +192,7 @@ function DashboardLayoutContent({
                 {theme === 'dark' ? 'Hell' : 'Dunkel'}
               </span>
             </button>
+
             <div className="flex items-center gap-3 rounded-lg px-1 py-1 w-full group-data-[collapsible=icon]:justify-center">
               <Avatar className="h-9 w-9 border shrink-0">
                 <AvatarFallback className="text-xs font-medium">
@@ -201,6 +210,8 @@ function DashboardLayoutContent({
             </div>
           </SidebarFooter>
         </Sidebar>
+
+        {/* Resizable handle */}
         <div
           className={`absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/20 transition-colors ${isCollapsed ? "hidden" : ""}`}
           onMouseDown={() => {
@@ -211,7 +222,9 @@ function DashboardLayoutContent({
         />
       </div>
 
-      <SidebarInset>
+      {/* Main content area with AWS header offset + Footer integration */}
+      <SidebarInset className="pt-[50px]">
+        {/* Mobile top bar (kept exactly as original – only visible on mobile) */}
         {isMobile && (
           <div className="flex border-b h-14 items-center justify-between bg-background/95 px-2 backdrop-blur supports-[backdrop-filter]:backdrop-blur sticky top-0 z-40">
             <div className="flex items-center gap-2">
@@ -222,7 +235,17 @@ function DashboardLayoutContent({
             </div>
           </div>
         )}
-        <main className="flex-1 p-4 lg:p-6">{children}</main>
+
+        {/* Content wrapper with full viewport height calculation + flex layout for footer */}
+        <div className="min-h-[calc(100vh-50px)] flex flex-col">
+          {/* Main scrollable content area – all existing children rendered here */}
+          <main className="flex-1 p-4 lg:p-6">
+            {children}
+          </main>
+
+          {/* NEW: AWS Global Footer – always at bottom, dark navy theme */}
+          <Footer />
+        </div>
       </SidebarInset>
     </>
   );
