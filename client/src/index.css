@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@import "tailwindcss-animate";
+@import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -38,7 +38,7 @@
   --radius-aws: 4px;
 }
 
-/* Global base styles – no @apply, pure CSS for maximum v4 compatibility */
+/* Global base styles – Tailwind v4 + Vite compatible (no @apply that breaks build) */
 @layer base {
   * {
     border-color: var(--border);
@@ -147,7 +147,7 @@
     transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  /* Header & Footer */
+  /* Header & Footer AWS classes */
   .aws-header {
     background-color: var(--aws-nav);
     color: var(--aws-nav-text);
