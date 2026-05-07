@@ -18,7 +18,7 @@ import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useTheme } from "@/contexts/ThemeContext";
 
-// NEW: AWS Console components
+// NEW: AWS Console components → now DB branded
 import Header from "./Header";
 import Footer from "./Footer";
 
@@ -126,7 +126,7 @@ function DashboardLayoutContent({
 
   return (
     <>
-      {/* NEW: Full AWS Console Header – fixed at top, 50px height, dark navy background */}
+      {/* DB Header – fixed at top, 60px height, dark DB grey with red accent bar */}
       <Header />
 
       {/* Sidebar container (resizable + collapsible) */}
@@ -136,7 +136,7 @@ function DashboardLayoutContent({
           className="border-r-0"
           disableTransition={isResizing}
         >
-          <SidebarHeader className="h-16 justify-center">
+          <SidebarHeader className="h-16 justify-center border-b border-border/60">
             <div className="flex items-center gap-3 px-2 transition-all w-full">
               <button
                 onClick={handleToggleSidebar}
@@ -147,6 +147,10 @@ function DashboardLayoutContent({
               </button>
               {!isCollapsed ? (
                 <div className="flex items-center gap-2 min-w-0">
+                  {/* DB small logo in sidebar header */}
+                  <div className="w-6 h-6 bg-[#FF0000] rounded flex items-center justify-center text-white font-bold text-xl leading-none pt-px">
+                    DB
+                  </div>
                   <span className="font-semibold tracking-tight truncate text-sm">
                     Bahn Project Manager
                   </span>
@@ -165,10 +169,10 @@ function DashboardLayoutContent({
                       isActive={isActive}
                       onClick={() => setLocation(item.path)}
                       tooltip={item.label}
-                      className="h-10 transition-all font-normal aws-nav-link"
+                      className={`h-10 transition-all font-normal aws-nav-link ${isActive ? "text-[#FF0000] border-l-4 border-[#FF0000] pl-3" : ""}`}
                     >
                       <item.icon
-                        className={`h-4 w-4 ${isActive ? "text-primary" : ""}`}
+                        className={`h-4 w-4 ${isActive ? "text-[#FF0000]" : ""}`}
                       />
                       <span>{item.label}</span>
                     </SidebarMenuButton>
@@ -222,8 +226,8 @@ function DashboardLayoutContent({
         />
       </div>
 
-      {/* Main content area with AWS header offset + Footer integration */}
-      <SidebarInset className="pt-[50px]">
+      {/* Main content area with DB header offset + Footer integration */}
+      <SidebarInset className="pt-[60px]">
         {/* Mobile top bar (kept exactly as original – only visible on mobile) */}
         {isMobile && (
           <div className="flex border-b h-14 items-center justify-between bg-background/95 px-2 backdrop-blur supports-[backdrop-filter]:backdrop-blur sticky top-0 z-40">
@@ -237,13 +241,13 @@ function DashboardLayoutContent({
         )}
 
         {/* Content wrapper with full viewport height calculation + flex layout for footer */}
-        <div className="min-h-[calc(100vh-50px)] flex flex-col">
+        <div className="min-h-[calc(100vh-60px)] flex flex-col">
           {/* Main scrollable content area – all existing children rendered here */}
           <main className="flex-1 p-4 lg:p-6">
             {children}
           </main>
 
-          {/* NEW: AWS Global Footer – always at bottom, dark navy theme */}
+          {/* DB Global Footer – always at bottom, dark DB theme */}
           <Footer />
         </div>
       </SidebarInset>
