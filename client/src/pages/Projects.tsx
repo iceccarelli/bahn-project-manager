@@ -1,6 +1,3 @@
-```tsx
-## src/pages/Projects.tsx
-```tsx
 import React, { useState, useCallback } from "react";
 import { useProjects, useFilters, type Project, type Review } from "@/hooks/useData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -622,4 +619,3 @@ export default function Projects() {
     </div>
   );
 }
-```
