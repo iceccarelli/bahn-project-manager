@@ -24,32 +24,32 @@ export default function Header() {
   }, []);
 
   const mockSuggestions = [
-    "Project #12345 – BVB-EEA Freigabe",
+    "Projekt #12345 – BVB-EEA Freigabe",
     "Resource: S3 Bucket eu-central-1",
-    "Action: Create new project",
+    "Aktion: Neues Projekt erstellen",
     "Region Nord – Frankfurt",
   ];
 
   return (
     <header
-      className={`aws-header fixed top-0 left-0 right-0 z-50 flex items-center px-6 gap-x-4 transition-shadow ${
+      className={`fixed top-0 left-0 right-0 z-50 flex items-center px-6 gap-x-4 h-[60px] bg-[#1A1A1A] text-white border-b border-[#FF0000] transition-shadow ${
         scrolled ? "shadow-2xl" : "shadow-md"
       }`}
     >
-      {/* Logo + Service Name */}
-      <div className="flex items-center gap-x-2 flex-shrink-0">
-        <div className="w-8 h-8 bg-[#ff9900] rounded flex items-center justify-center text-white font-bold text-2xl leading-none pt-0.5">
-          B
+      {/* DB Logo + Service Name */}
+      <div className="flex items-center gap-x-3 flex-shrink-0">
+        <div className="w-9 h-9 bg-[#FF0000] rounded flex items-center justify-center text-white font-bold text-3xl leading-none pt-0.5 shadow-inner">
+          DB
         </div>
         <div className="flex items-baseline">
-          <span className="font-semibold tracking-[-0.5px] text-xl">Bahn</span>
-          <span className="text-[#ff9900] font-semibold tracking-[-0.5px] text-xl ml-1">
+          <span className="font-bold tracking-[-0.5px] text-2xl">Bahn</span>
+          <span className="text-[#FF0000] font-bold tracking-[-0.5px] text-2xl ml-1">
             Project Manager
           </span>
         </div>
       </div>
 
-      {/* Global Search Bar */}
+      {/* Global Search Bar – DB styled for dark header */}
       <div className="flex-1 max-w-2xl relative">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/70" />
@@ -58,8 +58,8 @@ export default function Header() {
             onChange={(e) => setSearchTerm(e.target.value)}
             onFocus={() => setShowSuggestions(true)}
             onBlur={() => setTimeout(() => setShowSuggestions(false), 250)}
-            placeholder="Search for projects, resources, actions…"
-            className="aws-input pl-10 h-9 bg-white/10 border-white/30 text-white placeholder:text-white/60 focus:bg-white focus:text-black w-full text-sm"
+            placeholder="Projekte, Ressourcen, Aktionen durchsuchen…"
+            className="aws-input pl-10 h-9 bg-white/10 border-white/30 text-white placeholder:text-white/60 focus:bg-white focus:text-[#1A1A1A] focus:border-[#FF0000] w-full text-sm"
           />
         </div>
 
@@ -79,10 +79,10 @@ export default function Header() {
         )}
       </div>
 
-      {/* Quick Actions Button */}
-      <Button className="aws-button flex items-center gap-x-2 bg-[#ff9900] hover:bg-[#e68a00] text-white border-none px-5 py-1.5 text-sm font-medium">
+      {/* Quick Actions Button – DB red */}
+      <Button className="aws-button flex items-center gap-x-2 bg-[#FF0000] hover:bg-[#E6002B] text-white border-none px-5 py-1.5 text-sm font-medium">
         <Plus className="h-4 w-4" />
-        <span className="hidden sm:inline">Create</span>
+        <span className="hidden sm:inline">Erstellen</span>
       </Button>
 
       {/* Region Selector */}
@@ -90,7 +90,7 @@ export default function Header() {
         <DropdownMenuTrigger asChild>
           <Button
             variant="ghost"
-            className="aws-button text-white border-white/30 flex items-center gap-x-1 text-sm"
+            className="aws-button text-white border-white/30 flex items-center gap-x-1 text-sm hover:bg-white/10"
           >
             <span>eu-central-1</span>
             <ChevronDown className="h-4 w-4" />
@@ -107,51 +107,48 @@ export default function Header() {
       {/* Notifications */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" className="aws-button relative text-white p-2">
+          <Button variant="ghost" className="aws-button relative text-white p-2 hover:bg-white/10">
             <Bell className="h-5 w-5" />
-            <span className="absolute -top-1 -right-1 bg-red-500 text-[10px] px-1.5 rounded-full leading-none flex items-center justify-center min-w-[17px] h-[17px]">
+            <span className="absolute -top-1 -right-1 bg-[#FF0000] text-[10px] px-1.5 rounded-full leading-none flex items-center justify-center min-w-[17px] h-[17px]">
               3
             </span>
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-80">
-          <DropdownMenuLabel>Notifications (3)</DropdownMenuLabel>
+          <DropdownMenuLabel>Benachrichtigungen (3)</DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuItem className="flex flex-col items-start py-3">
-            <p className="font-medium">Project BVB-EEA approved</p>
-            <p className="text-xs text-gray-500">2 minutes ago</p>
+            <p className="font-medium">Projekt BVB-EEA freigegeben</p>
+            <p className="text-xs text-gray-500">vor 2 Minuten</p>
           </DropdownMenuItem>
-          {/* more items possible */}
         </DropdownMenuContent>
       </DropdownMenu>
 
       {/* User Avatar + Menu */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Avatar className="h-8 w-8 cursor-pointer ring-2 ring-offset-2 ring-[#ff9900]/30 hover:ring-[#ff9900]">
-            <AvatarFallback className="bg-[#ff9900] text-white text-xs font-bold">BP</AvatarFallback>
+          <Avatar className="h-8 w-8 cursor-pointer ring-2 ring-offset-2 ring-[#FF0000]/30 hover:ring-[#FF0000]">
+            <AvatarFallback className="bg-[#FF0000] text-white text-xs font-bold">BP</AvatarFallback>
           </Avatar>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
-          <DropdownMenuLabel>My Account</DropdownMenuLabel>
+          <DropdownMenuLabel>Mein Konto</DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuItem>
             <User className="mr-2 h-4 w-4" />
-            Account settings
+            Kontoeinstellungen
           </DropdownMenuItem>
           <DropdownMenuItem>
             <CreditCard className="mr-2 h-4 w-4" />
-            Billing &amp; usage
+            Abrechnung &amp; Nutzung
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem className="text-red-600 focus:text-red-600">
             <LogOut className="mr-2 h-4 w-4" />
-            Sign out
+            Abmelden
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-
-      {/* Mobile hamburger is handled by existing SidebarTrigger */}
     </header>
   );
 }
