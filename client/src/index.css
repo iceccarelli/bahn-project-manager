@@ -1,10 +1,10 @@
 @import "tailwindcss";
-@import "tw-animate-css";
+@import "tailwindcss-animate";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  /* ── Existing shadcn/ui theme (preserved for full compatibility) ── */
+  /* ── shadcn/ui theme (preserved 100% for compatibility) ── */
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -42,10 +42,9 @@
   /* shadcn base variables */
 }
 
-/* ── Global AWS micro-interaction base ── */
+/* ── Global AWS micro-interaction base (Tailwind v4 compatible) ── */
 @layer base {
   * {
-    /* Fixed for Tailwind v4 – no more @apply border-border */
     border-color: var(--border);
   }
 
@@ -64,7 +63,7 @@
     transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1) !important;
   }
 
-  /* WCAG 2.1 AA focus ring */
+  /* WCAG 2.1 AA focus */
   :focus-visible {
     outline: 2px solid var(--aws-accent);
     outline-offset: 2px;
@@ -152,7 +151,7 @@
     transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  /* Header-specific AWS classes */
+  /* Header & Footer AWS classes */
   .aws-header {
     background-color: var(--aws-nav);
     color: var(--aws-nav-text);
@@ -160,7 +159,6 @@
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
   }
 
-  /* Footer */
   .aws-footer {
     background-color: var(--aws-nav);
     color: var(--aws-nav-text);
