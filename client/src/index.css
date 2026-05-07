@@ -4,7 +4,7 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  /* ── shadcn/ui theme (preserved 100% for compatibility) ── */
+  /* shadcn/ui theme – preserved 100% for full compatibility */
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -26,7 +26,7 @@
   --ring: oklch(0.62 0.24 262.2);
   --radius: 0.5rem;
 
-  /* ── AWS Design Tokens (exact palette + proportions) ── */
+  /* AWS Design Tokens (exact AWS console palette) */
   --aws-nav: #232f3e;
   --aws-nav-text: #eaeded;
   --aws-accent: #ff9900;
@@ -38,18 +38,15 @@
   --radius-aws: 4px;
 }
 
-:root, .dark {
-  /* shadcn base variables */
-}
-
-/* ── Global AWS micro-interaction base (Tailwind v4 compatible) ── */
+/* Global base styles – no @apply, pure CSS for maximum v4 compatibility */
 @layer base {
   * {
     border-color: var(--border);
   }
 
   body {
-    @apply bg-background text-foreground;
+    background-color: var(--background);
+    color: var(--foreground);
   }
 
   button,
@@ -63,7 +60,6 @@
     transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1) !important;
   }
 
-  /* WCAG 2.1 AA focus */
   :focus-visible {
     outline: 2px solid var(--aws-accent);
     outline-offset: 2px;
@@ -151,7 +147,7 @@
     transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  /* Header & Footer AWS classes */
+  /* Header & Footer */
   .aws-header {
     background-color: var(--aws-nav);
     color: var(--aws-nav-text);
