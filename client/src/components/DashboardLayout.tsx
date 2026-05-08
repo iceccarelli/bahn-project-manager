@@ -13,12 +13,22 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, PanelLeft, Table2, FileCheck, Network, History, Moon, Sun } from "lucide-react";
+import {
+  LayoutDashboard,
+  PanelLeft,
+  Table2,
+  FileCheck,
+  Network,
+  History,
+  Moon,
+  Sun,
+  ShieldCheck, // NEW: Brandschutz icon
+} from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useTheme } from "@/contexts/ThemeContext";
 
-// NEW: AWS Console components → now DB branded
+// DB-branded Header & Footer (replaces previous AWS versions)
 import Header from "./Header";
 import Footer from "./Footer";
 
@@ -27,6 +37,7 @@ const menuItems = [
   { icon: Table2, label: "Projekte", path: "/projects" },
   { icon: FileCheck, label: "BVB-EEA", path: "/bvb-eea" },
   { icon: Network, label: "PSV-ITK", path: "/psv-itk" },
+  { icon: ShieldCheck, label: "Brandschutz (BS)", path: "/brandschutz" }, // NEW
   { icon: History, label: "Änderungshistorie", path: "/audit" },
 ];
 
@@ -84,7 +95,7 @@ function DashboardLayoutContent({
   const isCollapsed = state === "collapsed";
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
-  const activeMenuItem = menuItems.find(item => item.path === location);
+  const activeMenuItem = menuItems.find((item) => item.path === location);
   const isMobile = useIsMobile();
   const { theme, toggleTheme } = useTheme();
 
@@ -126,7 +137,7 @@ function DashboardLayoutContent({
 
   return (
     <>
-      {/* DB Header – fixed at top, 60px height, dark DB grey with red accent bar */}
+      {/* DB Header – fixed, 60px height, dark DB theme with red accent */}
       <Header />
 
       {/* Sidebar container (resizable + collapsible) */}
@@ -147,7 +158,7 @@ function DashboardLayoutContent({
               </button>
               {!isCollapsed ? (
                 <div className="flex items-center gap-2 min-w-0">
-                  {/* DB small logo in sidebar header */}
+                  {/* DB Logo */}
                   <div className="w-6 h-6 bg-[#FF0000] rounded flex items-center justify-center text-white font-bold text-xl leading-none pt-px">
                     DB
                   </div>
@@ -161,7 +172,7 @@ function DashboardLayoutContent({
 
           <SidebarContent className="gap-0">
             <SidebarMenu className="px-2 py-1">
-              {menuItems.map(item => {
+              {menuItems.map((item) => {
                 const isActive = location === item.path;
                 return (
                   <SidebarMenuItem key={item.path}>
@@ -169,7 +180,11 @@ function DashboardLayoutContent({
                       isActive={isActive}
                       onClick={() => setLocation(item.path)}
                       tooltip={item.label}
-                      className={`h-10 transition-all font-normal aws-nav-link ${isActive ? "text-[#FF0000] border-l-4 border-[#FF0000] pl-3" : ""}`}
+                      className={`h-10 transition-all font-normal aws-nav-link ${
+                        isActive
+                          ? "text-[#FF0000] border-l-4 border-[#FF0000] pl-3"
+                          : ""
+                      }`}
                     >
                       <item.icon
                         className={`h-4 w-4 ${isActive ? "text-[#FF0000]" : ""}`}
@@ -187,13 +202,13 @@ function DashboardLayoutContent({
               onClick={toggleTheme}
               className="flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-accent/50 transition-colors w-full text-left group-data-[collapsible=icon]:justify-center aws-button"
             >
-              {theme === 'dark' ? (
+              {theme === "dark" ? (
                 <Sun className="h-4 w-4 text-muted-foreground shrink-0" />
               ) : (
                 <Moon className="h-4 w-4 text-muted-foreground shrink-0" />
               )}
               <span className="text-sm text-muted-foreground group-data-[collapsible=icon]:hidden">
-                {theme === 'dark' ? 'Hell' : 'Dunkel'}
+                {theme === "dark" ? "Hell" : "Dunkel"}
               </span>
             </button>
 
@@ -226,9 +241,9 @@ function DashboardLayoutContent({
         />
       </div>
 
-      {/* Main content area with DB header offset + Footer integration */}
+      {/* Main content area with DB header offset + Footer */}
       <SidebarInset className="pt-[60px]">
-        {/* Mobile top bar (kept exactly as original – only visible on mobile) */}
+        {/* Mobile top bar */}
         {isMobile && (
           <div className="flex border-b h-14 items-center justify-between bg-background/95 px-2 backdrop-blur supports-[backdrop-filter]:backdrop-blur sticky top-0 z-40">
             <div className="flex items-center gap-2">
@@ -240,14 +255,13 @@ function DashboardLayoutContent({
           </div>
         )}
 
-        {/* Content wrapper with full viewport height calculation + flex layout for footer */}
+        {/* Content wrapper with flex layout for sticky footer */}
         <div className="min-h-[calc(100vh-60px)] flex flex-col">
-          {/* Main scrollable content area – all existing children rendered here */}
           <main className="flex-1 p-4 lg:p-6">
             {children}
           </main>
 
-          {/* DB Global Footer – always at bottom, dark DB theme */}
+          {/* DB Global Footer */}
           <Footer />
         </div>
       </SidebarInset>
