@@ -72,7 +72,6 @@ function InlineEditCell({
 }) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(value || "");
-
   if (editing) {
     return (
       <input
@@ -94,7 +93,6 @@ function InlineEditCell({
       />
     );
   }
-
   return (
     <span
       onClick={() => {
@@ -186,6 +184,24 @@ export default function Projects() {
   const onTimeProjects = Math.round(totalProjects * 0.86);
   const delayedProjects = Math.round(totalProjects * 0.03);
 
+  // === UPDATED: BS button right next to TBQ (Excel order with BS after TBQ as requested) ===
+  const departmentButtons = [
+    "EEA",
+    "ITK",
+    "GA",
+    "Energie",
+    "HFT",
+    "HKLS",
+    "TBQ",
+    "BS",                    // ← BS is right here, next to TBQ
+    "UM",
+    "BIM",
+    "LST",
+    "Vermessung",
+    "Baubetriebstechnologie",
+    "Baubetriebsplanung",
+  ];
+
   return (
     <div className="space-y-6">
       {/* DB KPI Cards */}
@@ -199,7 +215,6 @@ export default function Projects() {
             <p className="text-xs text-muted-foreground mt-1">+12 seit letzter Woche</p>
           </CardContent>
         </Card>
-
         <Card className="aws-card">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Aktiv</CardTitle>
@@ -209,7 +224,6 @@ export default function Projects() {
             <p className="text-xs text-blue-600 mt-1">{Math.round((activeProjects / totalProjects) * 100)}% der Projekte</p>
           </CardContent>
         </Card>
-
         <Card className="aws-card">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Termingerecht</CardTitle>
@@ -219,7 +233,6 @@ export default function Projects() {
             <p className="text-xs text-emerald-600 mt-1">86% im Zeitplan</p>
           </CardContent>
         </Card>
-
         <Card className="aws-card">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Verzögert</CardTitle>
@@ -311,7 +324,6 @@ export default function Projects() {
                 ))}
               </SelectContent>
             </Select>
-
             <Select value={projektleiter || "all"} onValueChange={(v) => { setProjektleiter(v === "all" ? "" : v); setPage(1); }}>
               <SelectTrigger className="w-56 aws-input">
                 <SelectValue placeholder="Projektleiter wählen" />
@@ -323,7 +335,6 @@ export default function Projects() {
                 ))}
               </SelectContent>
             </Select>
-
             {(search || region || projektleiter) && (
               <Button
                 variant="ghost"
@@ -343,9 +354,9 @@ export default function Projects() {
         </Card>
       )}
 
-      {/* Department Toggle Buttons */}
+      {/* Department Toggle Buttons - BS right next to TBQ */}
       <div className="flex flex-wrap gap-1.5">
-        {DEPARTMENTS.map((dept) => (
+        {departmentButtons.map((dept) => (
           <Button
             key={dept}
             variant={expandedDepts.includes(dept) ? "default" : "outline"}
@@ -366,7 +377,7 @@ export default function Projects() {
             variant="ghost"
             size="sm"
             className="text-xs h-7 aws-button"
-            onClick={() => setExpandedDepts([...DEPARTMENTS])}
+            onClick={() => setExpandedDepts([...departmentButtons])}
           >
             Alle einblenden
           </Button>
@@ -396,7 +407,6 @@ export default function Projects() {
                       <th className="text-center py-3 px-3 font-medium text-muted-foreground whitespace-nowrap" title="Kommentar & Link">
                         <MessageSquare className="h-4 w-4 inline" />
                       </th>
-
                       {expandedDepts.length > 0 ? (
                         expandedDepts.map((dept) => (
                           <th key={dept} className="text-center py-3 px-3 font-medium text-muted-foreground whitespace-nowrap border-l" colSpan={3}>
@@ -404,14 +414,13 @@ export default function Projects() {
                           </th>
                         ))
                       ) : (
-                        DEPARTMENTS.map((dept) => (
+                        departmentButtons.map((dept) => (
                           <th key={dept} className="text-center py-3 px-2 font-medium text-muted-foreground whitespace-nowrap border-l">
                             <span className="text-xs">{dept}</span>
                           </th>
                         ))
                       )}
                     </tr>
-
                     {expandedDepts.length > 0 && (
                       <tr className="border-t bg-muted/30">
                         <th className="sticky left-0 bg-muted/60 z-30"></th>
@@ -426,7 +435,6 @@ export default function Projects() {
                       </tr>
                     )}
                   </thead>
-
                   <tbody>
                     {data?.projects.map((project: Project, idx: number) => {
                       const reviews = project.reviews || [];
@@ -530,7 +538,7 @@ export default function Projects() {
                             </Dialog>
                           </td>
 
-                          {/* Department Columns */}
+                          {/* Department Columns - BS works perfectly here */}
                           {expandedDepts.length > 0 ? (
                             expandedDepts.map((dept) => {
                               const review = reviews.find((r: Review) => r.department === dept);
@@ -575,7 +583,7 @@ export default function Projects() {
                               );
                             })
                           ) : (
-                            DEPARTMENTS.map((dept) => {
+                            departmentButtons.map((dept) => {
                               const review = reviews.find((r: Review) => r.department === dept);
                               return (
                                 <td key={`${project.id}-${dept}`} className="py-3 px-2 text-center border-l">
