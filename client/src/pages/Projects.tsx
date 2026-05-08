@@ -14,7 +14,22 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Loader2, Search, ChevronLeft, ChevronRight, Filter, X, ArrowUpDown, ExternalLink, MessageSquare, Plus, Download, Table, LayoutGrid, MapPin } from "lucide-react";
+import {
+  Loader2,
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  Filter,
+  X,
+  ArrowUpDown,
+  ExternalLink,
+  MessageSquare,
+  Plus,
+  Download,
+  Table,
+  LayoutGrid,
+  MapPin,
+} from "lucide-react";
 import { DEPARTMENTS, REVIEW_STATUSES } from "@shared/types";
 import { toast } from "sonner";
 import { MapView } from "@/components/Map";
@@ -46,7 +61,15 @@ function StatusBadge({ status }: { status: string | null }) {
   );
 }
 
-function InlineEditCell({ value, onSave, className = "" }: { value: string | null; onSave: (val: string) => void; className?: string }) {
+function InlineEditCell({
+  value,
+  onSave,
+  className = "",
+}: {
+  value: string | null;
+  onSave: (val: string) => void;
+  className?: string;
+}) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(value || "");
 
@@ -74,7 +97,10 @@ function InlineEditCell({ value, onSave, className = "" }: { value: string | nul
 
   return (
     <span
-      onClick={() => { setEditValue(value || ""); setEditing(true); }}
+      onClick={() => {
+        setEditValue(value || "");
+        setEditing(true);
+      }}
       className={`cursor-pointer hover:bg-[#FF0000]/5 rounded px-1 py-0.5 -mx-1 transition-colors ${className}`}
       title="Klicken zum Bearbeiten"
     >
@@ -135,7 +161,7 @@ export default function Projects() {
 
   const handleSort = (column: string) => {
     if (sortBy === column) {
-      setSortDir(d => d === "asc" ? "desc" : "asc");
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     } else {
       setSortBy(column);
       setSortDir("asc");
@@ -146,16 +172,17 @@ export default function Projects() {
   const totalPages = data ? Math.ceil(data.total / pageSize) : 0;
 
   const toggleDept = (dept: string) => {
-    setExpandedDepts(prev =>
-      prev.includes(dept) ? prev.filter(d => d !== dept) : [...prev, dept]
+    setExpandedDepts((prev) =>
+      prev.includes(dept) ? prev.filter((d) => d !== dept) : [...prev, dept]
     );
   };
 
   // KPI calculation from real data
   const totalProjects = data?.total || 1298;
-  const activeProjects = data?.projects?.filter(p => 
-    p.reviews?.some(r => r.status === "in Bearbeitung" || r.status === "prüffähig")
-  ).length || 874;
+  const activeProjects =
+    data?.projects?.filter((p) =>
+      p.reviews?.some((r) => r.status === "in Bearbeitung" || r.status === "prüffähig")
+    ).length || 874;
   const onTimeProjects = Math.round(totalProjects * 0.86);
   const delayedProjects = Math.round(totalProjects * 0.03);
 
@@ -168,10 +195,11 @@ export default function Projects() {
             <CardTitle className="text-sm font-medium text-muted-foreground">Gesamtprojekte</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-4xl font-bold text-[#FF0000]">{totalProjects.toLocaleString('de-DE')}</div>
+            <div className="text-4xl font-bold text-[#FF0000]">{totalProjects.toLocaleString("de-DE")}</div>
             <p className="text-xs text-muted-foreground mt-1">+12 seit letzter Woche</p>
           </CardContent>
         </Card>
+
         <Card className="aws-card">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Aktiv</CardTitle>
@@ -181,6 +209,7 @@ export default function Projects() {
             <p className="text-xs text-blue-600 mt-1">{Math.round((activeProjects / totalProjects) * 100)}% der Projekte</p>
           </CardContent>
         </Card>
+
         <Card className="aws-card">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Termingerecht</CardTitle>
@@ -190,6 +219,7 @@ export default function Projects() {
             <p className="text-xs text-emerald-600 mt-1">86% im Zeitplan</p>
           </CardContent>
         </Card>
+
         <Card className="aws-card">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Verzögert</CardTitle>
@@ -210,12 +240,11 @@ export default function Projects() {
               placeholder="Projektnummer, Station, Beschreibung, Projektleiter..."
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
               className="pl-9 aws-input"
             />
           </div>
           <Button onClick={handleSearch} className="aws-button">Suchen</Button>
-
           <Button
             variant={showFilters ? "default" : "outline"}
             size="sm"
@@ -260,7 +289,6 @@ export default function Projects() {
             <Plus className="mr-2 h-4 w-4" />
             Neues Projekt
           </Button>
-
           <Button variant="outline" className="aws-button">
             <Download className="mr-2 h-4 w-4" />
             Export
@@ -297,9 +325,17 @@ export default function Projects() {
             </Select>
 
             {(search || region || projektleiter) && (
-              <Button variant="ghost" size="sm" onClick={() => {
-                setSearch(""); setSearchInput(""); setRegion(""); setProjektleiter(""); setPage(1);
-              }}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSearch("");
+                  setSearchInput("");
+                  setRegion("");
+                  setProjektleiter("");
+                  setPage(1);
+                }}
+              >
                 <X className="h-4 w-4 mr-2" /> Zurücksetzen
               </Button>
             )}
@@ -309,7 +345,7 @@ export default function Projects() {
 
       {/* Department Toggle Buttons */}
       <div className="flex flex-wrap gap-1.5">
-        {DEPARTMENTS.map(dept => (
+        {DEPARTMENTS.map((dept) => (
           <Button
             key={dept}
             variant={expandedDepts.includes(dept) ? "default" : "outline"}
@@ -326,7 +362,12 @@ export default function Projects() {
           </Button>
         )}
         {expandedDepts.length === 0 && (
-          <Button variant="ghost" size="sm" className="text-xs h-7 aws-button" onClick={() => setExpandedDepts([...DEPARTMENTS])}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-xs h-7 aws-button"
+            onClick={() => setExpandedDepts([...DEPARTMENTS])}
+          >
             Alle einblenden
           </Button>
         )}
@@ -355,25 +396,27 @@ export default function Projects() {
                       <th className="text-center py-3 px-3 font-medium text-muted-foreground whitespace-nowrap" title="Kommentar & Link">
                         <MessageSquare className="h-4 w-4 inline" />
                       </th>
+
                       {expandedDepts.length > 0 ? (
-                        expandedDepts.map(dept => (
+                        expandedDepts.map((dept) => (
                           <th key={dept} className="text-center py-3 px-3 font-medium text-muted-foreground whitespace-nowrap border-l" colSpan={3}>
                             {dept}
                           </th>
                         ))
                       ) : (
-                        DEPARTMENTS.map(dept => (
+                        DEPARTMENTS.map((dept) => (
                           <th key={dept} className="text-center py-3 px-2 font-medium text-muted-foreground whitespace-nowrap border-l">
                             <span className="text-xs">{dept}</span>
                           </th>
                         ))
                       )}
                     </tr>
+
                     {expandedDepts.length > 0 && (
                       <tr className="border-t bg-muted/30">
                         <th className="sticky left-0 bg-muted/60 z-30"></th>
                         <th></th><th></th><th></th><th></th><th></th><th></th>
-                        {expandedDepts.map(dept => (
+                        {expandedDepts.map((dept) => (
                           <React.Fragment key={`sub-${dept}`}>
                             <th className="text-left py-2 px-3 text-[10px] font-normal text-muted-foreground border-l">Prüfer</th>
                             <th className="text-left py-2 px-3 text-[10px] font-normal text-muted-foreground">Datum</th>
@@ -383,6 +426,7 @@ export default function Projects() {
                       </tr>
                     )}
                   </thead>
+
                   <tbody>
                     {data?.projects.map((project: Project, idx: number) => {
                       const reviews = project.reviews || [];
@@ -394,29 +438,39 @@ export default function Projects() {
                           <td className="py-3 px-4 font-mono text-xs whitespace-nowrap">
                             <InlineEditCell
                               value={project.projektnummer}
-                              onSave={(val) => { applyEdit(project.id, "projektnummer", val); toast.success("Gespeichert"); }}
+                              onSave={(val) => {
+                                applyEdit(project.id, "projektnummer", val);
+                                toast.success("Gespeichert");
+                              }}
                             />
                           </td>
-                          <td className="py-3 px-4 whitespace-nowrap text-xs">
-                            {project.bahnhofsmanagement || '-'}
-                          </td>
+                          <td className="py-3 px-4 whitespace-nowrap text-xs">{project.bahnhofsmanagement || "-"}</td>
                           <td className="py-3 px-4 whitespace-nowrap text-xs font-medium">
                             <InlineEditCell
                               value={project.station}
-                              onSave={(val) => { applyEdit(project.id, "station", val); toast.success("Gespeichert"); }}
+                              onSave={(val) => {
+                                applyEdit(project.id, "station", val);
+                                toast.success("Gespeichert");
+                              }}
                             />
                           </td>
                           <td className="py-3 px-4 text-xs max-w-[260px]">
                             <InlineEditCell
                               value={project.projektbeschreibung}
-                              onSave={(val) => { applyEdit(project.id, "projektbeschreibung", val); toast.success("Gespeichert"); }}
+                              onSave={(val) => {
+                                applyEdit(project.id, "projektbeschreibung", val);
+                                toast.success("Gespeichert");
+                              }}
                               className="line-clamp-2"
                             />
                           </td>
                           <td className="py-3 px-4 whitespace-nowrap text-xs">
                             <InlineEditCell
                               value={project.projektleiter}
-                              onSave={(val) => { applyEdit(project.id, "projektleiter", val); toast.success("Gespeichert"); }}
+                              onSave={(val) => {
+                                applyEdit(project.id, "projektleiter", val);
+                                toast.success("Gespeichert");
+                              }}
                             />
                           </td>
                           <td className="py-3 px-3 text-center">
@@ -460,7 +514,12 @@ export default function Projects() {
                                         placeholder="https://..."
                                       />
                                       {project.projektLink && (
-                                        <a href={project.projektLink} target="_blank" rel="noopener noreferrer" className="flex items-center px-4 text-[#FF0000] hover:text-[#FF0000]/80">
+                                        <a
+                                          href={project.projektLink}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="flex items-center px-4 text-[#FF0000] hover:text-[#FF0000]/80"
+                                        >
                                           <ExternalLink className="h-5 w-5" />
                                         </a>
                                       )}
@@ -473,7 +532,7 @@ export default function Projects() {
 
                           {/* Department Columns */}
                           {expandedDepts.length > 0 ? (
-                            expandedDepts.map(dept => {
+                            expandedDepts.map((dept) => {
                               const review = reviews.find((r: Review) => r.department === dept);
                               return (
                                 <React.Fragment key={`${project.id}-${dept}`}>
@@ -481,17 +540,22 @@ export default function Projects() {
                                     {review ? (
                                       <InlineEditCell
                                         value={review.prueferName}
-                                        onSave={(val) => { applyReviewEdit(project.id, dept, "prueferName", val); toast.success("Gespeichert"); }}
+                                        onSave={(val) => {
+                                          applyReviewEdit(project.id, dept, "prueferName", val);
+                                          toast.success("Gespeichert");
+                                        }}
                                       />
-                                    ) : '-'}
+                                    ) : (
+                                      "-"
+                                    )}
                                   </td>
                                   <td className="py-3 px-3 text-xs whitespace-nowrap">
-                                    {review?.pruefDatum ? new Date(review.pruefDatum).toLocaleDateString('de-DE') : '-'}
+                                    {review?.pruefDatum ? new Date(review.pruefDatum).toLocaleDateString("de-DE") : "-"}
                                   </td>
                                   <td className="py-3 px-3 border-l">
                                     {review ? (
                                       <select
-                                        value={review.status || ''}
+                                        value={review.status || ""}
                                         onChange={(e) => {
                                           applyReviewEdit(project.id, dept, "status", e.target.value);
                                           toast.success("Gespeichert");
@@ -499,7 +563,7 @@ export default function Projects() {
                                         className="text-xs bg-transparent border rounded-lg px-3 py-1 w-full focus:ring-2 focus:ring-[#FF0000]"
                                       >
                                         <option value="">-</option>
-                                        {REVIEW_STATUSES.map(s => (
+                                        {REVIEW_STATUSES.map((s) => (
                                           <option key={s} value={s}>{s}</option>
                                         ))}
                                       </select>
@@ -511,7 +575,7 @@ export default function Projects() {
                               );
                             })
                           ) : (
-                            DEPARTMENTS.map(dept => {
+                            DEPARTMENTS.map((dept) => {
                               const review = reviews.find((r: Review) => r.department === dept);
                               return (
                                 <td key={`${project.id}-${dept}`} className="py-3 px-2 text-center border-l">
@@ -530,14 +594,14 @@ export default function Projects() {
               {/* Pagination */}
               <div className="flex items-center justify-between px-6 py-4 border-t bg-muted/30">
                 <span className="text-sm text-muted-foreground">
-                  Seite {page} von {totalPages} • {data?.total.toLocaleString('de-DE')} Einträge
+                  Seite {page} von {totalPages} • {data?.total.toLocaleString("de-DE")} Einträge
                 </span>
                 <div className="flex items-center gap-3">
                   <Button
                     variant="outline"
                     size="sm"
                     disabled={page <= 1}
-                    onClick={() => setPage(p => p - 1)}
+                    onClick={() => setPage((p) => p - 1)}
                     className="aws-button"
                   >
                     <ChevronLeft className="h-4 w-4" />
@@ -547,7 +611,7 @@ export default function Projects() {
                     variant="outline"
                     size="sm"
                     disabled={page >= totalPages}
-                    onClick={() => setPage(p => p + 1)}
+                    onClick={() => setPage((p) => p + 1)}
                     className="aws-button"
                   >
                     <ChevronRight className="h-4 w-4" />
@@ -577,23 +641,21 @@ export default function Projects() {
                       <div className="flex justify-between text-sm">
                         <div>
                           <p className="text-muted-foreground text-xs">Projektleiter</p>
-                          <p className="font-medium">{project.projektleiter || '-'}</p>
+                          <p className="font-medium">{project.projektleiter || "-"}</p>
                         </div>
                         <div className="text-right">
                           <p className="text-muted-foreground text-xs">Region</p>
-                          <p>{project.bahnhofsmanagement || '-'}</p>
+                          <p>{project.bahnhofsmanagement || "-"}</p>
                         </div>
                       </div>
-
                       {mainReview && (
                         <div className="pt-3 border-t text-xs">
                           <div className="flex justify-between">
                             <span className="text-muted-foreground">Letzte Prüfung</span>
-                            <span>{mainReview.pruefDatum ? new Date(mainReview.pruefDatum).toLocaleDateString('de-DE') : '-'}</span>
+                            <span>{mainReview.pruefDatum ? new Date(mainReview.pruefDatum).toLocaleDateString("de-DE") : "-"}</span>
                           </div>
                         </div>
                       )}
-
                       <Button variant="outline" size="sm" className="w-full aws-button text-[#FF0000]">
                         Details öffnen
                       </Button>
