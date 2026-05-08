@@ -37,7 +37,6 @@ const menuItems = [
   { icon: Table2, label: "Projekte", path: "/projects" },
   { icon: FileCheck, label: "BVB-EEA", path: "/bvb-eea" },
   { icon: Network, label: "PSV-ITK", path: "/psv-itk" },
-  { icon: ShieldCheck, label: "Brandschutz (BS)", path: "/brandschutz" }, // NEW
   { icon: History, label: "Änderungshistorie", path: "/audit" },
 ];
 
