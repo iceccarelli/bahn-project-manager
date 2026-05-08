@@ -16,23 +16,22 @@ if (!DATABASE_URL) {
   process.exit(1);
 }
 
-// Department column mapping from Excel
-// Col 8: Projektleiter (with date in col 9)
-// Then groups of 3 columns: Status, Name, Date for each department
+// Department column mapping from Excel (with BS correctly placed after ITK)
 const DEPARTMENT_MAPPING = [
   { dept: 'EEA', statusCol: 10, nameCol: 11, dateCol: 12 },
   { dept: 'ITK', statusCol: 13, nameCol: 14, dateCol: 15 },
-  { dept: 'GA', statusCol: 16, nameCol: 17, dateCol: 18 },
-  { dept: 'Energie', statusCol: 19, nameCol: 20, dateCol: 21 },
-  { dept: 'HFT', statusCol: 22, nameCol: 23, dateCol: 24 },
-  { dept: 'HKLS', statusCol: 25, nameCol: 26, dateCol: 27 },
-  { dept: 'TBQ', statusCol: 28, nameCol: 29, dateCol: 30 },
-  { dept: 'UM', statusCol: 31, nameCol: 32, dateCol: 33 },
-  { dept: 'BIM', statusCol: 34, nameCol: 35, dateCol: 36 },
-  { dept: 'LST', statusCol: 37, nameCol: 38, dateCol: 39 },
-  { dept: 'Vermessung', statusCol: 40, nameCol: 41, dateCol: 42 },
-  { dept: 'Baubetriebstechnologie', statusCol: 43, nameCol: 44, dateCol: 45 },
-  { dept: 'Baubetriebsplanung', statusCol: 46, nameCol: 47, dateCol: 48 },
+  { dept: 'BS', statusCol: 16, nameCol: 17, dateCol: 18 },           // ← Brandschutz added here
+  { dept: 'GA', statusCol: 19, nameCol: 20, dateCol: 21 },
+  { dept: 'Energie', statusCol: 22, nameCol: 23, dateCol: 24 },
+  { dept: 'HFT', statusCol: 25, nameCol: 26, dateCol: 27 },
+  { dept: 'HKLS', statusCol: 28, nameCol: 29, dateCol: 30 },
+  { dept: 'TBQ', statusCol: 31, nameCol: 32, dateCol: 33 },
+  { dept: 'UM', statusCol: 34, nameCol: 35, dateCol: 36 },
+  { dept: 'BIM', statusCol: 37, nameCol: 38, dateCol: 39 },
+  { dept: 'LST', statusCol: 40, nameCol: 41, dateCol: 42 },
+  { dept: 'Vermessung', statusCol: 43, nameCol: 44, dateCol: 45 },
+  { dept: 'Baubetriebstechnologie', statusCol: 46, nameCol: 47, dateCol: 48 },
+  { dept: 'Baubetriebsplanung', statusCol: 49, nameCol: 50, dateCol: 51 },
 ];
 
 async function main() {
@@ -74,29 +73,23 @@ async function main() {
     const projectId = result.insertId;
     insertedProjects++;
 
-    // Insert department reviews
+    // Insert department reviews (now includes BS)
     for (const mapping of DEPARTMENT_MAPPING) {
       const status = row[`col_${mapping.statusCol}`] || null;
       const name = row[`col_${mapping.nameCol}`] || null;
       const dateStr = row[`col_${mapping.dateCol}`] || null;
 
-      // Only insert if there's any data for this department
       if (status || name || dateStr) {
         let datum = null;
         if (dateStr) {
-          // Handle various date formats
           if (dateStr.includes('T')) {
-            // ISO format: 2021-01-19T00:00:00
             datum = dateStr.substring(0, 19).replace('T', ' ');
           } else if (dateStr.match(/^\d{2}\.\d{2}\.\d{4}$/)) {
-            // German format: DD.MM.YYYY
             const [day, month, year] = dateStr.split('.');
             datum = `${year}-${month}-${day} 00:00:00`;
           } else if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
-            // Simple date: YYYY-MM-DD
             datum = `${dateStr} 00:00:00`;
           } else {
-            // Skip unparseable dates
             datum = null;
           }
         }
@@ -119,6 +112,7 @@ async function main() {
   // Also seed BVB-EEA data
   console.log('\nSeeding BVB-EEA data...');
   await connection.execute('DELETE FROM bvb_eea');
+
   const bvbEeaData = [
     { projektnummer: null, bahnhofsmanagement: 'Darmstadt', station: 'Riedbahn RWS', projektbeschreibung: 'RWS Erneuerung', projektleiter: 'Ralf Neumann', kommentar: 'Dank richtiger EIGV-Einstufung durch Ali Aydogdu ist die Maßnahme von Anzeigeflichtig auf Anzeigrfrei eingestuft.' },
     { projektnummer: 'G011560039', bahnhofsmanagement: 'Gießen', station: 'Niederwalgern', bahnhofsnummer: '4535', projektbeschreibung: 'provisorische PÜ / Blitzschutz mit Erneuerung der Stromverteilung', projektleiter: 'Alexander Roth', eigvAnzeige: '2025-08-22', kommentar: 'Freigabe am 04.11.2025', freigabeNummer: 'I.IP-MI-IW1-AA-001' },
