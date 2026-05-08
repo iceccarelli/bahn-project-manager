@@ -93,7 +93,7 @@ export function useFilters() {
 type EditableProjectField = keyof Omit<Project, "id" | "reviews">;
 type EditableReviewField = keyof Review;
 
-// Helper functions to safely mutate cached objects (avoids TS 2352 error)
+// Helper functions to safely mutate cached objects
 function updateProjectField(project: Project, field: EditableProjectField, value: string) {
   (project as unknown as Record<string, unknown>)[field] = value;
 }
@@ -115,7 +115,6 @@ export function useProjects(params: {
   const { data: allData, isLoading: dataLoading } = useAllData();
   const [version, setVersion] = useState(0);
 
-  // Destructure for clean, exhaustive dependency array
   const {
     page,
     pageSize,
@@ -155,7 +154,7 @@ export function useProjects(params: {
           if (review) {
             updateReviewField(review, field, value);
           } else {
-            // Create new review entry
+            // Create new review entry (works for BS and all other departments)
             const newReview: Review = {
               department: departmentName,
               status: field === "status" ? value : null,
@@ -208,7 +207,7 @@ export function useProjects(params: {
       );
     }
 
-    // Status + Department filter
+    // Status + Department filter (fully supports "BS")
     if (status && department) {
       filtered = filtered.filter((p) =>
         p.reviews.some(
