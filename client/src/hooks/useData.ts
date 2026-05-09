@@ -154,7 +154,7 @@ export function useProjects(params: {
           if (review) {
             updateReviewField(review, field, value);
           } else {
-            // Create new review entry (works for BS and all other departments)
+            // Create new review entry (fully supports BS and all other departments)
             const newReview: Review = {
               department: departmentName,
               status: field === "status" ? value : null,
