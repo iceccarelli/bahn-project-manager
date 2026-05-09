@@ -41,7 +41,25 @@ interface AppData {
   filters: Filters;
 }
 
-// Simple global cache (kept for optimistic local editing)
+// All departments used in the UI (must match Projects.tsx departmentButtons)
+const ALL_DEPARTMENTS = [
+  "EEA",
+  "ITK",
+  "GA",
+  "Energie",
+  "HFT",
+  "HKLS",
+  "TBQ",
+  "BS",
+  "UM",
+  "BIM",
+  "LST",
+  "Vermessung",
+  "Baubetriebstechnologie",
+  "Baubetriebsplanung",
+];
+
+// Simple global cache
 let cachedData: AppData | null = null;
 let loadingPromise: Promise<AppData> | null = null;
 
@@ -51,9 +69,38 @@ async function loadData(): Promise<AppData> {
 
   loadingPromise = fetch("/data.json")
     .then((res) => res.json())
-    .then((data: AppData) => {
-      cachedData = data;
-      return data;
+    .then((rawData: AppData) => {
+      // === NORMALIZE DATA: Ensure every project has all departments (including BS) ===
+      const normalizedProjects = rawData.projects.map((project) => {
+        const existingReviews = project.reviews || [];
+        const reviewMap = new Map(existingReviews.map(r => [r.department, r]));
+
+        const completeReviews: Review[] = ALL_DEPARTMENTS.map((dept) => {
+          if (reviewMap.has(dept)) {
+            return reviewMap.get(dept)!;
+          }
+          // Create empty review entry for missing departments (especially BS)
+          return {
+            department: dept,
+            status: null,
+            prueferName: null,
+            pruefDatum: null,
+          };
+        });
+
+        return {
+          ...project,
+          reviews: completeReviews,
+        };
+      });
+
+      const normalizedData: AppData = {
+        ...rawData,
+        projects: normalizedProjects,
+      };
+
+      cachedData = normalizedData;
+      return normalizedData;
     });
 
   return loadingPromise;
@@ -69,7 +116,6 @@ export function useAllData() {
       setIsLoading(false);
       return;
     }
-
     loadData().then((d) => {
       setData(d);
       setIsLoading(false);
@@ -89,11 +135,9 @@ export function useFilters() {
   return { data: data?.filters ?? null, isLoading };
 }
 
-// Type-safe editable fields
 type EditableProjectField = keyof Omit<Project, "id" | "reviews">;
 type EditableReviewField = keyof Review;
 
-// Helper functions to safely mutate cached objects
 function updateProjectField(project: Project, field: EditableProjectField, value: string) {
   (project as unknown as Record<string, unknown>)[field] = value;
 }
@@ -154,7 +198,6 @@ export function useProjects(params: {
           if (review) {
             updateReviewField(review, field, value);
           } else {
-            // Create new review entry (fully supports BS and all other departments)
             const newReview: Review = {
               department: departmentName,
               status: field === "status" ? value : null,
@@ -177,7 +220,6 @@ export function useProjects(params: {
 
     let filtered = [...allData.projects];
 
-    // Search
     if (search) {
       const s = search.toLowerCase();
       filtered = filtered.filter(
@@ -190,24 +232,20 @@ export function useProjects(params: {
       );
     }
 
-    // Region filter
     if (region) {
       filtered = filtered.filter((p) => p.bahnhofsmanagement === region);
     }
 
-    // Projektleiter filter
     if (projektleiter) {
       filtered = filtered.filter((p) => p.projektleiter === projektleiter);
     }
 
-    // Prüfer filter
     if (pruefer) {
       filtered = filtered.filter((p) =>
         p.reviews.some((r) => r.prueferName === pruefer)
       );
     }
 
-    // Status + Department filter (fully supports "BS")
     if (status && department) {
       filtered = filtered.filter((p) =>
         p.reviews.some(
