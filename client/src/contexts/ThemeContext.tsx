@@ -1,55 +1,53 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 
-type Theme = "light" | "dark";
+type Theme = 'light' | 'dark';
 
 interface ThemeContextType {
   theme: Theme;
-  toggleTheme?: () => void;
-  switchable: boolean;
+  toggleTheme: () => void;
+  setTheme: (theme: Theme) => void;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
-interface ThemeProviderProps {
-  children: React.ReactNode;
-  defaultTheme?: Theme;
-  switchable?: boolean;
-}
-
-export function ThemeProvider({
-  children,
-  defaultTheme = "light",
-  switchable = false,
-}: ThemeProviderProps) {
-  const [theme, setTheme] = useState<Theme>(() => {
-    if (switchable) {
-      const stored = localStorage.getItem("theme");
-      return (stored as Theme) || defaultTheme;
+export function ThemeProvider({ children }: { children: ReactNode }) {
+  const [theme, setThemeState] = useState<Theme>(() => {
+    // Synchronous initial state from localStorage to prevent theme flash
+    const savedTheme = localStorage.getItem('theme') as Theme | null;
+    if (savedTheme === 'light' || savedTheme === 'dark') {
+      return savedTheme;
     }
-    return defaultTheme;
+    // Default to professional dark (DB brand)
+    return 'dark';
   });
 
+  // Persist to localStorage whenever theme changes
+  useEffect(() => {
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  // Apply theme class to html element
   useEffect(() => {
     const root = document.documentElement;
-    if (theme === "dark") {
-      root.classList.add("dark");
+    if (theme === 'dark') {
+      root.classList.add('dark');
+      root.classList.remove('light');
     } else {
-      root.classList.remove("dark");
+      root.classList.remove('dark');
+      root.classList.add('light');
     }
+  }, [theme]);
 
-    if (switchable) {
-      localStorage.setItem("theme", theme);
-    }
-  }, [theme, switchable]);
+  const toggleTheme = () => {
+    setThemeState((prev) => (prev === 'dark' ? 'light' : 'dark'));
+  };
 
-  const toggleTheme = switchable
-    ? () => {
-        setTheme(prev => (prev === "light" ? "dark" : "light"));
-      }
-    : undefined;
+  const setTheme = (newTheme: Theme) => {
+    setThemeState(newTheme);
+  };
 
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme, switchable }}>
+    <ThemeContext.Provider value={{ theme, toggleTheme, setTheme }}>
       {children}
     </ThemeContext.Provider>
   );
@@ -57,8 +55,8 @@ export function ThemeProvider({
 
 export function useTheme() {
   const context = useContext(ThemeContext);
-  if (!context) {
-    throw new Error("useTheme must be used within ThemeProvider");
+  if (context === undefined) {
+    throw new Error('useTheme must be used within a ThemeProvider');
   }
   return context;
 }
