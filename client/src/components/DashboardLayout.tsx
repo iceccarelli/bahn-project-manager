@@ -25,6 +25,7 @@ import {
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useTheme } from "@/contexts/ThemeContext";
+import { ThemeProvider } from "@/contexts/ThemeContext";
 // DB-branded Header & Footer (perfect integration with Übersichtsliste.xlsm architecture)
 import Header from "./Header";
 import Footer from "./Footer";
@@ -63,17 +64,19 @@ export default function DashboardLayout({
   }, [sidebarWidth]);
 
   return (
-    <SidebarProvider
-      style={
-        {
-          "--sidebar-width": `${sidebarWidth}px`,
-        } as CSSProperties
-      }
-    >
-      <DashboardLayoutContent setSidebarWidth={setSidebarWidth}>
-        {children}
-      </DashboardLayoutContent>
-    </SidebarProvider>
+    <ThemeProvider>
+      <SidebarProvider
+        style={
+          {
+            "--sidebar-width": `${sidebarWidth}px`,
+          } as CSSProperties
+        }
+      >
+        <DashboardLayoutContent setSidebarWidth={setSidebarWidth}>
+          {children}
+        </DashboardLayoutContent>
+      </SidebarProvider>
+    </ThemeProvider>
   );
 }
 
@@ -140,7 +143,7 @@ function DashboardLayoutContent({
       <div className="relative" ref={sidebarRef}>
         <Sidebar
           collapsible="icon"
-          className="border-r-0"
+          className="border-r-0 bg-sidebar text-sidebar-foreground border-r border-sidebar-border"
           disableTransition={isResizing}
         >
           <SidebarHeader className="h-16 justify-center border-b border-border/60">
@@ -225,7 +228,7 @@ function DashboardLayoutContent({
       </div>
 
       {/* Main content area with DB header offset + sticky footer below everything */}
-      <SidebarInset className="pt-[60px]">
+      <SidebarInset className="pt-[60px] transition-[margin-left] duration-200 ease-in-out relative z-10 bg-background">
         {/* Mobile top bar */}
         {isMobile && (
           <div className="flex border-b h-14 items-center justify-between bg-background/95 px-2 backdrop-blur supports-[backdrop-filter]:backdrop-blur sticky top-0 z-40">
