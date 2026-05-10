@@ -1,6 +1,8 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, FolderOpen, CheckCircle2, Clock, AlertTriangle } from "lucide-react";
-import { useStats } from "@/hooks/useData";
+import { Button } from "@/components/ui/button";
+import { Loader2, FolderOpen, CheckCircle2, Clock, AlertTriangle, Inbox, Edit3, Mail, MessageSquare } from "lucide-react";
+import { useStats, useRecentArrivals, useRecentInBearbeitung } from "@/hooks/useData";
+import { toast } from "sonner";
 
 export default function Dashboard() {
   const { data: stats, isLoading } = useStats();
@@ -19,6 +21,52 @@ export default function Dashboard() {
   const inProgressCount = stats.statusDistribution.find(s => s.status === 'in Bearbeitung')?.count ?? 0;
 
   const departments = Array.from(new Set(stats.departmentStats.map(d => d.department)));
+
+  const { data: recentArrivals, isLoading: arrivalsLoading } = useRecentArrivals(5);
+  const { data: recentInBearbeitung, isLoading: inBearbLoading } = useRecentInBearbeitung(5);
+
+  const handleEmailNotify = (section: 'arrival' | 'bearbeitung') => {
+    const items = section === 'arrival' ? recentArrivals : recentInBearbeitung;
+    let subject = '';
+    let body = '';
+    if (section === 'arrival') {
+      subject = 'Neue Projekte / Prüfungen angekommen - Dashboard Benachrichtigung';
+      body = `Hallo Fachspezialist,\n\nDie folgenden neuen Projekte/Prüfungen sind gerade angekommen:\n\n` +
+        items.map((item, idx) => `${idx + 1}. Projektleiter: ${item.projektleiter}\n   Projekt: ${item.projekt}\n   Gewerke: ${item.gewerke}\n`).join('\n') +
+        `\nBitte prüfen und übernehmen.\n\nMit freundlichen Grüßen\nIhr Dashboard`;
+    } else {
+      subject = 'Projekte in Bearbeitung - Fristen & Status prüfen';
+      body = `Hallo,\n\nFolgende Projekte sind aktuell in Bearbeitung:\n\n` +
+        items.map((item, idx) => `${idx + 1}. Fachspezialist: ${item.fachspezialist}\n   Projekt: ${item.projekt}\n   Seit: ${item.seitWann} | Abgabe: ${item.abgabeWann}\n`).join('\n') +
+        `\nBitte um zeitnahe Rückmeldung.\n\nMit freundlichen Grüßen\nIhr Dashboard`;
+    }
+    const mailtoLink = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    window.location.href = mailtoLink;
+    toast.success('E-Mail Client geöffnet', {
+      description: 'Die Nachricht wurde vorausgefüllt mit den aktuellen Daten.',
+    });
+  };
+
+  const handleTeamsNotify = (section: 'arrival' | 'bearbeitung') => {
+    const items = section === 'arrival' ? recentArrivals : recentInBearbeitung;
+    let message = '';
+    if (section === 'arrival') {
+      message = `**🆕 Gerade angekommen - Dashboard Update**\n\n` +
+        items.map((item, idx) => `**${idx + 1}.** ${item.projektleiter} | ${item.projekt}\n   Gewerke: ${item.gewerke}`).join('\n\n') +
+        `\n\nBitte prüfen und ggf. übernehmen. Danke!`;
+    } else {
+      message = `**⚙️ Gerade in Bearbeitung - Dashboard Update**\n\n` +
+        items.map((item, idx) => `**${idx + 1}.** Fachspezialist: ${item.fachspezialist}\n   Projekt: ${item.projekt}\n   Seit: ${item.seitWann} | Abgabe: ${item.abgabeWann}`).join('\n\n') +
+        `\n\nBitte prüfen und Rückmeldung geben. Danke!`;
+    }
+    navigator.clipboard.writeText(message).then(() => {
+      toast.success('Teams-Nachricht kopiert!', {
+        description: 'In Microsoft Teams einfügen und an den/die Fachspezialisten senden.',
+      });
+    }).catch(() => {
+      toast.error('Kopieren fehlgeschlagen', { description: 'Bitte manuell kopieren.' });
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -77,6 +125,107 @@ export default function Dashboard() {
             <p className="text-xs text-muted-foreground mt-1">
               Aktive Prüfvorgänge
             </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Gerade angekommen & Gerade in Bearbeitung - Neue Sektionen mit Notify Buttons */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* 1. Gerade angekommen: letzte 5 neue */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-base">Gerade angekommen</CardTitle>
+                <p className="text-xs text-muted-foreground mt-0.5">Die letzten 5 neuen Projekte / Prüfungen</p>
+              </div>
+              <Inbox className="h-5 w-5 text-muted-foreground" />
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0">
+            {arrivalsLoading ? (
+              <div className="flex justify-center py-4"><Loader2 className="h-5 w-5 animate-spin" /></div>
+            ) : recentArrivals.length > 0 ? (
+              <div className="space-y-2.5 text-sm">
+                {recentArrivals.map((item, index) => (
+                  <div key={index} className="flex items-start justify-between gap-3 border-b pb-2 last:border-0 last:pb-0">
+                    <div className="min-w-0 flex-1">
+                      <div className="font-medium truncate">{item.projektleiter}</div>
+                      <div className="text-xs text-muted-foreground truncate">{item.projekt}</div>
+                      <div className="text-[10px] text-blue-600 dark:text-blue-400 mt-0.5">Gewerke: {item.gewerke}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground py-2">Keine aktuellen Daten verfügbar.</p>
+            )}
+            <div className="flex flex-wrap gap-2 mt-4">
+              <Button 
+                size="sm" 
+                className="flex-1 sm:flex-none gap-1.5"
+                onClick={() => handleEmailNotify('arrival')}
+              >
+                <Mail className="h-3.5 w-3.5" /> Email to notify Fachspezialist
+              </Button>
+              <Button 
+                size="sm" 
+                variant="outline" 
+                className="flex-1 sm:flex-none gap-1.5"
+                onClick={() => handleTeamsNotify('arrival')}
+              >
+                <MessageSquare className="h-3.5 w-3.5" /> Teams Message to notify
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* 2. Gerade in Bearbeitung: letzte 5 neue bei Fachspezialist */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-base">Gerade in Bearbeitung</CardTitle>
+                <p className="text-xs text-muted-foreground mt-0.5">Letzte 5 neue beim Fachspezialisten in Bearbeitung</p>
+              </div>
+              <Edit3 className="h-5 w-5 text-muted-foreground" />
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0">
+            {inBearbLoading ? (
+              <div className="flex justify-center py-4"><Loader2 className="h-5 w-5 animate-spin" /></div>
+            ) : recentInBearbeitung.length > 0 ? (
+              <div className="space-y-2.5 text-sm">
+                {recentInBearbeitung.map((item, index) => (
+                  <div key={index} className="flex items-start justify-between gap-3 border-b pb-2 last:border-0 last:pb-0">
+                    <div className="min-w-0 flex-1">
+                      <div className="font-medium truncate">{item.fachspezialist}</div>
+                      <div className="text-xs text-muted-foreground truncate">{item.projekt}</div>
+                      <div className="text-[10px] text-amber-600 dark:text-amber-400 mt-0.5">Seit: {item.seitWann} | Abgabe: {item.abgabeWann}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground py-2">Keine aktuellen Daten verfügbar.</p>
+            )}
+            <div className="flex flex-wrap gap-2 mt-4">
+              <Button 
+                size="sm" 
+                className="flex-1 sm:flex-none gap-1.5"
+                onClick={() => handleEmailNotify('bearbeitung')}
+              >
+                <Mail className="h-3.5 w-3.5" /> Email to notify Fachspezialist
+              </Button>
+              <Button 
+                size="sm" 
+                variant="outline" 
+                className="flex-1 sm:flex-none gap-1.5"
+                onClick={() => handleTeamsNotify('bearbeitung')}
+              >
+                <MessageSquare className="h-3.5 w-3.5" /> Teams Message to notify
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>
