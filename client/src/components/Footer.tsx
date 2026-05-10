@@ -10,7 +10,7 @@ export default function Footer() {
             <Globe className="h-5 w-5" />
             <span className="font-medium">Deutsch (DE)</span>
           </div>
-          <p className="text-xs opacity-70">© 2026 Deutsche Bahn AG • Alle Rechte vorbehalten</p>
+          <p className="text-xs opacity-70">© {new Date().getFullYear()} Deutsche Bahn AG • Alle Rechte vorbehalten</p>
           <p className="text-xs opacity-70 mt-1">Bahn Project Manager – Internes Tool</p>
         </div>
 
