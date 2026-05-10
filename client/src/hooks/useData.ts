@@ -135,6 +135,50 @@ export function useFilters() {
   return { data: data?.filters ?? null, isLoading };
 }
 
+export function useRecentArrivals(limit: number = 5) {
+  const { data: allData, isLoading } = useAllData();
+  if (!allData?.projects) {
+    return { data: [], isLoading };
+  }
+  // Newest first by id (higher id assumed more recent)
+  const sorted = [...allData.projects]
+    .sort((a, b) => b.id - a.id)
+    .slice(0, limit);
+  const arrivals = sorted.map((project) => {
+    const activeReviews = project.reviews.filter((r) => r.status != null);
+    const gewerke = activeReviews.length > 0
+      ? activeReviews.map((r) => r.department).join(", ")
+      : "Keine Gewerke";
+    return {
+      projektleiter: project.projektleiter || "-",
+      projekt: project.station || project.projektnummer || (project.projektbeschreibung ? project.projektbeschreibung.substring(0, 35) + "..." : "-"),
+      gewerke,
+    };
+  });
+  return { data: arrivals, isLoading };
+}
+
+export function useRecentInBearbeitung(limit: number = 5) {
+  const { data: allData, isLoading } = useAllData();
+  if (!allData?.projects) {
+    return { data: [], isLoading };
+  }
+  const filtered = allData.projects.filter((p) =>
+    p.reviews.some((r) => r.status === "in Bearbeitung")
+  );
+  const sorted = filtered.sort((a, b) => b.id - a.id).slice(0, limit);
+  const items = sorted.map((project) => {
+    const review = project.reviews.find((r) => r.status === "in Bearbeitung") || project.reviews[0];
+    return {
+      fachspezialist: review?.prueferName || "-",
+      projekt: project.station || project.projektnummer || (project.projektbeschreibung ? project.projektbeschreibung.substring(0, 35) + "..." : "-"),
+      seitWann: review?.pruefDatum || "-",
+      abgabeWann: "-", // Keine Fristdaten im aktuellen Datenmodell
+    };
+  });
+  return { data: items, isLoading };
+}
+
 type EditableProjectField = keyof Omit<Project, "id" | "reviews">;
 type EditableReviewField = keyof Review;
 
@@ -217,7 +261,7 @@ export function useProjects(params: {
     []
   );
 
-  // NEW: Add a new project professionally
+  // Professional addProject for "Neues Projekt" functionality
   const addProject = useCallback(
     (newProjectData: Omit<Project, "id" | "reviews"> & { reviews?: Review[] }) => {
       if (!cachedData) {
@@ -262,7 +306,7 @@ export function useProjects(params: {
 
     let filtered = [...allData.projects];
 
-    // Search filter (enhanced to be more helpful)
+    // Search filter (enhanced - includes more fields for better UX)
     if (search) {
       const s = search.toLowerCase().trim();
       filtered = filtered.filter(
@@ -309,7 +353,7 @@ export function useProjects(params: {
       );
     }
 
-    // === PROFESSIONAL SORTING SUPPORT ===
+    // === PROFESSIONAL SORTING SUPPORT (handles strings + numbers) ===
     if (sortBy) {
       filtered.sort((a: Project, b: Project) => {
         let va: any = (a as any)[sortBy];
@@ -325,7 +369,7 @@ export function useProjects(params: {
           va = String(va).toLowerCase();
           vb = String(vb).toLowerCase();
         } else if (typeof va === "number" && typeof vb === "number") {
-          // numeric compare for id etc
+          // numeric compare for id etc.
           return sortDir === "asc" ? va - vb : vb - va;
         }
 
@@ -361,6 +405,6 @@ export function useProjects(params: {
     refetch: () => setVersion((v) => v + 1),
     applyEdit,
     applyReviewEdit,
-    addProject, // NEW professional feature
+    addProject, // Professional feature for creating new projects
   };
 }
