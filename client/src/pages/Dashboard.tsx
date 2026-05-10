@@ -25,7 +25,7 @@ export default function Dashboard() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
         <p className="text-muted-foreground mt-1">
-          Übersicht aller Bahnhofsprojekte und Prüfstatus
+          Übersicht aller Bahnhofsprojekte und Prüfstatus (inkl. BS)
         </p>
       </div>
 
@@ -139,10 +139,10 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Status Distribution per Department */}
+      {/* Status Distribution per Department - includes BS */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Status-Verteilung nach Fachbereich</CardTitle>
+          <CardTitle className="text-base">Status-Verteilung nach Fachbereich (inkl. BS)</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
