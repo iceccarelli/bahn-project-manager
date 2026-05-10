@@ -263,8 +263,9 @@ function DashboardLayoutContent({
           
         </div>
       </SidebarInset>
-      {/* DB Global Footer */}
-      <Footer />
+      
     </>
+    {/* DB Global Footer */}
+      <Footer />
   );
 }
