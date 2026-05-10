@@ -41,7 +41,7 @@ interface AppData {
   filters: Filters;
 }
 
-// All departments used in the UI (must match Projects.tsx departmentButtons and shared types)
+// All departments used in the UI (must match Projects.tsx departmentButtons)
 const ALL_DEPARTMENTS = [
   "EEA",
   "ITK",
@@ -217,6 +217,44 @@ export function useProjects(params: {
     []
   );
 
+  // NEW: Add a new project professionally
+  const addProject = useCallback(
+    (newProjectData: Omit<Project, "id" | "reviews"> & { reviews?: Review[] }) => {
+      if (!cachedData) {
+        console.error("No cached data available to add project");
+        return null;
+      }
+
+      const maxId = cachedData.projects.length > 0 
+        ? Math.max(...cachedData.projects.map((p) => p.id)) 
+        : 0;
+
+      const newProject: Project = {
+        id: maxId + 1,
+        projektnummer: newProjectData.projektnummer || null,
+        bahnhofsmanagement: newProjectData.bahnhofsmanagement || null,
+        station: newProjectData.station || null,
+        bahnhofsnummer: newProjectData.bahnhofsnummer || null,
+        streckennummer: newProjectData.streckennummer || null,
+        projektbeschreibung: newProjectData.projektbeschreibung || null,
+        projektleiter: newProjectData.projektleiter || null,
+        kommentar: newProjectData.kommentar || null,
+        projektLink: newProjectData.projektLink || null,
+        reviews: newProjectData.reviews || ALL_DEPARTMENTS.map((dept) => ({
+          department: dept,
+          status: null,
+          prueferName: null,
+          pruefDatum: null,
+        })),
+      };
+
+      cachedData.projects.push(newProject);
+      setVersion((v) => v + 1);
+      return newProject.id;
+    },
+    []
+  );
+
   const result = useMemo(() => {
     if (!allData) {
       return { projects: [], total: 0, page, pageSize };
@@ -224,44 +262,41 @@ export function useProjects(params: {
 
     let filtered = [...allData.projects];
 
-    // Search filter
+    // Search filter (enhanced to be more helpful)
     if (search) {
-      const s = search.toLowerCase();
+      const s = search.toLowerCase().trim();
       filtered = filtered.filter(
         (p) =>
           p.station?.toLowerCase().includes(s) ||
           p.projektbeschreibung?.toLowerCase().includes(s) ||
           p.projektnummer?.toLowerCase().includes(s) ||
           p.projektleiter?.toLowerCase().includes(s) ||
-          p.bahnhofsmanagement?.toLowerCase().includes(s)
+          p.bahnhofsmanagement?.toLowerCase().includes(s) ||
+          p.kommentar?.toLowerCase().includes(s) ||
+          p.projektLink?.toLowerCase().includes(s)
       );
     }
 
-    // Region filter
     if (region) {
       filtered = filtered.filter((p) => p.bahnhofsmanagement === region);
     }
 
-    // Projektleiter filter
     if (projektleiter) {
       filtered = filtered.filter((p) => p.projektleiter === projektleiter);
     }
 
-    // Pruefer filter (any review by this person)
     if (pruefer) {
       filtered = filtered.filter((p) =>
         p.reviews.some((r) => r.prueferName === pruefer)
       );
     }
 
-    // Department filter (projects that have a review entry for this department - all do after normalization, but useful with status)
     if (department) {
       filtered = filtered.filter((p) =>
         p.reviews.some((r) => r.department === department)
       );
     }
 
-    // Status filter (with or without department)
     if (status && department) {
       filtered = filtered.filter((p) =>
         p.reviews.some(
@@ -274,21 +309,24 @@ export function useProjects(params: {
       );
     }
 
-    // === SORTING (client-side, supports all common columns) ===
+    // === PROFESSIONAL SORTING SUPPORT ===
     if (sortBy) {
       filtered.sort((a: Project, b: Project) => {
         let va: any = (a as any)[sortBy];
         let vb: any = (b as any)[sortBy];
 
-        // Handle null/undefined
+        // Handle null/undefined gracefully
         if (va == null && vb == null) return 0;
         if (va == null) return sortDir === "asc" ? 1 : -1;
         if (vb == null) return sortDir === "asc" ? -1 : 1;
 
-        // String comparison (case insensitive for text fields)
+        // String comparison (case-insensitive for text)
         if (typeof va === "string" || typeof vb === "string") {
           va = String(va).toLowerCase();
           vb = String(vb).toLowerCase();
+        } else if (typeof va === "number" && typeof vb === "number") {
+          // numeric compare for id etc
+          return sortDir === "asc" ? va - vb : vb - va;
         }
 
         if (va < vb) return sortDir === "asc" ? -1 : 1;
@@ -323,5 +361,6 @@ export function useProjects(params: {
     refetch: () => setVersion((v) => v + 1),
     applyEdit,
     applyReviewEdit,
+    addProject, // NEW professional feature
   };
 }
