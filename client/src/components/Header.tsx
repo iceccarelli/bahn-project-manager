@@ -1,5 +1,8 @@
 import { useState, useEffect, useRef } from "react";
-import { Search, Bell, ChevronDown, Plus, User, LogOut, CreditCard, Sun, Moon, X, Filter } from "lucide-react";
+import { 
+  Search, Bell, ChevronDown, Plus, User, LogOut, CreditCard, 
+  Sun, Moon, X, Filter, Globe
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
