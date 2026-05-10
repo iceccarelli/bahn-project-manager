@@ -6,6 +6,8 @@ import { toast } from "sonner";
 
 export default function Dashboard() {
   const { data: stats, isLoading } = useStats();
+  const { data: recentArrivals, isLoading: arrivalsLoading } = useRecentArrivals(5);
+  const { data: recentInBearbeitung, isLoading: inBearbLoading } = useRecentInBearbeitung(5);
 
   if (isLoading || !stats) {
     return (
@@ -21,9 +23,6 @@ export default function Dashboard() {
   const inProgressCount = stats.statusDistribution.find(s => s.status === 'in Bearbeitung')?.count ?? 0;
 
   const departments = Array.from(new Set(stats.departmentStats.map(d => d.department)));
-
-  const { data: recentArrivals, isLoading: arrivalsLoading } = useRecentArrivals(5);
-  const { data: recentInBearbeitung, isLoading: inBearbLoading } = useRecentInBearbeitung(5);
 
   const handleEmailNotify = (section: 'arrival' | 'bearbeitung') => {
     const items = section === 'arrival' ? recentArrivals : recentInBearbeitung;
@@ -148,7 +147,7 @@ export default function Dashboard() {
             ) : recentArrivals.length > 0 ? (
               <div className="space-y-2.5 text-sm">
                 {recentArrivals.map((item, index) => (
-                  <div key={index} className="flex items-start justify-between gap-3 border-b pb-2 last:border-0 last:pb-0">
+                  <div key={index} className="flex items-start gap-3 border-b pb-2 last:border-0 last:pb-0">
                     <div className="min-w-0 flex-1">
                       <div className="font-medium truncate">{item.projektleiter}</div>
                       <div className="text-xs text-muted-foreground truncate">{item.projekt}</div>
@@ -197,7 +196,7 @@ export default function Dashboard() {
             ) : recentInBearbeitung.length > 0 ? (
               <div className="space-y-2.5 text-sm">
                 {recentInBearbeitung.map((item, index) => (
-                  <div key={index} className="flex items-start justify-between gap-3 border-b pb-2 last:border-0 last:pb-0">
+                  <div key={index} className="flex items-start gap-3 border-b pb-2 last:border-0 last:pb-0">
                     <div className="min-w-0 flex-1">
                       <div className="font-medium truncate">{item.fachspezialist}</div>
                       <div className="text-xs text-muted-foreground truncate">{item.projekt}</div>
