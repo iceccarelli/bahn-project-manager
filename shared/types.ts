@@ -12,6 +12,7 @@ export * from "./_core/errors";
 export const DEPARTMENTS = [
   "EEA",
   "ITK",
+  "BS",
   "GA",
   "Energie",
   "HFT",
