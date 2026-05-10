@@ -1,8 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { 
-  Search, Bell, ChevronDown, Plus, User, LogOut, CreditCard, 
-  Sun, Moon, X, Filter, Globe
-} from "lucide-react";
+import { Search, Bell, ChevronDown, Plus, User, LogOut, CreditCard, Sun, Moon, X, Filter, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -105,9 +102,9 @@ export default function Header() {
 
   return (
     <header
-      className={`fixed top-0 left-0 right-0 z-[100] flex items-center px-5 gap-x-3 h-[60px] bg-[#1A1A1A] text-white border-b border-[#FF0000]/80 transition-all duration-300 ease-in-out ${
+      className={`fixed top-0 left-0 right-0 z-[100] flex items-center px-5 gap-x-3 h-[60px] transition-all duration-300 ease-in-out ${
         scrolled ? "shadow-2xl" : "shadow-md"
-      } ${isVisible ? "translate-y-0" : "-translate-y-[60px]"}`}
+      } ${isVisible ? "translate-y-0" : "-translate-y-[60px]"} bg-background/95 text-foreground border-b border-border backdrop-blur supports-[backdrop-filter]:bg-background/90`}
       style={{ willChange: 'transform' }}
     >
       {/* DB Logo + Service Name – perfect brand consistency */}
@@ -136,7 +133,7 @@ export default function Header() {
             onFocus={() => setShowSuggestions(true)}
             onBlur={() => setTimeout(() => setShowSuggestions(false), 220)}
             placeholder="Projekte, Stationen, Prüfer, Status, Aktionen durchsuchen… (z.B. G.0115, Frankfurt, Zustimmung erteilt, BS)"
-            className="aws-input pl-11 h-9 bg-white/10 border-white/25 text-white placeholder:text-white/50 focus:bg-white/95 focus:text-[#1A1A1A] focus:border-[#FF0000] focus:placeholder:text-gray-400 w-full text-sm rounded-lg transition-all"
+            className="aws-input pl-11 h-9 bg-muted/50 border-border text-foreground placeholder:text-muted-foreground focus:bg-background focus:text-foreground focus:border-[#FF0000] focus:placeholder:text-muted-foreground w-full text-sm rounded-lg transition-all"
           />
           {searchTerm && (
             <button 
@@ -180,7 +177,7 @@ export default function Header() {
             <span className="hidden sm:inline">Erstellen</span>
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-80 shadow-2xl">
+        <DropdownMenuContent align="end" className="w-80 shadow-2xl bg-popover text-popover-foreground border border-border">
           <DropdownMenuLabel className="flex items-center gap-2 text-[#FF0000]">
             <Plus className="h-4 w-4" /> DB Aktionen (direkt aus Übersichtsliste)
           </DropdownMenuLabel>
@@ -210,7 +207,7 @@ export default function Header() {
             <ChevronDown className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-64">
+        <DropdownMenuContent align="end" className="w-64 bg-popover text-popover-foreground border border-border">
           <DropdownMenuLabel>Region / Bahnhofsmanagement</DropdownMenuLabel>
           <DropdownMenuSeparator />
           {["eu-central-1 (Frankfurt)", "Kassel", "Kaiserslautern", "Frankfurt", "Darmstadt", "Saarbrücken", "Koblenz", "Mainz", "Gießen", "Alle Regionen"].map((r, i) => (
@@ -248,7 +245,7 @@ export default function Header() {
             </span>
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-96 max-h-[420px] overflow-auto shadow-2xl">
+        <DropdownMenuContent align="end" className="w-96 max-h-[420px] overflow-auto shadow-2xl bg-popover text-popover-foreground border border-border">
           <DropdownMenuLabel className="flex justify-between items-center">
             Benachrichtigungen <span className="text-xs bg-[#FF0000]/10 text-[#FF0000] px-2 py-0.5 rounded">7 neu</span>
           </DropdownMenuLabel>
@@ -277,7 +274,7 @@ export default function Header() {
             <AvatarFallback className="bg-[#FF0000] text-white text-xs font-bold">BP</AvatarFallback>
           </Avatar>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-64 shadow-2xl">
+        <DropdownMenuContent align="end" className="w-64 shadow-2xl bg-popover text-popover-foreground border border-border">
           <DropdownMenuLabel>
             <div className="flex flex-col">
               <span>Bahn Prüfer</span>
