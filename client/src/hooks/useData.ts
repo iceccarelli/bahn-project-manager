@@ -41,7 +41,7 @@ interface AppData {
   filters: Filters;
 }
 
-// All departments used in the UI (must match Projects.tsx departmentButtons)
+// All departments used in the UI (must match Projects.tsx departmentButtons and shared types)
 const ALL_DEPARTMENTS = [
   "EEA",
   "ITK",
@@ -155,6 +155,8 @@ export function useProjects(params: {
   pruefer?: string;
   status?: string;
   department?: string;
+  sortBy?: string;
+  sortDir?: "asc" | "desc";
 }) {
   const { data: allData, isLoading: dataLoading } = useAllData();
   const [version, setVersion] = useState(0);
@@ -168,6 +170,8 @@ export function useProjects(params: {
     pruefer,
     status,
     department,
+    sortBy = "id",
+    sortDir = "asc",
   } = params;
 
   const applyEdit = useCallback(
@@ -220,6 +224,7 @@ export function useProjects(params: {
 
     let filtered = [...allData.projects];
 
+    // Search filter
     if (search) {
       const s = search.toLowerCase();
       filtered = filtered.filter(
@@ -232,20 +237,31 @@ export function useProjects(params: {
       );
     }
 
+    // Region filter
     if (region) {
       filtered = filtered.filter((p) => p.bahnhofsmanagement === region);
     }
 
+    // Projektleiter filter
     if (projektleiter) {
       filtered = filtered.filter((p) => p.projektleiter === projektleiter);
     }
 
+    // Pruefer filter (any review by this person)
     if (pruefer) {
       filtered = filtered.filter((p) =>
         p.reviews.some((r) => r.prueferName === pruefer)
       );
     }
 
+    // Department filter (projects that have a review entry for this department - all do after normalization, but useful with status)
+    if (department) {
+      filtered = filtered.filter((p) =>
+        p.reviews.some((r) => r.department === department)
+      );
+    }
+
+    // Status filter (with or without department)
     if (status && department) {
       filtered = filtered.filter((p) =>
         p.reviews.some(
@@ -256,6 +272,29 @@ export function useProjects(params: {
       filtered = filtered.filter((p) =>
         p.reviews.some((r) => r.status === status)
       );
+    }
+
+    // === SORTING (client-side, supports all common columns) ===
+    if (sortBy) {
+      filtered.sort((a: Project, b: Project) => {
+        let va: any = (a as any)[sortBy];
+        let vb: any = (b as any)[sortBy];
+
+        // Handle null/undefined
+        if (va == null && vb == null) return 0;
+        if (va == null) return sortDir === "asc" ? 1 : -1;
+        if (vb == null) return sortDir === "asc" ? -1 : 1;
+
+        // String comparison (case insensitive for text fields)
+        if (typeof va === "string" || typeof vb === "string") {
+          va = String(va).toLowerCase();
+          vb = String(vb).toLowerCase();
+        }
+
+        if (va < vb) return sortDir === "asc" ? -1 : 1;
+        if (va > vb) return sortDir === "asc" ? 1 : -1;
+        return 0;
+      });
     }
 
     const total = filtered.length;
@@ -274,6 +313,8 @@ export function useProjects(params: {
     pruefer,
     status,
     department,
+    sortBy,
+    sortDir,
   ]);
 
   return {
