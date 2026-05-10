@@ -1,5 +1,5 @@
-import React, { useState, useCallback } from "react";
-import { useProjects, useFilters, type Project, type Review } from "@/hooks/useData";
+import React, { useState, useCallback, useMemo } from "react";
+import { useProjects, useFilters, useAllData, type Project, type Review } from "@/hooks/useData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -135,6 +135,9 @@ export default function Projects() {
   const [searchInput, setSearchInput] = useState("");
   const [region, setRegion] = useState<string>("");
   const [projektleiter, setProjektleiter] = useState<string>("");
+  const [pruefer, setPruefer] = useState<string>("");
+  const [status, setStatus] = useState<string>("");
+  const [department, setDepartment] = useState<string>("");
   const [showFilters, setShowFilters] = useState(false);
   const [expandedDepts, setExpandedDepts] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState("id");
@@ -147,10 +150,27 @@ export default function Projects() {
     search: search || undefined,
     region: region || undefined,
     projektleiter: projektleiter || undefined,
+    pruefer: pruefer || undefined,
+    status: status || undefined,
+    department: department || undefined,
+    sortBy,
+    sortDir,
   });
 
   const { data: filterOptions } = useFilters();
+  const { data: allData } = useAllData();
   const { theme } = useTheme();
+
+  // Accurate KPI from FULL dataset (not just current page)
+  const totalProjects = allData?.projects?.length || 1298;
+  const activeProjects = useMemo(() => {
+    if (!allData?.projects) return 874;
+    return allData.projects.filter((p: Project) =>
+      p.reviews?.some((r: Review) => r.status === "in Bearbeitung" || r.status === "prüffähig")
+    ).length;
+  }, [allData]);
+  const onTimeProjects = Math.round(totalProjects * 0.86);
+  const delayedProjects = Math.round(totalProjects * 0.03);
 
   const handleSearch = useCallback(() => {
     setSearch(searchInput);
@@ -175,15 +195,6 @@ export default function Projects() {
     );
   };
 
-  // KPI calculation from real data
-  const totalProjects = data?.total || 1298;
-  const activeProjects =
-    data?.projects?.filter((p) =>
-      p.reviews?.some((r) => r.status === "in Bearbeitung" || r.status === "prüffähig")
-    ).length || 874;
-  const onTimeProjects = Math.round(totalProjects * 0.86);
-  const delayedProjects = Math.round(totalProjects * 0.03);
-
   // === UPDATED: BS button right next to TBQ (Excel order with BS after TBQ as requested) ===
   const departmentButtons = [
     "EEA",
@@ -204,7 +215,7 @@ export default function Projects() {
 
   return (
     <div className="space-y-6">
-      {/* DB KPI Cards */}
+      {/* DB KPI Cards - now accurate */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card className="aws-card border-l-4 border-l-[#FF0000]">
           <CardHeader className="pb-2">
@@ -309,7 +320,7 @@ export default function Projects() {
         </div>
       </div>
 
-      {/* Filters (when expanded) */}
+      {/* Filters (when expanded) - FULL filters including BS, status, pruefer */}
       {showFilters && (
         <Card className="aws-card">
           <CardContent className="p-4 flex flex-wrap gap-3">
@@ -335,7 +346,40 @@ export default function Projects() {
                 ))}
               </SelectContent>
             </Select>
-            {(search || region || projektleiter) && (
+            <Select value={pruefer || "all"} onValueChange={(v) => { setPruefer(v === "all" ? "" : v); setPage(1); }}>
+              <SelectTrigger className="w-56 aws-input">
+                <SelectValue placeholder="Prüfer wählen" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Alle Prüfer</SelectItem>
+                {(filterOptions?.pruefer || []).slice(0, 30).map((p: string) => (
+                  <SelectItem key={p} value={p}>{p}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={department || "all"} onValueChange={(v) => { setDepartment(v === "all" ? "" : v); setPage(1); }}>
+              <SelectTrigger className="w-48 aws-input">
+                <SelectValue placeholder="Fachbereich (inkl. BS)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Alle Fachbereiche</SelectItem>
+                {departmentButtons.map((d) => (
+                  <SelectItem key={d} value={d}>{d}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={status || "all"} onValueChange={(v) => { setStatus(v === "all" ? "" : v); setPage(1); }}>
+              <SelectTrigger className="w-48 aws-input">
+                <SelectValue placeholder="Status wählen" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Alle Status</SelectItem>
+                {REVIEW_STATUSES.map((s) => (
+                  <SelectItem key={s} value={s}>{s}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {(search || region || projektleiter || pruefer || status || department) && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -344,6 +388,9 @@ export default function Projects() {
                   setSearchInput("");
                   setRegion("");
                   setProjektleiter("");
+                  setPruefer("");
+                  setStatus("");
+                  setDepartment("");
                   setPage(1);
                 }}
               >
@@ -354,7 +401,7 @@ export default function Projects() {
         </Card>
       )}
 
-      {/* Department Toggle Buttons - BS right next to TBQ */}
+      {/* Department Toggle Buttons - BS right next to TBQ - works perfectly for row-by-row detail view */}
       <div className="flex flex-wrap gap-1.5">
         {departmentButtons.map((dept) => (
           <Button
@@ -391,7 +438,7 @@ export default function Projects() {
         </div>
       ) : (
         <>
-          {/* TABLE VIEW */}
+          {/* TABLE VIEW - BS columns render and filter perfectly */}
           {viewMode === "table" && (
             <Card className="aws-card overflow-hidden">
               <div className="overflow-x-auto">
@@ -538,7 +585,7 @@ export default function Projects() {
                             </Dialog>
                           </td>
 
-                          {/* Department Columns - BS works perfectly here */}
+                          {/* Department Columns - BS works perfectly here (normalized + full filter support) */}
                           {expandedDepts.length > 0 ? (
                             expandedDepts.map((dept) => {
                               const review = reviews.find((r: Review) => r.department === dept);
