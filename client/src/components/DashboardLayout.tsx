@@ -260,10 +260,11 @@ function DashboardLayoutContent({
             {children}
           </main>
 
-          {/* DB Global Footer */}
-          <Footer />
+          
         </div>
       </SidebarInset>
+      {/* DB Global Footer */}
+      <Footer />
     </>
   );
 }
