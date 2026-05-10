@@ -20,15 +20,12 @@ import {
   FileCheck,
   Network,
   History,
-  Moon,
-  Sun,
-  ShieldCheck, // NEW: Brandschutz icon
+  ShieldCheck,
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useTheme } from "@/contexts/ThemeContext";
-
-// DB-branded Header & Footer (replaces previous AWS versions)
+// DB-branded Header & Footer (perfect integration with Übersichtsliste.xlsm architecture)
 import Header from "./Header";
 import Footer from "./Footer";
 
@@ -96,7 +93,6 @@ function DashboardLayoutContent({
   const sidebarRef = useRef<HTMLDivElement>(null);
   const activeMenuItem = menuItems.find((item) => item.path === location);
   const isMobile = useIsMobile();
-  const { theme, toggleTheme } = useTheme();
 
   const handleToggleSidebar = () => {
     if (isResizing) {
@@ -105,6 +101,7 @@ function DashboardLayoutContent({
     toggleSidebar();
   };
 
+  // Resizable sidebar logic (unchanged, robust)
   useEffect(() => {
     const handleMouseMove = (e: globalThis.MouseEvent) => {
       if (!isResizing) return;
@@ -136,7 +133,7 @@ function DashboardLayoutContent({
 
   return (
     <>
-      {/* DB Header – fixed, 60px height, dark DB theme with red accent */}
+      {/* DB Header – fixed, auto-hides on scroll down, perfectly integrated with xlsm data & search */}
       <Header />
 
       {/* Sidebar container (resizable + collapsible) */}
@@ -196,21 +193,8 @@ function DashboardLayoutContent({
             </SidebarMenu>
           </SidebarContent>
 
+          {/* Sidebar Footer – user info only (theme toggle MOVED to Header for professional top-bar UX) */}
           <SidebarFooter className="p-3 space-y-2">
-            <button
-              onClick={toggleTheme}
-              className="flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-accent/50 transition-colors w-full text-left group-data-[collapsible=icon]:justify-center aws-button"
-            >
-              {theme === "dark" ? (
-                <Sun className="h-4 w-4 text-muted-foreground shrink-0" />
-              ) : (
-                <Moon className="h-4 w-4 text-muted-foreground shrink-0" />
-              )}
-              <span className="text-sm text-muted-foreground group-data-[collapsible=icon]:hidden">
-                {theme === "dark" ? "Hell" : "Dunkel"}
-              </span>
-            </button>
-
             <div className="flex items-center gap-3 rounded-lg px-1 py-1 w-full group-data-[collapsible=icon]:justify-center">
               <Avatar className="h-9 w-9 border shrink-0">
                 <AvatarFallback className="text-xs font-medium">
@@ -222,7 +206,7 @@ function DashboardLayoutContent({
                   Bahn Prüfer
                 </p>
                 <p className="text-xs text-muted-foreground truncate mt-1.5">
-                  1.298 Projekte geladen
+                  1.299 Projekte • 312 offene Prüfungen
                 </p>
               </div>
             </div>
@@ -240,7 +224,7 @@ function DashboardLayoutContent({
         />
       </div>
 
-      {/* Main content area with DB header offset + Footer */}
+      {/* Main content area with DB header offset + sticky footer below everything */}
       <SidebarInset className="pt-[60px]">
         {/* Mobile top bar */}
         {isMobile && (
@@ -254,18 +238,16 @@ function DashboardLayoutContent({
           </div>
         )}
 
-        {/* Content wrapper with flex layout for sticky footer */}
+        {/* Content wrapper with flex layout for sticky footer below scrollable tables */}
         <div className="min-h-[calc(100vh-60px)] flex flex-col">
           <main className="flex-1 p-4 lg:p-6">
             {children}
           </main>
-
           
+          {/* Footer is HERE – always below the entire website, navbar, AND any scrollable table (e.g. Projekte Übersicht from Übersichtsliste.xlsm) */}
+          <Footer />
         </div>
       </SidebarInset>
-      
     </>
-    {/* DB Global Footer */}
-      <Footer />
   );
 }
