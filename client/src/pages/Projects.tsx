@@ -143,8 +143,18 @@ export default function Projects() {
   const [sortBy, setSortBy] = useState("id");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [viewMode, setViewMode] = useState<"table" | "cards" | "map">("table");
+  const [showNewDialog, setShowNewDialog] = useState(false);
+  const [newProj, setNewProj] = useState({
+    projektnummer: "",
+    station: "",
+    bahnhofsmanagement: "",
+    projektleiter: "",
+    projektbeschreibung: "",
+    kommentar: "",
+    projektLink: "",
+  });
 
-  const { data, isLoading, applyEdit, applyReviewEdit } = useProjects({
+  const { data, isLoading, applyEdit, applyReviewEdit, addProject } = useProjects({
     page,
     pageSize,
     search: search || undefined,
@@ -194,6 +204,79 @@ export default function Projects() {
       prev.includes(dept) ? prev.filter((d) => d !== dept) : [...prev, dept]
     );
   };
+
+  // New Project handler - integrates with addProject from new useData.ts
+  const handleCreateProject = () => {
+    if (!newProj.station?.trim() && !newProj.projektnummer?.trim()) {
+      toast.error("Bitte mindestens Station oder Projektnummer angeben");
+      return;
+    }
+    if (!addProject) {
+      toast.error("Projekt-Erstellung nicht verfügbar");
+      return;
+    }
+    const createdId = addProject({
+      projektnummer: newProj.projektnummer.trim() || null,
+      station: newProj.station.trim() || null,
+      bahnhofsmanagement: newProj.bahnhofsmanagement || null,
+      projektleiter: newProj.projektleiter.trim() || null,
+      projektbeschreibung: newProj.projektbeschreibung.trim() || null,
+      kommentar: newProj.kommentar.trim() || null,
+      projektLink: newProj.projektLink.trim() || null,
+    });
+    if (createdId) {
+      toast.success(`Projekt #${createdId} erfolgreich angelegt!`);
+      setShowNewDialog(false);
+      setNewProj({
+        projektnummer: "",
+        station: "",
+        bahnhofsmanagement: "",
+        projektleiter: "",
+        projektbeschreibung: "",
+        kommentar: "",
+        projektLink: "",
+      });
+      setPage(1);
+    }
+  };
+
+  // Professional CSV Export for current page (respects filters & pagination)
+  const handleExport = useCallback(() => {
+    if (!data?.projects || data.projects.length === 0) {
+      toast.error("Keine Projekte zum Exportieren vorhanden");
+      return;
+    }
+    const headers = [
+      "Nr.", "Projektnummer", "Region", "Station", "Projektleiter", 
+      "Beschreibung", "Kommentar", "ProjektLink", "Hauptstatus"
+    ];
+    const rows = data.projects.map((p: Project, idx: number) => {
+      const mainReview = p.reviews?.find((r: Review) => r.status) || p.reviews?.[0];
+      return [
+        (page - 1) * pageSize + idx + 1,
+        p.projektnummer || "",
+        p.bahnhofsmanagement || "",
+        p.station || "",
+        p.projektleiter || "",
+        (p.projektbeschreibung || "").replace(/"/g, '""'),
+        (p.kommentar || "").replace(/"/g, '""'),
+        p.projektLink || "",
+        mainReview?.status || "-"
+      ];
+    });
+    const csvContent = [
+      headers.join(","),
+      ...rows.map((row) => row.map((cell) => `"${cell}"`).join(","))
+    ].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.href = url;
+    link.download = `DB_Projektuebersicht_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast.success(`${data.projects.length} Projekte (Seite ${page}) exportiert`);
+  }, [data, page, pageSize]);
 
   // === UPDATED: BS button right next to TBQ (Excel order with BS after TBQ as requested) ===
   const departmentButtons = [
@@ -309,11 +392,18 @@ export default function Projects() {
             </Button>
           </div>
 
-          <Button className="aws-button bg-[#FF0000] hover:bg-[#E6002B] text-white">
+          <Button 
+            onClick={() => setShowNewDialog(true)}
+            className="aws-button bg-[#FF0000] hover:bg-[#E6002B] text-white"
+          >
             <Plus className="mr-2 h-4 w-4" />
             Neues Projekt
           </Button>
-          <Button variant="outline" className="aws-button">
+          <Button 
+            variant="outline" 
+            className="aws-button"
+            onClick={handleExport}
+          >
             <Download className="mr-2 h-4 w-4" />
             Export
           </Button>
@@ -711,8 +801,13 @@ export default function Projects() {
                           </div>
                         </div>
                       )}
-                      <Button variant="outline" size="sm" className="w-full aws-button text-[#FF0000]">
-                        Details öffnen
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="w-full aws-button text-[#FF0000]"
+                        onClick={() => setViewMode("table")}
+                      >
+                        Details in Tabelle öffnen
                       </Button>
                     </CardContent>
                   </Card>
@@ -733,6 +828,110 @@ export default function Projects() {
           )}
         </>
       )}
+
+      {/* NEW PROJECT DIALOG - Professional creation form integrated with addProject */}
+      <Dialog open={showNewDialog} onOpenChange={setShowNewDialog}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Neues Projekt anlegen</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Projektnummer</label>
+                <Input
+                  value={newProj.projektnummer}
+                  onChange={(e) => setNewProj((p) => ({ ...p, projektnummer: e.target.value }))}
+                  placeholder="z.B. PRJ-2026-042"
+                  className="aws-input"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Station *</label>
+                <Input
+                  value={newProj.station}
+                  onChange={(e) => setNewProj((p) => ({ ...p, station: e.target.value }))}
+                  placeholder="z.B. Frankfurt Hbf"
+                  className="aws-input"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Region (Bahnhofsmanagement)</label>
+                <Select
+                  value={newProj.bahnhofsmanagement || "all"}
+                  onValueChange={(v) => setNewProj((p) => ({ ...p, bahnhofsmanagement: v === "all" ? "" : v }))}
+                >
+                  <SelectTrigger className="aws-input">
+                    <SelectValue placeholder="Region wählen" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">— Bitte wählen —</SelectItem>
+                    {(filterOptions?.regions || []).map((r: string) => (
+                      <SelectItem key={r} value={r}>{r}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Projektleiter</label>
+                <Input
+                  value={newProj.projektleiter}
+                  onChange={(e) => setNewProj((p) => ({ ...p, projektleiter: e.target.value }))}
+                  placeholder="Name des PL"
+                  className="aws-input"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Projektbeschreibung</label>
+              <textarea
+                value={newProj.projektbeschreibung}
+                onChange={(e) => setNewProj((p) => ({ ...p, projektbeschreibung: e.target.value }))}
+                placeholder="Kurze Beschreibung des Vorhabens..."
+                className="w-full border rounded-xl px-4 py-3 text-sm bg-background min-h-[80px] resize-y aws-input"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Kommentar</label>
+                <Input
+                  value={newProj.kommentar}
+                  onChange={(e) => setNewProj((p) => ({ ...p, kommentar: e.target.value }))}
+                  placeholder="Optional..."
+                  className="aws-input"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Projektlink</label>
+                <Input
+                  value={newProj.projektLink}
+                  onChange={(e) => setNewProj((p) => ({ ...p, projektLink: e.target.value }))}
+                  placeholder="https://..."
+                  className="aws-input"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" onClick={() => setShowNewDialog(false)}>
+              Abbrechen
+            </Button>
+            <Button 
+              onClick={handleCreateProject}
+              className="aws-button bg-[#FF0000] hover:bg-[#E6002B] text-white"
+              disabled={!newProj.station?.trim() && !newProj.projektnummer?.trim()}
+            >
+              <Plus className="mr-2 h-4 w-4" /> Projekt anlegen
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
