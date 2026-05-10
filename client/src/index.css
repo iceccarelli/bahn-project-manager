@@ -180,3 +180,71 @@
     box-shadow: 0 0 0 3px var(--aws-accent-glow);
   }
 }
+
+/* ============================================
+   DARK MODE OVERRIDES (for HELL/DUNKEL toggle)
+   Professional DB theme - dark is primary
+   ============================================ */
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.62 0.24 262.2);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.62 0.24 262.2);
+
+  /* Sidebar specific for shadcn/ui sidebar */
+  --sidebar-background: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.62 0.24 262.2);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.62 0.24 262.2);
+}
+
+/* Ensure all shadcn dropdowns, popovers, sidebars are SOLID and not see-through */
+@layer components {
+  [data-radix-popper-content-wrapper] > div,
+  .DropdownMenuContent,
+  [role="menu"] {
+    background-color: var(--popover) !important;
+    color: var(--popover-foreground) !important;
+    border-color: var(--border) !important;
+  }
+
+  /* Sidebar solid background - fix see-through navbar */
+  .Sidebar,
+  [data-sidebar="sidebar"] {
+    background-color: var(--sidebar-background, var(--card)) !important;
+    color: var(--sidebar-foreground, var(--foreground)) !important;
+    border-right-color: var(--sidebar-border, var(--border)) !important;
+  }
+
+  /* Make sure main content never goes behind sidebar - professional layout */
+  .SidebarInset,
+  [data-sidebar="inset"] {
+    background-color: var(--background);
+  }
+}
+
+/* Responsive dynamic adjustments for all screen sizes */
+@media (max-width: 768px) {
+  .SidebarInset {
+    margin-left: 0 !important; /* Full width on mobile, sidebar overlays or collapses */
+  }
+}
