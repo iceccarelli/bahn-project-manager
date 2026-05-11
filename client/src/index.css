@@ -38,7 +38,7 @@
   --radius-aws: 4px;
 }
 
-/* Global base styles – Tailwind v4 + Vite compatible (no @apply that breaks build) */
+/* Global base styles – Tailwind v4 + Vite compatible */
 @layer base {
   * {
     border-color: var(--border);
@@ -245,6 +245,44 @@
 /* Responsive dynamic adjustments for all screen sizes */
 @media (max-width: 768px) {
   .SidebarInset {
-    margin-left: 0 !important; /* Full width on mobile, sidebar overlays or collapses */
+    margin-left: 0 !important;
   }
+}
+
+/* ============================================
+   LEAFLET MAP STYLES - Professional DB integration
+   ============================================ */
+.leaflet-container {
+  background: #f8f8f8;
+  border-radius: 12px;
+}
+
+.db-popup .leaflet-popup-content-wrapper {
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(255, 0, 0, 0.2);
+}
+
+.db-popup .leaflet-popup-tip {
+  background: white;
+  border: 1px solid rgba(255, 0, 0, 0.2);
+}
+
+.dark .db-popup .leaflet-popup-content-wrapper {
+  background: #1f2937;
+  color: #f3f4f6;
+}
+
+.dark .db-popup .leaflet-popup-tip {
+  background: #1f2937;
+}
+
+/* DB Red Custom Marker */
+.db-marker {
+  background: transparent !important;
+  border: none !important;
+}
+
+.leaflet-marker-icon.db-marker {
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
 }
