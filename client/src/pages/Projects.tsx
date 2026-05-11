@@ -816,15 +816,40 @@ export default function Projects() {
             </div>
           )}
 
-          {/* MAP VIEW */}
+          {/* MAP VIEW - Professional free interactive map (Leaflet + OpenStreetMap) with live project locations */}
           {viewMode === "map" && (
-            <Card className="aws-card p-3">
-              <MapView
-                initialCenter={{ lat: 50.1109, lng: 8.6821 }}
-                initialZoom={6}
-                className="h-[640px] rounded-2xl border border-[#FF0000]/10"
-              />
-            </Card>
+            <div className="space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 px-1">
+                <div>
+                  <div className="flex items-center gap-2 text-xl font-semibold tracking-tight">
+                    <MapPin className="h-6 w-6 text-[#FF0000]" />
+                    Interaktive Projektkarte
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-0.5">
+                    Alle gefilterten Projektstandorte (Stationen) als Marker. 
+                    Klicken Sie auf einen Pin für vollständige Informationen (Station, Leitung, Beschreibung, Status-Übersicht). 
+                    Kostenlos &amp; ohne API-Key (Leaflet + OpenStreetMap). Perfekt mit Ihren Daten aus der Übersichtsliste synchronisiert.
+                  </p>
+                </div>
+                <div className="text-xs text-muted-foreground bg-muted/60 px-3 py-1 rounded-full self-start sm:self-auto">
+                  {data?.projects?.length || 0} Projekte • Deutschland-weit
+                </div>
+              </div>
+
+              <Card className="aws-card overflow-hidden border-[#FF0000]/10">
+                <MapView
+                  projects={data?.projects || []}
+                  initialCenter={{ lat: 50.1109, lng: 8.6821 }}
+                  initialZoom={6}
+                  className="h-[640px] w-full"
+                />
+              </Card>
+
+              <div className="text-[10px] text-center text-muted-foreground/70 px-2">
+                Marker werden automatisch positioniert (vorgeladene DB-Standorte + kostenlose Geocodierung). 
+                Standortdaten stammen direkt aus der Übersichtsliste (Station + Bahnhofsmanagement + Reviews).
+              </div>
+            </div>
           )}
         </>
       )}
