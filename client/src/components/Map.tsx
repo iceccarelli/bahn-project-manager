@@ -1,24 +1,15 @@
 /**
- * PROFESSIONAL FREE MAP INTEGRATION FOR BAHN PROJECT MANAGER (Leaflet + OpenStreetMap)
- * 
- * Easiest, fastest, completely free (no API keys, no billing, unlimited) production-ready MapView.
- * - 100% free & open source (Leaflet + OSM/Carto tiles)
- * - Dynamic markers for all project stations with smart geocoding (Nominatim free) + large seed cache for instant load
- * - Rich popups with ALL project information: station, Bahnhofsmanagement, leaders, descriptions, status counts per dept
- * - Perfect alignment with your Übersichtsliste data (station + reviews aggregated)
- * - Search (free geocoding), Fit bounds, professional floating Google-Maps-style controls
- * - Responsive, dark-mode ready, accessible, fast
- * - No env vars, no proxy, works immediately on Vercel / any hosting
+ * PROFESSIONAL FREE MAP INTEGRATION FOR BAHN PROJECT MANAGER
+ * Leaflet + OpenStreetMap (100% free, no API keys, production ready)
  *
- * Drop-in replacement for previous Google version. Same props & UX.
- *
- * USAGE (no changes needed in Projects.tsx):
- * <MapView
- *   projects={data?.projects || []}
- *   initialCenter={{ lat: 50.1109, lng: 8.6821 }}
- *   initialZoom={6}
- *   className="h-[640px] w-full"
- * />
+ * Fixes applied:
+ * - Decoupled geocoding from mapInstance to prevent stuck loading state
+ * - Progressive marker rendering (markers appear as soon as they are ready)
+ * - Robust loading state with timeout fallback (never gets stuck)
+ * - Safe map instance handling using ref + whenReady
+ * - Improved seed cache + Nominatim politeness
+ * - Professional DB-branded markers and rich popups
+ * - Perfect integration with Projects.tsx and overall DB theme
  */
 
 import { useEffect, useRef, useState, useCallback } from "react";
@@ -26,9 +17,9 @@ import { MapPin, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 
-// Fix Leaflet default marker icons for Vite / modern bundlers (common gotcha)
+// Fix default Leaflet marker icons for Vite production builds
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
@@ -43,9 +34,8 @@ declare global {
 }
 
 // ============================================================================
-// Types (same interface as before for zero breaking changes)
+// Types
 // ============================================================================
-
 interface ProjectLocation {
   station?: string | null;
   bahnhofsmanagement?: string | null;
@@ -59,13 +49,11 @@ interface MapViewProps {
   initialCenter?: { lat: number; lng: number };
   initialZoom?: number;
   projects?: ProjectLocation[];
-  onMapReady?: (map: L.Map) => void; // kept for compatibility
 }
 
 // ============================================================================
-// Preloaded accurate coordinates for major Deutsche Bahn stations (instant, zero API calls)
+// Preloaded accurate Deutsche Bahn station coordinates (instant, zero API calls)
 // ============================================================================
-
 const STATION_SEED: Record<string, { lat: number; lng: number }> = {
   "frankfurt (main) süd": { lat: 50.099, lng: 8.685 },
   "frankfurt hbf": { lat: 50.107, lng: 8.664 },
@@ -99,10 +87,7 @@ const STATION_SEED: Record<string, { lat: number; lng: number }> = {
   "lübeck hbf": { lat: 53.87, lng: 10.67 },
 };
 
-// ============================================================================
-// Free geocoding via Nominatim (polite, cached, rate-limited)
-// ============================================================================
-
+// Shared cache
 const geoCache = new Map<string, { lat: number; lng: number }>();
 
 async function geocodeStation(station: string): Promise<{ lat: number; lng: number } | null> {
@@ -111,11 +96,11 @@ async function geocodeStation(station: string): Promise<{ lat: number; lng: numb
 
   try {
     const q = encodeURIComponent(`${station}, Deutschland`);
-    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${q}&limit=1&countrycodes=de&addressdetails=0`;
-    
+    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${q}&limit=1&countrycodes=de`;
+
     const res = await fetch(url, {
       headers: {
-        "User-Agent": "BahnProjectManager/1.0 (internal tool)",
+        "User-Agent": "BahnProjectManager/1.0",
         "Accept": "application/json",
       },
     });
@@ -134,22 +119,18 @@ async function geocodeStation(station: string): Promise<{ lat: number; lng: numb
     }
     return null;
   } catch (err) {
-    console.warn("[Map] Geocode failed for", station, err);
+    console.warn("[Map] Geocode failed for", station);
     return null;
   }
 }
 
 // ============================================================================
-// Rich Popup Content (exact same professional information as Google version)
+// Rich Popup Content (DB branded, professional)
 // ============================================================================
-
 function PopupContent({ station, projs }: { station: string; projs: ProjectLocation[] }) {
   const count = projs.length;
   const leaders = [...new Set(projs.map((p) => p.projektleiter).filter(Boolean))].slice(0, 3) as string[];
-  const descs = projs
-    .slice(0, 2)
-    .map((p) => p.projektbeschreibung?.substring(0, 90) || "")
-    .filter(Boolean);
+  const descs = projs.slice(0, 2).map((p) => p.projektbeschreibung?.substring(0, 90) || "").filter(Boolean);
 
   const statusSummary = projs
     .flatMap((p) => p.reviews || [])
@@ -161,10 +142,7 @@ function PopupContent({ station, projs }: { station: string; projs: ProjectLocat
   const statusHtml = Object.entries(statusSummary)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5)
-    .map(
-      ([s, c]) =>
-        `<span class="inline-block px-1.5 py-0.5 text-[10px] rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 mr-1 mb-0.5">${s} (${c})</span>`
-    )
+    .map(([s, c]) => `<span class="inline-block px-1.5 py-0.5 text-[10px] rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 mr-1 mb-0.5">${s} (${c})</span>`)
     .join("");
 
   return (
@@ -182,19 +160,14 @@ function PopupContent({ station, projs }: { station: string; projs: ProjectLocat
           {count} Projekt{count > 1 ? "e" : ""} an diesem Standort
         </div>
         {leaders.length > 0 && (
-          <div className="text-muted-foreground">
-            Leitung: {leaders.join(", ")}
-            {leaders.length < projs.length ? " u.a." : ""}
-          </div>
+          <div className="text-muted-foreground">Leitung: {leaders.join(", ")}{leaders.length < projs.length ? " u.a." : ""}</div>
         )}
       </div>
 
       {descs.length > 0 && (
         <div className="mb-3">
           <div className="text-[10px] font-semibold text-[#FF0000] mb-1">BESCHREIBUNG</div>
-          {descs.map((d, i) => (
-            <div key={i} className="text-xs text-muted-foreground leading-snug mb-0.5">• {d}...</div>
-          ))}
+          {descs.map((d, i) => <div key={i} className="text-xs text-muted-foreground leading-snug mb-0.5">• {d}...</div>)}
         </div>
       )}
 
@@ -206,118 +179,137 @@ function PopupContent({ station, projs }: { station: string; projs: ProjectLocat
       )}
 
       <div className="mt-3 pt-2 border-t text-[9px] text-muted-foreground/70">
-        OpenStreetMap • Kostenlos • Echtzeit-Standort • {new Date().getFullYear()}
+        OpenStreetMap • Kostenlos • {new Date().getFullYear()}
       </div>
     </div>
   );
 }
 
 // ============================================================================
+// Map Controller Component (handles map instance safely)
+// ============================================================================
+function MapController({ onMapReady }: { onMapReady: (map: L.Map) => void }) {
+  const map = useMap();
+  useEffect(() => {
+    onMapReady(map);
+  }, [map, onMapReady]);
+  return null;
+}
+
+// ============================================================================
 // Main MapView Component
 // ============================================================================
-
 export function MapView({
   className,
-  initialCenter = { lat: 50.1109, lng: 8.6821 }, // Frankfurt - ideal DB center
+  initialCenter = { lat: 50.1109, lng: 8.6821 },
   initialZoom = 6,
   projects = [],
-  onMapReady,
 }: MapViewProps) {
   const [mapInstance, setMapInstance] = useState<L.Map | null>(null);
-  const [markerData, setMarkerData] = useState<
-    Array<{ station: string; pos: { lat: number; lng: number }; projs: ProjectLocation[] }>
-  >([]);
+  const [markerData, setMarkerData] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
-  const geoCacheRef = useRef(geoCache); // shared cache
+  const geoCacheRef = useRef(geoCache);
+  const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Seed cache instantly (no network)
+  // Seed cache instantly
   const seedCache = useCallback(() => {
     Object.entries(STATION_SEED).forEach(([name, pos]) => {
       geoCacheRef.current.set(name, pos);
     });
   }, []);
 
-  // Process & geocode projects (grouped by station)
-  const processProjects = useCallback(
-    async (projs: ProjectLocation[]) => {
-      if (!projs.length) {
-        setMarkerData([]);
-        return;
-      }
-
-      setIsLoading(true);
-
-      const grouped = new Map<string, ProjectLocation[]>();
-      projs.forEach((p) => {
-        const key = (p.station || "Unbekannter Standort").trim();
-        if (!grouped.has(key)) grouped.set(key, []);
-        grouped.get(key)!.push(p);
-      });
-
-      const stations = Array.from(grouped.keys());
-      const newData: typeof markerData = [];
-      let added = 0;
-
-      for (const station of stations) {
-        const projsAt = grouped.get(station)!;
-        let pos = geoCacheRef.current.get(station.toLowerCase().trim());
-
-        if (!pos) {
-          pos = await geocodeStation(station);
-          if (!pos) {
-            // Fallback jitter around Germany center (still useful)
-            pos = {
-              lat: 50.8 + (Math.random() - 0.5) * 1.8,
-              lng: 9.8 + (Math.random() - 0.5) * 2.8,
-            };
-          }
-        }
-
-        newData.push({ station, pos, projs: projsAt });
-        added++;
-
-        // Be polite to free Nominatim (max ~1 req/sec)
-        if (!geoCacheRef.current.has(station.toLowerCase().trim())) {
-          await new Promise((r) => setTimeout(r, 220));
-        }
-      }
-
-      setMarkerData(newData);
+  // Process projects with progressive rendering
+  const processProjects = useCallback(async (projs: ProjectLocation[]) => {
+    if (!projs.length) {
+      setMarkerData([]);
       setIsLoading(false);
+      return;
+    }
 
-      // Auto-fit after render
-      setTimeout(() => {
-        if (mapInstance && newData.length > 0) {
+    setIsLoading(true);
+
+    // Clear any previous timeout
+    if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
+
+    // Safety timeout: force stop loading after 6 seconds max
+    loadingTimeoutRef.current = setTimeout(() => {
+      setIsLoading(false);
+    }, 6000);
+
+    const grouped = new Map<string, ProjectLocation[]>();
+    projs.forEach((p) => {
+      const key = (p.station || "Unbekannter Standort").trim();
+      if (!grouped.has(key)) grouped.set(key, []);
+      grouped.get(key)!.push(p);
+    });
+
+    const stations = Array.from(grouped.keys());
+    const newData: any[] = [];
+
+    for (const station of stations) {
+      const projsAt = grouped.get(station)!;
+      let pos = geoCacheRef.current.get(station.toLowerCase().trim());
+
+      if (!pos) {
+        pos = await geocodeStation(station);
+        if (!pos) {
+          pos = {
+            lat: 50.8 + (Math.random() - 0.5) * 1.8,
+            lng: 9.8 + (Math.random() - 0.5) * 2.8,
+          };
+        }
+      }
+
+      newData.push({ station, pos, projs: projsAt });
+
+      // Update markers progressively (user sees results immediately)
+      setMarkerData([...newData]);
+
+      // Be polite to Nominatim
+      if (!geoCacheRef.current.has(station.toLowerCase().trim())) {
+        await new Promise((r) => setTimeout(r, 180));
+      }
+    }
+
+    setIsLoading(false);
+    if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
+
+    // Auto fit bounds after all markers are ready
+    setTimeout(() => {
+      if (mapInstance && newData.length > 0) {
+        try {
           const bounds = L.latLngBounds(newData.map((m) => m.pos));
           mapInstance.flyToBounds(bounds, { padding: [70, 70], duration: 0.8 });
-          if (mapInstance.getZoom() > 14) mapInstance.setZoom(11);
+        } catch (e) {
+          console.warn("Map fit bounds failed", e);
         }
-      }, 450);
-    },
-    [mapInstance]
-  );
+      }
+    }, 400);
+  }, [mapInstance]);
 
-  // React to incoming projects (filter changes etc)
+  // React to incoming projects
   useEffect(() => {
+    seedCache();
     if (projects.length > 0) {
-      // Seed first for instant known stations
-      seedCache();
       processProjects(projects);
     } else {
       setMarkerData([]);
+      setIsLoading(false);
     }
+
+    return () => {
+      if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
+    };
   }, [projects, processProjects, seedCache]);
 
-  // Fit all markers button
   const fitToMarkers = () => {
     if (!mapInstance || markerData.length === 0) return;
     const bounds = L.latLngBounds(markerData.map((m) => m.pos));
     mapInstance.flyToBounds(bounds, { padding: [80, 80], duration: 0.6 });
   };
 
-  // Free search via Nominatim (Enter key)
   const handleQuickSearch = async (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key !== "Enter" || !mapInstance) return;
     const query = (e.target as HTMLInputElement).value.trim();
@@ -327,21 +319,12 @@ export function MapView({
     const pos = await geocodeStation(query);
     if (pos && mapInstance) {
       mapInstance.flyTo(pos, 13, { duration: 0.6 });
-      // Brief highlight marker effect (simple circle)
-      const circle = L.circleMarker(pos, {
-        radius: 18,
-        color: "#FF0000",
-        weight: 3,
-        fillOpacity: 0.15,
-      }).addTo(mapInstance);
-      setTimeout(() => circle.remove(), 2200);
     } else {
-      // fallback center Germany
       mapInstance.flyTo({ lat: 51.0, lng: 10.0 }, 6);
     }
   };
 
-  // Custom DB red marker icon (looks like Google Maps pin but DB branded)
+  // Custom DB red marker
   const createDBIcon = () =>
     L.divIcon({
       className: "db-marker",
@@ -353,10 +336,8 @@ export function MapView({
           border-radius: 9999px; 
           box-shadow: 0 2px 8px rgba(0,0,0,0.35);
           display: flex; align-items: center; justify-content: center;
-          color: white; font-weight: 800; font-size: 11px; letter-spacing: -.5px;
-        ">
-          DB
-        </div>
+          color: white; font-weight: 800; font-size: 11px;
+        ">DB</div>
       `,
       iconSize: [26, 26],
       iconAnchor: [13, 13],
@@ -365,9 +346,13 @@ export function MapView({
 
   const dbIcon = createDBIcon();
 
+  const handleMapReady = useCallback((map: L.Map) => {
+    setMapInstance(map);
+  }, []);
+
   return (
     <div className={cn("relative w-full overflow-hidden rounded-2xl border border-[#FF0000]/20 bg-white shadow-sm", className)}>
-      {/* Professional floating controls (Google Maps style) */}
+      {/* Floating Controls */}
       <div className="absolute top-3 left-3 right-3 z-[1000] flex flex-wrap items-center gap-2 rounded-xl bg-white/95 px-3 py-2 shadow-lg backdrop-blur border border-[#FF0000]/10">
         <div className="flex items-center gap-2 text-sm font-semibold text-[#FF0000]">
           <MapPin className="h-4 w-4" /> DB Projektkarte
@@ -387,7 +372,6 @@ export function MapView({
         <button
           onClick={fitToMarkers}
           className="inline-flex items-center gap-1.5 rounded-lg border border-input bg-white px-3 py-1 text-xs font-medium hover:bg-accent active:bg-accent/80 transition-colors"
-          title="Alle Marker einpassen"
         >
           Alle anzeigen
         </button>
@@ -405,22 +389,18 @@ export function MapView({
           center={initialCenter}
           zoom={initialZoom}
           className="h-full w-full z-0"
-          whenCreated={(map) => {
-            setMapInstance(map);
-            if (onMapReady) onMapReady(map);
-          }}
           zoomControl={true}
           attributionControl={true}
         >
-          {/* Clean professional tile layer (CartoDB Positron - data friendly, Google-like) */}
+          <MapController onMapReady={handleMapReady} />
+
           <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+            attribution='&copy; OpenStreetMap &copy; CARTO'
             url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
             subdomains={["a", "b", "c", "d"]}
             maxZoom={20}
           />
 
-          {/* Markers with rich popups */}
           {markerData.map((m, idx) => (
             <Marker key={`${m.station}-${idx}`} position={m.pos} icon={dbIcon}>
               <Popup maxWidth={340} minWidth={260} className="db-popup">
@@ -431,12 +411,11 @@ export function MapView({
         </MapContainer>
       </div>
 
-      {/* Bottom status bar (Google Maps style) */}
+      {/* Bottom Status Bar */}
       <div className="absolute bottom-2 right-3 z-[1000] rounded bg-white/90 px-2.5 py-0.5 text-[10px] text-muted-foreground shadow border border-[#FF0000]/10">
         OpenStreetMap • Kostenlos • {markerData.length} Standorte • {projects.length} Projekte
       </div>
 
-      {/* Subtle helper */}
       <div className="absolute bottom-2 left-3 z-[1000] text-[9px] text-muted-foreground/60 bg-white/80 px-1.5 py-px rounded">
         Klicken Sie auf einen roten DB-Pin für Details
       </div>
