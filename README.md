@@ -89,25 +89,25 @@ This project represents the evolution from traditional Excel files to a modern, 
 
 ```mermaid
 journey
-    title Migration Journey: Excel → Fully Distributed Living Platform
-    section Phase 1: Static & Siloed (Legacy)
+    title Migration Journey - Excel to Distributed Platform
+    section Phase 1 Static Excel Legacy
       Multiple Excel files per department: 5: Business Users
-      Manual status updates & email chains: 3: Business Users
+      Manual updates via email: 3: Business Users
       No single source of truth: 2: Platform Team
-    section Phase 2: Modern Web Application (Current - 48%)
-      Beautiful interactive React table + Map: 5: Developers
-      Centralized PostgreSQL + Audit Log: 5: Developers
-      Inline editing & Excel import/export: 4: Business Users
-      Role-based access (demo): 3: Platform Team
-    section Phase 3: Connected Enterprise Platform (Next 6-9 months)
-      Microsoft Entra ID SSO + Microsoft Graph: 4: Platform Team
-      SharePoint document storage per project: 3: Platform Team
-      Teams notifications & Planner task sync: 3: Business Users
-      Real backend persistence + TanStack Query: 5: Developers
-    section Phase 4: Fully Distributed & Alive (Future)
-      React Native mobile app with offline sync: 2: Business Users
-      Real-time status updates across web + mobile: 2: Platform Team
-      Power Automate workflows + Azure OpenAI insights: 2: Platform Team
+    section Phase 2 Modern Web App Current
+      Interactive React table and Map: 5: Developers
+      Centralized PostgreSQL with Audit: 5: Developers
+      Inline editing and Excel sync: 4: Business Users
+      Demo role-based access: 3: Platform Team
+    section Phase 3 Connected Enterprise
+      Microsoft Entra ID and Graph: 4: Platform Team
+      SharePoint document storage: 3: Platform Team
+      Teams and Planner integration: 3: Business Users
+      Full backend persistence: 5: Developers
+    section Phase 4 Fully Distributed
+      React Native mobile with offline: 2: Business Users
+      Real-time updates web and mobile: 2: Platform Team
+      Power Automate and AI insights: 2: Platform Team
       Power BI executive dashboards: 3: Management
 ```
 
