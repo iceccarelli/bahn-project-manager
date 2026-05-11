@@ -215,7 +215,7 @@ export function useProjects(params: {
     status,
     department,
     sortBy = "id",
-    sortDir = "asc",
+    sortDir = "desc",  // UPDATED: default to "desc" so newest (highest id) first
   } = params;
 
   const applyEdit = useCallback(
