@@ -16,17 +16,13 @@
 ---
 
 ## Table of Contents
-
+- [Current Progress](#current-progress)
 - [Overview](#overview)
+- [The Journey: From Excel to Living Distributed Platform](#the-journey-from-excel-to-living-distributed-platform)
 - [Key Features](#key-features)
 - [Tech Stack](#tech-stack)
 - [Architecture](#architecture)
 - [Getting Started](#getting-started)
-  - [Prerequisites](#prerequisites)
-  - [Installation](#installation)
-  - [Database Setup](#database-setup)
-  - [Environment Variables](#environment-variables)
-  - [Running Locally](#running-locally)
 - [Project Structure](#project-structure)
 - [Database Schema](#database-schema)
 - [Backend API](#backend-api)
@@ -36,6 +32,38 @@
 - [Roadmap & Next Steps](#roadmap--next-steps)
 - [Contributing](#contributing)
 - [License](#license)
+
+---
+
+## Current Progress
+
+We are actively migrating from **static Excel-based workflows** to a **fully distributed, living platform**. Here is the honest current state:
+
+| Area                                   | Completion | Status             | Notes |
+|----------------------------------------|------------|--------------------|-------|
+| **Frontend UI/UX & Interactivity**     | **92%**    | Excellent          | Polished table, map, inline editing, filters, dark mode |
+| **Database Schema & Seeding**          | **85%**    | Very Good          | 1,298 records, 14 departments, audit_log, specialized tables |
+| **Backend API & Procedures**           | **68%**    | Good               | Express + Drizzle CRUD exists, needs full persistence sync |
+| **Real Server State & TanStack Query** | **35%**    | In Progress        | Still partial client-side caching in `useData.ts` |
+| **Authentication (Microsoft Entra ID)**| **12%**    | Early              | Demo mode only |
+| **Microsoft 365 Interoperability**     | **8%**     | Early              | SharePoint, Teams, Planner, Power BI integration planned |
+| **React Native Mobile App**            | **3%**     | Not Started        | Expo + shared types planned |
+| **Real-time & Collaboration**          | **10%**    | Early              | Basic audit exists |
+| **DevOps, Testing & DX**               | **55%**    | Solid              | Vitest, Prettier, Vercel config ready |
+| **Overall Platform Maturity**          | **48%**    | Solid Foundation   | Excellent UI + data model; backend & integration next |
+
+```mermaid
+pie title Overall Platform Completion (May 2026)
+    "Frontend & UI" : 92
+    "Database & Persistence" : 75
+    "Backend API Core" : 68
+    "Authentication & Security" : 12
+    "Microsoft 365 Integration" : 8
+    "Mobile & Distributed" : 5
+    "Real-time & Advanced Features" : 10
+```
+
+**Visual Summary**: We have an outstanding, production-quality user interface and a solid data foundation. The biggest remaining work is **real backend synchronization**, **Microsoft identity & interoperability**, and the **React Native mobile experience**.
 
 ---
 
@@ -52,6 +80,38 @@ The system supports:
 - Excel-based bulk import/export aligned with existing business processes
 
 It is built as a modern full-stack TypeScript monorepo optimized for rapid iteration, type safety, and future extensibility into the broader Microsoft 365 and Azure ecosystem.
+
+---
+
+## The Journey: From Excel to Living Distributed Platform
+
+This project represents the evolution from traditional Excel files to a modern, collaborative, always-alive platform.
+
+```mermaid
+journey
+    title Migration Journey: Excel → Fully Distributed Living Platform
+    section Phase 1: Static & Siloed (Legacy)
+      Multiple Excel files per department: 5: Business Users
+      Manual status updates & email chains: 3: Business Users
+      No single source of truth: 2: Platform Team
+    section Phase 2: Modern Web Application (Current - 48%)
+      Beautiful interactive React table + Map: 5: Developers
+      Centralized PostgreSQL + Audit Log: 5: Developers
+      Inline editing & Excel import/export: 4: Business Users
+      Role-based access (demo): 3: Platform Team
+    section Phase 3: Connected Enterprise Platform (Next 6-9 months)
+      Microsoft Entra ID SSO + Microsoft Graph: 4: Platform Team
+      SharePoint document storage per project: 3: Platform Team
+      Teams notifications & Planner task sync: 3: Business Users
+      Real backend persistence + TanStack Query: 5: Developers
+    section Phase 4: Fully Distributed & Alive (Future)
+      React Native mobile app with offline sync: 2: Business Users
+      Real-time status updates across web + mobile: 2: Platform Team
+      Power Automate workflows + Azure OpenAI insights: 2: Platform Team
+      Power BI executive dashboards: 3: Management
+```
+
+**Goal**: Transform static, error-prone Excel processes into a living, collaborative system that works seamlessly across desktop, mobile, Microsoft Teams, SharePoint, and Power BI.
 
 ---
 
@@ -114,29 +174,79 @@ It is built as a modern full-stack TypeScript monorepo optimized for rapid itera
 
 ## Architecture
 
-This is a **monorepo** with clear separation of concerns:
+This is a **monorepo** with clear separation of concerns.
 
+**Current Data Flow:**
+
+```mermaid
+flowchart TD
+    subgraph Frontend
+        A[React 19 + Vite<br/>Pages & Components]
+        B[Custom Hooks<br/>useProjects, useAllData]
+        C[In-memory Cache + Optimistic Updates]
+    end
+
+    subgraph Backend
+        D[Express Server]
+        E[Drizzle ORM Queries & Procedures]
+    end
+
+    subgraph Data
+        F[(PostgreSQL<br/>Neon / Vercel Postgres)]
+    end
+
+    A -->|User interactions| B
+    B -->|fetch + mutations| D
+    D --> E
+    E --> F
+    F --> E
+    E --> D
+    D --> B
+    B --> C
+    C --> A
+
+    style A fill:#e0f2fe
+    style D fill:#fef3c7
+    style F fill:#dcfce7
 ```
-bahn-project-manager/
-├── client/                 # React + Vite frontend (pages, components, hooks)
-├── server/                 # Express backend + Drizzle queries & procedures
-├── shared/                 # Shared TypeScript types, constants, utilities (used by both)
-├── drizzle/                # Drizzle schema definitions and migration files
-├── patches/                # Dependency patches (if any)
-├── package.json            # Root scripts & dependencies
-├── drizzle.config.ts
-├── vercel.json
-└── tsconfig.json
+
+**Target Future Architecture (with Microsoft 365 + Mobile):**
+
+```mermaid
+flowchart TD
+    subgraph Web
+        W[React Web App]
+    end
+    subgraph Mobile
+        M[React Native + Expo]
+    end
+    subgraph Backend
+        API[Express / Future Hono API<br/>Protected by Entra ID]
+        Graph[Microsoft Graph Client]
+    end
+    subgraph Microsoft 365
+        Entra[Entra ID + RBAC]
+        SP[SharePoint Documents]
+        Teams[Teams Notifications]
+        Planner[Planner / Outlook]
+        PowerBI[Power BI Dashboards]
+    end
+    subgraph Data
+        DB[(PostgreSQL + Audit)]
+        RT[Real-time Layer<br/>Azure SignalR / Web PubSub]
+    end
+
+    W & M -->|MSAL + JWT| API
+    API --> Graph
+    Graph --> SP & Teams & Planner
+    API --> DB
+    API --> RT
+    RT --> W & M
+    Entra --> API
+    PowerBI -.-> DB
 ```
 
-**Data flow (current):**
-Frontend hooks (`useProjects`, `useAllData`) ↔ Backend Express procedures ↔ Drizzle ORM ↔ PostgreSQL
-
-The architecture is designed to evolve cleanly toward:
-- Full server state management (TanStack Query / React Query)
-- Real-time updates
-- Microsoft Entra ID protected APIs
-- Shared code with a future React Native app
+The architecture is designed to evolve cleanly toward full server state management, real-time updates, Microsoft Entra ID protected APIs, and shared code with a future React Native app.
 
 ---
 
@@ -149,7 +259,6 @@ The architecture is designed to evolve cleanly toward:
 - Git
 
 ### Installation
-
 ```bash
 git clone https://github.com/iceccarelli/bahn-project-manager.git
 cd bahn-project-manager
@@ -157,242 +266,144 @@ pnpm install
 ```
 
 ### Database Setup
-
 1. Create a PostgreSQL database and obtain a connection string (`DATABASE_URL`).
-
 2. Configure Drizzle:
+   ```bash
+   cp .env.example .env
+   # Edit .env and set DATABASE_URL=postgresql://user:pass@host:port/db
+   ```
+3. Push schema and seed:
+   ```bash
+   pnpm db:push
+   ```
 
-```bash
-cp .env.example .env
-# Edit .env and set DATABASE_URL=postgresql://user:pass@host:port/db
-```
-
-3. Push schema and seed (or run migrations):
-
-```bash
-pnpm db:push          # Generates & applies migrations (development)
-# or for production-grade:
-# pnpm drizzle-kit generate
-# pnpm drizzle-kit migrate
-```
-
-The database is pre-seeded with 1,298 realistic project records during initial setup.
+The database is pre-seeded with 1,298 realistic project records.
 
 ### Environment Variables
-
-Create a `.env` file (or configure in Vercel):
-
 ```env
-# Database
 DATABASE_URL="postgresql://..."
-
-# Microsoft Entra ID (future / optional for now)
 MICROSOFT_CLIENT_ID=""
-MICROSOFT_TENANT_ID="common"   # or your specific tenant
-MICROSOFT_CLIENT_SECRET=""     # for backend if using confidential client
-
-# Optional
+MICROSOFT_TENANT_ID="common"
+MICROSOFT_CLIENT_SECRET=""
 NODE_ENV=development
 PORT=3000
 ```
 
 ### Running Locally
-
 ```bash
-# Development (watches server + serves frontend via Vite)
 pnpm dev
-
-# Type checking
-pnpm check
-
-# Run tests
-pnpm test
-
-# Format code
-pnpm format
 ```
 
-The app will be available at `http://localhost:5173` (Vite) with backend on the configured port.
+The app will be available at `http://localhost:5173`.
 
 ---
 
 ## Project Structure
-
 ```
 client/src/
-├── components/          # Reusable UI (StatusBadge, InlineEditCell, MapView, etc.)
-├── hooks/               # Data fetching & mutation hooks (useProjects, useAllData, useFilters...)
-├── pages/               # Main views (Projects.tsx, Dashboard, BVB-EEA, PSV-ITK...)
-├── lib/                 # Utilities, API client
-└── App.tsx / main.tsx
-
+├── components/          # Reusable UI (StatusBadge, InlineEditCell, MapView...)
+├── hooks/               # Data hooks (useProjects, useAllData...)
+├── pages/               # Projects.tsx, Dashboard, BVB-EEA, PSV-ITK...
 server/
-├── _core/               # Express app setup, middleware
-├── procedures/          # Business logic (projects, reviews, stats, import/export, audit)
-├── db/                  # Drizzle schema + connection
-└── index.ts             # Server entry
-
+├── _core/               # Express setup
+├── procedures/          # Business logic (projects, reviews, import/export, audit)
 shared/
-├── types.ts             # Project, Review, Stats, Filters interfaces
-└── constants.ts         # Department lists, status enums, colors
-
+├── types.ts             # Shared interfaces
 drizzle/
-└── schema.ts            # All table definitions (projects, department_reviews, audit_log...)
+└── schema.ts            # All table definitions
 ```
 
 ---
 
 ## Database Schema
-
 Core tables (Drizzle):
-
-- `projects` — Master project data (id, projektnummer, station, bahnhofsmanagement, projektleiter, beschreibung, kommentar, projektLink, created/updated timestamps)
-- `department_reviews` — One row per project × department (status, prueferName, pruefDatum)
+- `projects` — Master project data
+- `department_reviews` — One row per project × 14 departments
 - `bvb_eea`, `psv_itk` — Specialized extension tables
-- `audit_log` — Immutable history of all mutations (user, action, old/new values, timestamp)
-
-All relationships are enforced at the database level with proper foreign keys and indexes for performance on filtered queries.
+- `audit_log` — Immutable change history
 
 ---
 
 ## Backend API
-
-The backend exposes procedure-style endpoints (mounted under `/api`):
-
-- `GET/POST/PATCH /api/projects` + filtering, pagination, search
-- `GET/PATCH /api/projects/:id/reviews` (per department)
-- `GET /api/stats` (KPIs, distributions, workload)
-- `POST /api/import/excel`, `GET /api/export/excel`
-- `GET /api/audit/:projectId`
-- Specialized routes for BVB-EEA and PSV-ITK
-
-All responses are fully typed and validated. The frontend currently uses a combination of direct fetch and optimistic client-side updates (transitioning to full server synchronization).
+Procedure-style endpoints under `/api`:
+- Projects CRUD + advanced filtering
+- Department reviews management
+- Statistics & workload
+- Excel import/export
+- Audit logging
 
 ---
 
 ## Frontend Highlights
-
 - **Projects Table** — Sticky columns, expandable department sub-rows, powerful inline editing, status dropdowns with corporate color palette.
-- **Map Integration** — Filter-aware Leaflet map with project pins and rich popups.
-- **Dashboard KPIs** — Accurate totals calculated from the complete dataset.
-- **Excel Alignment** — Import/export designed to match existing business Excel workflows.
-- **Accessibility & UX** — Keyboard navigation, screen-reader friendly labels, smooth loading states, error toasts.
+- **Map Integration** — Filter-aware Leaflet map with rich popups.
+- **Dashboard KPIs** — Accurate totals from the complete dataset.
+- **Excel Alignment** — Import/export matches existing business workflows.
+- **Accessibility & UX** — Keyboard navigation, smooth states, error toasts.
 
 ---
 
 ## Authentication & Authorization
+**Current:** Demo / mock authentication.
 
-**Current state:** Demo / mock authentication (easy to replace).
-
-**Target architecture (Microsoft 365 native):**
-
-- **Frontend (SPA):** MSAL.js (`@azure/msal-browser` + `@azure/msal-react`) for Entra ID login, token acquisition, and silent refresh.
-- **Backend (Express):** JWT validation middleware using `@azure/identity` or `passport-azure-ad`. Support for both delegated (user) and application permissions.
-- **Role-Based Access Control (RBAC):** Map Microsoft 365 security groups / Entra ID app roles to internal roles (Admin, Department Reviewer, ReadOnly).
-- **Conditional Access & MFA:** Leveraged automatically via Entra ID policies.
-- **User Provisioning:** Just-in-time creation from Microsoft Graph profile + group membership.
-
-This approach gives single sign-on across web, future mobile app, Teams tabs, and SharePoint web parts with zero additional password management.
+**Target (Microsoft 365 native):**
+- Frontend: MSAL.js (`@azure/msal-browser` + `@azure/msal-react`)
+- Backend: JWT validation with `@azure/identity`
+- RBAC mapped from Microsoft 365 security groups / Entra ID app roles
+- Just-in-time provisioning from Microsoft Graph
 
 ---
 
 ## Deployment
+**Vercel (Recommended)**  
+The repo already contains `vercel.json` for static frontend + serverless Express adapter.
 
-### Vercel (Recommended)
-
-The repository already contains `vercel.json` configured for:
-
-- Static frontend hosting
-- Serverless function adapter for the Express backend (`/api/*` routes)
-
-**Steps:**
-
-1. Connect the GitHub repository to Vercel.
-2. Add `DATABASE_URL` and Microsoft Entra ID environment variables in Vercel dashboard.
-3. (Optional) Configure custom domain and preview branches.
-4. Push to `main` → automatic deployment.
-
-For production database, prefer **Neon** or **Vercel Postgres** with connection pooling enabled.
+Steps:
+1. Connect GitHub repo to Vercel
+2. Add `DATABASE_URL` and Microsoft Entra ID variables
+3. Push to `main`
 
 ---
 
 ## Roadmap & Next Steps
 
-The frontend and core data model are mature. The highest-impact next investments are:
-
 ### 1. Backend Persistence & Real API Synchronization (High Priority)
-- Replace remaining client-side only mutations (`cachedData` in `useData.ts`) with real `fetch` calls to Express endpoints + proper loading/error states.
-- Introduce **TanStack Query** (React Query) for caching, invalidation, optimistic updates, and background refetching.
-- Add comprehensive error boundaries and retry logic.
+- Replace client-side only mutations in `useData.ts` with real API calls + TanStack Query
+- Full optimistic updates, error handling, and background refetching
 
 ### 2. Microsoft Entra ID Authentication & Microsoft 365 Integration (High Priority)
-- Implement MSAL-based login flow (popup + redirect) with proper token caching.
-- Protect all API routes with JWT validation.
-- Sync user roles from Microsoft 365 groups.
-- **Interoperability features:**
-  - Store and retrieve project documents in **SharePoint** document libraries (per station/project folder structure) via Microsoft Graph.
-  - Post adaptive card notifications to **Teams** channels when a review status changes.
-  - Create **Planner** tasks or Outlook events for upcoming `Prüfdatum` deadlines.
-  - Surface key metrics in **Power BI** dashboards (embedded or via Direct Lake).
+- MSAL login + JWT protection
+- SharePoint document libraries per project
+- Teams adaptive card notifications on status change
+- Planner / Outlook task sync for review deadlines
+- Power BI embedded dashboards
 
 ### 3. React Native Mobile Companion App (High Priority)
-- Create `mobile/` or `apps/mobile/` folder using **Expo SDK 52+**.
-- Share TypeScript types, business logic, and (where possible) UI components via the `shared/` package or a dedicated `@bahn-project-manager/shared` npm package.
-- Implement offline-first data layer (Expo SQLite + Drizzle or WatermelonDB) with background sync.
-- Native map experience (`react-native-maps` or WebView + Leaflet).
-- Push notifications via **Expo Notifications** bridged to **Azure Notification Hubs** or Microsoft Graph.
-- Microsoft authentication via `react-native-msal` or Expo AuthSession + Entra ID.
+- Expo SDK + shared `shared/` package
+- Offline-first (Expo SQLite + sync)
+- Native maps + push notifications via Azure Notification Hubs
+- Microsoft authentication
 
-### 4. Real-time Collaboration & Notifications
-- Add WebSocket / Server-Sent Events layer (or **Azure Web PubSub** / **Azure SignalR Service**) for live status updates across users.
-- Comment threads with @mentions and email/Teams digest.
-
-### 5. Advanced Reporting, Automation & AI
-- Server-side PDF generation (Puppeteer or React-PDF) + scheduled reports.
-- **Microsoft Power Automate** flows triggered by status changes (e.g., escalate overdue reviews).
-- Optional future: Azure OpenAI integration for summarizing long comment threads or flagging potential risks in project descriptions.
-
-### 6. Developer Experience & Operations
-- Full **GitHub Actions** CI/CD pipeline (lint, type-check, test, build, preview deploy).
-- End-to-end tests with **Playwright**.
-- Structured logging + correlation IDs + integration with **Azure Application Insights** or Sentry.
-- Infrastructure as Code (Bicep/Terraform) for any Azure resources beyond Vercel.
-- Expand test coverage to 80%+ on critical paths.
-- Internationalization (German primary + English) using `react-i18next` or native React 19 features.
-- Accessibility audit (WCAG 2.2 AA) and keyboard-only workflows.
-
-### 7. Scalability & Performance
-- Evaluate migration of frontend to **Next.js App Router** (React Server Components) for better SEO and streaming if public dashboards are needed.
-- Database query optimization, read replicas, and caching layer (Redis / Upstash).
-- Rate limiting, request validation, and security hardening (Helmet, CORS, input sanitization).
+### 4–7. Real-time, Reporting, DX, Scalability
+- Azure SignalR / Web PubSub for live updates
+- Power Automate workflows + optional Azure OpenAI
+- GitHub Actions CI/CD + Playwright E2E + Azure App Insights
+- i18n, accessibility (WCAG 2.2), Next.js evaluation, caching layer
 
 ---
 
 ## Contributing
-
-We welcome contributions that align with the enterprise vision:
-
-1. Fork the repository and create a feature branch.
-2. Follow existing code style (Prettier + TypeScript strict).
-3. Add or update tests for any new logic.
-4. Update this README and relevant documentation.
-5. Open a Pull Request with a clear description of changes and business impact.
-
-For large features (especially Microsoft 365 integration or mobile app), please open an issue first to discuss architecture.
+We welcome contributions that align with the enterprise vision. Please open an issue first for large features (especially Microsoft 365 integration or mobile).
 
 ---
 
 ## License
-
-This project is licensed under the terms of the [MIT License](LICENSE) (or your chosen license).  
-© 2025–2026 Bahn Project Manager contributors.
+MIT License © 2025–2026 Bahn Project Manager contributors.
 
 ---
 
 **Built with care for reliable railway infrastructure project delivery.**
 
-*Questions or feedback? Open an issue or start a discussion on GitHub.*
+*This README is living documentation. Please keep it updated as the platform evolves.*
 
----
-
-*This README is designed to be living documentation. Please keep it updated as the platform evolves toward deeper Microsoft 365 and cross-platform integration.*
+*Questions or feedback? Open an issue on GitHub.*
