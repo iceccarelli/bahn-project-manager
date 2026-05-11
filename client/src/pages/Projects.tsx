@@ -130,7 +130,7 @@ function SortHeader({ column, label, sortBy, onSort }: SortHeaderProps) {
 
 export default function Projects() {
   const [page, setPage] = useState(1);
-  const [pageSize] = useState(50);
+  const [pageSize] = useState(100);
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [region, setRegion] = useState<string>("");
@@ -141,7 +141,7 @@ export default function Projects() {
   const [showFilters, setShowFilters] = useState(false);
   const [expandedDepts, setExpandedDepts] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState("id");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [viewMode, setViewMode] = useState<"table" | "cards" | "map">("table");
   const [showNewDialog, setShowNewDialog] = useState(false);
   const [newProj, setNewProj] = useState({
@@ -578,7 +578,7 @@ export default function Projects() {
                       return (
                         <tr key={project.id} className="border-t hover:bg-[#FF0000]/5 transition-colors group">
                           <td className="py-3 px-4 text-muted-foreground text-xs sticky left-0 bg-card group-hover:bg-[#FF0000]/5 z-10">
-                            {(page - 1) * pageSize + idx + 1}
+                            {project.id}
                           </td>
                           <td className="py-3 px-4 font-mono text-xs whitespace-nowrap">
                             <InlineEditCell
