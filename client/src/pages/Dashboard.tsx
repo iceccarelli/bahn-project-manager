@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAllData } from '@/hooks/useData';
 import { toast } from 'sonner';
 
@@ -91,6 +92,19 @@ export default function Dashboard() {
       breakdown: counts
     };
   });
+
+  // Selected Gewerke Data
+  const selectedGewerkeData = selectedGewerke 
+    ? gewerkeStatusData.find(g => g.name === selectedGewerke) 
+    : null;
+
+  const selectedPieData = selectedGewerkeData 
+    ? Object.entries(selectedGewerkeData.breakdown).map(([status, value]) => ({
+        name: status,
+        value,
+        color: STATUS_COLORS[status] || "#64748b"
+      }))
+    : [];
 
   // Fachspezialist Workload
   const fachWorkload = FACHSPEZIALISTEN.map(name => {
@@ -222,7 +236,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
         {/* Left Column - Charts */}
         <div className="xl:col-span-7 space-y-6">
-          {/* Overall Status Distribution */}
+          {/* Overall Status Distribution (Alle Gewerke) */}
           <Card>
             <CardHeader>
               <CardTitle>Status-Verteilung (Alle Gewerke)</CardTitle>
@@ -250,7 +264,7 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {/* Per Gewerke Status Breakdown */}
+          {/* Per Gewerke Status Breakdown (Grid) */}
           <Card>
             <CardHeader>
               <CardTitle>Status pro Gewerke (Fachbereich)</CardTitle>
@@ -277,6 +291,105 @@ export default function Dashboard() {
                   </div>
                 ))}
               </div>
+            </CardContent>
+          </Card>
+
+          {/* NEW: Detailed View for Selected Gewerke */}
+          <Card className="border-2 border-[#FF0000]/20">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>
+                  {selectedGewerke 
+                    ? `Status-Verteilung für ${selectedGewerke}` 
+                    : "Detaillierte Ansicht pro Gewerke"}
+                </CardTitle>
+                
+                <div className="w-64">
+                  <Select 
+                    value={selectedGewerke || ""} 
+                    onValueChange={(value) => setSelectedGewerke(value || null)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Gewerke auswählen..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Alle Gewerke anzeigen</SelectItem>
+                      {GEWERKE.map((gew) => (
+                        <SelectItem key={gew} value={gew}>{gew}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardHeader>
+
+            <CardContent>
+              {!selectedGewerke ? (
+                <div className="flex flex-col items-center justify-center h-[320px] text-center">
+                  <div className="text-6xl mb-4">📊</div>
+                  <h3 className="text-xl font-semibold mb-2">Wählen Sie ein Gewerke</h3>
+                  <p className="text-muted-foreground max-w-md">
+                    Nutzen Sie das Dropdown oben, um die detaillierte Status-Verteilung 
+                    für einen bestimmten Fachbereich anzuzeigen.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+                  {/* Pie Chart for Selected Gewerke */}
+                  <div className="lg:col-span-3 h-[380px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={selectedPieData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={80}
+                          outerRadius={140}
+                          paddingAngle={3}
+                          dataKey="value"
+                        >
+                          {selectedPieData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip />
+                        <Legend />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Details Sidebar */}
+                  <div className="lg:col-span-2 space-y-4">
+                    <div>
+                      <div className="text-sm text-muted-foreground mb-1">Gesamtzahl Prüfungen</div>
+                      <div className="text-4xl font-bold">{selectedGewerkeData?.value}</div>
+                    </div>
+
+                    <div className="space-y-2 pt-4 border-t">
+                      {selectedPieData.map((item, idx) => (
+                        <div key={idx} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                          <div className="flex items-center gap-2">
+                            <div 
+                              className="w-3 h-3 rounded-full" 
+                              style={{ backgroundColor: item.color }}
+                            />
+                            <span>{item.name}</span>
+                          </div>
+                          <Badge variant="outline">{item.value}</Badge>
+                        </div>
+                      ))}
+                    </div>
+
+                    <Button 
+                      variant="outline" 
+                      className="w-full mt-4"
+                      onClick={() => setSelectedGewerke(null)}
+                    >
+                      Zurück zur Übersicht
+                    </Button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
