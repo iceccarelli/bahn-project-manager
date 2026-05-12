@@ -16,17 +16,24 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useAllData } from '@/hooks/useData';
 import { toast } from 'sonner';
 
-// === OPTIONAL MICROSOFT 365 INTEGRATION ===
+// === OPTIONAL MICROSOFT 365 INTEGRATION (Completely Safe) ===
 let PublicClientApplication: any = null;
 let Client: any = null;
 let AuthCodeMSALBrowserAuthenticationProvider: any = null;
 
 const loadMicrosoftLibraries = async () => {
   if (typeof window === 'undefined') return false;
+  
   try {
-    const msal = await import('@azure/msal-browser');
-    const graph = await import('@microsoft/microsoft-graph-client');
-    const authProvider = await import('@microsoft/microsoft-graph-client/authProviders/authCodeMsalBrowser');
+    // Dynamic import - only loads when user clicks "Connect"
+    const msal = await import('@azure/msal-browser').catch(() => null);
+    const graph = await import('@microsoft/microsoft-graph-client').catch(() => null);
+    const authProvider = await import('@microsoft/microsoft-graph-client/authProviders/authCodeMsalBrowser').catch(() => null);
+    
+    if (!msal || !graph || !authProvider) {
+      console.log("Microsoft 365 packages not installed - running in offline mode");
+      return false;
+    }
     
     PublicClientApplication = msal.PublicClientApplication;
     Client = graph.Client;
@@ -156,7 +163,12 @@ export default function Dashboard() {
 
   const handleMicrosoftLogin = async () => {
     const loaded = await initializeMicrosoft();
-    if (!loaded || !PublicClientApplication) return;
+    if (!loaded || !PublicClientApplication) {
+      toast.error("Microsoft 365 Pakete nicht installiert", {
+        description: "Bitte führen Sie 'pnpm add @azure/msal-browser @microsoft/microsoft-graph-client' aus und deployen Sie neu."
+      });
+      return;
+    }
 
     setIsLoadingAuth(true);
     try {
