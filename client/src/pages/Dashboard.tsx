@@ -306,14 +306,14 @@ export default function Dashboard() {
                 
                 <div className="w-64">
                   <Select 
-                    value={selectedGewerke || ""} 
-                    onValueChange={(value) => setSelectedGewerke(value || null)}
+                    value={selectedGewerke || "all"} 
+                    onValueChange={(value) => setSelectedGewerke(value === "all" ? null : value)}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Gewerke auswählen..." />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Alle Gewerke anzeigen</SelectItem>
+                      <SelectItem value="all">Alle Gewerke anzeigen</SelectItem>
                       {GEWERKE.map((gew) => (
                         <SelectItem key={gew} value={gew}>{gew}</SelectItem>
                       ))}
