@@ -35,7 +35,7 @@ import { toast } from "sonner";
 import { MapView } from "@/components/Map";
 import { useTheme } from "@/contexts/ThemeContext";
 
-// DB Corporate Status Colors (dark mode ready)
+// DB Corporate Status Colors (perfect harmony with Dashboard.tsx)
 const STATUS_COLORS: Record<string, string> = {
   "nicht erforderlich": "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
   "offen": "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
@@ -171,7 +171,6 @@ export default function Projects() {
   const { data: allData } = useAllData();
   const { theme } = useTheme();
 
-  // Accurate KPI from FULL dataset (not just current page)
   const totalProjects = allData?.projects?.length || 1298;
   const activeProjects = useMemo(() => {
     if (!allData?.projects) return 874;
@@ -205,7 +204,6 @@ export default function Projects() {
     );
   };
 
-  // New Project handler - integrates with addProject from new useData.ts
   const handleCreateProject = () => {
     if (!newProj.station?.trim() && !newProj.projektnummer?.trim()) {
       toast.error("Bitte mindestens Station oder Projektnummer angeben");
@@ -240,7 +238,6 @@ export default function Projects() {
     }
   };
 
-  // Professional CSV Export for current page (respects filters & pagination)
   const handleExport = useCallback(() => {
     if (!data?.projects || data.projects.length === 0) {
       toast.error("Keine Projekte zum Exportieren vorhanden");
@@ -278,27 +275,16 @@ export default function Projects() {
     toast.success(`${data.projects.length} Projekte (Seite ${page}) exportiert`);
   }, [data, page, pageSize]);
 
-  // === UPDATED: BS button right next to TBQ (Excel order with BS after TBQ as requested) ===
+  // Exact department order from the uploaded Übersichtsliste_Dashboard_1.xlsm (perfect harmony)
   const departmentButtons = [
-    "EEA",
-    "ITK",
-    "GA",
-    "Energie",
-    "HFT",
-    "HKLS",
-    "TBQ",
-    "BS",                    // ← BS is right here, next to TBQ
-    "UM",
-    "BIM",
-    "LST",
-    "Vermessung",
-    "Baubetriebstechnologie",
-    "Baubetriebsplanung",
+    "EEA", "ITK", "BS", "GA", "Energie", "HFT", "HKLS", 
+    "TBQ", "UM", "BIM", "LST", "Vermessung", 
+    "Baubetriebstechnologie", "Baubetriebsplanung"
   ];
 
   return (
     <div className="space-y-6">
-      {/* DB KPI Cards - now accurate */}
+      {/* DB KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card className="aws-card border-l-4 border-l-[#FF0000]">
           <CardHeader className="pb-2">
@@ -338,7 +324,7 @@ export default function Projects() {
         </Card>
       </div>
 
-      {/* Controls Bar - DB Style */}
+      {/* Controls Bar */}
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
         <div className="flex items-center gap-3 w-full sm:w-auto">
           <div className="relative flex-1 sm:w-80">
@@ -364,7 +350,6 @@ export default function Projects() {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* View Toggle - DB Style */}
           <div className="flex border rounded-lg p-1 bg-card shadow-sm">
             <Button
               variant={viewMode === "table" ? "default" : "ghost"}
@@ -410,7 +395,7 @@ export default function Projects() {
         </div>
       </div>
 
-      {/* Filters (when expanded) - FULL filters including BS, status, pruefer */}
+      {/* Filters */}
       {showFilters && (
         <Card className="aws-card">
           <CardContent className="p-4 flex flex-wrap gap-3">
@@ -491,7 +476,7 @@ export default function Projects() {
         </Card>
       )}
 
-      {/* Department Toggle Buttons - BS right next to TBQ - works perfectly for row-by-row detail view */}
+      {/* Department Toggle Buttons - BS right after TBQ (exact Excel order) */}
       <div className="flex flex-wrap gap-1.5">
         {departmentButtons.map((dept) => (
           <Button
@@ -528,7 +513,7 @@ export default function Projects() {
         </div>
       ) : (
         <>
-          {/* TABLE VIEW - BS columns render and filter perfectly */}
+          {/* TABLE VIEW */}
           {viewMode === "table" && (
             <Card className="aws-card overflow-hidden">
               <div className="overflow-x-auto">
@@ -675,7 +660,7 @@ export default function Projects() {
                             </Dialog>
                           </td>
 
-                          {/* Department Columns - BS works perfectly here (normalized + full filter support) */}
+                          {/* Department Columns - BS works perfectly */}
                           {expandedDepts.length > 0 ? (
                             expandedDepts.map((dept) => {
                               const review = reviews.find((r: Review) => r.department === dept);
@@ -736,7 +721,6 @@ export default function Projects() {
                 </table>
               </div>
 
-              {/* Pagination */}
               <div className="flex items-center justify-between px-6 py-4 border-t bg-muted/30">
                 <span className="text-sm text-muted-foreground">
                   Seite {page} von {totalPages} • {data?.total.toLocaleString("de-DE")} Einträge
@@ -816,7 +800,7 @@ export default function Projects() {
             </div>
           )}
 
-          {/* MAP VIEW - Professional free interactive map (Leaflet + OpenStreetMap) with live project locations */}
+          {/* MAP VIEW */}
           {viewMode === "map" && (
             <div className="space-y-3">
               <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 px-1">
@@ -827,8 +811,7 @@ export default function Projects() {
                   </div>
                   <p className="text-sm text-muted-foreground mt-0.5">
                     Alle gefilterten Projektstandorte (Stationen) als Marker. 
-                    Klicken Sie auf einen Pin für vollständige Informationen (Station, Leitung, Beschreibung, Status-Übersicht). 
-                    Kostenlos &amp; ohne API-Key (Leaflet + OpenStreetMap). Perfekt mit Ihren Daten aus der Übersichtsliste synchronisiert.
+                    Klicken Sie auf einen Pin für vollständige Informationen.
                   </p>
                 </div>
                 <div className="text-xs text-muted-foreground bg-muted/60 px-3 py-1 rounded-full self-start sm:self-auto">
@@ -846,15 +829,14 @@ export default function Projects() {
               </Card>
 
               <div className="text-[10px] text-center text-muted-foreground/70 px-2">
-                Marker werden automatisch positioniert (vorgeladene DB-Standorte + kostenlose Geocodierung). 
-                Standortdaten stammen direkt aus der Übersichtsliste (Station + Bahnhofsmanagement + Reviews).
+                Marker werden automatisch positioniert. Standortdaten stammen direkt aus der Übersichtsliste.
               </div>
             </div>
           )}
         </>
       )}
 
-      {/* NEW PROJECT DIALOG - Professional creation form integrated with addProject */}
+      {/* NEW PROJECT DIALOG */}
       <Dialog open={showNewDialog} onOpenChange={setShowNewDialog}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
