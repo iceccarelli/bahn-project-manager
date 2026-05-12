@@ -1,8 +1,10 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2, FolderOpen, CheckCircle2, Clock, AlertTriangle, Inbox, Edit3, Mail, MessageSquare } from "lucide-react";
+import { Loader2, FolderOpen, CheckCircle2, Clock, AlertTriangle, Inbox, Edit3, Mail, MessageSquare, RefreshCw } from "lucide-react";
 import { useStats, useRecentArrivals, useRecentInBearbeitung } from "@/hooks/useData";
 import { toast } from "sonner";
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { motion } from "framer-motion";
 
 export default function Dashboard() {
   const { data: stats, isLoading } = useStats();
@@ -126,6 +128,95 @@ export default function Dashboard() {
             </p>
           </CardContent>
         </Card>
+      </div>
+
+      {/* Professional Visualizations - Recharts powered for billion-dollar insights */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Overall Status Pie Chart */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+        >
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                Gesamt Status Verteilung
+                <RefreshCw 
+                  className="h-4 w-4 ml-auto cursor-pointer hover:text-primary" 
+                  onClick={() => window.location.reload()} 
+                />
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={220}>
+                <PieChart>
+                  <Pie
+                    data={stats.statusDistribution}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={90}
+                    dataKey="count"
+                    nameKey="status"
+                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                  >
+                    {stats.statusDistribution.map((entry, index) => (
+                      <Cell 
+                        key={`cell-${index}`} 
+                        fill={['#22c55e', '#eab308', '#3b82f6', '#ef4444', '#8b5cf6', '#14b8a6'][index % 6]} 
+                      />
+                    ))}
+                  </Pie>
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: 'hsl(var(--background))', 
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '6px'
+                    }} 
+                  />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+              <p className="text-xs text-center text-muted-foreground mt-2">
+                Live synchronisiert mit allen {stats.totalProjects} Projekten
+              </p>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        {/* Prüfer Workload Bar Chart */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.1 }}
+        >
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Prüfer Workload (Top 8)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={stats.prueferWorkload.slice(0, 8)}>
+                  <XAxis 
+                    dataKey="name" 
+                    angle={-35} 
+                    height={60} 
+                    tick={{ fontSize: 10 }} 
+                  />
+                  <YAxis />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: 'hsl(var(--background))', 
+                      border: '1px solid hsl(var(--border))' 
+                    }} 
+                  />
+                  <Bar dataKey="count" fill="#FF0000" radius={4} />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </motion.div>
       </div>
 
       {/* Gerade angekommen & Gerade in Bearbeitung - Neue Sektionen mit Notify Buttons */}
