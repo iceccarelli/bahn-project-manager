@@ -21,9 +21,12 @@ export type InsertUser = typeof users.$inferInsert;
 /**
  * Projects table - main entity representing a Bahnhof project.
  * Each row corresponds to one row in the Excel Übersichtsliste.
+ * Enhanced with originalRowIndex + fullRowData for perfect data fidelity (zero cell loss on import).
  */
 export const projects = mysqlTable("projects", {
   id: int("id").autoincrement().primaryKey(),
+  originalRowIndex: int("originalRowIndex"),
+  fullRowData: json("fullRowData"),
   projektnummer: varchar("projektnummer", { length: 256 }),
   bahnhofsmanagement: varchar("bahnhofsmanagement", { length: 128 }),
   station: varchar("station", { length: 256 }),
