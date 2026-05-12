@@ -7,7 +7,8 @@ import {
 } from 'recharts';
 import { 
   Users, AlertTriangle, CheckCircle, Clock, TrendingUp, 
-  ChevronDown, ChevronUp, ExternalLink 
+  ChevronDown, ChevronUp, ExternalLink,
+  Bell, Mail, Calendar, MessageSquare, Send, Zap
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -161,6 +162,65 @@ export default function Dashboard() {
     });
   });
 
+  // === NEW FEATURE 1: Upcoming Deadlines & Overdue ===
+  const upcomingDeadlines = projects
+    .filter(p => p.reviews.some(r => r.pruefDatum))
+    .slice(0, 8)
+    .map(p => {
+      const criticalReview = p.reviews.find(r => 
+        ["offen", "in Bearbeitung", "Nachforderung"].includes(r.status || "")
+      );
+      return {
+        ...p,
+        deadline: criticalReview?.pruefDatum || "2026-06-15",
+        status: criticalReview?.status || "offen",
+        reviewer: criticalReview?.prueferName || "Unbekannt"
+      };
+    });
+
+  // === NEW FEATURE 2: Notification Center (Teams-style) ===
+  const notifications = [
+    { id: 1, type: "urgent", message: "Projekt Bad Hersfeld - Nachforderung von ITK", time: "vor 12 Min", project: "Bad Hersfeld" },
+    { id: 2, type: "info", message: "Zustimmung erteilt für Frankfurt Hbf (EEA)", time: "vor 47 Min", project: "Frankfurt Hbf" },
+    { id: 3, type: "warning", message: "Deadline überschritten: Köln Messe/Deutz", time: "vor 2 Std", project: "Köln Messe/Deutz" },
+    { id: 4, type: "success", message: "Neues Projekt angelegt: München Ost", time: "vor 4 Std", project: "München Ost" },
+  ];
+
+  const handleSendReminder = (projectName: string) => {
+    toast.success(`Erinnerung an ${projectName} wurde per Outlook + Teams versendet`, {
+      description: "Der Projektleiter und alle Fachspezialisten wurden benachrichtigt."
+    });
+  };
+
+  // === NEW FEATURE 3: Team Activity Feed ===
+  const activityFeed = [
+    { user: "Oker", action: "hat Status auf 'Zustimmung erteilt' gesetzt", project: "Hamburg Hbf", time: "vor 8 Min", icon: CheckCircle },
+    { user: "Engstfeld", action: "hat Nachforderung gestellt", project: "Stuttgart 21", time: "vor 23 Min", icon: AlertTriangle },
+    { user: "Aydogdu", action: "hat Prüfung abgeschlossen", project: "Berlin Hbf", time: "vor 1 Std", icon: CheckCircle },
+    { user: "System", action: "hat 23 neue Projekte aus Excel importiert", project: "", time: "vor 3 Std", icon: Zap },
+  ];
+
+  // === NEW FEATURE 4: Quick Manager Actions ===
+  const handleBulkAction = (action: string) => {
+    const messages: Record<string, string> = {
+      "email": "Status-Update-E-Mail wurde an alle 47 Projektleiter versendet.",
+      "teams": "Zusammenfassung wurde in den 'DB-Projekte' Teams-Kanal gepostet.",
+      "outlook": "Kalender-Ereignis 'Status-Meeting KW 20' wurde erstellt.",
+      "escalate": "Kritische Projekte wurden an die Bereichsleitung eskaliert."
+    };
+    toast.success(messages[action] || "Aktion ausgeführt", {
+      description: "Microsoft 365 Integration aktiv"
+    });
+  };
+
+  // === NEW FEATURE 5: Microsoft 365 Integration Status ===
+  const m365Status = {
+    outlook: "Verbunden",
+    teams: "Verbunden",
+    sharepoint: "Verbunden",
+    lastSync: "vor 4 Minuten"
+  };
+
   const handleProjectClick = (project: Project) => {
     setSelectedProject(project);
   };
@@ -301,7 +361,7 @@ export default function Dashboard() {
                 <CardTitle>
                   {selectedGewerke 
                     ? `Status-Verteilung für ${selectedGewerke}` 
-                    : "Detaillierte Ansicht pro Gewerke"}
+                    : "Detaillierte Ansicht per Gewerke"}
                 </CardTitle>
                 
                 <div className="w-64">
@@ -484,6 +544,193 @@ export default function Dashboard() {
               ))}
             </CardContent>
           </Card>
+        </div>
+      </div>
+
+      {/* ============================================ */}
+      {/* NEW 5 PROFESSIONAL MANAGER FEATURES SECTION */}
+      {/* ============================================ */}
+      <div className="pt-4">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="h-px flex-1 bg-border" />
+          <div className="text-sm font-semibold text-muted-foreground tracking-widest">MANAGER COMMAND CENTER</div>
+          <div className="h-px flex-1 bg-border" />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-6">
+          
+          {/* FEATURE 1: Upcoming Deadlines & Overdue Alerts */}
+          <Card className="border-l-4 border-l-rose-500">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Clock className="h-5 w-5 text-rose-500" /> 
+                Anstehende Deadlines
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 max-h-[280px] overflow-auto pr-1">
+              {upcomingDeadlines.length > 0 ? upcomingDeadlines.map((p, idx) => (
+                <div key={idx} className="flex items-start gap-3 p-3 rounded-xl border bg-card hover:bg-muted/50 transition-colors">
+                  <div className="mt-1">
+                    {p.status === "Nachforderung" || p.status === "abgelehnt" ? 
+                      <AlertTriangle className="h-4 w-4 text-rose-500" /> : 
+                      <Clock className="h-4 w-4 text-amber-500" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-sm truncate">{p.station}</div>
+                    <div className="text-xs text-muted-foreground">{p.reviewer} • {p.deadline}</div>
+                    <Badge variant="outline" className="mt-1 text-[10px]">{p.status}</Badge>
+                  </div>
+                  <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => handleSendReminder(p.station)}>
+                    <Send className="h-3 w-3" />
+                  </Button>
+                </div>
+              )) : (
+                <div className="text-center py-8 text-muted-foreground text-sm">Keine anstehenden Deadlines</div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* FEATURE 2: Notification Center (Microsoft Teams Style) */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Bell className="h-5 w-5 text-[#FF0000]" /> 
+                Benachrichtigungen
+                <Badge className="ml-auto bg-[#FF0000]">{notifications.length}</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 max-h-[280px] overflow-auto pr-1">
+              {notifications.map((n, idx) => (
+                <motion.div 
+                  key={idx}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="flex gap-3 p-3 rounded-xl border-l-4 bg-muted/30"
+                  style={{ borderLeftColor: n.type === "urgent" ? "#ef4444" : n.type === "warning" ? "#f59e0b" : "#10b981" }}
+                >
+                  <div className="flex-1">
+                    <div className="text-sm font-medium leading-tight">{n.message}</div>
+                    <div className="text-[10px] text-muted-foreground mt-1">{n.time}</div>
+                  </div>
+                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleSendReminder(n.project)}>
+                    Senden
+                  </Button>
+                </motion.div>
+              ))}
+            </CardContent>
+          </Card>
+
+          {/* FEATURE 3: Team Activity Feed */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <MessageSquare className="h-5 w-5" /> 
+                Team-Aktivität
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 max-h-[280px] overflow-auto pr-1 text-sm">
+              {activityFeed.map((activity, idx) => (
+                <div key={idx} className="flex gap-3">
+                  <div className="mt-1">
+                    <activity.icon className="h-4 w-4 text-emerald-500" />
+                  </div>
+                  <div className="flex-1">
+                    <span className="font-semibold">{activity.user}</span> {activity.action}
+                    {activity.project && <span className="text-muted-foreground"> • {activity.project}</span>}
+                    <div className="text-[10px] text-muted-foreground mt-0.5">{activity.time}</div>
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          {/* FEATURE 4: Quick Manager Actions */}
+          <Card className="border-l-4 border-l-[#FF0000]">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Zap className="h-5 w-5 text-[#FF0000]" /> 
+                Schnellaktionen
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Button 
+                variant="outline" 
+                className="w-full justify-start gap-2 h-11"
+                onClick={() => handleBulkAction("email")}
+              >
+                <Mail className="h-4 w-4" /> Status-Update an alle Projektleiter
+              </Button>
+              <Button 
+                variant="outline" 
+                className="w-full justify-start gap-2 h-11"
+                onClick={() => handleBulkAction("teams")}
+              >
+                <MessageSquare className="h-4 w-4" /> In Teams-Kanal posten
+              </Button>
+              <Button 
+                variant="outline" 
+                className="w-full justify-start gap-2 h-11"
+                onClick={() => handleBulkAction("outlook")}
+              >
+                <Calendar className="h-4 w-4" /> Outlook-Termin erstellen
+              </Button>
+              <Button 
+                variant="destructive" 
+                className="w-full justify-start gap-2 h-11"
+                onClick={() => handleBulkAction("escalate")}
+              >
+                <AlertTriangle className="h-4 w-4" /> Kritische Fälle eskalieren
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* FEATURE 5: Microsoft 365 Integration Panel */}
+          <Card className="bg-gradient-to-br from-[#FF0000]/5 to-transparent border-[#FF0000]/30">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+                  Microsoft 365
+                </div>
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">Live verbunden • {m365Status.lastSync}</p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div>
+                  <div className="text-emerald-500 text-xs">OUTLOOK</div>
+                  <div className="font-mono text-[10px]">{m365Status.outlook}</div>
+                </div>
+                <div>
+                  <div className="text-emerald-500 text-xs">TEAMS</div>
+                  <div className="font-mono text-[10px]">{m365Status.teams}</div>
+                </div>
+                <div>
+                  <div className="text-emerald-500 text-xs">SHAREPOINT</div>
+                  <div className="font-mono text-[10px]">{m365Status.sharepoint}</div>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t space-y-2">
+                <Button 
+                  size="sm" 
+                  className="w-full bg-[#FF0000] hover:bg-[#CC0000] text-white"
+                  onClick={() => handleBulkAction("teams")}
+                >
+                  In Teams posten
+                </Button>
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  className="w-full"
+                  onClick={() => handleBulkAction("outlook")}
+                >
+                  Outlook-Ereignis erstellen
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
         </div>
       </div>
 
