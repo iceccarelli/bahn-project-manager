@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useAllData } from '@/hooks/useData';
 import { toast } from 'sonner';
 
+// DB Corporate Status Colors (perfect harmony with Projects.tsx)
 const STATUS_COLORS: Record<string, string> = {
   "nicht erforderlich": "#64748b", "offen": "#f59e0b", "in Bearbeitung": "#3b82f6",
   "prüffähig": "#06b6d4", "Zustimmung erteilt": "#10b981", "Niederschrift erstellt": "#10b981",
@@ -23,6 +24,7 @@ const STATUS_COLORS: Record<string, string> = {
   "Nachforderung": "#f97316", "Projektkonfig.": "#8b5cf6",
 };
 
+// Exact department order from Übersichtsliste_Dashboard_1.xlsm (perfect consistency)
 const GEWERKE = [
   "EEA", "ITK", "BS", "GA", "Energie", "HFT", "HKLS", 
   "TBQ", "UM", "BIM", "LST", "Vermessung", 
@@ -64,7 +66,6 @@ export default function Dashboard() {
 
   const projects: Project[] = allData?.projects || [];
 
-  // Calculate all KPIs and data
   const totalProjects = projects.length;
   const openReviews = projects.reduce((sum, p) => 
     sum + p.reviews.filter(r => r.status === "offen" || r.status === "in Bearbeitung").length, 0);
@@ -481,7 +482,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* MANAGER COMMAND CENTER - 5 PROFESSIONAL SECTIONS */}
+      {/* MANAGER COMMAND CENTER */}
       <div className="pt-4">
         <div className="flex items-center gap-3 mb-6">
           <div className="h-px flex-1 bg-border" />
@@ -490,8 +491,6 @@ export default function Dashboard() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-6">
-          
-          {/* SECTION 1: Upcoming Deadlines */}
           <Card className="border-l-4 border-l-rose-500">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-base">
@@ -521,7 +520,6 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {/* SECTION 2: Notification Center */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-base">
@@ -550,7 +548,6 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {/* SECTION 3: Team Activity Feed */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-base">
@@ -573,7 +570,6 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {/* SECTION 4: Quick Manager Actions */}
           <Card className="border-l-4 border-l-[#FF0000]">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-base">
@@ -596,7 +592,6 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {/* SECTION 5: Microsoft 365 Status */}
           <Card className="bg-gradient-to-br from-[#FF0000]/5 to-transparent border-[#FF0000]/30">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-base">
@@ -633,7 +628,6 @@ export default function Dashboard() {
               </div>
             </CardContent>
           </Card>
-
         </div>
       </div>
 
@@ -646,8 +640,6 @@ export default function Dashboard() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          
-          {/* Extended KPI Section */}
           <Card>
             <CardHeader>
               <CardTitle>Erweiterte Kennzahlen</CardTitle>
@@ -672,7 +664,6 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {/* Regional Distribution */}
           <Card>
             <CardHeader>
               <CardTitle>Regionale Verteilung</CardTitle>
@@ -699,7 +690,6 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {/* Top Performers */}
           <Card>
             <CardHeader>
               <CardTitle>Top Performer (Fachspezialisten)</CardTitle>
@@ -721,7 +711,6 @@ export default function Dashboard() {
               ))}
             </CardContent>
           </Card>
-
         </div>
       </div>
 
