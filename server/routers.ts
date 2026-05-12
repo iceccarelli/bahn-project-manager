@@ -56,7 +56,6 @@ export const appRouter = router({
           throw new TRPCError({ code: "UNAUTHORIZED", message: "Ungültige Anmeldedaten" });
         }
 
-        // Upsert user in database
         await upsertUser({
           openId: demoUser.openId,
           name: demoUser.name,
@@ -66,16 +65,14 @@ export const appRouter = router({
           lastSignedIn: new Date(),
         });
 
-        // Create JWT token using the SDK (includes openId, appId, name)
         const token = await sdk.createSessionToken(demoUser.openId, {
           name: demoUser.name,
         });
 
-        // Set cookie
         const cookieOptions = getSessionCookieOptions(ctx.req);
         ctx.res.cookie(COOKIE_NAME, token, {
           ...cookieOptions,
-          maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+          maxAge: 30 * 24 * 60 * 60 * 1000,
         });
 
         return { success: true, user: { name: demoUser.name, email: demoUser.email, role: demoUser.role } };
@@ -100,11 +97,9 @@ export const appRouter = router({
         const params = input ?? {};
         const result = await getProjects(params);
 
-        // Fetch reviews for all returned projects
         const projectIds = result.projects.map(p => p.id);
         const reviews = await getProjectReviews(projectIds);
 
-        // Group reviews by project
         const reviewsByProject: Record<number, typeof reviews> = {};
         for (const review of reviews) {
           if (!reviewsByProject[review.projectId]) {
