@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo } from "react";
-import { useProjects, useFilters, useAllData, type Project, type Review } from "@/hooks/useData";
+import { useProjects, useFilters, useAllData, type Project, type Review } from "@/hooks/useDataQuery";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
