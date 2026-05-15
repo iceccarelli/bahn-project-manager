@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { Search, Bell, ChevronDown, Plus, User, LogOut, CreditCard, Sun, Moon, X, Filter, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PresenceIndicator } from "./PresenceIndicator";
+import { useAuth } from "@/_core/hooks/useAuth";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,6 +23,7 @@ export default function Header() {
   const [isVisible, setIsVisible] = useState(true);
   const lastScrollY = useRef(0);
   const { theme, toggleTheme } = useTheme();
+  const { user } = useAuth();
 
   // Auto-hide header on scroll down (perfect modern UX, reappears on scroll up)
   useEffect(() => {
@@ -220,6 +223,9 @@ export default function Header() {
         </DropdownMenuContent>
       </DropdownMenu>
 
+      {/* Presence Indicator – shows online colleagues */}
+      <PresenceIndicator />
+
       {/* Theme Toggle – HELL / DUNKEL – MOVED HERE for professional top-level access */}
       <Button
         variant="ghost"
@@ -277,8 +283,8 @@ export default function Header() {
         <DropdownMenuContent align="end" className="w-64 shadow-2xl bg-popover text-popover-foreground border border-border">
           <DropdownMenuLabel>
             <div className="flex flex-col">
-              <span>Bahn Prüfer</span>
-              <span className="text-xs text-muted-foreground font-normal">1.299 Projekte • 47 offene Prüfungen</span>
+              <span>{user?.name || "Bahn Prüfer"}</span>
+              <span className="text-xs text-muted-foreground font-normal">{user?.role === "admin" ? "Administrator" : "Prüfer"} • 1.299 Projekte</span>
             </div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
