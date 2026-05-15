@@ -13,7 +13,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useAllData } from '@/hooks/useData';
+import { useAllData } from '@/hooks/useDataQuery';
 import { toast } from 'sonner';
 
 // DB Corporate Status Colors (perfect harmony with Projects.tsx)
