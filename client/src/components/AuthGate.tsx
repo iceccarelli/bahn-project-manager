@@ -1,47 +1,30 @@
-import { useEffect } from "react";
-import { useLocation } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
-import Login from "@/pages/Login";
-import DashboardLayout from "./DashboardLayout";
-import { Skeleton } from "@/components/ui/skeleton";
+import { useLocation } from "wouter";
+import { useEffect, ReactNode } from "react";
+import { Loader2 } from "lucide-react";
 
-export default function AuthGate({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, user, loading } = useAuth();
-  const [location, navigate] = useLocation();
+export default function AuthGate({ children }: { children: ReactNode }) {
+  const { user, loading } = useAuth();
+  const [, setLocation] = useLocation();
 
-  // Redirect logic based on auth state
   useEffect(() => {
-    if (loading) return; // Don't redirect while loading
-
-    if (!isAuthenticated && location !== "/login") {
-      navigate("/login", { replace: true });
-    } else if (isAuthenticated && location === "/login") {
-      navigate("/", { replace: true });
+    if (!loading && !user) {
+      setLocation("/login");
     }
-  }, [isAuthenticated, location, navigate, loading]);
+  }, [user, loading, setLocation]);
 
-  // Show loading state while checking auth
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="space-y-4 w-full max-w-md px-4">
-          <Skeleton className="h-12 w-full" />
-          <Skeleton className="h-8 w-3/4" />
-          <Skeleton className="h-8 w-1/2" />
+      <div className="flex h-screen w-screen items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-12 w-12 animate-spin text-primary" />
+          <p className="text-lg font-medium text-muted-foreground">Verbindung wird hergestellt...</p>
         </div>
       </div>
     );
   }
 
-  // Render login page if not authenticated
-  if (!isAuthenticated) {
-    return <Login />;
-  }
+  if (!user) return null;
 
-  // Render dashboard with children if authenticated
-  return (
-    <DashboardLayout>
-      {children}
-    </DashboardLayout>
-  );
+  return <>{children}</>;
 }
