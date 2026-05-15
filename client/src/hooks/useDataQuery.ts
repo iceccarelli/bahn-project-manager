@@ -1,5 +1,5 @@
 /**
- * Data Hooks with TanStack Query
+ * useDataQuery.ts — Data Hooks with TanStack Query
  * 
  * Refactored from useData.ts to use useQuery/useMutation
  * Provides proper caching, invalidation, and optimistic updates
@@ -479,3 +479,21 @@ export function useFilters() {
 
   return { data, isLoading };
 }
+
+/**
+ * Backward compatibility re-export for useAllData
+ */
+export function useAllData() {
+  const { data: projects, isLoading: projectsLoading } = useAllProjects();
+  const { data: stats, isLoading: statsLoading } = useDashboardStats();
+  const { data: filters, isLoading: filtersLoading } = useFilters();
+
+  const data = useMemo(() => {
+    if (!projects || !stats || !filters) return null;
+    return { projects, stats, filters };
+  }, [projects, stats, filters]);
+
+  return { data, isLoading: projectsLoading || statsLoading || filtersLoading };
+}
+
+export type { Project, Review, Stats, Filters };
