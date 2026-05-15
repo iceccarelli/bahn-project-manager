@@ -20,16 +20,21 @@ export default function Login() {
   const doLogin = (loginEmail: string, loginPassword: string) => {
     setError("");
     setIsLoading(true);
-    const success = loginDemo(loginEmail, loginPassword);
-    if (success) {
-      // Force full page reload to pick up new auth state everywhere
-      const params = new URLSearchParams(window.location.search);
-      const returnTo = params.get("returnTo") || "/";
-      window.location.href = returnTo;
-    } else {
-      setError("Ungültige Zugangsdaten. Verwenden Sie einen Demo-Account.");
-      setIsLoading(false);
-    }
+    
+    // Simulate a brief delay for better UX
+    setTimeout(() => {
+      const success = loginDemo(loginEmail, loginPassword);
+      if (success) {
+        // No page reload needed — auth state is picked up via useAuth hook
+        // Just redirect to dashboard
+        const params = new URLSearchParams(window.location.search);
+        const returnTo = params.get("returnTo") || "/";
+        window.location.href = returnTo;
+      } else {
+        setError("Ungültige Zugangsdaten. Verwenden Sie einen Demo-Account.");
+        setIsLoading(false);
+      }
+    }, 500);
   };
 
   const handleLogin = (e: React.FormEvent) => {
@@ -58,6 +63,14 @@ export default function Login() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {isLoading && (
+              <div className="absolute inset-0 bg-black/20 rounded-lg flex items-center justify-center">
+                <div className="bg-background rounded-lg p-4 flex flex-col items-center gap-2">
+                  <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                  <p className="text-sm text-muted-foreground">Wird angemeldet...</p>
+                </div>
+              </div>
+            )}
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email">E-Mail</Label>
@@ -67,6 +80,7 @@ export default function Login() {
                   placeholder="name@bahn.de"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  disabled={isLoading}
                   required
                 />
               </div>
@@ -78,6 +92,7 @@ export default function Login() {
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  disabled={isLoading}
                   required
                 />
               </div>
@@ -103,7 +118,7 @@ export default function Login() {
                 <Button
                   key={user.email}
                   variant="outline"
-                  className="w-full justify-start gap-3"
+                  className="w-full justify-start gap-3 relative"
                   onClick={() => doLogin(user.email, user.password)}
                   disabled={isLoading}
                 >
@@ -123,7 +138,7 @@ export default function Login() {
         </Card>
 
         <p className="text-center text-xs text-muted-foreground">
-          Demo-Version &bull; Alle Daten aus der Übersichtsliste.xlsm
+          Demo-Version v1.0 &bull; Bahn Project Manager
         </p>
       </div>
     </div>
