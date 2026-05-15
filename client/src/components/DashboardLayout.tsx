@@ -20,12 +20,11 @@ import {
   FileCheck,
   Network,
   History,
-  ShieldCheck,
+  LogOut,
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { useTheme } from "@/contexts/ThemeContext";
-import { ThemeProvider } from "@/contexts/ThemeContext";
+import { useAuth } from "@/_core/hooks/useAuth";
 // DB-branded Header & Footer (perfect integration with Übersichtsliste.xlsm architecture)
 import Header from "./Header";
 import Footer from "./Footer";
@@ -64,19 +63,17 @@ export default function DashboardLayout({
   }, [sidebarWidth]);
 
   return (
-    <ThemeProvider>
-      <SidebarProvider
-        style={
-          {
-            "--sidebar-width": `${sidebarWidth}px`,
-          } as CSSProperties
-        }
-      >
-        <DashboardLayoutContent setSidebarWidth={setSidebarWidth}>
-          {children}
-        </DashboardLayoutContent>
-      </SidebarProvider>
-    </ThemeProvider>
+    <SidebarProvider
+      style={
+        {
+          "--sidebar-width": `${sidebarWidth}px`,
+        } as CSSProperties
+      }
+    >
+      <DashboardLayoutContent setSidebarWidth={setSidebarWidth}>
+        {children}
+      </DashboardLayoutContent>
+    </SidebarProvider>
   );
 }
 
@@ -84,6 +81,51 @@ type DashboardLayoutContentProps = {
   children: React.ReactNode;
   setSidebarWidth: (width: number) => void;
 };
+
+function SidebarFooterContent() {
+  const { user, logout } = useAuth();
+  const [, navigate] = useLocation();
+
+  const handleLogout = () => {
+    logout();
+    navigate("/login", { replace: true });
+  };
+
+  const userInitials = user?.name
+    ?.split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase() || "DB";
+
+  const userRole = user?.role === "admin" ? "Admin" : "Prüfer";
+
+  return (
+    <div className="p-3 space-y-3 border-t border-border/50">
+      <div className="flex items-center gap-3 rounded-lg px-1 py-1 w-full group-data-[collapsible=icon]:justify-center">
+        <Avatar className="h-9 w-9 border shrink-0">
+          <AvatarFallback className="text-xs font-medium bg-[#FF0000] text-white">
+            {userInitials}
+          </AvatarFallback>
+        </Avatar>
+        <div className="flex-1 min-w-0 group-data-[collapsible=icon]:hidden">
+          <p className="text-sm font-medium truncate leading-none">
+            {user?.name || "Bahn Prüfer"}
+          </p>
+          <p className="text-xs text-muted-foreground truncate mt-1.5">
+            {userRole} • 1.299 Projekte
+          </p>
+        </div>
+      </div>
+      <button
+        onClick={handleLogout}
+        className="w-full px-3 py-2 text-sm text-left text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors flex items-center gap-2"
+      >
+        <LogOut className="h-4 w-4" />
+        <span>Abmelden</span>
+      </button>
+    </div>
+  );
+}
 
 function DashboardLayoutContent({
   children,
@@ -196,23 +238,9 @@ function DashboardLayoutContent({
             </SidebarMenu>
           </SidebarContent>
 
-          {/* Sidebar Footer – user info only (theme toggle MOVED to Header for professional top-bar UX) */}
-          <SidebarFooter className="p-3 space-y-2">
-            <div className="flex items-center gap-3 rounded-lg px-1 py-1 w-full group-data-[collapsible=icon]:justify-center">
-              <Avatar className="h-9 w-9 border shrink-0">
-                <AvatarFallback className="text-xs font-medium">
-                  DB
-                </AvatarFallback>
-              </Avatar>
-              <div className="flex-1 min-w-0 group-data-[collapsible=icon]:hidden">
-                <p className="text-sm font-medium truncate leading-none">
-                  Bahn Prüfer
-                </p>
-                <p className="text-xs text-muted-foreground truncate mt-1.5">
-                  1.299 Projekte • 312 offene Prüfungen
-                </p>
-              </div>
-            </div>
+          {/* Sidebar Footer – dynamic user info with logout */}
+          <SidebarFooter>
+            <SidebarFooterContent />
           </SidebarFooter>
         </Sidebar>
 
@@ -228,7 +256,7 @@ function DashboardLayoutContent({
       </div>
 
       {/* Main content area with DB header offset + sticky footer below everything */}
-      <SidebarInset className="pt-[60px] transition-[margin-left] duration-200 ease-in-out relative z-10 bg-background">
+      <SidebarInset className="pt-[60px] transition-[margin-left] duration-200 ease-in-out relative z-10 bg-background flex flex-col min-h-screen">
         {/* Mobile top bar */}
         {isMobile && (
           <div className="flex border-b h-14 items-center justify-between bg-background/95 px-2 backdrop-blur supports-[backdrop-filter]:backdrop-blur sticky top-0 z-40">
@@ -242,11 +270,11 @@ function DashboardLayoutContent({
         )}
 
         {/* Content wrapper with flex layout for sticky footer below scrollable tables */}
-        <div className="min-h-[calc(100vh-60px)] flex flex-col">
-          <main className="flex-1 p-4 lg:p-6">
+        <div className="flex-1 flex flex-col">
+          <main className="flex-1 p-4 lg:p-6 overflow-auto">
             {children}
           </main>
-          
+
           {/* Footer is HERE – always below the entire website, navbar, AND any scrollable table (e.g. Projekte Übersicht from Übersichtsliste.xlsm) */}
           <Footer />
         </div>
