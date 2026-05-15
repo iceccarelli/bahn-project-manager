@@ -75,7 +75,18 @@ export function logoutDemo() {
 
 export function useAuth(_options?: { redirectOnUnauthenticated?: boolean; redirectPath?: string }) {
   const [user, setUser] = useState<DemoUser | null>(() => getStoredUser());
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
+  // Initialize loading state on mount
+  useEffect(() => {
+    // Simulate checking localStorage (synchronous, but wrapped in effect for consistency)
+    const storedUser = getStoredUser();
+    setUser(storedUser);
+    setLoading(false);
+  }, []);
+
+  // Listen for auth changes from other tabs/windows
   useEffect(() => {
     const handler = () => {
       setUser(getStoredUser());
@@ -90,14 +101,21 @@ export function useAuth(_options?: { redirectOnUnauthenticated?: boolean; redire
 
   const logout = useCallback(() => {
     logoutDemo();
+    setUser(null);
+    setError(null);
+  }, []);
+
+  const refresh = useCallback(() => {
+    const storedUser = getStoredUser();
+    setUser(storedUser);
   }, []);
 
   return {
     user,
-    loading: false,
-    error: null,
+    loading,
+    error,
     isAuthenticated: Boolean(user),
-    refresh: () => setUser(getStoredUser()),
+    refresh,
     logout,
   };
 }
