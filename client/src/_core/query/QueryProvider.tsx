@@ -1,16 +1,21 @@
-/**
- * QueryClientProvider Wrapper
- * 
- * Provides TanStack Query context to entire app
- */
+import { QueryClient, QueryClientProvider as TanStackQueryProvider } from "@tanstack/react-query";
+import { ReactNode, useState } from "react";
 
-import { QueryClientProvider as TanStackQueryClientProvider } from "@tanstack/react-query";
-import { queryClient } from "./queryClient";
+export function QueryClientProvider({ children }: { children: ReactNode }) {
+  const [queryClient] = useState(() => new QueryClient({
+    defaultOptions: {
+      queries: {
+        staleTime: 1000 * 60 * 5, // 5 minutes
+        gcTime: 1000 * 60 * 10, // 10 minutes
+        retry: 1,
+        refetchOnWindowFocus: false,
+      },
+    },
+  }));
 
-export function QueryClientProvider({ children }: { children: React.ReactNode }) {
   return (
-    <TanStackQueryClientProvider client={queryClient}>
+    <TanStackQueryProvider client={queryClient}>
       {children}
-    </TanStackQueryClientProvider>
+    </TanStackQueryProvider>
   );
 }
