@@ -1,6 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
-import { useAllData } from "@/hooks/useData";
+import { useAllData } from "@/hooks/useDataQuery";
 
 export default function PsvItk() {
   const { data, isLoading } = useAllData();
