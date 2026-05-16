@@ -7,8 +7,11 @@ export default function BvbEea() {
 
   if (isLoading || !data) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="flex items-center justify-center h-screen bg-background">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-12 w-12 animate-spin text-[#FF0000]" />
+          <p className="text-lg font-medium text-muted-foreground">Lade BVB-EEA Daten...</p>
+        </div>
       </div>
     );
   }
@@ -20,59 +23,63 @@ export default function BvbEea() {
   });
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">BVB-EEA Freigaben</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          Verwaltung der EEA-Freigabeerklärungen &bull; {eaaProjects.length} Einträge
-        </p>
+    <div className="space-y-8 p-6 bg-background min-h-screen">
+      {/* HEADER SECTION */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-4xl font-bold tracking-tight">BVB-EEA Freigaben</h1>
+          <p className="text-muted-foreground mt-2">
+            Verwaltung der EEA-Freigabeerklärungen &bull; {eaaProjects.length} Einträge
+          </p>
+        </div>
       </div>
 
-      <Card>
+      {/* MAIN CONTENT AREA */}
+      <Card className="bg-card rounded-xl border shadow-sm overflow-hidden">
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50">
+          <div className="table-scroll-container">
+            <table className="w-full text-xs border-collapse">
+              <thead className="bg-muted/50 sticky top-0 z-10">
                 <tr>
-                  <th className="text-left py-2.5 px-3 font-medium text-muted-foreground whitespace-nowrap">Projektnummer</th>
-                  <th className="text-left py-2.5 px-3 font-medium text-muted-foreground whitespace-nowrap">Region</th>
-                  <th className="text-left py-2.5 px-3 font-medium text-muted-foreground whitespace-nowrap">Station</th>
-                  <th className="text-left py-2.5 px-3 font-medium text-muted-foreground whitespace-nowrap min-w-[200px]">Beschreibung</th>
-                  <th className="text-left py-2.5 px-3 font-medium text-muted-foreground whitespace-nowrap">Projektleiter</th>
-                  <th className="text-left py-2.5 px-3 font-medium text-muted-foreground whitespace-nowrap">EEA-Prüfer</th>
-                  <th className="text-left py-2.5 px-3 font-medium text-muted-foreground whitespace-nowrap">Datum</th>
-                  <th className="text-left py-2.5 px-3 font-medium text-muted-foreground whitespace-nowrap">Status</th>
+                  <th className="text-left py-3 px-4 font-semibold text-muted-foreground whitespace-nowrap border-b">Projektnummer</th>
+                  <th className="text-left py-3 px-4 font-semibold text-muted-foreground whitespace-nowrap border-b">Region</th>
+                  <th className="text-left py-3 px-4 font-semibold text-muted-foreground whitespace-nowrap border-b">Station</th>
+                  <th className="text-left py-3 px-4 font-semibold text-muted-foreground whitespace-nowrap border-b min-w-[250px]">Beschreibung</th>
+                  <th className="text-left py-3 px-4 font-semibold text-muted-foreground whitespace-nowrap border-b">Projektleiter</th>
+                  <th className="text-left py-3 px-4 font-semibold text-muted-foreground whitespace-nowrap border-b">EEA-Prüfer</th>
+                  <th className="text-left py-3 px-4 font-semibold text-muted-foreground whitespace-nowrap border-b">Datum</th>
+                  <th className="text-left py-3 px-4 font-semibold text-muted-foreground whitespace-nowrap border-b">Status</th>
                 </tr>
               </thead>
               <tbody>
                 {eaaProjects.map((item: any) => {
                   const eaaReview = item.reviews?.find((r: any) => r.department === 'EEA');
                   return (
-                    <tr key={item.id} className="border-t hover:bg-muted/30 transition-colors">
-                      <td className="py-2 px-3 font-mono text-xs whitespace-nowrap font-medium">
+                    <tr key={item.id} className="border-b hover:bg-muted/30 transition-colors">
+                      <td className="py-3 px-4 font-mono text-xs whitespace-nowrap font-medium">
                         {item.projektnummer || '-'}
                       </td>
-                      <td className="py-2 px-3 text-xs whitespace-nowrap">
+                      <td className="py-3 px-4 text-xs whitespace-nowrap">
                         {item.bahnhofsmanagement || '-'}
                       </td>
-                      <td className="py-2 px-3 text-xs whitespace-nowrap font-medium">
+                      <td className="py-3 px-4 text-xs whitespace-nowrap font-medium">
                         {item.station || '-'}
                       </td>
-                      <td className="py-2 px-3 text-xs max-w-[250px]">
+                      <td className="py-3 px-4 text-xs max-w-[300px]">
                         <span className="line-clamp-2">{item.projektbeschreibung || '-'}</span>
                       </td>
-                      <td className="py-2 px-3 text-xs whitespace-nowrap">
+                      <td className="py-3 px-4 text-xs whitespace-nowrap">
                         {item.projektleiter || '-'}
                       </td>
-                      <td className="py-2 px-3 text-xs whitespace-nowrap">
+                      <td className="py-3 px-4 text-xs whitespace-nowrap">
                         {eaaReview?.prueferName || '-'}
                       </td>
-                      <td className="py-2 px-3 text-xs whitespace-nowrap">
+                      <td className="py-3 px-4 text-xs whitespace-nowrap">
                         {eaaReview?.pruefDatum ? new Date(eaaReview.pruefDatum).toLocaleDateString('de-DE') : '-'}
                       </td>
-                      <td className="py-2 px-3 text-xs whitespace-nowrap">
-                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                          eaaReview?.status === 'Zustimmung erteilt' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' :
+                      <td className="py-3 px-4 text-xs whitespace-nowrap">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-medium ${
+                          eaaReview?.status === 'Zustimmung erteilt' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300' :
                           eaaReview?.status === 'offen' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300' :
                           eaaReview?.status === 'in Bearbeitung' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' :
                           'bg-muted text-muted-foreground'
@@ -85,7 +92,7 @@ export default function BvbEea() {
                 })}
                 {eaaProjects.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="py-8 text-center text-muted-foreground">
+                    <td colSpan={8} className="py-12 text-center text-muted-foreground">
                       Keine BVB-EEA Einträge vorhanden.
                     </td>
                   </tr>
