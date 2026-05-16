@@ -1,288 +1,123 @@
-@import "tailwindcss";
-@import "tw-animate-css";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-@custom-variant dark (&:is(.dark *));
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+    --primary: 0 100% 50%; /* DB Red: #FF0000 */
+    --primary-foreground: 0 0% 98%;
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --accent: 240 4.8% 95.9%;
+    --accent-foreground: 240 5.9% 10%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 0 100% 50%;
+    --radius: 0.5rem;
+    
+    /* Sidebar Variables */
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 0 100% 50%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
 
-@theme inline {
-  /* shadcn/ui theme – preserved 100% for full compatibility */
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.62 0.24 262.2);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0.01 0);
-  --secondary-foreground: oklch(0.21 0.006 0);
-  --muted: oklch(0.967 0.01 0);
-  --muted-foreground: oklch(0.557 0.01 0);
-  --accent: oklch(0.97 0.01 0);
-  --accent-foreground: oklch(0.21 0.006 0);
-  --destructive: oklch(0.577 0.25 27.33);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.92 0.01 0);
-  --input: oklch(0.92 0.01 0);
-  --ring: oklch(0.62 0.24 262.2);
-  --radius: 0.5rem;
-
-  /* AWS Design Tokens (exact AWS console palette) */
-  --aws-nav: #232f3e;
-  --aws-nav-text: #eaeded;
-  --aws-accent: #ff9900;
-  --aws-accent-glow: rgba(255, 153, 0, 0.5);
-  --aws-border: #545b64;
-  --aws-card-bg: oklch(0.98 0.002 250);
-  --aws-text-light: #eaeded;
-  --aws-text-dark: #16191f;
-  --radius-aws: 4px;
+  .dark {
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 240 10% 3.9%;
+    --card-foreground: 0 0% 98%;
+    --popover: 240 10% 3.9%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 0 100% 50%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 240 3.7% 15.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
+    --accent: 240 3.7% 15.9%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 3.7% 15.9%;
+    --input: 240 3.7% 15.9%;
+    --ring: 0 100% 50%;
+    
+    /* Sidebar Dark Variables */
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 0 100% 50%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
 }
 
-/* Global base styles – Tailwind v4 + Vite compatible */
 @layer base {
   * {
-    border-color: var(--border);
+    @apply border-border;
   }
-
   body {
-    background-color: var(--background);
-    color: var(--foreground);
-  }
-
-  button,
-  [role="button"],
-  a[role="button"],
-  input:not([type="checkbox"]):not([type="radio"]),
-  textarea,
-  select,
-  .card,
-  .panel {
-    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1) !important;
-  }
-
-  :focus-visible {
-    outline: 2px solid var(--aws-accent);
-    outline-offset: 2px;
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
   }
 }
 
-@layer components {
-  /* AWS-style Buttons */
-  .aws-button {
-    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-    border-radius: var(--radius-aws);
-  }
-  .aws-button:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 0 0 2px var(--aws-accent-glow);
-    border-color: var(--aws-accent);
-    background-color: color-mix(in srgb, currentColor 5%, transparent);
-  }
-  .aws-button:active {
-    transform: scale(0.99);
-  }
-  .aws-button:focus {
-    box-shadow: 0 0 0 3px var(--aws-accent-glow);
-  }
-
-  /* AWS-style Inputs / Textareas */
-  .aws-input {
-    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-    border-radius: var(--radius-aws);
-  }
-  .aws-input:hover {
-    background-color: #fafafa;
-    border-color: var(--aws-border);
-  }
-  .aws-input:focus {
-    border-color: var(--aws-accent);
-    box-shadow: 0 0 0 3px var(--aws-accent-glow);
-    padding-block: calc(0.5rem + 2px);
-  }
-
-  /* AWS-style Cards / Panels */
-  .aws-card {
-    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-    position: relative;
-    border-radius: 6px;
-    border: 1px solid #d5dbdb;
-    background-color: var(--aws-card-bg);
-  }
-  .aws-card:hover {
-    box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
-    border-color: #d5dbdb;
-  }
-  .aws-card:hover::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 3px;
-    background: linear-gradient(to right, transparent, var(--aws-accent), transparent);
-    opacity: 0.7;
-  }
-  .aws-card:active {
-    transform: scale(0.99);
-  }
-
-  /* AWS-style Nav Links / Tabs */
-  .aws-nav-link {
-    position: relative;
-    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-  .aws-nav-link:hover::after,
-  .aws-nav-link[data-active="true"]::after {
-    content: '';
-    position: absolute;
-    bottom: -2px;
-    left: 0;
-    width: 100%;
-    height: 3px;
-    background-color: var(--aws-accent);
-    transform: scaleX(1);
-  }
-  .aws-nav-link::after {
-    transform: scaleX(0);
-    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
-  /* Header & Footer AWS classes */
-  .aws-header {
-    background-color: var(--aws-nav);
-    color: var(--aws-nav-text);
-    height: 50px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-  }
-
-  .aws-footer {
-    background-color: var(--aws-nav);
-    color: var(--aws-nav-text);
-  }
-}
-
-/* Touch-device graceful degradation */
-@media (hover: none) {
-  .aws-button:hover,
-  .aws-card:hover {
-    transform: none;
-    box-shadow: initial;
-  }
-  .aws-button:active,
-  .aws-card:active {
-    transform: scale(0.98);
-  }
-}
-
-/* Extra utilities */
+/* Professional Layout Utilities */
 @layer utilities {
-  .aws-glow-accent {
-    box-shadow: 0 0 0 3px var(--aws-accent-glow);
+  .main-content-container {
+    @apply mx-auto w-full max-w-[1600px] px-4 md:px-6 lg:px-8;
+  }
+  
+  .table-scroll-container {
+    @apply w-full overflow-x-auto rounded-lg border bg-card shadow-sm;
   }
 }
 
-/* ============================================
-   DARK MODE OVERRIDES (for HELL/DUNKEL toggle)
-   Professional DB theme - dark is primary
-   ============================================ */
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.62 0.24 262.2);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.62 0.24 262.2);
-
-  /* Sidebar specific for shadcn/ui sidebar */
-  --sidebar-background: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.62 0.24 262.2);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.62 0.24 262.2);
+/* Custom Scrollbar for DB Theme */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
 }
 
-/* Ensure all shadcn dropdowns, popovers, sidebars are SOLID and not see-through */
-@layer components {
-  [data-radix-popper-content-wrapper] > div,
-  .DropdownMenuContent,
-  [role="menu"] {
-    background-color: var(--popover) !important;
-    color: var(--popover-foreground) !important;
-    border-color: var(--border) !important;
-  }
-
-  /* Sidebar solid background - fix see-through navbar */
-  .Sidebar,
-  [data-sidebar="sidebar"] {
-    background-color: var(--sidebar-background, var(--card)) !important;
-    color: var(--sidebar-foreground, var(--foreground)) !important;
-    border-right-color: var(--sidebar-border, var(--border)) !important;
-  }
-
-  /* Make sure main content never goes behind sidebar - professional layout */
-  .SidebarInset,
-  [data-sidebar="inset"] {
-    background-color: var(--background);
-  }
+::-webkit-scrollbar-track {
+  @apply bg-muted;
 }
 
-/* Responsive dynamic adjustments for all screen sizes */
-@media (max-width: 768px) {
-  .SidebarInset {
-    margin-left: 0 !important;
-  }
+::-webkit-scrollbar-thumb {
+  @apply bg-muted-foreground/30 rounded-full border-2 border-transparent bg-clip-padding hover:bg-muted-foreground/50 transition-colors;
 }
 
-/* ============================================
-   LEAFLET MAP STYLES - Professional DB integration
-   ============================================ */
+/* Leaflet Map Professional Integration */
 .leaflet-container {
-  background: #f8f8f8;
-  border-radius: 12px;
+  @apply rounded-xl border shadow-md bg-muted;
 }
 
-.db-popup .leaflet-popup-content-wrapper {
-  border-radius: 12px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
-  border: 1px solid rgba(255, 0, 0, 0.2);
+.dark .leaflet-tile {
+  filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.7);
 }
 
-.db-popup .leaflet-popup-tip {
-  background: white;
-  border: 1px solid rgba(255, 0, 0, 0.2);
+/* Fix for white text on light background in Header/Sidebar */
+.bg-primary {
+  color: hsl(var(--primary-foreground)) !important;
 }
 
-.dark .db-popup .leaflet-popup-content-wrapper {
-  background: #1f2937;
-  color: #f3f4f6;
-}
-
-.dark .db-popup .leaflet-popup-tip {
-  background: #1f2937;
-}
-
-/* DB Red Custom Marker */
-.db-marker {
-  background: transparent !important;
-  border: none !important;
-}
-
-.leaflet-marker-icon.db-marker {
-  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+.text-primary {
+  color: hsl(var(--primary)) !important;
 }
