@@ -1,10 +1,3 @@
-/**
- * Presence Indicator Component
- * 
- * Shows online colleagues count and their avatars
- * Displays "X colleagues online" badge
- */
-
 import { useColleaguesOnline, useOnlineColleagues } from "@/_core/hooks/usePresence";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -13,10 +6,13 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Users } from "lucide-react";
+import { useMemo } from "react";
 
-export function PresenceIndicator() {
+export default function PresenceIndicator() {
   const colleaguesOnline = useColleaguesOnline();
   const colleagues = useOnlineColleagues();
+
+  const colleagueList = useMemo(() => colleagues, [colleagues]);
 
   if (colleaguesOnline === 0) {
     return null;
@@ -36,9 +32,8 @@ export function PresenceIndicator() {
             </span>
           </div>
 
-          {/* Mini avatars */}
           <div className="flex -space-x-2">
-            {colleagues.slice(0, 3).map((colleague) => {
+            {colleagueList.slice(0, 3).map((colleague) => {
               const initials = colleague.name
                 .split(" ")
                 .map((n) => n[0])
@@ -65,7 +60,6 @@ export function PresenceIndicator() {
         </button>
       </PopoverTrigger>
 
-      {/* Popover content showing all online colleagues */}
       <PopoverContent className="w-64">
         <div className="space-y-3">
           <h4 className="font-semibold text-sm">
@@ -73,7 +67,7 @@ export function PresenceIndicator() {
           </h4>
 
           <div className="space-y-2 max-h-64 overflow-y-auto">
-            {colleagues.map((colleague) => {
+            {colleagueList.map((colleague) => {
               const initials = colleague.name
                 .split(" ")
                 .map((n) => n[0])
@@ -106,10 +100,6 @@ export function PresenceIndicator() {
               );
             })}
           </div>
-
-          <p className="text-xs text-muted-foreground pt-2 border-t">
-            Aktualisiert vor {Math.floor(Math.random() * 5) + 1} Sekunden
-          </p>
         </div>
       </PopoverContent>
     </Popover>
