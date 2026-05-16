@@ -1,6 +1,37 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@theme {
+  /* DB Red Primary */
+  --color-primary: #FF0000;
+  --color-primary-foreground: #ffffff;
+
+  /* Semantic Colors */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* Sidebar Tokens */
+  --color-sidebar-background: var(--sidebar-background);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
 
 @layer base {
   :root {
@@ -10,7 +41,7 @@
     --card-foreground: 240 10% 3.9%;
     --popover: 0 0% 100%;
     --popover-foreground: 240 10% 3.9%;
-    --primary: 0 100% 50%; /* DB Red: #FF0000 */
+    --primary: 0 100% 50%;
     --primary-foreground: 0 0% 98%;
     --secondary: 240 4.8% 95.9%;
     --secondary-foreground: 240 5.9% 10%;
@@ -24,8 +55,6 @@
     --input: 240 5.9% 90%;
     --ring: 0 100% 50%;
     --radius: 0.5rem;
-    
-    /* Sidebar Variables */
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
     --sidebar-primary: 0 100% 50%;
@@ -56,8 +85,6 @@
     --border: 240 3.7% 15.9%;
     --input: 240 3.7% 15.9%;
     --ring: 0 100% 50%;
-    
-    /* Sidebar Dark Variables */
     --sidebar-background: 240 5.9% 10%;
     --sidebar-foreground: 240 4.8% 95.9%;
     --sidebar-primary: 0 100% 50%;
@@ -71,53 +98,65 @@
 
 @layer base {
   * {
-    @apply border-border;
+    border-color: hsl(var(--border));
   }
   body {
-    @apply bg-background text-foreground antialiased;
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 }
 
 /* Professional Layout Utilities */
-@layer utilities {
+.main-content-container {
+  margin-left: auto;
+  margin-right: auto;
+  width: 100%;
+  max-width: 1600px;
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+@media (min-width: 768px) {
   .main-content-container {
-    @apply mx-auto w-full max-w-[1600px] px-4 md:px-6 lg:px-8;
-  }
-  
-  .table-scroll-container {
-    @apply w-full overflow-x-auto rounded-lg border bg-card shadow-sm;
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
   }
 }
 
-/* Custom Scrollbar for DB Theme */
+@media (min-width: 1024px) {
+  .main-content-container {
+    padding-left: 2rem;
+    padding-right: 2rem;
+  }
+}
+
+.table-scroll-container {
+  width: 100%;
+  overflow-x: auto;
+  border-radius: 0.5rem;
+  border-width: 1px;
+  background-color: hsl(var(--card));
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+}
+
+/* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 
 ::-webkit-scrollbar-track {
-  @apply bg-muted;
+  background-color: hsl(var(--muted));
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-muted-foreground/30 rounded-full border-2 border-transparent bg-clip-padding hover:bg-muted-foreground/50 transition-colors;
+  background-color: hsla(var(--muted-foreground), 0.3);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 
-/* Leaflet Map Professional Integration */
-.leaflet-container {
-  @apply rounded-xl border shadow-md bg-muted;
-}
-
-.dark .leaflet-tile {
-  filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.7);
-}
-
-/* Fix for white text on light background in Header/Sidebar */
-.bg-primary {
-  color: hsl(var(--primary-foreground)) !important;
-}
-
-.text-primary {
-  color: hsl(var(--primary)) !important;
+::-webkit-scrollbar-thumb:hover {
+  background-color: hsla(var(--muted-foreground), 0.5);
 }
