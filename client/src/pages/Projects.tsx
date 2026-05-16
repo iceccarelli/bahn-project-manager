@@ -275,7 +275,6 @@ export default function Projects() {
     toast.success(`${data.projects.length} Projekte (Seite ${page}) exportiert`);
   }, [data, page, pageSize]);
 
-  // Exact department order from the uploaded Übersichtsliste_Dashboard_1.xlsm (perfect harmony)
   const departmentButtons = [
     "EEA", "ITK", "BS", "GA", "Energie", "HFT", "HKLS", 
     "TBQ", "UM", "BIM", "LST", "Vermessung", 
@@ -283,10 +282,10 @@ export default function Projects() {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 p-6 bg-background min-h-screen">
       {/* DB KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card className="aws-card border-l-4 border-l-[#FF0000]">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+        <Card className="aws-card border-l-4 border-l-[#FF0000] shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Gesamtprojekte</CardTitle>
           </CardHeader>
@@ -295,7 +294,7 @@ export default function Projects() {
             <p className="text-xs text-muted-foreground mt-1">+12 seit letzter Woche</p>
           </CardContent>
         </Card>
-        <Card className="aws-card">
+        <Card className="aws-card shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Aktiv</CardTitle>
           </CardHeader>
@@ -304,7 +303,7 @@ export default function Projects() {
             <p className="text-xs text-blue-600 mt-1">{Math.round((activeProjects / totalProjects) * 100)}% der Projekte</p>
           </CardContent>
         </Card>
-        <Card className="aws-card">
+        <Card className="aws-card shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Termingerecht</CardTitle>
           </CardHeader>
@@ -313,7 +312,7 @@ export default function Projects() {
             <p className="text-xs text-emerald-600 mt-1">86% im Zeitplan</p>
           </CardContent>
         </Card>
-        <Card className="aws-card">
+        <Card className="aws-card shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Verzögert</CardTitle>
           </CardHeader>
@@ -325,7 +324,7 @@ export default function Projects() {
       </div>
 
       {/* Controls Bar */}
-      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between bg-card p-4 rounded-xl border shadow-sm">
         <div className="flex items-center gap-3 w-full sm:w-auto">
           <div className="relative flex-1 sm:w-80">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -334,15 +333,15 @@ export default function Projects() {
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-              className="pl-9 aws-input"
+              className="pl-9 h-10 aws-input"
             />
           </div>
-          <Button onClick={handleSearch} className="aws-button">Suchen</Button>
+          <Button onClick={handleSearch} className="aws-button h-10">Suchen</Button>
           <Button
             variant={showFilters ? "default" : "outline"}
             size="sm"
             onClick={() => setShowFilters(!showFilters)}
-            className="aws-button gap-2"
+            className="aws-button gap-2 h-10"
           >
             <Filter className="h-4 w-4" />
             Filter
@@ -350,12 +349,12 @@ export default function Projects() {
         </div>
 
         <div className="flex items-center gap-2">
-          <div className="flex border rounded-lg p-1 bg-card shadow-sm">
+          <div className="flex border rounded-lg p-1 bg-muted/50 shadow-sm">
             <Button
               variant={viewMode === "table" ? "default" : "ghost"}
               size="sm"
               onClick={() => setViewMode("table")}
-              className="aws-button rounded-l-lg"
+              className="aws-button h-8 w-10 p-0"
             >
               <Table className="h-4 w-4" />
             </Button>
@@ -363,7 +362,7 @@ export default function Projects() {
               variant={viewMode === "cards" ? "default" : "ghost"}
               size="sm"
               onClick={() => setViewMode("cards")}
-              className="aws-button"
+              className="aws-button h-8 w-10 p-0"
             >
               <LayoutGrid className="h-4 w-4" />
             </Button>
@@ -371,7 +370,7 @@ export default function Projects() {
               variant={viewMode === "map" ? "default" : "ghost"}
               size="sm"
               onClick={() => setViewMode("map")}
-              className="aws-button rounded-r-lg"
+              className="aws-button h-8 w-10 p-0"
             >
               <MapPin className="h-4 w-4" />
             </Button>
@@ -379,14 +378,14 @@ export default function Projects() {
 
           <Button 
             onClick={() => setShowNewDialog(true)}
-            className="aws-button bg-[#FF0000] hover:bg-[#E6002B] text-white"
+            className="aws-button bg-[#FF0000] hover:bg-[#E6002B] text-white h-10"
           >
             <Plus className="mr-2 h-4 w-4" />
             Neues Projekt
           </Button>
           <Button 
             variant="outline" 
-            className="aws-button"
+            className="aws-button h-10"
             onClick={handleExport}
           >
             <Download className="mr-2 h-4 w-4" />
@@ -395,212 +394,190 @@ export default function Projects() {
         </div>
       </div>
 
-      {/* Filters */}
+      {/* Filters Panel */}
       {showFilters && (
-        <Card className="aws-card">
-          <CardContent className="p-4 flex flex-wrap gap-3">
-            <Select value={region || "all"} onValueChange={(v) => { setRegion(v === "all" ? "" : v); setPage(1); }}>
-              <SelectTrigger className="w-48 aws-input">
-                <SelectValue placeholder="Region wählen" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Alle Regionen</SelectItem>
-                {(filterOptions?.regions || []).map((r: string) => (
-                  <SelectItem key={r} value={r}>{r}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={projektleiter || "all"} onValueChange={(v) => { setProjektleiter(v === "all" ? "" : v); setPage(1); }}>
-              <SelectTrigger className="w-56 aws-input">
-                <SelectValue placeholder="Projektleiter wählen" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Alle Projektleiter</SelectItem>
-                {(filterOptions?.projektleiter || []).slice(0, 50).map((p: string) => (
-                  <SelectItem key={p} value={p}>{p}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={pruefer || "all"} onValueChange={(v) => { setPruefer(v === "all" ? "" : v); setPage(1); }}>
-              <SelectTrigger className="w-56 aws-input">
-                <SelectValue placeholder="Prüfer wählen" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Alle Prüfer</SelectItem>
-                {(filterOptions?.pruefer || []).slice(0, 30).map((p: string) => (
-                  <SelectItem key={p} value={p}>{p}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={department || "all"} onValueChange={(v) => { setDepartment(v === "all" ? "" : v); setPage(1); }}>
-              <SelectTrigger className="w-48 aws-input">
-                <SelectValue placeholder="Fachbereich (inkl. BS)" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Alle Fachbereiche</SelectItem>
-                {departmentButtons.map((d) => (
-                  <SelectItem key={d} value={d}>{d}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={status || "all"} onValueChange={(v) => { setStatus(v === "all" ? "" : v); setPage(1); }}>
-              <SelectTrigger className="w-48 aws-input">
-                <SelectValue placeholder="Status wählen" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Alle Status</SelectItem>
-                {REVIEW_STATUSES.map((s) => (
-                  <SelectItem key={s} value={s}>{s}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {(search || region || projektleiter || pruefer || status || department) && (
-              <Button
-                variant="ghost"
-                size="sm"
+        <Card className="aws-card border-2 border-[#FF0000]/10 animate-in slide-in-from-top-2 duration-200">
+          <CardContent className="p-4 flex flex-wrap gap-4">
+            <div className="space-y-1.5 min-w-[150px]">
+              <label className="text-[10px] font-bold uppercase text-muted-foreground">Region</label>
+              <Select value={region || "all"} onValueChange={(v) => setRegion(v === "all" ? "" : v)}>
+                <SelectTrigger className="h-9 text-xs">
+                  <SelectValue placeholder="Alle Regionen" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alle Regionen</SelectItem>
+                  {(filterOptions?.regions || []).map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5 min-w-[150px]">
+              <label className="text-[10px] font-bold uppercase text-muted-foreground">Status</label>
+              <Select value={status || "all"} onValueChange={(v) => setStatus(v === "all" ? "" : v)}>
+                <SelectTrigger className="h-9 text-xs">
+                  <SelectValue placeholder="Alle Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alle Status</SelectItem>
+                  {REVIEW_STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5 min-w-[150px]">
+              <label className="text-[10px] font-bold uppercase text-muted-foreground">Gewerke</label>
+              <Select value={department || "all"} onValueChange={(v) => setDepartment(v === "all" ? "" : v)}>
+                <SelectTrigger className="h-9 text-xs">
+                  <SelectValue placeholder="Alle Gewerke" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alle Gewerke</SelectItem>
+                  {DEPARTMENTS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5 min-w-[150px]">
+              <label className="text-[10px] font-bold uppercase text-muted-foreground">Prüfer</label>
+              <Select value={pruefer || "all"} onValueChange={(v) => setPruefer(v === "all" ? "" : v)}>
+                <SelectTrigger className="h-9 text-xs">
+                  <SelectValue placeholder="Alle Prüfer" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alle Prüfer</SelectItem>
+                  {(filterOptions?.pruefer || []).map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-end">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="h-9 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50"
                 onClick={() => {
-                  setSearch("");
-                  setSearchInput("");
                   setRegion("");
-                  setProjektleiter("");
-                  setPruefer("");
                   setStatus("");
                   setDepartment("");
-                  setPage(1);
+                  setPruefer("");
+                  setSearch("");
+                  setSearchInput("");
                 }}
               >
-                <X className="h-4 w-4 mr-2" /> Zurücksetzen
+                <X className="h-3 w-3 mr-1" /> Filter zurücksetzen
               </Button>
-            )}
+            </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Department Toggle Buttons - BS right after TBQ (exact Excel order) */}
-      <div className="flex flex-wrap gap-1.5">
+      {/* Department Visibility Controls */}
+      <div className="flex flex-wrap gap-2 items-center bg-muted/30 p-3 rounded-xl border">
+        <span className="text-[10px] font-bold uppercase text-muted-foreground mr-2">Gewerke-Ansicht:</span>
         {departmentButtons.map((dept) => (
           <Button
             key={dept}
             variant={expandedDepts.includes(dept) ? "default" : "outline"}
             size="sm"
-            className="text-xs h-7 px-3 aws-button"
             onClick={() => toggleDept(dept)}
+            className={`h-7 text-[10px] px-3 ${expandedDepts.includes(dept) ? "bg-[#FF0000] hover:bg-[#CC0000]" : ""}`}
           >
             {dept}
           </Button>
         ))}
+        <div className="flex-1" />
         {expandedDepts.length > 0 && (
-          <Button variant="ghost" size="sm" className="text-xs h-7 aws-button" onClick={() => setExpandedDepts([])}>
-            Alle ausblenden
-          </Button>
-        )}
-        {expandedDepts.length === 0 && (
           <Button
             variant="ghost"
             size="sm"
-            className="text-xs h-7 aws-button"
-            onClick={() => setExpandedDepts([...departmentButtons])}
+            className="h-7 text-[10px] text-muted-foreground"
+            onClick={() => setExpandedDepts([])}
           >
-            Alle einblenden
+            Alle ausblenden
           </Button>
         )}
       </div>
 
       {/* VIEW RENDERING */}
-      {isLoading ? (
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin text-[#FF0000]" />
-        </div>
-      ) : (
-        <>
-          {/* TABLE VIEW */}
-          {viewMode === "table" && (
-            <Card className="aws-card overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted/60 sticky top-0 z-20">
+      <div className="bg-card rounded-xl border shadow-sm overflow-hidden min-h-[600px]">
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center h-[600px] gap-4">
+            <Loader2 className="h-12 w-12 animate-spin text-[#FF0000]" />
+            <p className="text-muted-foreground animate-pulse font-medium">Lade Projektdaten...</p>
+          </div>
+        ) : (
+          <>
+            {/* TABLE VIEW */}
+            {viewMode === "table" && (
+              <div className="table-scroll-container">
+                <table className="w-full border-collapse text-[11px]">
+                  <thead className="bg-muted/50 sticky top-0 z-20">
                     <tr>
-                      <th className="text-left py-3 px-4 font-medium text-muted-foreground whitespace-nowrap sticky left-0 bg-muted/60 z-30">Nr.</th>
+                      <th className="text-left py-3 px-4 font-semibold text-muted-foreground whitespace-nowrap sticky left-0 bg-muted/50 z-30 border-b">Nr.</th>
                       <SortHeader column="projektnummer" label="Projektnummer" sortBy={sortBy} onSort={handleSort} />
                       <SortHeader column="bahnhofsmanagement" label="Region" sortBy={sortBy} onSort={handleSort} />
                       <SortHeader column="station" label="Station" sortBy={sortBy} onSort={handleSort} />
-                      <th className="text-left py-3 px-4 font-medium text-muted-foreground whitespace-nowrap min-w-[260px]">Beschreibung</th>
+                      <th className="text-left py-3 px-4 font-semibold text-muted-foreground whitespace-nowrap min-w-[260px] border-b">Beschreibung</th>
                       <SortHeader column="projektleiter" label="Projektleiter" sortBy={sortBy} onSort={handleSort} />
-                      <th className="text-center py-3 px-3 font-medium text-muted-foreground whitespace-nowrap" title="Kommentar & Link">
+                      <th className="text-center py-3 px-3 font-semibold text-muted-foreground whitespace-nowrap border-b" title="Kommentar & Link">
                         <MessageSquare className="h-4 w-4 inline" />
                       </th>
                       {expandedDepts.length > 0 ? (
                         expandedDepts.map((dept) => (
-                          <th key={dept} className="text-center py-3 px-3 font-medium text-muted-foreground whitespace-nowrap border-l" colSpan={3}>
+                          <th key={dept} className="text-center py-3 px-3 font-semibold text-muted-foreground whitespace-nowrap border-b border-l bg-muted/30" colSpan={3}>
                             {dept}
                           </th>
                         ))
                       ) : (
                         departmentButtons.map((dept) => (
-                          <th key={dept} className="text-center py-3 px-2 font-medium text-muted-foreground whitespace-nowrap border-l">
-                            <span className="text-xs">{dept}</span>
+                          <th key={dept} className="text-center py-3 px-2 font-semibold text-muted-foreground whitespace-nowrap border-b border-l bg-muted/30">
+                            {dept}
                           </th>
                         ))
                       )}
                     </tr>
                     {expandedDepts.length > 0 && (
-                      <tr className="border-t bg-muted/30">
-                        <th className="sticky left-0 bg-muted/60 z-30"></th>
+                      <tr className="border-b bg-muted/20">
+                        <th className="sticky left-0 bg-muted/50 z-30"></th>
                         <th></th><th></th><th></th><th></th><th></th><th></th>
                         {expandedDepts.map((dept) => (
                           <React.Fragment key={`sub-${dept}`}>
-                            <th className="text-left py-2 px-3 text-[10px] font-normal text-muted-foreground border-l">Prüfer</th>
-                            <th className="text-left py-2 px-3 text-[10px] font-normal text-muted-foreground">Datum</th>
-                            <th className="text-left py-2 px-3 text-[10px] font-normal text-muted-foreground">Status</th>
+                            <th className="text-left py-2 px-3 text-[9px] font-bold uppercase text-muted-foreground border-l">Prüfer</th>
+                            <th className="text-left py-2 px-3 text-[9px] font-bold uppercase text-muted-foreground">Datum</th>
+                            <th className="text-left py-2 px-3 text-[9px] font-bold uppercase text-muted-foreground">Status</th>
                           </React.Fragment>
                         ))}
                       </tr>
                     )}
                   </thead>
-                  <tbody>
+                  <TableBody>
                     {data?.projects.map((project: Project, idx: number) => {
                       const reviews = project.reviews || [];
                       return (
-                        <tr key={project.id} className="border-t hover:bg-[#FF0000]/5 transition-colors group">
-                          <td className="py-3 px-4 text-muted-foreground text-xs sticky left-0 bg-card group-hover:bg-[#FF0000]/5 z-10">
-                            {project.id}
+                        <tr key={project.id} className="border-b hover:bg-muted/30 transition-colors group">
+                          <td className="py-3 px-4 text-muted-foreground font-medium sticky left-0 bg-card group-hover:bg-muted/30 z-10">
+                            {(page - 1) * pageSize + idx + 1}
                           </td>
-                          <td className="py-3 px-4 font-mono text-xs whitespace-nowrap">
+                          <td className="py-3 px-4 font-mono font-bold">
                             <InlineEditCell
                               value={project.projektnummer}
-                              onSave={(val) => {
-                                applyEdit(project.id, "projektnummer", val);
-                                toast.success("Gespeichert");
-                              }}
+                              onSave={(val) => applyEdit(project.id, { projektnummer: val })}
                             />
                           </td>
-                          <td className="py-3 px-4 whitespace-nowrap text-xs">{project.bahnhofsmanagement || "-"}</td>
-                          <td className="py-3 px-4 whitespace-nowrap text-xs font-medium">
+                          <td className="py-3 px-4 whitespace-nowrap">{project.bahnhofsmanagement || "-"}</td>
+                          <td className="py-3 px-4 whitespace-nowrap font-semibold">
                             <InlineEditCell
                               value={project.station}
-                              onSave={(val) => {
-                                applyEdit(project.id, "station", val);
-                                toast.success("Gespeichert");
-                              }}
+                              onSave={(val) => applyEdit(project.id, { station: val })}
                             />
                           </td>
-                          <td className="py-3 px-4 text-xs max-w-[260px]">
+                          <td className="py-3 px-4 max-w-[260px]">
                             <InlineEditCell
                               value={project.projektbeschreibung}
-                              onSave={(val) => {
-                                applyEdit(project.id, "projektbeschreibung", val);
-                                toast.success("Gespeichert");
-                              }}
+                              onSave={(val) => applyEdit(project.id, { projektbeschreibung: val })}
                               className="line-clamp-2"
                             />
                           </td>
-                          <td className="py-3 px-4 whitespace-nowrap text-xs">
+                          <td className="py-3 px-4 whitespace-nowrap">
                             <InlineEditCell
                               value={project.projektleiter}
-                              onSave={(val) => {
-                                applyEdit(project.id, "projektleiter", val);
-                                toast.success("Gespeichert");
-                              }}
+                              onSave={(val) => applyEdit(project.id, { projektleiter: val })}
                             />
                           </td>
                           <td className="py-3 px-3 text-center">
@@ -614,45 +591,32 @@ export default function Projects() {
                                 <DialogHeader>
                                   <DialogTitle>Kommentar &amp; Link</DialogTitle>
                                 </DialogHeader>
-                                <div className="space-y-4">
-                                  <div>
-                                    <label className="text-xs text-muted-foreground mb-1 block">Kommentar</label>
+                                <div className="space-y-4 py-4">
+                                  <div className="space-y-2">
+                                    <label className="text-xs font-bold uppercase text-muted-foreground">Kommentar</label>
                                     <textarea
                                       defaultValue={project.kommentar || ""}
-                                      onBlur={(e) => {
-                                        if (e.target.value !== (project.kommentar || "")) {
-                                          applyEdit(project.id, "kommentar", e.target.value);
-                                          toast.success("Gespeichert");
-                                        }
-                                      }}
-                                      className="w-full border rounded-xl px-4 py-3 text-sm bg-background min-h-[100px] resize-y"
+                                      onBlur={(e) => applyEdit(project.id, { kommentar: e.target.value })}
+                                      className="w-full border rounded-xl px-4 py-3 text-sm bg-background min-h-[120px] resize-y focus:ring-2 focus:ring-[#FF0000]/20 outline-none"
                                       placeholder="Kommentar eingeben..."
                                     />
                                   </div>
-                                  <div>
-                                    <label className="text-xs text-muted-foreground mb-1 block">Projektlink</label>
+                                  <div className="space-y-2">
+                                    <label className="text-xs font-bold uppercase text-muted-foreground">Projektlink</label>
                                     <div className="flex gap-2">
-                                      <input
+                                      <Input
                                         defaultValue={project.projektLink || ""}
-                                        onBlur={(e) => {
-                                          if (e.target.value !== (project.projektLink || "")) {
-                                            applyEdit(project.id, "projektLink", e.target.value);
-                                            toast.success("Gespeichert");
-                                          }
-                                        }}
-                                        className="flex-1 border rounded-xl px-4 py-3 text-sm bg-background"
+                                        onBlur={(e) => applyEdit(project.id, { projektLink: e.target.value })}
+                                        className="flex-1"
                                         placeholder="https://..."
                                       />
                                       {project.projektLink && (
-                                        <a
-                                          href={project.projektLink}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="flex items-center px-4 text-[#FF0000] hover:text-[#FF0000]/80"
-                                        >
-                                          <ExternalLink className="h-5 w-5" />
-                                        </a>
-                                      )}
+                                        <Button variant="outline" size="icon" asChild>
+                                          <a href={project.projektLink} target="_blank" rel="noopener noreferrer">
+                                            <ExternalLink className="h-4 w-4 text-[#FF0000]" />
+                                          </a>
+                                        </Button>
+                                       )}
                                     </div>
                                   </div>
                                 </div>
@@ -660,46 +624,35 @@ export default function Projects() {
                             </Dialog>
                           </td>
 
-                          {/* Department Columns - BS works perfectly */}
                           {expandedDepts.length > 0 ? (
                             expandedDepts.map((dept) => {
                               const review = reviews.find((r: Review) => r.department === dept);
                               return (
                                 <React.Fragment key={`${project.id}-${dept}`}>
-                                  <td className="py-3 px-3 text-xs whitespace-nowrap border-l">
+                                  <td className="py-3 px-3 border-l border-border/30">
                                     {review ? (
                                       <InlineEditCell
                                         value={review.prueferName}
-                                        onSave={(val) => {
-                                          applyReviewEdit(project.id, dept, "prueferName", val);
-                                          toast.success("Gespeichert");
-                                        }}
+                                        onSave={(val) => applyReviewEdit(project.id, dept, { prueferName: val })}
                                       />
-                                    ) : (
-                                      "-"
-                                    )}
+                                    ) : "-"}
                                   </td>
-                                  <td className="py-3 px-3 text-xs whitespace-nowrap">
+                                  <td className="py-3 px-3 whitespace-nowrap">
                                     {review?.pruefDatum ? new Date(review.pruefDatum).toLocaleDateString("de-DE") : "-"}
                                   </td>
-                                  <td className="py-3 px-3 border-l">
+                                  <td className="py-3 px-3">
                                     {review ? (
                                       <select
                                         value={review.status || ""}
-                                        onChange={(e) => {
-                                          applyReviewEdit(project.id, dept, "status", e.target.value);
-                                          toast.success("Gespeichert");
-                                        }}
-                                        className="text-xs bg-transparent border rounded-lg px-3 py-1 w-full focus:ring-2 focus:ring-[#FF0000]"
+                                        onChange={(e) => applyReviewEdit(project.id, dept, { status: e.target.value })}
+                                        className="text-[10px] bg-transparent border rounded-md px-2 py-1 w-full focus:ring-1 focus:ring-[#FF0000] outline-none"
                                       >
                                         <option value="">-</option>
                                         {REVIEW_STATUSES.map((s) => (
                                           <option key={s} value={s}>{s}</option>
                                         ))}
                                       </select>
-                                    ) : (
-                                      <span className="text-xs text-muted-foreground">-</span>
-                                    )}
+                                    ) : "-"}
                                   </td>
                                 </React.Fragment>
                               );
@@ -708,7 +661,7 @@ export default function Projects() {
                             departmentButtons.map((dept) => {
                               const review = reviews.find((r: Review) => r.department === dept);
                               return (
-                                <td key={`${project.id}-${dept}`} className="py-3 px-2 text-center border-l">
+                                <td key={`${project.id}-${dept}`} className="py-3 px-2 text-center border-l border-border/30">
                                   <StatusBadge status={review?.status || null} />
                                 </td>
                               );
@@ -717,225 +670,205 @@ export default function Projects() {
                         </tr>
                       );
                     })}
-                  </tbody>
+                  </TableBody>
                 </table>
               </div>
+            )}
 
-              <div className="flex items-center justify-between px-6 py-4 border-t bg-muted/30">
-                <span className="text-sm text-muted-foreground">
-                  Seite {page} von {totalPages} • {data?.total.toLocaleString("de-DE")} Einträge
-                </span>
-                <div className="flex items-center gap-3">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={page <= 1}
-                    onClick={() => setPage((p) => p - 1)}
-                    className="aws-button"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <span className="text-sm font-medium px-4">{page} / {totalPages}</span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={page >= totalPages}
-                    onClick={() => setPage((p) => p + 1)}
-                    className="aws-button"
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            </Card>
-          )}
-
-          {/* CARDS VIEW */}
-          {viewMode === "cards" && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {data?.projects.map((project: Project) => {
-                const mainReview = project.reviews?.[0];
-                return (
-                  <Card key={project.id} className="aws-card hover:shadow-xl transition-all group">
-                    <CardHeader className="pb-3">
-                      <div className="flex justify-between items-start">
-                        <StatusBadge status={mainReview?.status || null} />
-                        <span className="font-mono text-xs text-muted-foreground">{project.projektnummer}</span>
-                      </div>
-                      <CardTitle className="text-base leading-tight line-clamp-2 group-hover:text-[#FF0000] transition-colors">
-                        {project.projektbeschreibung || project.station}
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="flex justify-between text-sm">
-                        <div>
-                          <p className="text-muted-foreground text-xs">Projektleiter</p>
-                          <p className="font-medium">{project.projektleiter || "-"}</p>
+            {/* CARDS VIEW */}
+            {viewMode === "cards" && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 p-6">
+                {data?.projects.map((project: Project) => {
+                  const mainReview = project.reviews?.[0];
+                  return (
+                    <Card key={project.id} className="aws-card hover:shadow-xl transition-all group border-2 hover:border-[#FF0000]/20">
+                      <CardHeader className="pb-3 space-y-3">
+                        <div className="flex justify-between items-start">
+                          <StatusBadge status={mainReview?.status || null} />
+                          <Badge variant="secondary" className="font-mono text-[10px]">{project.projektnummer || "N/A"}</Badge>
                         </div>
-                        <div className="text-right">
-                          <p className="text-muted-foreground text-xs">Region</p>
-                          <p>{project.bahnhofsmanagement || "-"}</p>
-                        </div>
-                      </div>
-                      {mainReview && (
-                        <div className="pt-3 border-t text-xs">
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Letzte Prüfung</span>
-                            <span>{mainReview.pruefDatum ? new Date(mainReview.pruefDatum).toLocaleDateString("de-DE") : "-"}</span>
+                        <CardTitle className="text-lg leading-tight group-hover:text-[#FF0000] transition-colors line-clamp-2">
+                          {project.station}
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <p className="text-xs text-muted-foreground line-clamp-3 min-h-[45px]">{project.projektbeschreibung || "Keine Beschreibung vorhanden."}</p>
+                        <div className="pt-4 border-t flex justify-between items-center">
+                          <div className="flex flex-col">
+                            <span className="text-[9px] uppercase text-muted-foreground font-bold">Projektleiter</span>
+                            <span className="text-xs font-semibold">{project.projektleiter || "Unbekannt"}</span>
+                          </div>
+                          <div className="flex flex-col text-right">
+                            <span className="text-[9px] uppercase text-muted-foreground font-bold">Region</span>
+                            <span className="text-xs">{project.bahnhofsmanagement || "-"}</span>
                           </div>
                         </div>
-                      )}
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="w-full aws-button text-[#FF0000]"
-                        onClick={() => setViewMode("table")}
-                      >
-                        Details in Tabelle öffnen
-                      </Button>
-                    </CardContent>
-                  </Card>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="w-full aws-button text-[#FF0000] hover:bg-[#FF0000] hover:text-white transition-all"
+                          onClick={() => setViewMode("table")}
+                        >
+                          Details anzeigen
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* MAP VIEW */}
+            {viewMode === "map" && (
+              <div className="h-[700px] w-full relative">
+                <MapView projects={data?.projects || []} />
+                <div className="absolute bottom-6 left-6 bg-background/95 backdrop-blur p-4 rounded-xl border shadow-2xl z-[1000] max-w-xs border-[#FF0000]/20">
+                  <div className="flex items-center gap-2 mb-2">
+                    <MapPin className="h-5 w-5 text-[#FF0000]" />
+                    <h4 className="text-sm font-bold">Interaktive Projektkarte</h4>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    Zeigt alle {data?.projects.length} gefilterten Projekte basierend auf ihren Standorten an. 
+                    Klicken Sie auf einen Marker für detaillierte Informationen.
+                  </p>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* PAGINATION CONTROLS */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between bg-card px-6 py-4 rounded-xl border shadow-sm">
+          <div className="text-sm text-muted-foreground">
+            Zeige <span className="font-bold text-foreground">{(page - 1) * pageSize + 1}</span> bis <span className="font-bold text-foreground">{Math.min(page * pageSize, data?.total || 0)}</span> von <span className="font-bold text-foreground">{data?.total.toLocaleString("de-DE")}</span> Projekten
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { setPage(1); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+              disabled={page === 1}
+              className="h-9 w-9 p-0"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              <ChevronLeft className="h-4 w-4 -ml-2" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { setPage((p) => Math.max(1, p - 1)); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+              disabled={page === 1}
+              className="gap-2 h-9 px-4"
+            >
+              <ChevronLeft className="h-4 w-4" /> Zurück
+            </Button>
+            <div className="flex items-center gap-1 mx-2">
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let pageNum = page;
+                if (page <= 3) pageNum = i + 1;
+                else if (page >= totalPages - 2) pageNum = totalPages - 4 + i;
+                else pageNum = page - 2 + i;
+                
+                if (pageNum <= 0 || pageNum > totalPages) return null;
+
+                return (
+                  <Button
+                    key={pageNum}
+                    variant={page === pageNum ? "default" : "ghost"}
+                    size="sm"
+                    onClick={() => { setPage(pageNum); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                    className={`h-9 w-9 p-0 ${page === pageNum ? "bg-[#FF0000] hover:bg-[#CC0000]" : ""}`}
+                  >
+                    {pageNum}
+                  </Button>
                 );
               })}
             </div>
-          )}
-
-          {/* MAP VIEW */}
-          {viewMode === "map" && (
-            <div className="space-y-3">
-              <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 px-1">
-                <div>
-                  <div className="flex items-center gap-2 text-xl font-semibold tracking-tight">
-                    <MapPin className="h-6 w-6 text-[#FF0000]" />
-                    Interaktive Projektkarte
-                  </div>
-                  <p className="text-sm text-muted-foreground mt-0.5">
-                    Alle gefilterten Projektstandorte (Stationen) als Marker. 
-                    Klicken Sie auf einen Pin für vollständige Informationen.
-                  </p>
-                </div>
-                <div className="text-xs text-muted-foreground bg-muted/60 px-3 py-1 rounded-full self-start sm:self-auto">
-                  {data?.projects?.length || 0} Projekte • Deutschland-weit
-                </div>
-              </div>
-
-              <Card className="aws-card overflow-hidden border-[#FF0000]/10">
-                <MapView
-                  projects={data?.projects || []}
-                  initialCenter={{ lat: 50.1109, lng: 8.6821 }}
-                  initialZoom={6}
-                  className="h-[640px] w-full"
-                />
-              </Card>
-
-              <div className="text-[10px] text-center text-muted-foreground/70 px-2">
-                Marker werden automatisch positioniert. Standortdaten stammen direkt aus der Übersichtsliste.
-              </div>
-            </div>
-          )}
-        </>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { setPage((p) => Math.min(totalPages, p + 1)); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+              disabled={page === totalPages}
+              className="gap-2 h-9 px-4"
+            >
+              Weiter <ChevronRight className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { setPage(totalPages); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+              disabled={page === totalPages}
+              className="h-9 w-9 p-0"
+            >
+              <ChevronRight className="h-4 w-4" />
+              <ChevronRight className="h-4 w-4 -ml-2" />
+            </Button>
+          </div>
+        </div>
       )}
 
       {/* NEW PROJECT DIALOG */}
       <Dialog open={showNewDialog} onOpenChange={setShowNewDialog}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="sm:max-w-[650px] rounded-2xl">
           <DialogHeader>
-            <DialogTitle>Neues Projekt anlegen</DialogTitle>
+            <DialogTitle className="text-2xl font-bold">Neues Projekt anlegen</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Projektnummer</label>
-                <Input
-                  value={newProj.projektnummer}
-                  onChange={(e) => setNewProj((p) => ({ ...p, projektnummer: e.target.value }))}
-                  placeholder="z.B. PRJ-2026-042"
-                  className="aws-input"
+          <div className="grid gap-6 py-6">
+            <div className="grid grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase text-muted-foreground">Projektnummer</label>
+                <Input 
+                  value={newProj.projektnummer} 
+                  onChange={(e) => setNewProj({...newProj, projektnummer: e.target.value})} 
+                  placeholder="z.B. PRJ-2026-001" 
+                  className="h-11 rounded-xl"
                 />
               </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Station *</label>
-                <Input
-                  value={newProj.station}
-                  onChange={(e) => setNewProj((p) => ({ ...p, station: e.target.value }))}
-                  placeholder="z.B. Frankfurt Hbf"
-                  className="aws-input"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Region (Bahnhofsmanagement)</label>
-                <Select
-                  value={newProj.bahnhofsmanagement || "all"}
-                  onValueChange={(v) => setNewProj((p) => ({ ...p, bahnhofsmanagement: v === "all" ? "" : v }))}
-                >
-                  <SelectTrigger className="aws-input">
-                    <SelectValue placeholder="Region wählen" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">— Bitte wählen —</SelectItem>
-                    {(filterOptions?.regions || []).map((r: string) => (
-                      <SelectItem key={r} value={r}>{r}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Projektleiter</label>
-                <Input
-                  value={newProj.projektleiter}
-                  onChange={(e) => setNewProj((p) => ({ ...p, projektleiter: e.target.value }))}
-                  placeholder="Name des PL"
-                  className="aws-input"
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase text-muted-foreground">Station *</label>
+                <Input 
+                  value={newProj.station} 
+                  onChange={(e) => setNewProj({...newProj, station: e.target.value})} 
+                  placeholder="z.B. Berlin Hbf" 
+                  className="h-11 rounded-xl"
                 />
               </div>
             </div>
-
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Projektbeschreibung</label>
-              <textarea
-                value={newProj.projektbeschreibung}
-                onChange={(e) => setNewProj((p) => ({ ...p, projektbeschreibung: e.target.value }))}
-                placeholder="Kurze Beschreibung des Vorhabens..."
-                className="w-full border rounded-xl px-4 py-3 text-sm bg-background min-h-[80px] resize-y aws-input"
+            <div className="space-y-2">
+              <label className="text-xs font-bold uppercase text-muted-foreground">Region / Bahnhofsmanagement</label>
+              <Select value={newProj.bahnhofsmanagement} onValueChange={(val) => setNewProj({...newProj, bahnhofsmanagement: val})}>
+                <SelectTrigger className="h-11 rounded-xl">
+                  <SelectValue placeholder="Region wählen..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {(filterOptions?.regions || []).map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold uppercase text-muted-foreground">Projektleiter</label>
+              <Input 
+                value={newProj.projektleiter} 
+                onChange={(e) => setNewProj({...newProj, projektleiter: e.target.value})} 
+                placeholder="Name des Projektleiters" 
+                className="h-11 rounded-xl"
               />
             </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Kommentar</label>
-                <Input
-                  value={newProj.kommentar}
-                  onChange={(e) => setNewProj((p) => ({ ...p, kommentar: e.target.value }))}
-                  placeholder="Optional..."
-                  className="aws-input"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Projektlink</label>
-                <Input
-                  value={newProj.projektLink}
-                  onChange={(e) => setNewProj((p) => ({ ...p, projektLink: e.target.value }))}
-                  placeholder="https://..."
-                  className="aws-input"
-                />
-              </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold uppercase text-muted-foreground">Beschreibung</label>
+              <textarea 
+                className="w-full min-h-[120px] p-4 rounded-xl border bg-background text-sm focus:ring-2 focus:ring-[#FF0000]/20 outline-none resize-y" 
+                value={newProj.projektbeschreibung} 
+                onChange={(e) => setNewProj({...newProj, projektbeschreibung: e.target.value})}
+                placeholder="Detaillierte Projektbeschreibung..."
+              />
             </div>
-          </div>
-
-          <div className="flex justify-end gap-3">
-            <Button variant="outline" onClick={() => setShowNewDialog(false)}>
-              Abbrechen
-            </Button>
-            <Button 
-              onClick={handleCreateProject}
-              className="aws-button bg-[#FF0000] hover:bg-[#E6002B] text-white"
-              disabled={!newProj.station?.trim() && !newProj.projektnummer?.trim()}
-            >
-              <Plus className="mr-2 h-4 w-4" /> Projekt anlegen
-            </Button>
+            <div className="flex justify-end gap-3 pt-4">
+              <Button variant="ghost" onClick={() => setShowNewDialog(false)} className="rounded-xl px-6">Abbrechen</Button>
+              <Button onClick={handleCreateProject} className="bg-[#FF0000] hover:bg-[#CC0000] rounded-xl px-8 h-11">Projekt speichern</Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
