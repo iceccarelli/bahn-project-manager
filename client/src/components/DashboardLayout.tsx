@@ -163,9 +163,8 @@ function DashboardLayoutContent({
   }, [isResizing, setSidebarWidth]);
 
   return (
-    <div className="flex min-h-screen w-full bg-background">
-      <Header />
-      <div className="relative flex flex-1 pt-[60px]">
+    <div className="flex min-h-screen w-full bg-background overflow-hidden">
+      <div className="relative flex flex-1">
         <div className="relative" ref={sidebarRef}>
           <Sidebar
             collapsible="icon"
@@ -229,20 +228,12 @@ function DashboardLayoutContent({
           )}
         </div>
 
-        <SidebarInset className="flex flex-col flex-1 min-w-0 bg-background">
-          {isMobile && (
-            <div className="flex border-b h-14 items-center justify-between bg-background/95 px-2 backdrop-blur sticky top-0 z-40">
-              <div className="flex items-center gap-2">
-                <SidebarTrigger className="h-9 w-9 rounded-lg bg-background" />
-                <span className="tracking-tight text-foreground font-medium">
-                  {activeMenuItem?.label ?? "Menu"}
-                </span>
-              </div>
+        <SidebarInset className="flex flex-col flex-1 min-w-0 bg-background overflow-hidden">
+          <Header />
+          <main className="flex-1 mt-[60px] p-4 lg:p-6 overflow-auto w-full">
+            <div className="main-content-container">
+              {children}
             </div>
-          )}
-
-          <main className="flex-1 p-4 lg:p-6 overflow-auto">
-            {children}
           </main>
           <Footer />
         </SidebarInset>
