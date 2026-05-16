@@ -1,30 +1,41 @@
-import { useAuth } from "@/_core/hooks/useAuth";
-import { useLocation } from "wouter";
 import { useEffect, ReactNode } from "react";
-import { Loader2 } from "lucide-react";
+import { useLocation } from "wouter";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function AuthGate({ children }: { children: ReactNode }) {
-  const { user, loading } = useAuth();
-  const [, setLocation] = useLocation();
+  const { isAuthenticated, loading } = useAuth();
+  const [location, navigate] = useLocation();
 
   useEffect(() => {
-    if (!loading && !user) {
-      setLocation("/login");
+    if (loading) return;
+
+    if (!isAuthenticated && location !== "/login") {
+      navigate("/login", { replace: true });
+    } else if (isAuthenticated && location === "/login") {
+      navigate("/", { replace: true });
     }
-  }, [user, loading, setLocation]);
+  }, [isAuthenticated, location, navigate, loading]);
 
   if (loading) {
     return (
-      <div className="flex h-screen w-screen items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-12 w-12 animate-spin text-primary" />
-          <p className="text-lg font-medium text-muted-foreground">Verbindung wird hergestellt...</p>
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="space-y-4 w-full max-w-md px-4">
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-8 w-3/4" />
+          <Skeleton className="h-8 w-1/2" />
         </div>
       </div>
     );
   }
 
-  if (!user) return null;
+  if (!isAuthenticated && location === "/login") {
+    return <>{children}</>;
+  }
+
+  if (!isAuthenticated) {
+    return null;
+  }
 
   return <>{children}</>;
 }
