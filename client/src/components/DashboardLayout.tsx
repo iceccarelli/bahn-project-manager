@@ -22,10 +22,9 @@ import {
   History,
   LogOut,
 } from "lucide-react";
-import { CSSProperties, useEffect, useRef, useState } from "react";
+import { CSSProperties, useEffect, useRef, useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
-// DB-branded Header & Footer (perfect integration with Übersichtsliste.xlsm architecture)
 import Header from "./Header";
 import Footer from "./Footer";
 
@@ -57,9 +56,7 @@ export default function DashboardLayout({
   });
 
   useEffect(() => {
-    try {
-      localStorage.setItem(SIDEBAR_WIDTH_KEY, sidebarWidth.toString());
-    } catch {}
+    localStorage.setItem(SIDEBAR_WIDTH_KEY, sidebarWidth.toString());
   }, [sidebarWidth]);
 
   return (
@@ -77,11 +74,6 @@ export default function DashboardLayout({
   );
 }
 
-type DashboardLayoutContentProps = {
-  children: React.ReactNode;
-  setSidebarWidth: (width: number) => void;
-};
-
 function SidebarFooterContent() {
   const { user, logout } = useAuth();
   const [, navigate] = useLocation();
@@ -91,13 +83,10 @@ function SidebarFooterContent() {
     navigate("/login", { replace: true });
   };
 
-  const userInitials = user?.name
-    ?.split(" ")
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase() || "DB";
-
-  const userRole = user?.role === "admin" ? "Admin" : "Prüfer";
+  const userInitials = useMemo(() => 
+    user?.name?.split(" ").map((n) => n[0]).join("").toUpperCase() || "DB",
+    [user?.name]
+  );
 
   return (
     <div className="p-3 space-y-3 border-t border-border/50">
@@ -112,7 +101,7 @@ function SidebarFooterContent() {
             {user?.name || "Bahn Prüfer"}
           </p>
           <p className="text-xs text-muted-foreground truncate mt-1.5">
-            {userRole} • 1.299 Projekte
+            {user?.role === "admin" ? "Admin" : "Prüfer"} • 1.299 Projekte
           </p>
         </div>
       </div>
@@ -130,25 +119,24 @@ function SidebarFooterContent() {
 function DashboardLayoutContent({
   children,
   setSidebarWidth,
-}: DashboardLayoutContentProps) {
+}: {
+  children: React.ReactNode;
+  setSidebarWidth: (width: number) => void;
+}) {
   const [location, setLocation] = useLocation();
   const { state, toggleSidebar } = useSidebar();
   const isCollapsed = state === "collapsed";
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
-  const activeMenuItem = menuItems.find((item) => item.path === location);
   const isMobile = useIsMobile();
 
-  const handleToggleSidebar = () => {
-    if (isResizing) {
-      setIsResizing(false);
-    }
-    toggleSidebar();
-  };
+  const activeMenuItem = useMemo(() => 
+    menuItems.find((item) => item.path === location),
+    [location]
+  );
 
-  // Resizable sidebar logic (unchanged, robust)
   useEffect(() => {
-    const handleMouseMove = (e: globalThis.MouseEvent) => {
+    const handleMouseMove = (e: MouseEvent) => {
       if (!isResizing) return;
       const sidebarLeft = sidebarRef.current?.getBoundingClientRect().left ?? 0;
       const newWidth = e.clientX - sidebarLeft;
@@ -157,9 +145,7 @@ function DashboardLayoutContent({
       }
     };
 
-    const handleMouseUp = () => {
-      setIsResizing(false);
-    };
+    const handleMouseUp = () => setIsResizing(false);
 
     if (isResizing) {
       document.addEventListener("mousemove", handleMouseMove);
@@ -177,108 +163,90 @@ function DashboardLayoutContent({
   }, [isResizing, setSidebarWidth]);
 
   return (
-    <>
-      {/* DB Header – fixed, auto-hides on scroll down, perfectly integrated with xlsm data & search */}
+    <div className="flex min-h-screen w-full bg-background">
       <Header />
-
-      {/* Sidebar container (resizable + collapsible) */}
-      <div className="relative" ref={sidebarRef}>
-        <Sidebar
-          collapsible="icon"
-          className="border-r-0 bg-sidebar text-sidebar-foreground border-r border-sidebar-border"
-          disableTransition={isResizing}
-        >
-          <SidebarHeader className="h-16 justify-center border-b border-border/60">
-            <div className="flex items-center gap-3 px-2 transition-all w-full">
-              <button
-                onClick={handleToggleSidebar}
-                className="h-8 w-8 flex items-center justify-center hover:bg-accent rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring shrink-0"
-                aria-label="Navigation umschalten"
-              >
-                <PanelLeft className="h-4 w-4 text-muted-foreground" />
-              </button>
-              {!isCollapsed ? (
-                <div className="flex items-center gap-2 min-w-0">
-                  {/* DB Logo */}
-                  <div className="w-6 h-6 bg-[#FF0000] rounded flex items-center justify-center text-white font-bold text-xl leading-none pt-px">
-                    DB
+      <div className="relative flex flex-1 pt-[60px]">
+        <div className="relative" ref={sidebarRef}>
+          <Sidebar
+            collapsible="icon"
+            className="border-r-0 bg-sidebar text-sidebar-foreground border-r border-sidebar-border"
+            disableTransition={isResizing}
+          >
+            <SidebarHeader className="h-16 justify-center border-b border-border/60">
+              <div className="flex items-center gap-3 px-2 transition-all w-full">
+                <button
+                  onClick={toggleSidebar}
+                  className="h-8 w-8 flex items-center justify-center hover:bg-accent rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring shrink-0"
+                >
+                  <PanelLeft className="h-4 w-4 text-muted-foreground" />
+                </button>
+                {!isCollapsed && (
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-6 h-6 bg-[#FF0000] rounded flex items-center justify-center text-white font-bold text-xl leading-none pt-px">
+                      DB
+                    </div>
+                    <span className="font-semibold tracking-tight truncate text-sm">
+                      Bahn Project Manager
+                    </span>
                   </div>
-                  <span className="font-semibold tracking-tight truncate text-sm">
-                    Bahn Project Manager
-                  </span>
-                </div>
-              ) : null}
+                )}
+              </div>
+            </SidebarHeader>
+
+            <SidebarContent className="gap-0">
+              <SidebarMenu className="px-2 py-1">
+                {menuItems.map((item) => {
+                  const isActive = location === item.path;
+                  return (
+                    <SidebarMenuItem key={item.path}>
+                      <SidebarMenuButton
+                        isActive={isActive}
+                        onClick={() => setLocation(item.path)}
+                        tooltip={item.label}
+                        className={`h-10 transition-all font-normal ${
+                          isActive ? "text-[#FF0000] border-l-4 border-[#FF0000] pl-3" : ""
+                        }`}
+                      >
+                        <item.icon className={`h-4 w-4 ${isActive ? "text-[#FF0000]" : ""}`} />
+                        <span>{item.label}</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </SidebarContent>
+
+            <SidebarFooter>
+              <SidebarFooterContent />
+            </SidebarFooter>
+          </Sidebar>
+
+          {!isCollapsed && (
+            <div
+              className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/20 transition-colors z-50"
+              onMouseDown={() => setIsResizing(true)}
+            />
+          )}
+        </div>
+
+        <SidebarInset className="flex flex-col flex-1 min-w-0 bg-background">
+          {isMobile && (
+            <div className="flex border-b h-14 items-center justify-between bg-background/95 px-2 backdrop-blur sticky top-0 z-40">
+              <div className="flex items-center gap-2">
+                <SidebarTrigger className="h-9 w-9 rounded-lg bg-background" />
+                <span className="tracking-tight text-foreground font-medium">
+                  {activeMenuItem?.label ?? "Menu"}
+                </span>
+              </div>
             </div>
-          </SidebarHeader>
+          )}
 
-          <SidebarContent className="gap-0">
-            <SidebarMenu className="px-2 py-1">
-              {menuItems.map((item) => {
-                const isActive = location === item.path;
-                return (
-                  <SidebarMenuItem key={item.path}>
-                    <SidebarMenuButton
-                      isActive={isActive}
-                      onClick={() => setLocation(item.path)}
-                      tooltip={item.label}
-                      className={`h-10 transition-all font-normal aws-nav-link ${
-                        isActive
-                          ? "text-[#FF0000] border-l-4 border-[#FF0000] pl-3"
-                          : ""
-                      }`}
-                    >
-                      <item.icon
-                        className={`h-4 w-4 ${isActive ? "text-[#FF0000]" : ""}`}
-                      />
-                      <span>{item.label}</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
-          </SidebarContent>
-
-          {/* Sidebar Footer – dynamic user info with logout */}
-          <SidebarFooter>
-            <SidebarFooterContent />
-          </SidebarFooter>
-        </Sidebar>
-
-        {/* Resizable handle */}
-        <div
-          className={`absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/20 transition-colors ${isCollapsed ? "hidden" : ""}`}
-          onMouseDown={() => {
-            if (isCollapsed) return;
-            setIsResizing(true);
-          }}
-          style={{ zIndex: 50 }}
-        />
-      </div>
-
-      {/* Main content area with DB header offset + sticky footer below everything */}
-      <SidebarInset className="pt-[60px] transition-[margin-left] duration-200 ease-in-out relative z-10 bg-background flex flex-col min-h-screen">
-        {/* Mobile top bar */}
-        {isMobile && (
-          <div className="flex border-b h-14 items-center justify-between bg-background/95 px-2 backdrop-blur supports-[backdrop-filter]:backdrop-blur sticky top-0 z-40">
-            <div className="flex items-center gap-2">
-              <SidebarTrigger className="h-9 w-9 rounded-lg bg-background" />
-              <span className="tracking-tight text-foreground font-medium">
-                {activeMenuItem?.label ?? "Menu"}
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* Content wrapper with flex layout for sticky footer below scrollable tables */}
-        <div className="flex-1 flex flex-col">
           <main className="flex-1 p-4 lg:p-6 overflow-auto">
             {children}
           </main>
-
-          {/* Footer is HERE – always below the entire website, navbar, AND any scrollable table (e.g. Projekte Übersicht from Übersichtsliste.xlsm) */}
           <Footer />
-        </div>
-      </SidebarInset>
-    </>
+        </SidebarInset>
+      </div>
+    </div>
   );
 }
