@@ -1,106 +1,132 @@
-import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
+import { useAuth, loginDemo } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Train, Shield, User } from "lucide-react";
-import { loginDemo } from "@/_core/hooks/useAuth";
-
-const DEMO_USERS = [
-  { name: "Admin Demo", email: "admin@bahn.de", role: "admin", password: "admin" },
-  { name: "Prüfer Demo", email: "pruefer@bahn.de", role: "user", password: "user" },
-];
+import { Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export default function Login() {
+  const { isAuthenticated, loading: authLoading } = useAuth();
+  const [, setLocation] = useLocation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
 
-  const doLogin = (loginEmail: string, loginPassword: string) => {
-    setError("");
-    setIsLoading(true);
-    
-    // Simulate a brief delay for better UX
-    setTimeout(() => {
-      const success = loginDemo(loginEmail, loginPassword);
-      if (success) {
-        // No page reload needed — auth state is picked up via useAuth hook
-        // Just redirect to dashboard
-        const params = new URLSearchParams(window.location.search);
-        const returnTo = params.get("returnTo") || "/";
-        window.location.href = returnTo;
-      } else {
-        setError("Ungültige Zugangsdaten. Verwenden Sie einen Demo-Account.");
-        setIsLoading(false);
-      }
-    }, 500);
-  };
+  useEffect(() => {
+    if (!authLoading && isAuthenticated) {
+      setLocation("/");
+    }
+  }, [isAuthenticated, authLoading, setLocation]);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    doLogin(email, password);
+    setIsLoading(true);
+    setError(null);
+
+    // Simulate network delay
+    await new Promise(resolve => setTimeout(resolve, 800));
+
+    const success = loginDemo(email, password);
+    if (success) {
+      setSuccess(true);
+      setTimeout(() => setLocation("/"), 500);
+    } else {
+      setError("Ungültige E-Mail oder Passwort. Bitte versuchen Sie es erneut.");
+      setIsLoading(false);
+    }
   };
+
+  const handleDemoLogin = async (role: "admin" | "user") => {
+    setIsLoading(true);
+    setError(null);
+    
+    const demoEmail = role === "admin" ? "admin@bahn.de" : "pruefer@bahn.de";
+    const demoPass = role === "admin" ? "admin" : "user";
+    
+    setEmail(demoEmail);
+    setPassword(demoPass);
+
+    await new Promise(resolve => setTimeout(resolve, 800));
+    
+    const success = loginDemo(demoEmail, demoPass);
+    if (success) {
+      setSuccess(true);
+      setTimeout(() => setLocation("/"), 500);
+    } else {
+      setError("Demo-Login fehlgeschlagen.");
+      setIsLoading(false);
+    }
+  };
+
+  if (authLoading) return null;
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <div className="w-full max-w-md space-y-6">
-        <div className="text-center space-y-2">
-          <div className="flex items-center justify-center gap-2 mb-4">
-            <Train className="h-8 w-8 text-primary" />
-            <h1 className="text-2xl font-bold">Bahn Project Manager</h1>
+    <div className="min-h-screen flex items-center justify-center bg-muted/30 px-4 py-12">
+      <div className="w-full max-w-md space-y-8">
+        <div className="flex flex-col items-center text-center space-y-2">
+          <div className="w-16 h-16 bg-[#FF0000] rounded-xl flex items-center justify-center text-white font-bold text-5xl shadow-lg mb-4">
+            DB
           </div>
-          <p className="text-muted-foreground text-sm">
-            Prüfverwaltung für Bahnhofsprojekte
-          </p>
+          <h1 className="text-3xl font-bold tracking-tight">Bahn Project Manager</h1>
+          <p className="text-muted-foreground">Melden Sie sich an, um fortzufahren</p>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Anmelden</CardTitle>
+        <Card className="border-none shadow-xl">
+          <CardHeader className="space-y-1">
+            <CardTitle className="text-2xl">Anmelden</CardTitle>
             <CardDescription>
-              Verwenden Sie Ihre Zugangsdaten oder einen Demo-Account
+              Geben Sie Ihre Zugangsdaten ein oder nutzen Sie einen Demo-Account
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            {isLoading && (
-              <div className="absolute inset-0 bg-black/20 rounded-lg flex items-center justify-center">
-                <div className="bg-background rounded-lg p-4 flex flex-col items-center gap-2">
-                  <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                  <p className="text-sm text-muted-foreground">Wird angemeldet...</p>
-                </div>
-              </div>
+          <CardContent className="grid gap-4">
+            {error && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Fehler</AlertTitle>
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
             )}
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div className="space-y-2">
+            
+            {success && (
+              <Alert className="border-green-500 text-green-600 bg-green-50">
+                <CheckCircle2 className="h-4 w-4 text-green-500" />
+                <AlertTitle>Erfolg</AlertTitle>
+                <AlertDescription>Anmeldung erfolgreich. Weiterleitung...</AlertDescription>
+              </Alert>
+            )}
+
+            <form onSubmit={handleLogin} className="grid gap-4">
+              <div className="grid gap-2">
                 <Label htmlFor="email">E-Mail</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="name@bahn.de"
+                <Input 
+                  id="email" 
+                  type="email" 
+                  placeholder="name@bahn.de" 
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  disabled={isLoading}
+                  disabled={isLoading || success}
                   required
                 />
               </div>
-              <div className="space-y-2">
+              <div className="grid gap-2">
                 <Label htmlFor="password">Passwort</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="••••••••"
+                <Input 
+                  id="password" 
+                  type="password" 
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  disabled={isLoading}
+                  disabled={isLoading || success}
                   required
                 />
               </div>
-              {error && (
-                <p className="text-sm text-destructive">{error}</p>
-              )}
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? "Wird angemeldet..." : "Anmelden"}
+              <Button type="submit" className="w-full bg-[#FF0000] hover:bg-[#CC0000]" disabled={isLoading || success}>
+                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Anmelden
               </Button>
             </form>
 
@@ -109,37 +135,25 @@ export default function Login() {
                 <span className="w-full border-t" />
               </div>
               <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-card px-2 text-muted-foreground">Demo-Zugänge</span>
+                <span className="bg-background px-2 text-muted-foreground">Oder Demo nutzen</span>
               </div>
             </div>
 
-            <div className="grid gap-2">
-              {DEMO_USERS.map((user) => (
-                <Button
-                  key={user.email}
-                  variant="outline"
-                  className="w-full justify-start gap-3 relative"
-                  onClick={() => doLogin(user.email, user.password)}
-                  disabled={isLoading}
-                >
-                  {user.role === "admin" ? (
-                    <Shield className="h-4 w-4 text-amber-500" />
-                  ) : (
-                    <User className="h-4 w-4 text-blue-500" />
-                  )}
-                  <div className="text-left">
-                    <div className="text-sm font-medium">{user.name}</div>
-                    <div className="text-xs text-muted-foreground">{user.email} / {user.password}</div>
-                  </div>
-                </Button>
-              ))}
+            <div className="grid grid-cols-2 gap-4">
+              <Button variant="outline" onClick={() => handleDemoLogin("admin")} disabled={isLoading || success}>
+                Admin Demo
+              </Button>
+              <Button variant="outline" onClick={() => handleDemoLogin("user")} disabled={isLoading || success}>
+                Prüfer Demo
+              </Button>
             </div>
           </CardContent>
+          <CardFooter>
+            <p className="text-xs text-center w-full text-muted-foreground">
+              Version 1.0.0 | © 2026 Deutsche Bahn AG
+            </p>
+          </CardFooter>
         </Card>
-
-        <p className="text-center text-xs text-muted-foreground">
-          Demo-Version v1.0 &bull; Bahn Project Manager
-        </p>
       </div>
     </div>
   );
