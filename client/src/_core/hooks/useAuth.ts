@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useMemo } from "react";
 
 export type DemoUser = {
   id: number;
@@ -7,12 +7,13 @@ export type DemoUser = {
   role: "admin" | "user";
   openId: string;
   loginMethod: string;
-  createdAt: Date;
-  updatedAt: Date;
-  lastSignedIn: Date;
+  createdAt: string;
+  updatedAt: string;
+  lastSignedIn: string;
 };
 
 const STORAGE_KEY = "bahn-demo-user";
+const AUTH_EVENT = "bahn-auth-change";
 
 function getStoredUser(): DemoUser | null {
   try {
@@ -36,9 +37,9 @@ export function loginDemo(email: string, password: string): boolean {
         role: "admin",
         openId: "demo-admin",
         loginMethod: "demo",
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        lastSignedIn: new Date(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        lastSignedIn: new Date().toISOString(),
       },
     },
     {
@@ -51,9 +52,9 @@ export function loginDemo(email: string, password: string): boolean {
         role: "user",
         openId: "demo-user",
         loginMethod: "demo",
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        lastSignedIn: new Date(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        lastSignedIn: new Date().toISOString(),
       },
     },
   ];
@@ -61,8 +62,7 @@ export function loginDemo(email: string, password: string): boolean {
   const match = demoUsers.find(u => u.email === email && u.password === password);
   if (match) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(match.user));
-    // Dispatch storage event so other hooks pick it up
-    window.dispatchEvent(new Event("auth-change"));
+    window.dispatchEvent(new CustomEvent(AUTH_EVENT, { detail: match.user }));
     return true;
   }
   return false;
@@ -70,52 +70,55 @@ export function loginDemo(email: string, password: string): boolean {
 
 export function logoutDemo() {
   localStorage.removeItem(STORAGE_KEY);
-  window.dispatchEvent(new Event("auth-change"));
+  window.dispatchEvent(new CustomEvent(AUTH_EVENT, { detail: null }));
 }
 
-export function useAuth(_options?: { redirectOnUnauthenticated?: boolean; redirectPath?: string }) {
+export function useAuth() {
   const [user, setUser] = useState<DemoUser | null>(() => getStoredUser());
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  // Initialize loading state on mount
   useEffect(() => {
-    // Simulate checking localStorage (synchronous, but wrapped in effect for consistency)
     const storedUser = getStoredUser();
     setUser(storedUser);
     setLoading(false);
-  }, []);
 
-  // Listen for auth changes from other tabs/windows
-  useEffect(() => {
-    const handler = () => {
-      setUser(getStoredUser());
+    const handleAuthChange = (e: any) => {
+      const newUser = e.detail;
+      setUser(prev => {
+        if (JSON.stringify(prev) === JSON.stringify(newUser)) return prev;
+        return newUser;
+      });
     };
-    window.addEventListener("auth-change", handler);
-    window.addEventListener("storage", handler);
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === STORAGE_KEY) {
+        const newUser = e.newValue ? JSON.parse(e.newValue) : null;
+        setUser(prev => {
+          if (JSON.stringify(prev) === JSON.stringify(newUser)) return prev;
+          return newUser;
+        });
+      }
+    };
+
+    window.addEventListener(AUTH_EVENT, handleAuthChange);
+    window.addEventListener("storage", handleStorage);
+    
     return () => {
-      window.removeEventListener("auth-change", handler);
-      window.removeEventListener("storage", handler);
+      window.removeEventListener(AUTH_EVENT, handleAuthChange);
+      window.removeEventListener("storage", handleStorage);
     };
   }, []);
 
   const logout = useCallback(() => {
     logoutDemo();
-    setUser(null);
-    setError(null);
   }, []);
 
-  const refresh = useCallback(() => {
-    const storedUser = getStoredUser();
-    setUser(storedUser);
-  }, []);
+  const isAuthenticated = useMemo(() => !!user, [user]);
 
   return {
     user,
     loading,
-    error,
-    isAuthenticated: Boolean(user),
-    refresh,
+    isAuthenticated,
     logout,
   };
 }
