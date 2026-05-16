@@ -30,7 +30,6 @@ function App() {
                     <Route path="/bvb-eea" component={BvbEea} />
                     <Route path="/psv-itk" component={PsvItk} />
                     <Route path="/audit" component={AuditLogPage} />
-                    <Route path="/404" component={NotFound} />
                     <Route component={NotFound} />
                   </Switch>
                 </AuthGate>
