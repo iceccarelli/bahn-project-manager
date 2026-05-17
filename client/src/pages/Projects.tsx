@@ -477,6 +477,22 @@ export default function Projects() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="mt-6 border-t pt-4">
+              <div className="text-sm font-medium text-muted-foreground mb-3">Gewerke-Spalten ein-/ausblenden:</div>
+              <div className="flex flex-wrap gap-2">
+                {departmentButtons.map((dept) => (
+                  <Button
+                    key={dept}
+                    variant={expandedDepts.includes(dept) ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => toggleDept(dept)}
+                    className={expandedDepts.includes(dept) ? "bg-[#FF0000] hover:bg-[#CC0000]" : ""}
+                  >
+                    {dept}
+                  </Button>
+                ))}
+              </div>
+            </div>
             <div className="flex justify-end mt-4">
               <Button variant="ghost" onClick={() => {
                 setRegion("__all__");
@@ -486,6 +502,7 @@ export default function Projects() {
                 setDepartment("__all__");
                 setSearch("");
                 setSearchInput("");
+                setExpandedDepts([]);
                 setShowFilters(false);
               }}>Filter zurücksetzen</Button>
             </div>
