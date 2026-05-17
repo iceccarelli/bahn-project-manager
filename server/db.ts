@@ -1,6 +1,7 @@
 import { eq, like, and, or, sql, desc, asc, inArray, count } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { InsertUser, users, projects, departmentReviews, bvbEea, psvItk, auditLog } from "../drizzle/schema";
+import { sql } from "drizzle-orm";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -90,6 +91,7 @@ export async function getUserByOpenId(openId: string) {
 // ============= PROJECT QUERIES =============
 
 export async function getProjects(params: {
+  showAll?: boolean;
   page?: number;
   pageSize?: number;
   search?: string;
@@ -99,11 +101,15 @@ export async function getProjects(params: {
   status?: string;
   sortBy?: string;
   sortDir?: 'asc' | 'desc';
+  minLat?: number;
+  maxLat?: number;
+  minLng?: number;
+  maxLng?: number;
 }) {
   const db = await getDb();
   if (!db) return { projects: [], total: 0 };
 
-  const { page = 1, pageSize = 50, search, region, projektleiter, sortBy = 'id', sortDir = 'asc' } = params;
+  const { page = 1, pageSize = 50, search, region, projektleiter, sortBy = 'id', sortDir = 'asc', showAll = false, minLat, maxLat, minLng, maxLng } = params;
   const offset = (page - 1) * pageSize;
 
   const conditions: any[] = [];
@@ -128,6 +134,11 @@ export async function getProjects(params: {
     conditions.push(like(projects.projektleiter, `%${projektleiter}%`));
   }
 
+  if (minLat !== undefined && maxLat !== undefined && minLng !== undefined && maxLng !== undefined) {
+    conditions.push(sql`${projects.latitude} BETWEEN ${minLat} AND ${maxLat}`);
+    conditions.push(sql`${projects.longitude} BETWEEN ${minLng} AND ${maxLng}`);
+  }
+
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
   // Get total count
@@ -146,8 +157,8 @@ export async function getProjects(params: {
     .from(projects)
     .where(whereClause)
     .orderBy(orderFn(sortColumn))
-    .limit(pageSize)
-    .offset(offset);
+    .limit(showAll ? undefined : pageSize)
+    .offset(showAll ? undefined : offset);
 
   return { projects: projectList, total };
 }
@@ -358,6 +369,67 @@ export async function getAuditLog(params: { entityType?: string; entityId?: numb
 }
 
 // ============= FILTER OPTIONS =============
+
+export async function getSearchSuggestions(term: string) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const searchLike = `%${term.toLowerCase()}%`;
+
+  const projectSuggestions = await db
+    .selectDistinct({
+      value: projects.station,
+      type: sql<string>`'station'`,
+    })
+    .from(projects)
+    .where(like(sql`LOWER(${projects.station})`, searchLike))
+    .union(
+      db.selectDistinct({
+        value: projects.projektnummer,
+        type: sql<string>`'projektnummer'`,
+      })
+      .from(projects)
+      .where(like(sql`LOWER(${projects.projektnummer})`, searchLike))
+    )
+    .union(
+      db.selectDistinct({
+        value: projects.projektleiter,
+        type: sql<string>`'projektleiter'`,
+      })
+      .from(projects)
+      .where(like(sql`LOWER(${projects.projektleiter})`, searchLike))
+    )
+    .union(
+      db.selectDistinct({
+        value: projects.bahnhofsmanagement,
+        type: sql<string>`'region'`,
+      })
+      .from(projects)
+      .where(like(sql`LOWER(${projects.bahnhofsmanagement})`, searchLike))
+    );
+
+  const reviewSuggestions = await db
+    .selectDistinct({
+      value: departmentReviews.prueferName,
+      type: sql<string>`'pruefer'`,
+    })
+    .from(departmentReviews)
+    .where(like(sql`LOWER(${departmentReviews.prueferName})`, searchLike))
+    .union(
+      db.selectDistinct({
+        value: departmentReviews.department,
+        type: sql<string>`'department'`,
+      })
+      .from(departmentReviews)
+      .where(like(sql`LOWER(${departmentReviews.department})`, searchLike))
+    );
+
+  const combinedSuggestions = [...projectSuggestions, ...reviewSuggestions]
+    .filter(s => s.value !== null && s.value !== '' && s.value !== 'Zuordnung erforderlich')
+    .map(s => s.value);
+
+  return Array.from(new Set(combinedSuggestions)).slice(0, 10); // Limit to 10 unique suggestions
+}
 
 export async function getFilterOptions() {
   const db = await getDb();
