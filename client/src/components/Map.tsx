@@ -326,6 +326,7 @@ export const MapView: React.FC<MapViewProps> = ({
   initialCenter = { lat: 51.1657, lng: 10.4515 },
   initialZoom = 6,
   className = "h-full w-full",
+  onBoundsChange,
 }) => {
   return (
     <div className={`relative ${className} rounded-2xl overflow-hidden border-2 border-border/50 shadow-2xl bg-muted/5`}>
