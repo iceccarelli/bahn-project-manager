@@ -42,7 +42,10 @@ export const queryKeys = {
 export function useAllProjects() {
   return useQuery({
     queryKey: queryKeys.projects.list({ showAll: true }), // Always fetch all for global context
-    queryFn: () => apiClient.projects.list(),
+    queryFn: async () => {
+      const projects = await apiClient.projects.list();
+      return { projects }; // Ensure it always returns an object with a projects array
+    },
   });
 }
 
@@ -106,20 +109,20 @@ export function useUpdateProject() {
     mutationFn: (input: ProjectUpdateInput) => apiClient.projects.update(input.id, input),
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: queryKeys.projects.all });
-      const previousProjects = queryClient.getQueryData<Project[]>(queryKeys.projects.list({ showAll: true }));
+      const previousProjectsData = queryClient.getQueryData<{ projects: Project[] }>(queryKeys.projects.list({ showAll: true }));
 
-      if (previousProjects) {
-        const updated = previousProjects.map((p) =>
+      if (previousProjectsData?.projects) {
+        const updated = previousProjectsData.projects.map((p) =>
           p.id === input.id ? { ...p, [input.field]: input.value } : p
         );
-        queryClient.setQueryData(queryKeys.projects.list({ showAll: true }), updated);
+        queryClient.setQueryData(queryKeys.projects.list({ showAll: true }), { projects: updated });
       }
 
-      return { previousProjects };
+      return { previousProjectsData };
     },
     onError: (err, input, context) => {
-      if (context?.previousProjects) {
-        queryClient.setQueryData(queryKeys.projects.list({ showAll: true }), context.previousProjects);
+      if (context?.previousProjectsData?.projects) {
+        queryClient.setQueryData(queryKeys.projects.list({ showAll: true }), context.previousProjectsData);
       }
     },
     onSuccess: () => {
@@ -139,10 +142,10 @@ export function useUpdateReview() {
     mutationFn: (input: ReviewUpdateInput) => apiClient.reviews.update(input.id, input),
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: queryKeys.projects.all });
-      const previousProjects = queryClient.getQueryData<Project[]>(queryKeys.projects.list({ showAll: true }));
+      const previousProjectsData = queryClient.getQueryData<{ projects: Project[] }>(queryKeys.projects.list({ showAll: true }));
 
-      if (previousProjects) {
-        const updated = previousProjects.map((p) => {
+      if (previousProjectsData?.projects) {
+        const updated = previousProjectsData.projects.map((p) => {
           if (p.id !== input.projectId) return p;
           return {
             ...p,
@@ -153,14 +156,14 @@ export function useUpdateReview() {
             ),
           };
         });
-        queryClient.setQueryData(queryKeys.projects.list({ showAll: true }), updated);
+        queryClient.setQueryData(queryKeys.projects.list({ showAll: true }), { projects: updated });
       }
 
-      return { previousProjects };
+      return { previousProjectsData };
     },
     onError: (err, input, context) => {
-      if (context?.previousProjects) {
-        queryClient.setQueryData(queryKeys.projects.list({ showAll: true }), context.previousProjects);
+      if (context?.previousProjectsData?.projects) {
+        queryClient.setQueryData(queryKeys.projects.list({ showAll: true }), context.previousProjectsData);
       }
     },
     onSuccess: () => {
@@ -202,7 +205,7 @@ export function useProjects(params: {
   sortDir?: "asc" | "desc";
   showAll?: boolean;
 }) {
-  const { data: allProjects, isLoading: allProjectsLoading } = useAllProjects();
+  const { data: allProjectsData, isLoading: allProjectsLoading } = useAllProjects();
   const updateProjectMutation = useUpdateProject();
   const updateReviewMutation = useUpdateReview();
   const createProjectMutation = useCreateProject();
@@ -222,11 +225,13 @@ export function useProjects(params: {
   } = params;
 
   const result = useMemo(() => {
+    const allProjects = allProjectsData?.projects || []; // Safely access projects array
+
     if (!allProjects) {
       return { projects: [], total: 0, page, pageSize, showAll };
     }
 
-    let filtered = [...allProjects.projects];
+    let filtered = [...allProjects];
 
     // Enhanced Google-like search
     if (search) {
@@ -243,7 +248,7 @@ export function useProjects(params: {
             p.projektleiter?.toLowerCase().includes(term) ||
             p.bahnhofsmanagement?.toLowerCase().includes(term) ||
             p.kommentar?.toLowerCase().includes(term) ||
-            p.reviews.some(r => 
+            p.reviews?.some(r => 
               r.prueferName?.toLowerCase().includes(term) || 
               r.department?.toLowerCase().includes(term) ||
               r.status?.toLowerCase().includes(term)
@@ -255,15 +260,15 @@ export function useProjects(params: {
 
     if (region) filtered = filtered.filter((p) => p.bahnhofsmanagement === region);
     if (projektleiter) filtered = filtered.filter((p) => p.projektleiter === projektleiter);
-    if (pruefer) filtered = filtered.filter((p) => p.reviews.some((r) => r.prueferName === pruefer));
-    if (department) filtered = filtered.filter((p) => p.reviews.some((r) => r.department === department));
+    if (pruefer) filtered = filtered.filter((p) => p.reviews?.some((r) => r.prueferName === pruefer));
+    if (department) filtered = filtered.filter((p) => p.reviews?.some((r) => r.department === department));
 
     if (status && department) {
       filtered = filtered.filter((p) =>
-        p.reviews.some((r) => r.department === department && r.status === status)
+        p.reviews?.some((r) => r.department === department && r.status === status)
       );
     } else if (status) {
-      filtered = filtered.filter((p) => p.reviews.some((r) => r.status === status));
+      filtered = filtered.filter((p) => p.reviews?.some((r) => r.status === status));
     }
 
     if (sortBy) {
@@ -296,7 +301,7 @@ export function useProjects(params: {
     }
 
     return { projects, total, page, pageSize, showAll };
-  }, [allProjects, page, pageSize, search, region, projektleiter, pruefer, status, department, sortBy, sortDir, showAll]);
+  }, [allProjectsData, page, pageSize, search, region, projektleiter, pruefer, status, department, sortBy, sortDir, showAll]);
 
   const applyEdit = useCallback(
     (projectId: number, field: string, value: string) => {
@@ -329,18 +334,19 @@ export function useProjects(params: {
 }
 
 export function useFilters() {
-  const { data: allProjects, isLoading } = useAllProjects();
+  const { data: allProjectsData, isLoading } = useAllProjects();
 
   const data: Filters | null = useMemo(() => {
+    const allProjects = allProjectsData?.projects || []; // Safely access projects array
     if (!allProjects) return null;
     const regions = new Set<string>();
     const projektleiter = new Set<string>();
     const pruefer = new Set<string>();
 
-    allProjects.projects.forEach((p) => {
+    allProjects.forEach((p) => {
       if (p.bahnhofsmanagement) regions.add(p.bahnhofsmanagement);
       if (p.projektleiter) projektleiter.add(p.projektleiter);
-      p.reviews.forEach((r) => { if (r.prueferName) pruefer.add(r.prueferName); });
+      p.reviews?.forEach((r) => { if (r.prueferName) pruefer.add(r.prueferName); });
     });
 
     return {
@@ -348,20 +354,21 @@ export function useFilters() {
       projektleiter: Array.from(projektleiter).sort(),
       pruefer: Array.from(pruefer).sort(),
     };
-  }, [allProjects]);
+  }, [allProjectsData]);
 
   return { data, isLoading };
 }
 
 export function useAllData() {
-  const { data: projects, isLoading: pLoading } = useAllProjects();
+  const { data: projectsData, isLoading: pLoading } = useAllProjects();
   const { data: stats, isLoading: sLoading } = useDashboardStats();
   const { data: filters, isLoading: fLoading } = useFilters();
 
   const data = useMemo(() => {
+    const projects = projectsData?.projects || []; // Safely access projects array
     if (!projects || !stats || !filters) return null;
     return { projects, stats, filters };
-  }, [projects, stats, filters]);
+  }, [projectsData, stats, filters]);
 
   return { data, isLoading: pLoading || sLoading || fLoading };
 }
