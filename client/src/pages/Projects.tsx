@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect } from "react";
-import { useProjects, useFilters, useAllData, type Project, type Review } from "@/hooks/useDataQuery";
+import { useProjects, useFilters, useAllData, useSearchSuggestions, type Project, type Review } from "@/hooks/useDataQuery";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -137,6 +137,8 @@ export default function Projects() {
   const [showAllProjects, setShowAllProjects] = useState(false); // Renamed to avoid conflict with hook param
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
+  const { data: searchSuggestions } = useSearchSuggestions(searchInput);
+  const [mapBounds, setMapBounds] = useState<{ minLat?: number; maxLat?: number; minLng?: number; maxLng?: number }>({});
   const [region, setRegion] = useState<string>("");
   const [projektleiter, setProjektleiter] = useState<string>("");
   const [pruefer, setPruefer] = useState<string>("");
@@ -170,6 +172,7 @@ export default function Projects() {
     sortBy,
     sortDir,
     showAll: showAllProjects, // Use the local state here
+    ...mapBounds,
   });
 
   const { data: filterOptions } = useFilters();
@@ -333,13 +336,32 @@ export default function Projects() {
         <div className="flex items-center gap-3 w-full sm:w-auto">
           <div className="relative flex-1 sm:w-80">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Google-Suche: Ort, PL, Gewerke..."
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-              className="pl-9 h-10 aws-input"
-            />
+            <div className="relative flex-1 sm:w-80">
+              <Input
+                placeholder="Google-Suche: Ort, PL, Gewerke..."
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                className="pl-9 h-10 aws-input"
+              />
+              {searchInput.length > 1 && searchSuggestions && searchSuggestions.length > 0 && (
+                <div className="absolute z-10 w-full bg-popover border rounded-md shadow-lg mt-1 max-h-60 overflow-auto">
+                  {searchSuggestions.map((suggestion, index) => (
+                    <div
+                      key={index}
+                      className="px-4 py-2 cursor-pointer hover:bg-accent hover:text-accent-foreground"
+                      onClick={() => {
+                        setSearchInput(suggestion);
+                        setSearch(suggestion);
+                        setPage(1);
+                      }}
+                    >
+                      {suggestion}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
           <Button onClick={handleSearch} className="aws-button h-10 bg-[#FF0000] hover:bg-[#CC0000]">Suchen</Button>
           <Button
@@ -717,8 +739,13 @@ export default function Projects() {
 
             {/* MAP VIEW */}
             {viewMode === "map" && (
-              <div className="h-[700px] w-full relative">
-                <MapView projects={data?.projects || []} />
+                <MapView
+                  projects={data?.projects || []}
+                  initialCenter={{ lat: 51.1657, lng: 10.4515 }}
+                  initialZoom={6}
+                  className="h-[600px] w-full relative"
+                  onBoundsChange={setMapBounds}
+                />
                 <div className="absolute bottom-6 left-6 bg-background/95 backdrop-blur p-4 rounded-xl border shadow-2xl z-[1000] max-w-xs border-[#FF0000]/20">
                   <div className="flex items-center gap-2 mb-2">
                     <MapPin className="h-5 w-5 text-[#FF0000]" />
