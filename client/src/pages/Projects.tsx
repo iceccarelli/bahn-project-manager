@@ -396,105 +396,103 @@ export default function Projects() {
 
       {/* Filters Panel */}
       {showFilters && (
-        <Card className="aws-card border-2 border-[#FF0000]/10 animate-in slide-in-from-top-2 duration-200">
-          <CardContent className="p-4 flex flex-wrap gap-4">
-            <div className="space-y-1.5 min-w-[150px]">
-              <label className="text-[10px] font-bold uppercase text-muted-foreground">Region</label>
-              <Select value={region || "all"} onValueChange={(v) => setRegion(v === "all" ? "" : v)}>
-                <SelectTrigger className="h-9 text-xs">
-                  <SelectValue placeholder="Alle Regionen" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Alle Regionen</SelectItem>
-                  {(filterOptions?.regions || []).map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
-                </SelectContent>
-              </Select>
+        <Card className="aws-card border-2 border-[#FF0000]/10 animate-in slide-in-from-top-2 duration-300">
+          <CardContent className="p-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Region</label>
+                <Select value={region} onValueChange={(val) => { setRegion(val); setPage(1); }}>
+                  <SelectTrigger className="aws-input h-10">
+                    <SelectValue placeholder="Alle Regionen" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Alle Regionen</SelectItem>
+                    {(filterOptions?.regions || []).map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Projektleiter</label>
+                <Select value={projektleiter} onValueChange={(val) => { setProjektleiter(val); setPage(1); }}>
+                  <SelectTrigger className="aws-input h-10">
+                    <SelectValue placeholder="Alle Leiter" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Alle Leiter</SelectItem>
+                    {(filterOptions?.projektleiter || []).map(pl => <SelectItem key={pl} value={pl}>{pl}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Prüfer</label>
+                <Select value={pruefer} onValueChange={(val) => { setPruefer(val); setPage(1); }}>
+                  <SelectTrigger className="aws-input h-10">
+                    <SelectValue placeholder="Alle Prüfer" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Alle Prüfer</SelectItem>
+                    {(filterOptions?.pruefer || []).map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Status</label>
+                <Select value={status} onValueChange={(val) => { setStatus(val); setPage(1); }}>
+                  <SelectTrigger className="aws-input h-10">
+                    <SelectValue placeholder="Alle Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Alle Status</SelectItem>
+                    {REVIEW_STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Fachbereich</label>
+                <Select value={department} onValueChange={(val) => { setDepartment(val); setPage(1); }}>
+                  <SelectTrigger className="aws-input h-10">
+                    <SelectValue placeholder="Alle Fachbereiche" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Alle Fachbereiche</SelectItem>
+                    {DEPARTMENTS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div className="space-y-1.5 min-w-[150px]">
-              <label className="text-[10px] font-bold uppercase text-muted-foreground">Status</label>
-              <Select value={status || "all"} onValueChange={(v) => setStatus(v === "all" ? "" : v)}>
-                <SelectTrigger className="h-9 text-xs">
-                  <SelectValue placeholder="Alle Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Alle Status</SelectItem>
-                  {REVIEW_STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5 min-w-[150px]">
-              <label className="text-[10px] font-bold uppercase text-muted-foreground">Gewerke</label>
-              <Select value={department || "all"} onValueChange={(v) => setDepartment(v === "all" ? "" : v)}>
-                <SelectTrigger className="h-9 text-xs">
-                  <SelectValue placeholder="Alle Gewerke" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Alle Gewerke</SelectItem>
-                  {DEPARTMENTS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5 min-w-[150px]">
-              <label className="text-[10px] font-bold uppercase text-muted-foreground">Prüfer</label>
-              <Select value={pruefer || "all"} onValueChange={(v) => setPruefer(v === "all" ? "" : v)}>
-                <SelectTrigger className="h-9 text-xs">
-                  <SelectValue placeholder="Alle Prüfer" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Alle Prüfer</SelectItem>
-                  {(filterOptions?.pruefer || []).map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-end">
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                className="h-9 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+            <div className="mt-6 pt-6 border-t flex justify-between items-center">
+              <div className="flex flex-wrap gap-2">
+                {departmentButtons.map(dept => (
+                  <Button
+                    key={dept}
+                    variant={expandedDepts.includes(dept) ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => toggleDept(dept)}
+                    className={`h-8 text-[10px] font-bold rounded-full transition-all ${
+                      expandedDepts.includes(dept) ? "bg-[#FF0000] hover:bg-[#CC0000]" : "hover:border-[#FF0000] hover:text-[#FF0000]"
+                    }`}
+                  >
+                    {dept} {expandedDepts.includes(dept) ? "×" : "+"}
+                  </Button>
+                ))}
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => {
-                  setRegion("");
-                  setStatus("");
-                  setDepartment("");
-                  setPruefer("");
-                  setSearch("");
-                  setSearchInput("");
+                  setRegion(""); setProjektleiter(""); setPruefer(""); setStatus(""); setDepartment("");
+                  setSearch(""); setSearchInput(""); setExpandedDepts([]); setPage(1);
                 }}
+                className="text-muted-foreground hover:text-[#FF0000] gap-2"
               >
-                <X className="h-3 w-3 mr-1" /> Filter zurücksetzen
+                <X className="h-4 w-4" /> Filter zurücksetzen
               </Button>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Department Visibility Controls */}
-      <div className="flex flex-wrap gap-2 items-center bg-muted/30 p-3 rounded-xl border">
-        <span className="text-[10px] font-bold uppercase text-muted-foreground mr-2">Gewerke-Ansicht:</span>
-        {departmentButtons.map((dept) => (
-          <Button
-            key={dept}
-            variant={expandedDepts.includes(dept) ? "default" : "outline"}
-            size="sm"
-            onClick={() => toggleDept(dept)}
-            className={`h-7 text-[10px] px-3 ${expandedDepts.includes(dept) ? "bg-[#FF0000] hover:bg-[#CC0000]" : ""}`}
-          >
-            {dept}
-          </Button>
-        ))}
-        <div className="flex-1" />
-        {expandedDepts.length > 0 && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 text-[10px] text-muted-foreground"
-            onClick={() => setExpandedDepts([])}
-          >
-            Alle ausblenden
-          </Button>
-        )}
-      </div>
-
-      {/* VIEW RENDERING */}
+      {/* Main Content Area */}
       <div className="bg-card rounded-xl border shadow-sm overflow-hidden min-h-[600px]">
         {isLoading ? (
           <div className="flex flex-col items-center justify-center h-[600px] gap-4">
