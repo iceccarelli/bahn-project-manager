@@ -137,11 +137,11 @@ export default function Projects() {
   const [search, setSearch] = useState("");
   const { data: searchSuggestions } = useSearchSuggestions(searchInput);
   const [mapBounds, setMapBounds] = useState<{ minLat?: number; maxLat?: number; minLng?: number; maxLng?: number }>({});
-  const [region, setRegion] = useState<string>("");
-  const [projektleiter, setProjektleiter] = useState<string>("");
-  const [pruefer, setPruefer] = useState<string>("");
-  const [status, setStatus] = useState<string>("");
-  const [department, setDepartment] = useState<string>("");
+  const [region, setRegion] = useState<string>("__all__");
+  const [projektleiter, setProjektleiter] = useState<string>("__all__");
+  const [pruefer, setPruefer] = useState<string>("__all__");
+  const [status, setStatus] = useState<string>("__all__");
+  const [department, setDepartment] = useState<string>("__all__");
   const [showFilters, setShowFilters] = useState(false);
   const [expandedDepts, setExpandedDepts] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState("id");
@@ -160,11 +160,11 @@ export default function Projects() {
 
   const { data, isLoading, applyEdit, applyReviewEdit, addProject } = useProjects({
     search: search || undefined,
-    region: region || undefined,
-    projektleiter: projektleiter || undefined,
-    pruefer: pruefer || undefined,
-    status: status || undefined,
-    department: department || undefined,
+    region: region === "__all__" ? undefined : region,
+    projektleiter: projektleiter === "__all__" ? undefined : projektleiter,
+    pruefer: pruefer === "__all__" ? undefined : pruefer,
+    status: status === "__all__" ? undefined : status,
+    department: department === "__all__" ? undefined : department,
     sortBy,
     sortDir,
     showAll: true, // Always load all projects
@@ -422,7 +422,7 @@ export default function Projects() {
                   <SelectValue placeholder="Region" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Alle Regionen</SelectItem>
+                  <SelectItem value="__all__">Alle Regionen</SelectItem>
                   {filterOptions?.regions.map((r) => (
                     <SelectItem key={r} value={r}>{r}</SelectItem>
                   ))}
@@ -434,7 +434,7 @@ export default function Projects() {
                   <SelectValue placeholder="Projektleiter" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Alle Projektleiter</SelectItem>
+                  <SelectItem value="__all__">Alle Projektleiter</SelectItem>
                   {filterOptions?.projektleiter.map((pl) => (
                     <SelectItem key={pl} value={pl}>{pl}</SelectItem>
                   ))}
@@ -446,7 +446,7 @@ export default function Projects() {
                   <SelectValue placeholder="Prüfer" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Alle Prüfer</SelectItem>
+                  <SelectItem value="__all__">Alle Prüfer</SelectItem>
                   {filterOptions?.pruefer.map((p) => (
                     <SelectItem key={p} value={p}>{p}</SelectItem>
                   ))}
@@ -458,7 +458,7 @@ export default function Projects() {
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Alle Status</SelectItem>
+                  <SelectItem value="__all__">Alle Status</SelectItem>
                   {REVIEW_STATUSES.map((s) => (
                     <SelectItem key={s} value={s}>{s}</SelectItem>
                   ))}
@@ -470,7 +470,7 @@ export default function Projects() {
                   <SelectValue placeholder="Gewerke" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Alle Gewerke</SelectItem>
+                  <SelectItem value="__all__">Alle Gewerke</SelectItem>
                   {DEPARTMENTS.map((d) => (
                     <SelectItem key={d} value={d}>{d}</SelectItem>
                   ))}
@@ -479,11 +479,11 @@ export default function Projects() {
             </div>
             <div className="flex justify-end mt-4">
               <Button variant="ghost" onClick={() => {
-                setRegion("");
-                setProjektleiter("");
-                setPruefer("");
-                setStatus("");
-                setDepartment("");
+                setRegion("__all__");
+                setProjektleiter("__all__");
+                setPruefer("__all__");
+                setStatus("__all__");
+                setDepartment("__all__");
                 setSearch("");
                 setSearchInput("");
                 setShowFilters(false);
