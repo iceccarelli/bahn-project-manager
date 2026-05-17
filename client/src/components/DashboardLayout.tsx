@@ -130,11 +130,6 @@ function DashboardLayoutContent({
   const sidebarRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
 
-  const activeMenuItem = useMemo(() => 
-    menuItems.find((item) => item.path === location),
-    [location]
-  );
-
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!isResizing) return;
