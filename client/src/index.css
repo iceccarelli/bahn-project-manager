@@ -151,7 +151,7 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background-color: hsla(var(--muted-foreground), 0.3);
+  background-color: hsl(var(--muted-foreground));
   border-radius: 9999px;
   border: 2px solid transparent;
   background-clip: padding-box;
