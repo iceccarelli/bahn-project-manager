@@ -24,6 +24,7 @@ import {
   createAuditEntry,
   getAuditLog,
   getFilterOptions,
+  getSearchSuggestions,
   upsertUser,
   getUserByOpenId,
 } from "./db";
@@ -91,7 +92,12 @@ export const appRouter = router({
         department: z.string().optional(),
         status: z.string().optional(),
         sortBy: z.string().default('id'),
-        sortDir: z.enum(['asc', 'desc']).default('asc'),
+        sortDir: z.enum([\"asc\", \"desc\"]).default(\"asc\"),
+        minLat: z.number().optional(),
+        maxLat: z.number().optional(),
+        minLng: z.number().optional(),
+        maxLng: z.number().optional(),
+        showAll: z.boolean().optional(),
       }).optional())
       .query(async ({ input }) => {
         const params = input ?? {};
@@ -178,6 +184,12 @@ export const appRouter = router({
         });
 
         return { id };
+      }),
+
+    searchSuggestions: publicProcedure
+      .input(z.object({ term: z.string() }))
+      .query(async ({ input }) => {
+        return getSearchSuggestions(input.term);
       }),
 
     delete: protectedProcedure
