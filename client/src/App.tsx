@@ -6,6 +6,7 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { QueryClientProvider } from "@/_core/query/QueryProvider";
 import AuthGate from "@/components/AuthGate";
+import DashboardLayout from "@/components/DashboardLayout";
 import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
 import Projects from "@/pages/Projects";
@@ -24,14 +25,16 @@ function App() {
               <Route path="/login" component={Login} />
               <Route>
                 <AuthGate>
-                  <Switch>
-                    <Route path="/" component={Dashboard} />
-                    <Route path="/projects" component={Projects} />
-                    <Route path="/bvb-eea" component={BvbEea} />
-                    <Route path="/psv-itk" component={PsvItk} />
-                    <Route path="/audit" component={AuditLogPage} />
-                    <Route component={NotFound} />
-                  </Switch>
+                  <DashboardLayout>
+                    <Switch>
+                      <Route path="/" component={Dashboard} />
+                      <Route path="/projects" component={Projects} />
+                      <Route path="/bvb-eea" component={BvbEea} />
+                      <Route path="/psv-itk" component={PsvItk} />
+                      <Route path="/audit" component={AuditLogPage} />
+                      <Route component={NotFound} />
+                    </Switch>
+                  </DashboardLayout>
                 </AuthGate>
               </Route>
             </Switch>
