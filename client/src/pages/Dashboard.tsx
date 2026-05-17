@@ -118,7 +118,7 @@ export default function Dashboard() {
     return {
       name, incoming, completed,
       total: incoming + completed,
-      timeline: timeline.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5)
+      timeline: timeline.sort((a, b) => b.date.localeCompare(a.date))
     };
   }).filter(f => f.total > 0).sort((a, b) => b.total - a.total);
 
@@ -404,7 +404,7 @@ export default function Dashboard() {
               <p className="text-sm text-muted-foreground">Klicken Sie auf einen Namen für Details</p>
             </CardHeader>
             <CardContent className="space-y-3 max-h-[720px] overflow-auto pr-2">
-              {fachWorkload.slice(0, 12).map((fach, index) => (
+              {fachWorkload.map((fach, index) => (
                 <motion.div 
                   key={index}
                   initial={{ opacity: 0, y: 10 }}
@@ -459,10 +459,10 @@ export default function Dashboard() {
                         </div>
                         <div>
                           <div className="text-xs font-medium mb-2 text-muted-foreground">AKTUELLE AKTIVITÄT</div>
-                          <div className="space-y-2">
+                          <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
                             {fach.timeline.length > 0 ? fach.timeline.map((item, i) => (
-                              <div key={i} className="flex items-start gap-3 text-sm border-l-2 border-[#FF0000] pl-3">
-                                <div className="font-mono text-xs text-muted-foreground w-20">{item.date}</div>
+                              <div key={i} className="flex items-start gap-3 text-sm border-l-2 border-[#FF0000] pl-3 py-1">
+                                <div className="font-mono text-xs text-muted-foreground w-20 shrink-0">{item.date}</div>
                                 <div>
                                   <span className="font-medium">{item.action}</span> — {item.project}
                                 </div>
