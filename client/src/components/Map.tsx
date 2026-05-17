@@ -5,7 +5,7 @@ import "leaflet/dist/leaflet.css";
 import { Project } from "@/_core/api/client";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ExternalLink, MapPin, Navigation, Info, Search } from "lucide-react";
+import { ExternalLink, MapPin, Navigation, Info, Search, Maximize, Minimize } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -326,8 +326,18 @@ export const MapView: React.FC<MapViewProps> = ({
   className = "h-full w-full",
   onBoundsChange,
 }) => {
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  const toggleFullscreen = () => {
+    setIsFullscreen(!isFullscreen);
+  };
+
+  const containerClass = isFullscreen 
+    ? "fixed inset-0 z-[9999] bg-background" 
+    : `relative ${className} rounded-2xl overflow-hidden border-2 border-border/50 shadow-2xl bg-muted/5`;
+
   return (
-    <div className={`relative ${className} rounded-2xl overflow-hidden border-2 border-border/50 shadow-2xl bg-muted/5`}>
+    <div className={containerClass}>
       <MapContainer
         center={[initialCenter.lat, initialCenter.lng]}
         zoom={initialZoom}
@@ -399,6 +409,18 @@ export const MapView: React.FC<MapViewProps> = ({
             />
           </div>
         </div>
+      </div>
+
+      {/* Fullscreen Toggle */}
+      <div className="absolute top-6 right-6 z-[1000]">
+        <Button 
+          variant="outline" 
+          size="icon" 
+          onClick={toggleFullscreen}
+          className="bg-background/95 backdrop-blur-xl border-2 border-border/50 shadow-2xl hover:bg-muted"
+        >
+          {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
+        </Button>
       </div>
     </div>
   );
