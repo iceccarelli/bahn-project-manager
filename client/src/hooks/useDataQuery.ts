@@ -193,8 +193,6 @@ export function useDeleteProject() {
 // ============================================================================
 
 export function useProjects(params: {
-  page: number;
-  pageSize: number;
   search?: string;
   region?: string;
   projektleiter?: string;
@@ -203,7 +201,6 @@ export function useProjects(params: {
   department?: string;
   sortBy?: string;
   sortDir?: "asc" | "desc";
-  showAll?: boolean;
   minLat?: number;
   maxLat?: number;
   minLng?: number;
@@ -215,8 +212,6 @@ export function useProjects(params: {
   const createProjectMutation = useCreateProject();
 
   const {
-    page,
-    pageSize,
     search,
     region,
     projektleiter,
@@ -225,7 +220,6 @@ export function useProjects(params: {
     department,
     sortBy = "id",
     sortDir = "desc",
-    showAll = false,
   minLat,
   maxLat,
   minLng,
@@ -236,7 +230,7 @@ export function useProjects(params: {
     const allProjects = allProjectsData?.projects || []; // Safely access projects array
 
     if (!allProjects) {
-      return { projects: [], total: 0, page, pageSize, showAll };
+      return { projects: [], total: 0 };
     }
 
     let filtered = [...allProjects];
@@ -300,16 +294,10 @@ export function useProjects(params: {
 
     const total = filtered.length;
     
-    let projects;
-    if (showAll) {
-      projects = filtered;
-    } else {
-      const start = (page - 1) * pageSize;
-      projects = filtered.slice(start, start + pageSize);
-    }
+    const projects = filtered;
 
-    return { projects, total, page, pageSize, showAll };
-  }, [allProjectsData, page, pageSize, search, region, projektleiter, pruefer, status, department, sortBy, sortDir, showAll, minLat, maxLat, minLng, maxLng]);
+    return { projects, total };
+  }, [allProjectsData, search, region, projektleiter, pruefer, status, department, sortBy, sortDir, minLat, maxLat, minLng, maxLng]);
 
   const applyEdit = useCallback(
     (projectId: number, field: string, value: string) => {
