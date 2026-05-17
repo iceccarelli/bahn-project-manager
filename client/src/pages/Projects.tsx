@@ -132,6 +132,7 @@ function SortHeader({ column, label, sortBy, onSort }: SortHeaderProps) {
 }
 
 export default function Projects() {
+
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const { data: searchSuggestions } = useSearchSuggestions(searchInput);
@@ -212,6 +213,8 @@ export default function Projects() {
       toast.error("Projekt-Erstellung nicht verfügbar");
       return;
     }
+    // The addProject mutation doesn't return the created ID directly, it invalidates queries.
+    // We'll rely on the query invalidation to refresh the list.
     addProject({
       projektnummer: newProj.projektnummer.trim() || null,
       station: newProj.station.trim() || null,
@@ -360,137 +363,122 @@ export default function Projects() {
             <Filter className="h-4 w-4" />
             Filter
           </Button>
+
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <div className="flex bg-muted p-1 rounded-lg">
+        <div className="flex items-center gap-2">
+          <div className="flex border rounded-lg p-1 bg-muted/50 shadow-sm">
             <Button
-              variant={viewMode === "table" ? "secondary" : "ghost"}
+              variant={viewMode === "table" ? "default" : "ghost"}
               size="sm"
               onClick={() => setViewMode("table")}
-              className="h-8 px-3"
+              className="aws-button h-8 w-10 p-0"
             >
               <Table className="h-4 w-4" />
             </Button>
             <Button
-              variant={viewMode === "cards" ? "secondary" : "ghost"}
+              variant={viewMode === "cards" ? "default" : "ghost"}
               size="sm"
               onClick={() => setViewMode("cards")}
-              className="h-8 px-3"
+              className="aws-button h-8 w-10 p-0"
             >
               <LayoutGrid className="h-4 w-4" />
             </Button>
             <Button
-              variant={viewMode === "map" ? "secondary" : "ghost"}
+              variant={viewMode === "map" ? "default" : "ghost"}
               size="sm"
               onClick={() => setViewMode("map")}
-              className="h-8 px-3"
+              className="aws-button h-8 w-10 p-0"
             >
               <MapPin className="h-4 w-4" />
             </Button>
           </div>
-          <Button onClick={() => setShowNewDialog(true)} className="aws-button bg-[#FF0000] hover:bg-[#CC0000] gap-2 h-10">
-            <Plus className="h-4 w-4" />
+
+          <Button 
+            onClick={() => setShowNewDialog(true)}
+            className="aws-button bg-[#FF0000] hover:bg-[#E6002B] text-white h-10"
+          >
+            <Plus className="mr-2 h-4 w-4" />
             Neues Projekt
           </Button>
-          <Button variant="outline" onClick={handleExport} className="aws-button gap-2 h-10">
-            <Download className="h-4 w-4" />
+          <Button 
+            variant="outline" 
+            className="aws-button h-10"
+            onClick={handleExport}
+          >
+            <Download className="mr-2 h-4 w-4" />
             Export
           </Button>
         </div>
       </div>
 
-      {/* Filter Panel */}
+      {/* Filters Panel */}
       {showFilters && (
-        <Card className="aws-card border-[#FF0000]/20 shadow-md animate-in fade-in slide-in-from-top-4 duration-300">
-          <CardContent className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase text-muted-foreground">Region</label>
-                <Select value={region} onValueChange={setRegion}>
-                  <SelectTrigger className="aws-input">
-                    <SelectValue placeholder="Alle Regionen" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Alle Regionen</SelectItem>
-                    {filterOptions?.regions.map((r) => (
-                      <SelectItem key={r} value={r}>{r}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase text-muted-foreground">Projektleiter</label>
-                <Select value={projektleiter} onValueChange={setProjektleiter}>
-                  <SelectTrigger className="aws-input">
-                    <SelectValue placeholder="Alle Projektleiter" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Alle Projektleiter</SelectItem>
-                    {filterOptions?.projektleiter.map((p) => (
-                      <SelectItem key={p} value={p}>{p}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase text-muted-foreground">Prüfer</label>
-                <Select value={pruefer} onValueChange={setPruefer}>
-                  <SelectTrigger className="aws-input">
-                    <SelectValue placeholder="Alle Prüfer" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Alle Prüfer</SelectItem>
-                    {filterOptions?.pruefer.map((p) => (
-                      <SelectItem key={p} value={p}>{p}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase text-muted-foreground">Status</label>
-                <Select value={status} onValueChange={setStatus}>
-                  <SelectTrigger className="aws-input">
-                    <SelectValue placeholder="Alle Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Alle Status</SelectItem>
-                    {REVIEW_STATUSES.map((s) => (
-                      <SelectItem key={s} value={s}>{s}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase text-muted-foreground">Gewerk</label>
-                <Select value={department} onValueChange={setDepartment}>
-                  <SelectTrigger className="aws-input">
-                    <SelectValue placeholder="Alle Gewerke" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Alle Gewerke</SelectItem>
-                    {DEPARTMENTS.map((d) => (
-                      <SelectItem key={d} value={d}>{d}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+        <Card className="aws-card border-2 border-[#FF0000]/10 animate-in slide-in-from-top-2 fade-in-0 duration-300">
+          <CardContent className="pt-6 pb-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+              <Select value={region} onValueChange={setRegion}>
+                <SelectTrigger className="aws-input">
+                  <SelectValue placeholder="Region" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Alle Regionen</SelectItem>
+                  {filterOptions?.regions.map((r) => (
+                    <SelectItem key={r} value={r}>{r}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={projektleiter} onValueChange={setProjektleiter}>
+                <SelectTrigger className="aws-input">
+                  <SelectValue placeholder="Projektleiter" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Alle Projektleiter</SelectItem>
+                  {filterOptions?.projektleiter.map((pl) => (
+                    <SelectItem key={pl} value={pl}>{pl}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={pruefer} onValueChange={setPruefer}>
+                <SelectTrigger className="aws-input">
+                  <SelectValue placeholder="Prüfer" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Alle Prüfer</SelectItem>
+                  {filterOptions?.pruefer.map((p) => (
+                    <SelectItem key={p} value={p}>{p}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={status} onValueChange={setStatus}>
+                <SelectTrigger className="aws-input">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Alle Status</SelectItem>
+                  {REVIEW_STATUSES.map((s) => (
+                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={department} onValueChange={setDepartment}>
+                <SelectTrigger className="aws-input">
+                  <SelectValue placeholder="Gewerke" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Alle Gewerke</SelectItem>
+                  {DEPARTMENTS.map((d) => (
+                    <SelectItem key={d} value={d}>{d}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <div className="flex justify-between items-center mt-6 pt-6 border-t">
-              <div className="flex flex-wrap gap-2">
-                {departmentButtons.map((dept) => (
-                  <Button
-                    key={dept}
-                    variant={expandedDepts.includes(dept) ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => toggleDept(dept)}
-                    className={`text-[10px] h-7 px-3 ${expandedDepts.includes(dept) ? "bg-[#FF0000] hover:bg-[#CC0000]" : ""}`}
-                  >
-                    {dept} Details
-                  </Button>
-                ))}
-              </div>
-              <Button variant="ghost" size="sm" className="text-[#FF0000] hover:bg-[#FF0000]/10" onClick={() => {
+            <div className="flex justify-end mt-4">
+              <Button variant="ghost" onClick={() => {
                 setRegion("");
                 setProjektleiter("");
                 setPruefer("");
@@ -745,7 +733,8 @@ export default function Projects() {
                     <h4 className="text-sm font-bold">Interaktive Projektkarte</h4>
                   </div>
                   <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    Zeigt alle {data?.projects.length} gefilterten Projekte basierend auf ihren Standorten an. Klicken Sie auf einen Marker für detaillierte Informationen.
+                    Zeigt alle {data?.projects.length} gefilterten Projekte basierend auf ihren Standorten an. 
+                    Klicken Sie auf einen Marker für detaillierte Informationen.
                   </p>
                 </div>
               </>
@@ -753,6 +742,8 @@ export default function Projects() {
           </>
         )}
       </div>
+
+
 
       {/* New Project Dialog */}
       <Dialog open={showNewDialog} onOpenChange={setShowNewDialog}>
