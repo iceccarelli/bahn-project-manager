@@ -185,21 +185,39 @@ interface MapViewProps {
   initialCenter?: { lat: number; lng: number };
   initialZoom?: number;
   className?: string;
+  onBoundsChange?: (bounds: { minLat: number; maxLat: number; minLng: number; maxLng: number }) => void;
 }
 
 /**
  * ZERO-DEPENDENCY CLUSTERING CONTROLLER
  * Manages marker visibility and grouping based on zoom level without external libraries.
  */
-const MapHierarchyController = ({ projects }: { projects: Project[] }) => {
+const MapHierarchyController = ({ projects, onBoundsChange }: { projects: Project[]; onBoundsChange?: (bounds: { minLat: number; maxLat: number; minLng: number; maxLng: number }) => void; }) => {
   const map = useMap();
   const [zoom, setZoom] = useState(map.getZoom());
 
   useEffect(() => {
-    const onZoom = () => setZoom(map.getZoom());
-    map.on("zoomend", onZoom);
-    return () => { map.off("zoomend", onZoom); };
-  }, [map]);
+    const updateBounds = () => {
+      const bounds = map.getBounds();
+      onBoundsChange?.({
+        minLat: bounds.getSouthWest().lat,
+        maxLat: bounds.getNorthEast().lat,
+        minLng: bounds.getSouthWest().lng,
+        maxLng: bounds.getNorthEast().lng,
+      });
+      setZoom(map.getZoom());
+    };
+
+    map.on("moveend", updateBounds);
+    map.on("zoomend", updateBounds);
+    // Initial call to set bounds
+    updateBounds();
+
+    return () => {
+      map.off("moveend", updateBounds);
+      map.off("zoomend", updateBounds);
+    };
+  }, [map, onBoundsChange]);
 
   // Group projects by location
   const groupedProjects = useMemo(() => {
@@ -323,7 +341,7 @@ export const MapView: React.FC<MapViewProps> = ({
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         <ZoomControl position="bottomright" />
-        <MapHierarchyController projects={projects} />
+        <MapHierarchyController projects={projects} onBoundsChange={onBoundsChange} />
       </MapContainer>
       
       {/* Professional Floating HUD */}
@@ -341,7 +359,7 @@ export const MapView: React.FC<MapViewProps> = ({
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                 </span>
                 <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-black">
-                  {projects.length.toLocaleString('de-DE' )} Standorte synchronisiert
+                  {projects.length.toLocaleString('de-DE')} Standorte synchronisiert
                 </p>
               </div>
             </div>
@@ -371,7 +389,7 @@ export const MapView: React.FC<MapViewProps> = ({
         </div>
       </div>
 
-      {/* Map Search Overlay */}
+      {/* Map Search Overlay (Visual Only) */}
       <div className="absolute top-6 right-16 z-[1000] pointer-events-none hidden md:block">
         <div className="flex items-center gap-2 bg-background/95 backdrop-blur-xl p-2 rounded-2xl border-2 border-border/50 shadow-2xl pointer-events-auto">
           <div className="relative">
