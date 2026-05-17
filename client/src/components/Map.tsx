@@ -240,8 +240,11 @@ const MapHierarchyController = ({ projects, onBoundsChange }: { projects: Projec
   // Intelligent Zoom-Based Filtering
   const visibleGroups = useMemo(() => {
     return groupedProjects.filter(group => {
-      if (zoom < 7) return group.priority === 1; // Only major hubs
-      if (zoom < 9) return group.priority <= 2; // Hubs + Regional cities
+      // At very low zoom, show only major hubs
+      if (zoom < 6) return group.priority === 1;
+      // At medium zoom, show hubs and regional cities
+      if (zoom < 8) return group.priority <= 2;
+      // At higher zoom levels, show all projects
       return true; // Show everything
     });
   }, [groupedProjects, zoom]);
