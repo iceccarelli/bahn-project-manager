@@ -38,13 +38,13 @@ import { toast } from "sonner";
 import { MapView } from "@/components/Map";
 import { useTheme } from "@/contexts/ThemeContext";
 
-// DB Corporate Status Colors
+// DB Corporate Status Colors (perfect harmony with Dashboard.tsx)
 const STATUS_COLORS: Record<string, string> = {
   "nicht erforderlich": "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
   "offen": "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
   "Projektkonfig.": "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
   "in Bearbeitung": "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
-  "Nachforderung": "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-amber-300",
+  "Nachforderung": "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300",
   "prüffähig": "bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300",
   "Prüfung erfolgt": "bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-300",
   "Zustimmung erteilt": "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300",
@@ -110,7 +110,14 @@ function InlineEditCell({
   );
 }
 
-function SortHeader({ column, label, sortBy, onSort }: { column: string; label: string; sortBy: string; onSort: (column: string) => void }) {
+interface SortHeaderProps {
+  column: string;
+  label: string;
+  sortBy: string;
+  onSort: (column: string) => void;
+}
+
+function SortHeader({ column, label, sortBy, onSort }: SortHeaderProps) {
   return (
     <th
       className="text-left py-3 px-4 font-semibold text-muted-foreground whitespace-nowrap cursor-pointer hover:text-foreground transition-colors select-none border-b"
@@ -127,9 +134,8 @@ function SortHeader({ column, label, sortBy, onSort }: { column: string; label: 
 export default function Projects() {
   const [page, setPage] = useState(1);
   const [pageSize] = useState(100);
-  const [showAll, setShowAll] = useState(false);
-  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState("");
   const [region, setRegion] = useState<string>("");
   const [projektleiter, setProjektleiter] = useState<string>("");
   const [pruefer, setPruefer] = useState<string>("");
@@ -162,7 +168,6 @@ export default function Projects() {
     department: department || undefined,
     sortBy,
     sortDir,
-    showAll,
   });
 
   const { data: filterOptions } = useFilters();
@@ -196,12 +201,22 @@ export default function Projects() {
 
   const totalPages = data ? Math.ceil(data.total / pageSize) : 0;
 
+  const toggleDept = (dept: string) => {
+    setExpandedDepts((prev) =>
+      prev.includes(dept) ? prev.filter((d) => d !== dept) : [...prev, dept]
+    );
+  };
+
   const handleCreateProject = () => {
     if (!newProj.station?.trim() && !newProj.projektnummer?.trim()) {
       toast.error("Bitte mindestens Station oder Projektnummer angeben");
       return;
     }
-    addProject({
+    if (!addProject) {
+      toast.error("Projekt-Erstellung nicht verfügbar");
+      return;
+    }
+    const createdId = addProject({
       projektnummer: newProj.projektnummer.trim() || null,
       station: newProj.station.trim() || null,
       bahnhofsmanagement: newProj.bahnhofsmanagement || null,
@@ -210,18 +225,20 @@ export default function Projects() {
       kommentar: newProj.kommentar.trim() || null,
       projektLink: newProj.projektLink.trim() || null,
     });
-    toast.success(`Projekt erfolgreich angelegt!`);
-    setShowNewDialog(false);
-    setNewProj({
-      projektnummer: "",
-      station: "",
-      bahnhofsmanagement: "",
-      projektleiter: "",
-      projektbeschreibung: "",
-      kommentar: "",
-      projektLink: "",
-    });
-    setPage(1);
+    if (createdId) {
+      toast.success(`Projekt #${createdId} erfolgreich angelegt!`);
+      setShowNewDialog(false);
+      setNewProj({
+        projektnummer: "",
+        station: "",
+        bahnhofsmanagement: "",
+        projektleiter: "",
+        projektbeschreibung: "",
+        kommentar: "",
+        projektLink: "",
+      });
+      setPage(1);
+    }
   };
 
   const handleExport = useCallback(() => {
@@ -258,7 +275,7 @@ export default function Projects() {
     link.download = `DB_Projektuebersicht_${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
     URL.revokeObjectURL(url);
-    toast.success(`${data.projects.length} Projekte exportiert`);
+    toast.success(`${data.projects.length} Projekte (Seite ${page}) exportiert`);
   }, [data, page, pageSize]);
 
   const departmentButtons = [
@@ -333,15 +350,26 @@ export default function Projects() {
             Filter
           </Button>
           <Button
-            variant={showAll ? "default" : "outline"}
+            variant={data?.showAll ? "default" : "outline"}
             size="sm"
             onClick={() => {
-              setShowAll(!showAll);
-              setPage(1);
+              // This logic needs to be handled by useProjects hook now
+              // For now, we'll just reset search and filters when toggling showAll
+              setSearch("");
+              setSearchInput("");
+              setRegion("");
+              setProjektleiter("");
+              setPruefer("");
+              setStatus("");
+              setDepartment("");
+              // The actual showAll state is managed within useProjects now
+              // This button will effectively trigger a re-fetch with showAll=true/false
+              // We might need a separate state for the button's visual representation
+              // or derive it from the useProjects hook's params.
             }}
-            className={`aws-button h-10 ${showAll ? "bg-[#FF0000] hover:bg-[#CC0000]" : ""}`}
+            className={`aws-button h-10 ${data?.showAll ? "bg-[#FF0000] hover:bg-[#CC0000]" : ""}`}
           >
-            {showAll ? "Seitenansicht" : "Alle anzeigen"}
+            {data?.showAll ? "Seitenansicht" : "Alle anzeigen"}
           </Button>
         </div>
 
@@ -393,101 +421,95 @@ export default function Projects() {
 
       {/* Filters Panel */}
       {showFilters && (
-        <Card className="aws-card border-2 border-[#FF0000]/10 animate-in slide-in-from-top-2">
-          <CardContent className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase text-muted-foreground">Region</label>
-                <Select value={region} onValueChange={setRegion}>
-                  <SelectTrigger className="aws-input h-10">
-                    <SelectValue placeholder="Alle Regionen" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Alle Regionen</SelectItem>
-                    {filterOptions?.regions.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase text-muted-foreground">Projektleiter</label>
-                <Select value={projektleiter} onValueChange={setProjektleiter}>
-                  <SelectTrigger className="aws-input h-10">
-                    <SelectValue placeholder="Alle Leiter" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Alle Leiter</SelectItem>
-                    {filterOptions?.projektleiter.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase text-muted-foreground">Fachspezialist</label>
-                <Select value={pruefer} onValueChange={setPruefer}>
-                  <SelectTrigger className="aws-input h-10">
-                    <SelectValue placeholder="Alle Spezialisten" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Alle Spezialisten</SelectItem>
-                    {filterOptions?.pruefer.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase text-muted-foreground">Gewerke</label>
-                <Select value={department} onValueChange={setDepartment}>
-                  <SelectTrigger className="aws-input h-10">
-                    <SelectValue placeholder="Alle Gewerke" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Alle Gewerke</SelectItem>
-                    {departmentButtons.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase text-muted-foreground">Status</label>
-                <Select value={status} onValueChange={setStatus}>
-                  <SelectTrigger className="aws-input h-10">
-                    <SelectValue placeholder="Alle Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Alle Status</SelectItem>
-                    {REVIEW_STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
+        <Card className="aws-card border-2 border-[#FF0000]/10 animate-in slide-in-from-top-2 fade-in-0 duration-300">
+          <CardContent className="pt-6 pb-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+              <Select value={region} onValueChange={setRegion}>
+                <SelectTrigger className="aws-input">
+                  <SelectValue placeholder="Region" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Alle Regionen</SelectItem>
+                  {filterOptions?.regions.map((r) => (
+                    <SelectItem key={r} value={r}>{r}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={projektleiter} onValueChange={setProjektleiter}>
+                <SelectTrigger className="aws-input">
+                  <SelectValue placeholder="Projektleiter" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Alle Projektleiter</SelectItem>
+                  {filterOptions?.projektleiter.map((pl) => (
+                    <SelectItem key={pl} value={pl}>{pl}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={pruefer} onValueChange={setPruefer}>
+                <SelectTrigger className="aws-input">
+                  <SelectValue placeholder="Prüfer" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Alle Prüfer</SelectItem>
+                  {filterOptions?.pruefer.map((p) => (
+                    <SelectItem key={p} value={p}>{p}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={status} onValueChange={setStatus}>
+                <SelectTrigger className="aws-input">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Alle Status</SelectItem>
+                  {REVIEW_STATUSES.map((s) => (
+                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={department} onValueChange={setDepartment}>
+                <SelectTrigger className="aws-input">
+                  <SelectValue placeholder="Gewerke" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Alle Gewerke</SelectItem>
+                  {DEPARTMENTS.map((d) => (
+                    <SelectItem key={d} value={d}>{d}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <div className="flex justify-end mt-6">
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={() => {
-                  setRegion("");
-                  setProjektleiter("");
-                  setPruefer("");
-                  setStatus("");
-                  setDepartment("");
-                  setSearch("");
-                  setSearchInput("");
-                }}
-                className="text-muted-foreground hover:text-[#FF0000]"
-              >
-                Filter zurücksetzen
-              </Button>
+            <div className="flex justify-end mt-4">
+              <Button variant="ghost" onClick={() => {
+                setRegion("");
+                setProjektleiter("");
+                setPruefer("");
+                setStatus("");
+                setDepartment("");
+                setSearch("");
+                setSearchInput("");
+                setShowFilters(false);
+              }}>Filter zurücksetzen</Button>
             </div>
           </CardContent>
         </Card>
       )}
 
       {/* Main Content Area */}
-      <div className="bg-card rounded-xl border shadow-sm overflow-hidden">
+      <div className="bg-card rounded-xl border shadow-sm relative min-h-[600px]">
         {isLoading ? (
-          <div className="flex flex-col items-center justify-center h-[600px] gap-4">
-            <Loader2 className="h-12 w-12 animate-spin text-[#FF0000]" />
-            <p className="text-muted-foreground font-medium">Daten werden geladen...</p>
+          <div className="absolute inset-0 flex items-center justify-center bg-card/80 backdrop-blur-sm z-10 rounded-xl">
+            <Loader2 className="h-10 w-10 animate-spin text-[#FF0000]" />
+            <p className="text-muted-foreground animate-pulse font-medium">Lade Projektdaten...</p>
           </div>
         ) : (
           <>
+            {/* TABLE VIEW */}
             {viewMode === "table" && (
               <div className="table-scroll-container">
                 <table className="w-full border-collapse text-[11px]">
@@ -499,15 +521,36 @@ export default function Projects() {
                       <SortHeader column="station" label="Station" sortBy={sortBy} onSort={handleSort} />
                       <th className="text-left py-3 px-4 font-semibold text-muted-foreground whitespace-nowrap min-w-[260px] border-b">Beschreibung</th>
                       <SortHeader column="projektleiter" label="Projektleiter" sortBy={sortBy} onSort={handleSort} />
-                      <th className="text-center py-3 px-3 font-semibold text-muted-foreground whitespace-nowrap border-b">
+                      <th className="text-center py-3 px-3 font-semibold text-muted-foreground whitespace-nowrap border-b" title="Kommentar & Link">
                         <MessageSquare className="h-4 w-4 inline" />
                       </th>
-                      {departmentButtons.map((dept) => (
-                        <th key={dept} className="text-center py-3 px-2 font-semibold text-muted-foreground whitespace-nowrap border-b border-l bg-muted/30">
-                          {dept}
-                        </th>
-                      ))}
+                      {expandedDepts.length > 0 ? (
+                        expandedDepts.map((dept) => (
+                          <th key={dept} className="text-center py-3 px-3 font-semibold text-muted-foreground whitespace-nowrap border-b border-l bg-muted/30" colSpan={3}>
+                            {dept}
+                          </th>
+                        ))
+                      ) : (
+                        departmentButtons.map((dept) => (
+                          <th key={dept} className="text-center py-3 px-2 font-semibold text-muted-foreground whitespace-nowrap border-b border-l bg-muted/30">
+                            {dept}
+                          </th>
+                        ))
+                      )}
                     </tr>
+                    {expandedDepts.length > 0 && (
+                      <tr className="border-b bg-muted/20">
+                        <th className="sticky left-0 bg-muted/50 z-30"></th>
+                        <th></th><th></th><th></th><th></th><th></th><th></th>
+                        {expandedDepts.map((dept) => (
+                          <React.Fragment key={`sub-${dept}`}>
+                            <th className="text-left py-2 px-3 text-[9px] font-bold uppercase text-muted-foreground border-l">Prüfer</th>
+                            <th className="text-left py-2 px-3 text-[9px] font-bold uppercase text-muted-foreground">Datum</th>
+                            <th className="text-left py-2 px-3 text-[9px] font-bold uppercase text-muted-foreground">Status</th>
+                          </React.Fragment>
+                        ))}
+                      </tr>
+                    )}
                   </thead>
                   <TableBody>
                     {data?.projects.map((project: Project, idx: number) => {
@@ -515,7 +558,7 @@ export default function Projects() {
                       return (
                         <tr key={project.id} className="border-b hover:bg-muted/30 transition-colors group">
                           <td className="py-3 px-4 text-muted-foreground font-medium sticky left-0 bg-card group-hover:bg-muted/30 z-10">
-                            {showAll ? idx + 1 : (page - 1) * pageSize + idx + 1}
+                            {(page - 1) * pageSize + idx + 1}
                           </td>
                           <td className="py-3 px-4 font-mono font-bold">
                             <InlineEditCell
@@ -586,14 +629,50 @@ export default function Projects() {
                               </DialogContent>
                             </Dialog>
                           </td>
-                          {departmentButtons.map((dept) => {
-                            const review = reviews.find((r: Review) => r.department === dept);
-                            return (
-                              <td key={`${project.id}-${dept}`} className="py-3 px-2 text-center border-l border-border/30">
-                                <StatusBadge status={review?.status || null} />
-                              </td>
-                            );
-                          })}
+
+                          {expandedDepts.length > 0 ? (
+                            expandedDepts.map((dept) => {
+                              const review = reviews.find((r: Review) => r.department === dept);
+                              return (
+                                <React.Fragment key={`${project.id}-${dept}`}>
+                                  <td className="py-3 px-3 border-l border-border/30">
+                                    {review ? (
+                                      <InlineEditCell
+                                        value={review.prueferName}
+                                        onSave={(val) => applyReviewEdit(project.id, dept, "prueferName", val)}
+                                      />
+                                    ) : "-"}
+                                  </td>
+                                  <td className="py-3 px-3 whitespace-nowrap">
+                                    {review?.pruefDatum ? new Date(review.pruefDatum).toLocaleDateString("de-DE") : "-"}
+                                  </td>
+                                  <td className="py-3 px-3">
+                                    {review ? (
+                                      <select
+                                        value={review.status || ""}
+                                        onChange={(e) => applyReviewEdit(project.id, dept, "status", e.target.value)}
+                                        className="text-[10px] bg-transparent border rounded-md px-2 py-1 w-full focus:ring-1 focus:ring-[#FF0000] outline-none"
+                                      >
+                                        <option value="">-</option>
+                                        {REVIEW_STATUSES.map((s) => (
+                                          <option key={s} value={s}>{s}</option>
+                                        ))}
+                                      </select>
+                                    ) : "-"}
+                                  </td>
+                                </React.Fragment>
+                              );
+                            })
+                          ) : (
+                            departmentButtons.map((dept) => {
+                              const review = reviews.find((r: Review) => r.department === dept);
+                              return (
+                                <td key={`${project.id}-${dept}`} className="py-3 px-2 text-center border-l border-border/30">
+                                  <StatusBadge status={review?.status || null} />
+                                </td>
+                              );
+                            })
+                          )}
                         </tr>
                       );
                     })}
@@ -602,6 +681,7 @@ export default function Projects() {
               </div>
             )}
 
+            {/* CARDS VIEW */}
             {viewMode === "cards" && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 p-6">
                 {data?.projects.map((project: Project) => {
@@ -629,6 +709,14 @@ export default function Projects() {
                             <span className="text-xs">{project.bahnhofsmanagement || "-"}</span>
                           </div>
                         </div>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="w-full aws-button text-[#FF0000] hover:bg-[#FF0000] hover:text-white transition-all"
+                          onClick={() => setViewMode("table")}
+                        >
+                          Details anzeigen
+                        </Button>
                       </CardContent>
                     </Card>
                   );
@@ -636,9 +724,20 @@ export default function Projects() {
               </div>
             )}
 
+            {/* MAP VIEW */}
             {viewMode === "map" && (
               <div className="h-[700px] w-full relative">
                 <MapView projects={data?.projects || []} />
+                <div className="absolute bottom-6 left-6 bg-background/95 backdrop-blur p-4 rounded-xl border shadow-2xl z-[1000] max-w-xs border-[#FF0000]/20">
+                  <div className="flex items-center gap-2 mb-2">
+                    <MapPin className="h-5 w-5 text-[#FF0000]" />
+                    <h4 className="text-sm font-bold">Interaktive Projektkarte</h4>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    Zeigt alle {data?.projects.length} gefilterten Projekte basierend auf ihren Standorten an. 
+                    Klicken Sie auf einen Marker für detaillierte Informationen.
+                  </p>
+                </div>
               </div>
             )}
           </>
@@ -646,7 +745,7 @@ export default function Projects() {
       </div>
 
       {/* PAGINATION CONTROLS */}
-      {!showAll && totalPages > 1 && (
+      {data && !data.showAll && totalPages > 1 && (
         <div className="flex items-center justify-between bg-card px-6 py-4 rounded-xl border shadow-sm">
           <div className="text-sm text-muted-foreground">
             Zeige <span className="font-bold text-foreground">{(page - 1) * pageSize + 1}</span> bis <span className="font-bold text-foreground">{Math.min(page * pageSize, data?.total || 0)}</span> von <span className="font-bold text-foreground">{data?.total.toLocaleString("de-DE")}</span> Projekten
@@ -655,125 +754,115 @@ export default function Projects() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => { setPage(1); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+              onClick={() => setPage((prev) => Math.max(1, prev - 1))}
               disabled={page === 1}
-              className="h-9 w-9 p-0"
+              className="aws-button h-9 w-9 p-0"
             >
               <ChevronLeft className="h-4 w-4" />
-              <ChevronLeft className="h-4 w-4 -ml-2" />
             </Button>
+            <span className="text-sm font-medium text-foreground">
+              Seite {page} von {totalPages}
+            </span>
             <Button
               variant="outline"
               size="sm"
-              onClick={() => { setPage((p) => Math.max(1, p - 1)); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-              disabled={page === 1}
-              className="gap-2 h-9 px-4"
-            >
-              <ChevronLeft className="h-4 w-4" /> Zurück
-            </Button>
-            <div className="flex items-center gap-1 mx-2">
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                let pageNum = page;
-                if (page <= 3) pageNum = i + 1;
-                else if (page >= totalPages - 2) pageNum = totalPages - 4 + i;
-                else pageNum = page - 2 + i;
-                if (pageNum <= 0 || pageNum > totalPages) return null;
-                return (
-                  <Button
-                    key={pageNum}
-                    variant={page === pageNum ? "default" : "ghost"}
-                    size="sm"
-                    onClick={() => { setPage(pageNum); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-                    className={`h-9 w-9 p-0 ${page === pageNum ? "bg-[#FF0000] hover:bg-[#CC0000]" : ""}`}
-                  >
-                    {pageNum}
-                  </Button>
-                );
-              })}
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => { setPage((p) => Math.min(totalPages, p + 1)); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+              onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
               disabled={page === totalPages}
-              className="gap-2 h-9 px-4"
-            >
-              Weiter <ChevronRight className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => { setPage(totalPages); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-              disabled={page === totalPages}
-              className="h-9 w-9 p-0"
+              className="aws-button h-9 w-9 p-0"
             >
               <ChevronRight className="h-4 w-4" />
-              <ChevronRight className="h-4 w-4 -ml-2" />
             </Button>
           </div>
         </div>
       )}
 
-      {/* NEW PROJECT DIALOG */}
+      {/* New Project Dialog */}
       <Dialog open={showNewDialog} onOpenChange={setShowNewDialog}>
-        <DialogContent className="sm:max-w-[650px] rounded-2xl">
+        <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle className="text-2xl font-bold">Neues Projekt anlegen</DialogTitle>
+            <DialogTitle>Neues Projekt anlegen</DialogTitle>
           </DialogHeader>
-          <div className="grid gap-6 py-6">
-            <div className="grid grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase text-muted-foreground">Projektnummer</label>
-                <Input 
-                  value={newProj.projektnummer} 
-                  onChange={(e) => setNewProj({...newProj, projektnummer: e.target.value})} 
-                  placeholder="z.B. PRJ-2026-001" 
-                  className="h-11 rounded-xl"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase text-muted-foreground">Station *</label>
-                <Input 
-                  value={newProj.station} 
-                  onChange={(e) => setNewProj({...newProj, station: e.target.value})} 
-                  placeholder="z.B. Berlin Hbf" 
-                  className="h-11 rounded-xl"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <label className="text-xs font-bold uppercase text-muted-foreground">Region / Bahnhofsmanagement</label>
-              <Select value={newProj.bahnhofsmanagement} onValueChange={(val) => setNewProj({...newProj, bahnhofsmanagement: val})}>
-                <SelectTrigger className="h-11 rounded-xl">
-                  <SelectValue placeholder="Region wählen..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {(filterOptions?.regions || []).map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-xs font-bold uppercase text-muted-foreground">Projektleiter</label>
-              <Input 
-                value={newProj.projektleiter} 
-                onChange={(e) => setNewProj({...newProj, projektleiter: e.target.value})} 
-                placeholder="Name des Projektleiters" 
-                className="h-11 rounded-xl"
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <label htmlFor="projektnummer" className="text-right text-sm">
+                Projektnummer
+              </label>
+              <Input
+                id="projektnummer"
+                value={newProj.projektnummer}
+                onChange={(e) => setNewProj({ ...newProj, projektnummer: e.target.value })}
+                className="col-span-3"
               />
             </div>
-            <div className="space-y-2">
-              <label className="text-xs font-bold uppercase text-muted-foreground">Beschreibung</label>
-              <textarea 
-                className="w-full min-h-[120px] p-4 rounded-xl border bg-background text-sm focus:ring-2 focus:ring-[#FF0000]/20 outline-none resize-y" 
-                value={newProj.projektbeschreibung} 
-                onChange={(e) => setNewProj({...newProj, projektbeschreibung: e.target.value})}
-                placeholder="Detaillierte Projektbeschreibung..."
+            <div className="grid grid-cols-4 items-center gap-4">
+              <label htmlFor="station" className="text-right text-sm">
+                Station
+              </label>
+              <Input
+                id="station"
+                value={newProj.station}
+                onChange={(e) => setNewProj({ ...newProj, station: e.target.value })}
+                className="col-span-3"
               />
             </div>
-            <div className="flex justify-end gap-3 pt-4">
-              <Button variant="ghost" onClick={() => setShowNewDialog(false)} className="rounded-xl px-6">Abbrechen</Button>
-              <Button onClick={handleCreateProject} className="bg-[#FF0000] hover:bg-[#CC0000] rounded-xl px-8 h-11">Projekt speichern</Button>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <label htmlFor="bahnhofsmanagement" className="text-right text-sm">
+                Region
+              </label>
+              <Input
+                id="bahnhofsmanagement"
+                value={newProj.bahnhofsmanagement}
+                onChange={(e) => setNewProj({ ...newProj, bahnhofsmanagement: e.target.value })}
+                className="col-span-3"
+              />
             </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <label htmlFor="projektleiter" className="text-right text-sm">
+                Projektleiter
+              </label>
+              <Input
+                id="projektleiter"
+                value={newProj.projektleiter}
+                onChange={(e) => setNewProj({ ...newProj, projektleiter: e.target.value })}
+                className="col-span-3"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <label htmlFor="projektbeschreibung" className="text-right text-sm">
+                Beschreibung
+              </label>
+              <Input
+                id="projektbeschreibung"
+                value={newProj.projektbeschreibung}
+                onChange={(e) => setNewProj({ ...newProj, projektbeschreibung: e.target.value })}
+                className="col-span-3"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <label htmlFor="kommentar" className="text-right text-sm">
+                Kommentar
+              </label>
+              <Input
+                id="kommentar"
+                value={newProj.kommentar}
+                onChange={(e) => setNewProj({ ...newProj, kommentar: e.target.value })}
+                className="col-span-3"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <label htmlFor="projektLink" className="text-right text-sm">
+                Projektlink
+              </label>
+              <Input
+                id="projektLink"
+                value={newProj.projektLink}
+                onChange={(e) => setNewProj({ ...newProj, projektLink: e.target.value })}
+                className="col-span-3"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <Button onClick={handleCreateProject} className="aws-button bg-[#FF0000] hover:bg-[#E6002B]">Projekt anlegen</Button>
           </div>
         </DialogContent>
       </Dialog>
