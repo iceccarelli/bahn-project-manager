@@ -41,7 +41,7 @@ export const queryKeys = {
  */
 export function useAllProjects() {
   return useQuery({
-    queryKey: queryKeys.projects.list({ showAll: true }), // Always fetch all for global context
+    queryKey: queryKeys.projects.list({ showAll: true, minLat, maxLat, minLng, maxLng }), // Always fetch all for global context
     queryFn: async () => {
       const projects = await apiClient.projects.list();
       return { projects }; // Ensure it always returns an object with a projects array
@@ -204,6 +204,10 @@ export function useProjects(params: {
   sortBy?: string;
   sortDir?: "asc" | "desc";
   showAll?: boolean;
+  minLat?: number;
+  maxLat?: number;
+  minLng?: number;
+  maxLng?: number;
 }) {
   const { data: allProjectsData, isLoading: allProjectsLoading } = useAllProjects();
   const updateProjectMutation = useUpdateProject();
@@ -222,6 +226,10 @@ export function useProjects(params: {
     sortBy = "id",
     sortDir = "desc",
     showAll = false,
+  minLat,
+  maxLat,
+  minLng,
+  maxLng,
   } = params;
 
   const result = useMemo(() => {
@@ -301,7 +309,7 @@ export function useProjects(params: {
     }
 
     return { projects, total, page, pageSize, showAll };
-  }, [allProjectsData, page, pageSize, search, region, projektleiter, pruefer, status, department, sortBy, sortDir, showAll]);
+  }, [allProjectsData, page, pageSize, search, region, projektleiter, pruefer, status, department, sortBy, sortDir, showAll, minLat, maxLat, minLng, maxLng]);
 
   const applyEdit = useCallback(
     (projectId: number, field: string, value: string) => {
@@ -359,6 +367,15 @@ export function useFilters() {
   return { data, isLoading };
 }
 
+export function useSearchSuggestions(term: string) {
+  return useQuery({
+    queryKey: ["searchSuggestions", term],
+    queryFn: () => apiClient.projects.searchSuggestions(term),
+    enabled: !!term && term.length > 1, // Only fetch if term is not empty and has at least 2 characters
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+}
+
 export function useAllData() {
   const { data: projectsData, isLoading: pLoading } = useAllProjects();
   const { data: stats, isLoading: sLoading } = useDashboardStats();
@@ -374,3 +391,25 @@ export function useAllData() {
 }
 
 export type { Project, Review, Stats, Filters, AuditLogEntry };
+
+declare module "@/_core/api/client" {
+  export interface ApiClient {
+    projects: {
+      list(): Promise<Project[]>;
+      get(id: number): Promise<Project | null>;
+      create(input: ProjectCreateInput): Promise<Project>;
+      update(id: number, input: ProjectUpdateInput): Promise<Project>;
+      delete(id: number): Promise<void>;
+      searchSuggestions(term: string): Promise<string[]>;
+    };
+    reviews: {
+      update(input: ReviewUpdateInput): Promise<Project>;
+    };
+    dashboard: {
+      getStats(): Promise<Stats>;
+    };
+    audit: {
+      list(): Promise<AuditLogEntry[]>;
+    };
+  }
+}
