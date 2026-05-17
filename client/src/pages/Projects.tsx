@@ -134,8 +134,9 @@ function SortHeader({ column, label, sortBy, onSort }: SortHeaderProps) {
 export default function Projects() {
   const [page, setPage] = useState(1);
   const [pageSize] = useState(100);
-  const [search, setSearch] = useState("");
+  const [showAllProjects, setShowAllProjects] = useState(false); // Renamed to avoid conflict with hook param
   const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
   const [region, setRegion] = useState<string>("");
   const [projektleiter, setProjektleiter] = useState<string>("");
   const [pruefer, setPruefer] = useState<string>("");
@@ -168,6 +169,7 @@ export default function Projects() {
     department: department || undefined,
     sortBy,
     sortDir,
+    showAll: showAllProjects, // Use the local state here
   });
 
   const { data: filterOptions } = useFilters();
@@ -216,7 +218,9 @@ export default function Projects() {
       toast.error("Projekt-Erstellung nicht verfügbar");
       return;
     }
-    const createdId = addProject({
+    // The addProject mutation doesn't return the created ID directly, it invalidates queries.
+    // We'll rely on the query invalidation to refresh the list.
+    addProject({
       projektnummer: newProj.projektnummer.trim() || null,
       station: newProj.station.trim() || null,
       bahnhofsmanagement: newProj.bahnhofsmanagement || null,
@@ -225,20 +229,18 @@ export default function Projects() {
       kommentar: newProj.kommentar.trim() || null,
       projektLink: newProj.projektLink.trim() || null,
     });
-    if (createdId) {
-      toast.success(`Projekt #${createdId} erfolgreich angelegt!`);
-      setShowNewDialog(false);
-      setNewProj({
-        projektnummer: "",
-        station: "",
-        bahnhofsmanagement: "",
-        projektleiter: "",
-        projektbeschreibung: "",
-        kommentar: "",
-        projektLink: "",
-      });
-      setPage(1);
-    }
+    toast.success(`Projekt erfolgreich angelegt!`);
+    setShowNewDialog(false);
+    setNewProj({
+      projektnummer: "",
+      station: "",
+      bahnhofsmanagement: "",
+      projektleiter: "",
+      projektbeschreibung: "",
+      kommentar: "",
+      projektLink: "",
+    });
+    setPage(1);
   };
 
   const handleExport = useCallback(() => {
@@ -258,8 +260,8 @@ export default function Projects() {
         p.bahnhofsmanagement || "",
         p.station || "",
         p.projektleiter || "",
-        (p.projektbeschreibung || "").replace(/"/g, '""'),
-        (p.kommentar || "").replace(/"/g, '""'),
+        (p.projektbeschreibung || "").replace(/"/g, "\"\""),
+        (p.kommentar || "").replace(/"/g, "\"\""),
         p.projektLink || "",
         mainReview?.status || "-"
       ];
@@ -350,26 +352,15 @@ export default function Projects() {
             Filter
           </Button>
           <Button
-            variant={data?.showAll ? "default" : "outline"}
+            variant={showAllProjects ? "default" : "outline"}
             size="sm"
             onClick={() => {
-              // This logic needs to be handled by useProjects hook now
-              // For now, we'll just reset search and filters when toggling showAll
-              setSearch("");
-              setSearchInput("");
-              setRegion("");
-              setProjektleiter("");
-              setPruefer("");
-              setStatus("");
-              setDepartment("");
-              // The actual showAll state is managed within useProjects now
-              // This button will effectively trigger a re-fetch with showAll=true/false
-              // We might need a separate state for the button's visual representation
-              // or derive it from the useProjects hook's params.
+              setShowAllProjects(!showAllProjects);
+              setPage(1);
             }}
-            className={`aws-button h-10 ${data?.showAll ? "bg-[#FF0000] hover:bg-[#CC0000]" : ""}`}
+            className={`aws-button h-10 ${showAllProjects ? "bg-[#FF0000] hover:bg-[#CC0000]" : ""}`}
           >
-            {data?.showAll ? "Seitenansicht" : "Alle anzeigen"}
+            {showAllProjects ? "Seitenansicht" : "Alle anzeigen"}
           </Button>
         </div>
 
@@ -622,7 +613,7 @@ export default function Projects() {
                                             <ExternalLink className="h-4 w-4 text-[#FF0000]" />
                                           </a>
                                         </Button>
-                                       )}
+                                      )}
                                     </div>
                                   </div>
                                 </div>
@@ -745,7 +736,7 @@ export default function Projects() {
       </div>
 
       {/* PAGINATION CONTROLS */}
-      {data && !data.showAll && totalPages > 1 && (
+      {data && !showAllProjects && totalPages > 1 && (
         <div className="flex items-center justify-between bg-card px-6 py-4 rounded-xl border shadow-sm">
           <div className="text-sm text-muted-foreground">
             Zeige <span className="font-bold text-foreground">{(page - 1) * pageSize + 1}</span> bis <span className="font-bold text-foreground">{Math.min(page * pageSize, data?.total || 0)}</span> von <span className="font-bold text-foreground">{data?.total.toLocaleString("de-DE")}</span> Projekten
