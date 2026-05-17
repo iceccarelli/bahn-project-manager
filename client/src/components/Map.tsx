@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ExternalLink, MapPin, Navigation, Info, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 // Fix Leaflet default icon issue
 import icon from "leaflet/dist/images/marker-icon.png";
@@ -340,7 +341,7 @@ export const MapView: React.FC<MapViewProps> = ({
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                 </span>
                 <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-black">
-                  {projects.length.toLocaleString('de-DE')} Standorte synchronisiert
+                  {projects.length.toLocaleString('de-DE' )} Standorte synchronisiert
                 </p>
               </div>
             </div>
@@ -370,7 +371,7 @@ export const MapView: React.FC<MapViewProps> = ({
         </div>
       </div>
 
-      {/* Map Search Overlay (Visual Only) */}
+      {/* Map Search Overlay */}
       <div className="absolute top-6 right-16 z-[1000] pointer-events-none hidden md:block">
         <div className="flex items-center gap-2 bg-background/95 backdrop-blur-xl p-2 rounded-2xl border-2 border-border/50 shadow-2xl pointer-events-auto">
           <div className="relative">
