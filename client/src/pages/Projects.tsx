@@ -739,6 +739,7 @@ export default function Projects() {
 
             {/* MAP VIEW */}
             {viewMode === "map" && (
+              <>
                 <MapView
                   projects={data?.projects || []}
                   initialCenter={{ lat: 51.1657, lng: 10.4515 }}
@@ -756,7 +757,7 @@ export default function Projects() {
                     Klicken Sie auf einen Marker für detaillierte Informationen.
                   </p>
                 </div>
-              </div>
+              </>
             )}
           </>
         )}
