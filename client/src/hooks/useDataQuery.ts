@@ -41,7 +41,7 @@ export const queryKeys = {
  */
 export function useAllProjects() {
   return useQuery({
-    queryKey: queryKeys.projects.list({ showAll: true, minLat, maxLat, minLng, maxLng }), // Always fetch all for global context
+    queryKey: queryKeys.projects.list({ showAll: true }), // Always fetch all for global context
     queryFn: async () => {
       const projects = await apiClient.projects.list();
       return { projects }; // Ensure it always returns an object with a projects array
