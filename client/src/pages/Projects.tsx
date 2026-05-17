@@ -519,13 +519,24 @@ export default function Projects() {
                       </th>
                       {expandedDepts.length > 0 ? (
                         expandedDepts.map((dept) => (
-                          <th key={dept} className="text-center py-3 px-3 font-semibold text-muted-foreground whitespace-nowrap border-b border-l bg-muted/30" colSpan={3}>
+                          <th 
+                            key={dept} 
+                            className="text-center py-3 px-3 font-semibold text-muted-foreground whitespace-nowrap border-b border-l bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors" 
+                            colSpan={3}
+                            onClick={() => toggleDept(dept)}
+                            title="Klicken zum Minimieren"
+                          >
                             {dept}
                           </th>
                         ))
                       ) : (
                         departmentButtons.map((dept) => (
-                          <th key={dept} className="text-center py-3 px-2 font-semibold text-muted-foreground whitespace-nowrap border-b border-l bg-muted/30">
+                          <th 
+                            key={dept} 
+                            className="text-center py-3 px-2 font-semibold text-muted-foreground whitespace-nowrap border-b border-l bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors"
+                            onClick={() => toggleDept(dept)}
+                            title="Klicken zum Erweitern"
+                          >
                             {dept}
                           </th>
                         ))
