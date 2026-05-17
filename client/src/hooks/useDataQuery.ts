@@ -205,6 +205,7 @@ export function useProjects(params: {
   department?: string;
   sortBy?: string;
   sortDir?: "asc" | "desc";
+  showAll?: boolean;
 }) {
   const { data: allProjects, isLoading } = useAllProjects();
   const updateProjectMutation = useUpdateProject();
@@ -222,6 +223,7 @@ export function useProjects(params: {
     department,
     sortBy = "id",
     sortDir = "desc",
+    showAll = false,
   } = params;
 
   const result = useMemo(() => {
@@ -231,18 +233,29 @@ export function useProjects(params: {
 
     let filtered = [...allProjects];
 
+    // Enhanced Google-like search
     if (search) {
       const s = search.toLowerCase().trim();
-      filtered = filtered.filter(
-        (p) =>
-          p.station?.toLowerCase().includes(s) ||
-          p.projektbeschreibung?.toLowerCase().includes(s) ||
-          p.projektnummer?.toLowerCase().includes(s) ||
-          p.projektleiter?.toLowerCase().includes(s) ||
-          p.bahnhofsmanagement?.toLowerCase().includes(s) ||
-          p.kommentar?.toLowerCase().includes(s) ||
-          p.projektLink?.toLowerCase().includes(s)
-      );
+      const searchTerms = s.split(/\s+/);
+      
+      filtered = filtered.filter((p) => {
+        // Check if all search terms match at least one field
+        return searchTerms.every(term => {
+          return (
+            p.station?.toLowerCase().includes(term) ||
+            p.projektbeschreibung?.toLowerCase().includes(term) ||
+            p.projektnummer?.toLowerCase().includes(term) ||
+            p.projektleiter?.toLowerCase().includes(term) ||
+            p.bahnhofsmanagement?.toLowerCase().includes(term) ||
+            p.kommentar?.toLowerCase().includes(term) ||
+            p.reviews.some(r => 
+              r.prueferName?.toLowerCase().includes(term) || 
+              r.department?.toLowerCase().includes(term) ||
+              r.status?.toLowerCase().includes(term)
+            )
+          );
+        });
+      });
     }
 
     if (region) filtered = filtered.filter((p) => p.bahnhofsmanagement === region);
@@ -278,11 +291,17 @@ export function useProjects(params: {
     }
 
     const total = filtered.length;
-    const start = (page - 1) * pageSize;
-    const projects = filtered.slice(start, start + pageSize);
+    
+    let projects;
+    if (showAll) {
+      projects = filtered;
+    } else {
+      const start = (page - 1) * pageSize;
+      projects = filtered.slice(start, start + pageSize);
+    }
 
-    return { projects, total, page, pageSize };
-  }, [allProjects, page, pageSize, search, region, projektleiter, pruefer, status, department, sortBy, sortDir]);
+    return { projects, total, page, pageSize, showAll };
+  }, [allProjects, page, pageSize, search, region, projektleiter, pruefer, status, department, sortBy, sortDir, showAll]);
 
   const applyEdit = useCallback(
     (projectId: number, field: string, value: string) => {
@@ -335,9 +354,9 @@ export function useFilters() {
     });
 
     return {
-      regions: Array.from(regions),
-      projektleiter: Array.from(projektleiter),
-      pruefer: Array.from(pruefer),
+      regions: Array.from(regions).sort(),
+      projektleiter: Array.from(projektleiter).sort(),
+      pruefer: Array.from(pruefer).sort(),
     };
   }, [allProjects]);
 
