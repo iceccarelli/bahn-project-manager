@@ -1,10 +1,3 @@
-/**
- * useDataQuery.ts — Data Hooks with TanStack Query
- * 
- * Refactored from useData.ts to use useQuery/useMutation
- * Provides proper caching, invalidation, and optimistic updates
- */
-
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import { apiClient } from "@/_core/api/client";
@@ -26,7 +19,7 @@ import type {
 export const queryKeys = {
   projects: {
     all: ["projects"] as const,
-    list: () => [...queryKeys.projects.all, "list"] as const,
+    list: (params: any) => [...queryKeys.projects.all, "list", params] as const,
     detail: (id: number) => [...queryKeys.projects.all, "detail", id] as const,
   },
   stats: {
@@ -48,7 +41,7 @@ export const queryKeys = {
  */
 export function useAllProjects() {
   return useQuery({
-    queryKey: queryKeys.projects.list(),
+    queryKey: queryKeys.projects.list({ showAll: true }), // Always fetch all for global context
     queryFn: () => apiClient.projects.list(),
   });
 }
@@ -96,7 +89,7 @@ export function useCreateProject() {
   return useMutation({
     mutationFn: (input: ProjectCreateInput) => apiClient.projects.create(input),
     onSuccess: (newProject) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.projects.list() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.stats.dashboard() });
       queryClient.setQueryData(queryKeys.projects.detail(newProject.id), newProject);
     },
@@ -110,26 +103,27 @@ export function useUpdateProject() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: ProjectUpdateInput) => apiClient.projects.update(input),
+    mutationFn: (input: ProjectUpdateInput) => apiClient.projects.update(input.id, input),
     onMutate: async (input) => {
-      await queryClient.cancelQueries({ queryKey: queryKeys.projects.list() });
-      const previousProjects = queryClient.getQueryData<Project[]>(queryKeys.projects.list());
+      await queryClient.cancelQueries({ queryKey: queryKeys.projects.all });
+      const previousProjects = queryClient.getQueryData<Project[]>(queryKeys.projects.list({ showAll: true }));
 
       if (previousProjects) {
         const updated = previousProjects.map((p) =>
           p.id === input.id ? { ...p, [input.field]: input.value } : p
         );
-        queryClient.setQueryData(queryKeys.projects.list(), updated);
+        queryClient.setQueryData(queryKeys.projects.list({ showAll: true }), updated);
       }
 
       return { previousProjects };
     },
     onError: (err, input, context) => {
       if (context?.previousProjects) {
-        queryClient.setQueryData(queryKeys.projects.list(), context.previousProjects);
+        queryClient.setQueryData(queryKeys.projects.list({ showAll: true }), context.previousProjects);
       }
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.stats.dashboard() });
     },
   });
@@ -142,10 +136,10 @@ export function useUpdateReview() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: ReviewUpdateInput) => apiClient.reviews.update(input),
+    mutationFn: (input: ReviewUpdateInput) => apiClient.reviews.update(input.id, input),
     onMutate: async (input) => {
-      await queryClient.cancelQueries({ queryKey: queryKeys.projects.list() });
-      const previousProjects = queryClient.getQueryData<Project[]>(queryKeys.projects.list());
+      await queryClient.cancelQueries({ queryKey: queryKeys.projects.all });
+      const previousProjects = queryClient.getQueryData<Project[]>(queryKeys.projects.list({ showAll: true }));
 
       if (previousProjects) {
         const updated = previousProjects.map((p) => {
@@ -159,17 +153,18 @@ export function useUpdateReview() {
             ),
           };
         });
-        queryClient.setQueryData(queryKeys.projects.list(), updated);
+        queryClient.setQueryData(queryKeys.projects.list({ showAll: true }), updated);
       }
 
       return { previousProjects };
     },
     onError: (err, input, context) => {
       if (context?.previousProjects) {
-        queryClient.setQueryData(queryKeys.projects.list(), context.previousProjects);
+        queryClient.setQueryData(queryKeys.projects.list({ showAll: true }), context.previousProjects);
       }
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.stats.dashboard() });
     },
   });
@@ -184,7 +179,7 @@ export function useDeleteProject() {
   return useMutation({
     mutationFn: (id: number) => apiClient.projects.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.projects.list() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.stats.dashboard() });
     },
   });
@@ -207,7 +202,7 @@ export function useProjects(params: {
   sortDir?: "asc" | "desc";
   showAll?: boolean;
 }) {
-  const { data: allProjects, isLoading } = useAllProjects();
+  const { data: allProjects, isLoading: allProjectsLoading } = useAllProjects();
   const updateProjectMutation = useUpdateProject();
   const updateReviewMutation = useUpdateReview();
   const createProjectMutation = useCreateProject();
@@ -228,10 +223,10 @@ export function useProjects(params: {
 
   const result = useMemo(() => {
     if (!allProjects) {
-      return { projects: [], total: 0, page, pageSize };
+      return { projects: [], total: 0, page, pageSize, showAll };
     }
 
-    let filtered = [...allProjects];
+    let filtered = [...allProjects.projects];
 
     // Enhanced Google-like search
     if (search) {
@@ -326,16 +321,11 @@ export function useProjects(params: {
 
   return {
     data: result,
-    isLoading: isLoading || updateProjectMutation.isPending || updateReviewMutation.isPending,
+    isLoading: allProjectsLoading || updateProjectMutation.isPending || updateReviewMutation.isPending || createProjectMutation.isPending,
     applyEdit,
     applyReviewEdit,
     addProject,
   };
-}
-
-export function useStats() {
-  const { data, isLoading } = useDashboardStats();
-  return { data: data ?? null, isLoading };
 }
 
 export function useFilters() {
@@ -347,7 +337,7 @@ export function useFilters() {
     const projektleiter = new Set<string>();
     const pruefer = new Set<string>();
 
-    allProjects.forEach((p) => {
+    allProjects.projects.forEach((p) => {
       if (p.bahnhofsmanagement) regions.add(p.bahnhofsmanagement);
       if (p.projektleiter) projektleiter.add(p.projektleiter);
       p.reviews.forEach((r) => { if (r.prueferName) pruefer.add(r.prueferName); });
@@ -376,4 +366,4 @@ export function useAllData() {
   return { data, isLoading: pLoading || sLoading || fLoading };
 }
 
-export type { Project, Review, Stats, Filters };
+export type { Project, Review, Stats, Filters, AuditLogEntry };
