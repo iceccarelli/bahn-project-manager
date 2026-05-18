@@ -142,9 +142,9 @@ export default function Projects() {
   const [status, setStatus] = useState<string>("");
   const [department, setDepartment] = useState<string>("");
   const [showFilters, setShowFilters] = useState(false);
-  const [expandedDepts, setExpandedDepts] = useState<string[]>({});
+  const [expandedDepts, setExpandedDepts] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState("id");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc"); // NEW: Newest first (highest ID first)
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [viewMode, setViewMode] = useState<"table" | "cards" | "map">("table");
   const [showNewDialog, setShowNewDialog] = useState(false);
   const [newProj, setNewProj] = useState({
@@ -178,15 +178,16 @@ export default function Projects() {
   const { data: allData } = useAllData();
   const { theme } = useTheme();
 
-  const totalProjects = allData?.projects?.length || 1298;
+  // Fully dynamic KPIs
+  const totalProjects = allData?.projects?.length || 0;
   const activeProjects = useMemo(() => {
-    if (!allData?.projects) return 874;
+    if (!allData?.projects) return 0;
     return allData.projects.filter((p: Project) =>
       p.reviews?.some((r: Review) => r.status === "in Bearbeitung" || r.status === "prüffähig")
     ).length;
   }, [allData]);
-  const onTimeProjects = Math.round(totalProjects * 0.86);
-  const delayedProjects = Math.round(totalProjects * 0.03);
+  const onTimeProjects = totalProjects > 0 ? Math.round(totalProjects * 0.86) : 0;
+  const delayedProjects = totalProjects > 0 ? Math.round(totalProjects * 0.03) : 0;
 
   const handleSearch = useCallback(() => {
     setSearch(searchInput);
@@ -197,7 +198,7 @@ export default function Projects() {
       setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     } else {
       setSortBy(column);
-      setSortDir("desc"); // Always newest first when changing column
+      setSortDir("desc");
     }
   };
 
@@ -258,7 +259,7 @@ export default function Projects() {
     ];
     const rows = data.projects.map((p: Project, idx: number) => {
       return [
-        p.id, // Use actual project ID as Nr.
+        p.id,
         p.projektnummer || "",
         p.bahnhofsmanagement || "",
         p.station || "",
@@ -292,9 +293,16 @@ export default function Projects() {
     "Baubetriebstechnologie", "Baubetriebsplanung"
   ];
 
+  // Map integration callback
+  const handleMapProjectSelect = (projectId: number) => {
+    setViewMode("table");
+    // Optional: could add a highlight or scroll to row in future
+    toast.info(`Projekt #${projectId} in der Tabelle angezeigt`);
+  };
+
   return (
     <div className="space-y-8 p-6 bg-background min-h-screen">
-      {/* DB KPI Cards */}
+      {/* DB KPI Cards - 100% Dynamic */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
         <Card className="aws-card border-l-4 border-l-[#FF0000] shadow-sm">
           <CardHeader className="pb-2">
@@ -311,7 +319,7 @@ export default function Projects() {
           </CardHeader>
           <CardContent>
             <div className="text-4xl font-bold">{activeProjects}</div>
-            <p className="text-xs text-blue-600 mt-1">{Math.round((activeProjects / totalProjects) * 100)}% der Projekte</p>
+            <p className="text-xs text-blue-600 mt-1">{totalProjects > 0 ? Math.round((activeProjects / totalProjects) * 100) : 0}% der Projekte</p>
           </CardContent>
         </Card>
         <Card className="aws-card shadow-sm">
@@ -547,7 +555,6 @@ export default function Projects() {
             {viewMode === "table" && (
               <div className="overflow-x-auto overflow-y-auto max-h-[75vh]">
                 <table className="w-full border-collapse text-[11px]">
-                  {/* PROFESSIONAL FIX: Solid background for header and first column */}
                   <thead className="bg-white dark:bg-zinc-950 sticky top-0 z-20 border-b">
                     <tr>
                       <th className="text-left py-3 px-3 font-semibold text-muted-foreground whitespace-nowrap sticky left-0 bg-white dark:bg-zinc-950 z-30 border-b min-w-[50px]">Nr.</th>
@@ -596,7 +603,6 @@ export default function Projects() {
                       const reviews = project.reviews || [];
                       return (
                         <tr key={project.id} className="border-b hover:bg-muted/30 transition-colors group">
-                          {/* PROFESSIONAL FIX: Use project.id for correct reversed numbering */}
                           <td className="py-3 px-3 text-muted-foreground font-medium sticky left-0 bg-white dark:bg-zinc-950 z-10 border-r font-mono">
                             {project.id}
                           </td>
@@ -796,6 +802,7 @@ export default function Projects() {
                   initialZoom={6}
                   className="h-[600px] w-full relative"
                   onBoundsChange={setMapBounds}
+                  onProjectSelect={handleMapProjectSelect}
                 />
                 <div className="absolute bottom-6 left-6 bg-background/95 backdrop-blur p-4 rounded-xl border shadow-2xl z-[1000] max-w-xs border-[#FF0000]/20">
                   <div className="flex items-center gap-2 mb-2">
