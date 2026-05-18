@@ -1,13 +1,10 @@
 /**
- * client.ts — API Client & Mock Backend
+ * client.ts — API Client & Mock Backend (UPDATED FOR PERFECT data.json INTEGRATION)
  * 
  * Handles data fetching, persistence, and simulated server procedures.
- * Integrated with your provided data.json URL for initial source of truth.
+ * Now prioritizes local /data.json for maximum reliability and consistency.
  * 
- * Project fields match Excel Übersichtsliste column structure exactly:
- * Nr. (computed) | Projektnummer | Bahnhofsmanagement | Station | Bahnhofsnummer |
- * Streckennummer | Projektbeschreibung | Projektstand | Projektleiter |
- * Termin Projektvorstellung | [14 dept reviews] | Kommentar | Projektlink
+ * Project fields match Excel Übersichtsliste column structure exactly.
  */
 
 import type { Project, Review, Stats, AuditLogEntry } from "@/hooks/useDataQuery";
@@ -41,20 +38,43 @@ export interface ProjectCreateInput {
 
 const STORAGE_KEY_PROJECTS = "bahn_projects";
 const STORAGE_KEY_AUDIT = "bahn_audit_log";
-const DATA_JSON_URL = "https://raw.githubusercontent.com/iceccarelli/bahn-project-manager/refs/heads/main/client/public/data.json";
+
+// Local-first data source (served automatically by Vercel from public/data.json)
+const LOCAL_DATA_JSON_URL = "/data.json";
 
 async function initializeStorage() {
   const stored = localStorage.getItem(STORAGE_KEY_PROJECTS);
-  if (stored) return JSON.parse(stored);
+  if (stored) {
+    try {
+      return JSON.parse(stored);
+    } catch (e) {
+      console.warn("Corrupted localStorage, reloading from data.json");
+    }
+  }
 
   try {
-    const res = await fetch(DATA_JSON_URL);
+    // 1. Try local /data.json first (fastest + most reliable)
+    const res = await fetch(LOCAL_DATA_JSON_URL);
+    if (res.ok) {
+      const data = await res.json();
+      const projects = data.projects || data;
+      localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
+      console.log(`✅ Loaded ${projects.length} projects from local /data.json`);
+      return projects;
+    }
+  } catch (err) {
+    console.warn("Local /data.json not available, trying remote fallback...");
+  }
+
+  // 2. Fallback to remote GitHub raw (original behavior)
+  try {
+    const res = await fetch("https://raw.githubusercontent.com/iceccarelli/bahn-project-manager/refs/heads/main/client/public/data.json");
     const data = await res.json();
-    const projects = data.projects || data; // Handle both {projects:[]} and []
+    const projects = data.projects || data;
     localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
     return projects;
   } catch (err) {
-    console.error("Failed to initialize storage from remote JSON:", err);
+    console.error("Failed to load any data source:", err);
     return [];
   }
 }
@@ -114,7 +134,6 @@ export const apiClient = {
         })),
       };
 
-      // Add new project at end (ascending order: Nr. 1 at top, newest at bottom)
       projects.push(newProject);
       localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
       recordAudit("Projekt erstellt", `Projekt ${newProject.projektnummer} (${newProject.station}) angelegt.`);
