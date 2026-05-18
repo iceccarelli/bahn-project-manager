@@ -22,6 +22,10 @@ export type InsertUser = typeof users.$inferInsert;
  * Projects table - main entity representing a Bahnhof project.
  * Each row corresponds to one row in the Excel Übersichtsliste.
  * Enhanced with originalRowIndex + fullRowData for perfect data fidelity (zero cell loss on import).
+ * 
+ * Column order matches Excel: Projektnummer, Bahnhofsmanagement, Station, Bahnhofsnummer,
+ * Streckennummer, Projektbeschreibung, Projektstand, Projektleiter, Termin Projektvorstellung,
+ * [14 dept columns via department_reviews], Kommentar, Link zum Projekt
  */
 export const projects = mysqlTable("projects", {
   id: int("id").autoincrement().primaryKey(),
@@ -33,8 +37,10 @@ export const projects = mysqlTable("projects", {
   bahnhofsnummer: varchar("bahnhofsnummer", { length: 32 }),
   streckennummer: varchar("streckennummer", { length: 32 }),
   projektbeschreibung: text("projektbeschreibung"),
+  projektstand: varchar("projektstand", { length: 128 }),
   eigvEinstufung: text("eigvEinstufung"),
   projektleiter: varchar("projektleiter", { length: 256 }),
+  terminProjektvorstellung: datetime("terminProjektvorstellung"),
   kommentar: text("kommentar"),
   projektLink: text("projektLink"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
