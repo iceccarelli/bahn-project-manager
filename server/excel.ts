@@ -2,14 +2,41 @@
  * Excel import/export functionality.
  * Provides endpoints for exporting current data and importing new data from Excel files.
  * Updated for deployment: 
- * - Includes all 14 departments (with BS correctly placed after ITK to match Übersichtsliste_Dashboard_1.xlsm column order)
- * - Supports BOTH export format ("XXX - Status", "XXX - Prüfer", "XXX - Datum") AND legacy Übersichtsliste.xlsm format (exact column names from the uploaded file)
+ * - Includes all 14 departments (with BS correctly placed after ITK to match Übersichtsliste column order)
+ * - Supports BOTH export format ("XXX - Status", "XXX - Prüfer", "XXX - Datum") AND legacy Übersichtsliste.xlsm format
  * - Improved date parsing (supports DD.MM.YYYY, DD/MM/YYYY, DD-MM-YYYY, 1 or 2 digit days/months, Excel serial dates)
  * - Perfect data fidelity: stores originalRowIndex + fullRowData (JSON) for every imported row
  * - Better error resilience and logging with exact row numbers
  * - Freeze panes + extended column widths for better usability in Excel
  * - Fully integrates with the project schema, tRPC/Express routes, and GitHub repo structure
- * - Ready for production use with the provided Übersichtsliste_Dashboard_1.xlsm and round-tripping exports
+ * - Ready for production use with the provided Übersichtsliste.xlsm and round-tripping exports
+ * 
+ * Excel Column Structure (Übersichtsliste.xlsm):
+ * Col 0: Projektnummer
+ * Col 1: Bahnhofsmanagement
+ * Col 2: Station
+ * Col 3: Bahnhofsnummer
+ * Col 4: Streckennummer
+ * Col 5: Projektbeschreibung
+ * Col 6: Projektstand          <-- NEW (was previously mapped to eigvEinstufung)
+ * Col 7: Projektleiter
+ * Col 8: Termin Projektvorstellung  <-- NEW
+ * Col 9-11: EEA (Status, Name, Datum)
+ * Col 12-14: ITK
+ * Col 15-17: BS
+ * Col 18-20: GA
+ * Col 21-23: Energie
+ * Col 24-26: HFT
+ * Col 27-29: HKLS
+ * Col 30-32: TBQ
+ * Col 33-35: UM
+ * Col 36-38: BIM
+ * Col 39-41: LST
+ * Col 42-44: Vermessung
+ * Col 45-47: Baubetriebstechnologie
+ * Col 48-50: Baubetriebsplanung
+ * Col 51: Kommentar
+ * Col 52: Link zum Projekt
  */
 import { Express, Request, Response } from 'express';
 import * as XLSX from 'xlsx';
@@ -17,7 +44,7 @@ import { getDb } from './db';
 import { projects, departmentReviews } from '../drizzle/schema';
 import { eq, asc } from 'drizzle-orm';
 
-// Canonical department list - EXACT order from the uploaded Übersichtsliste_Dashboard_1.xlsm header row
+// Canonical department list - EXACT order from the uploaded Übersichtsliste.xlsm header row
 // This ensures perfect visual and logical harmony across UI, export, import and database
 const DEPARTMENTS = [
   "EEA",
@@ -64,8 +91,11 @@ export function registerExcelRoutes(app: Express) {
           'Bahnhofsnummer': project.bahnhofsnummer || '',
           'Streckennummer': project.streckennummer || '',
           'Projektbeschreibung': project.projektbeschreibung || '',
-          'EIGV-Einstufung': project.eigvEinstufung || '',
+          'Projektstand': project.projektstand || '',
           'Projektleiter': project.projektleiter || '',
+          'Termin Projektvorstellung': project.terminProjektvorstellung 
+            ? new Date(project.terminProjektvorstellung).toLocaleDateString('de-DE') 
+            : '',
         };
 
         const projectReviews = reviewsByProject[project.id] || [];
@@ -86,7 +116,7 @@ export function registerExcelRoutes(app: Express) {
 
       const baseCols = [
         { wch: 18 }, { wch: 16 }, { wch: 25 }, { wch: 12 }, { wch: 12 },
-        { wch: 45 }, { wch: 16 }, { wch: 25 }
+        { wch: 45 }, { wch: 16 }, { wch: 25 }, { wch: 18 }
       ];
       const deptCols = DEPARTMENTS.flatMap(() => [
         { wch: 18 }, { wch: 14 }, { wch: 12 }
@@ -105,7 +135,7 @@ export function registerExcelRoutes(app: Express) {
           "Niederschrift erstellt", "abgelehnt", "zurückgestellt", "gestoppt"
         ].join(', ') },
         { Info: 'Date format: DD.MM.YYYY (German)' },
-        { Info: 'To re-import: Use POST /api/import/excel with this file or the original Übersichtsliste_Dashboard_1.xlsm (legacy format supported)' },
+        { Info: 'To re-import: Use POST /api/import/excel with this file or the original Übersichtsliste.xlsm (legacy format supported)' },
       ];
       const legendWs = XLSX.utils.json_to_sheet(legendData);
       legendWs['!cols'] = [{ wch: 120 }];
@@ -122,7 +152,7 @@ export function registerExcelRoutes(app: Express) {
     }
   });
 
-  // Import Excel file - PERFECT SUPPORT for the uploaded Übersichtsliste_Dashboard_1.xlsm
+  // Import Excel file - PERFECT SUPPORT for the uploaded Übersichtsliste.xlsm
   app.post('/api/import/excel', async (req: Request, res: Response) => {
     try {
       const db = await getDb();
@@ -166,7 +196,26 @@ export function registerExcelRoutes(app: Express) {
             if (!row || row.every((cell: any) => !cell)) continue;
 
             try {
-              // Build project data
+              // Parse terminProjektvorstellung (col 8 in legacy format)
+              let terminPV: Date | null = null;
+              const terminStr = isLegacyFormat ? row[8] : null;
+              if (terminStr) {
+                const cleaned = String(terminStr).trim();
+                if (typeof terminStr === 'number' && terminStr > 40000) {
+                  terminPV = new Date((terminStr - 25569) * 86400 * 1000);
+                } else {
+                  const parts = cleaned.match(/(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})/);
+                  if (parts) {
+                    const day = parts[1].padStart(2, '0');
+                    const month = parts[2].padStart(2, '0');
+                    const year = parts[3];
+                    const parsed = new Date(`${year}-${month}-${day}`);
+                    if (!isNaN(parsed.getTime())) terminPV = parsed;
+                  }
+                }
+              }
+
+              // Build project data - column mapping matches Excel exactly
               const projectData: any = {
                 projektnummer: row[0] || null,
                 bahnhofsmanagement: row[1] || null,
@@ -174,10 +223,11 @@ export function registerExcelRoutes(app: Express) {
                 bahnhofsnummer: row[3] || null,
                 streckennummer: row[4] || null,
                 projektbeschreibung: row[5] || null,
-                eigvEinstufung: row[6] || null,
+                projektstand: row[6] || null,
                 projektleiter: row[7] || null,
-                kommentar: row[52] || null,
-                projektLink: row[53] || null,
+                terminProjektvorstellung: terminPV,
+                kommentar: row[51] || null,
+                projektLink: row[52] || null,
                 originalRowIndex: i,
                 fullRowData: JSON.stringify(row),
               };
@@ -192,11 +242,21 @@ export function registerExcelRoutes(app: Express) {
                 let dateStr: string | undefined;
 
                 if (!isLegacyFormat) {
-                  status = row[`${dept} - Status`];
-                  name = row[`${dept} - Prüfer`];
-                  dateStr = row[`${dept} - Datum`];
+                  // In non-legacy format, data is accessed by header index from json_to_sheet
+                  // This path is for re-importing our own export format
+                  const headerIdx = headerRow.indexOf(`${dept} - Status`);
+                  if (headerIdx >= 0) {
+                    status = row[headerIdx] as string | undefined;
+                    name = row[headerIdx + 1] as string | undefined;
+                    dateStr = row[headerIdx + 2] as string | undefined;
+                  } else {
+                    status = undefined;
+                    name = undefined;
+                    dateStr = undefined;
+                  }
                 } else {
-                  // Exact mapping from the uploaded Übersichtsliste_Dashboard_1.xlsm header
+                  // Exact mapping from the uploaded Übersichtsliste.xlsm header
+                  // Col 9 starts departments: each dept has 3 cols (Status, Name, Datum)
                   const legacyMap: Record<string, { statusCol: number; prueferCol: number; datumCol: number }> = {
                     "EEA": { statusCol: 9, prueferCol: 10, datumCol: 11 },
                     "ITK": { statusCol: 12, prueferCol: 13, datumCol: 14 },
@@ -244,7 +304,7 @@ export function registerExcelRoutes(app: Express) {
                     projectId,
                     department: dept,
                     prueferName: name || null,
-                    datum: datum ? datum.toISOString().split('T')[0] : null,
+                    datum: datum || null,
                     status: status || null,
                   });
                 }
