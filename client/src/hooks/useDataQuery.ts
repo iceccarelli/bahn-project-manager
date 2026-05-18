@@ -258,21 +258,22 @@ export function useProjects(params: {
       const searchTerms = s.split(/\s+/);
       
       filtered = filtered.filter((p) => {
-        return searchTerms.every(term => {
+        return searchTerms.every((term) => {
+          const lowerTerm = term.toLowerCase();
           return (
-            p.station?.toLowerCase().includes(term) ||
-            p.projektbeschreibung?.toLowerCase().includes(term) ||
-            p.projektnummer?.toLowerCase().includes(term) ||
-            p.projektleiter?.toLowerCase().includes(term) ||
-            p.bahnhofsmanagement?.toLowerCase().includes(term) ||
-            p.projektstand?.toLowerCase().includes(term) ||
-            p.bahnhofsnummer?.toLowerCase().includes(term) ||
-            p.streckennummer?.toLowerCase().includes(term) ||
-            p.kommentar?.toLowerCase().includes(term) ||
-            p.reviews?.some(r => 
-              r.prueferName?.toLowerCase().includes(term) || 
-              r.department?.toLowerCase().includes(term) ||
-              r.status?.toLowerCase().includes(term)
+            (p.station?.toLowerCase() || "").includes(lowerTerm) ||
+            (p.projektbeschreibung?.toLowerCase() || "").includes(lowerTerm) ||
+            (p.projektnummer?.toLowerCase() || "").includes(lowerTerm) ||
+            (p.projektleiter?.toLowerCase() || "").includes(lowerTerm) ||
+            (p.bahnhofsmanagement?.toLowerCase() || "").includes(lowerTerm) ||
+            (p.projektstand?.toLowerCase() || "").includes(lowerTerm) ||
+            (p.bahnhofsnummer?.toLowerCase() || "").includes(lowerTerm) ||
+            (p.streckennummer?.toLowerCase() || "").includes(lowerTerm) ||
+            (p.kommentar?.toLowerCase() || "").includes(lowerTerm) ||
+            p.reviews?.some((r) =>
+              (r.prueferName?.toLowerCase() || "").includes(lowerTerm) ||
+              (r.department?.toLowerCase() || "").includes(lowerTerm) ||
+              (r.status?.toLowerCase() || "").includes(lowerTerm)
             )
           );
         });
@@ -346,9 +347,11 @@ export function useProjects(params: {
 export function useFilters() {
   const { data: allProjectsData, isLoading } = useAllProjects();
 
-  const data: Filters | null = useMemo(() => {
+  const data: Filters = useMemo(() => {
     const allProjects = allProjectsData?.projects || [];
-    if (!allProjects || allProjects.length === 0) return null;
+    if (!allProjects || allProjects.length === 0) {
+      return { regions: [], projektleiter: [], pruefer: [] };
+    }
 
     const regions = new Set<string>();
     const projektleiter = new Set<string>();
@@ -357,9 +360,9 @@ export function useFilters() {
     allProjects.forEach((p) => {
       if (p.bahnhofsmanagement) regions.add(p.bahnhofsmanagement);
       if (p.projektleiter) projektleiter.add(p.projektleiter);
-      p.reviews?.forEach((r) => { 
-        if (r.prueferName && r.prueferName !== 'Zuordnung erforderlich') {
-          pruefer.add(r.prueferName); 
+      p.reviews?.forEach((r) => {
+        if (r.prueferName && r.prueferName !== "Zuordnung erforderlich") {
+          pruefer.add(r.prueferName);
         }
       });
     });
@@ -390,7 +393,7 @@ export function useAllData() {
 
   const data = useMemo(() => {
     const projects = projectsData?.projects || [];
-    if (!projects || projects.length === 0 || !stats || !filters) return null;
+    if (!projects.length || !stats || !filters) return null;
     return { projects, stats, filters };
   }, [projectsData, stats, filters]);
 
