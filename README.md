@@ -270,43 +270,6 @@ flowchart TD
     style DB fill:#dcfce7,stroke:#16a34a
 ```
 
----
-
-**Target Future Architecture (with Microsoft 365 + Mobile + SSO):**
-
-```mermaid
-flowchart TD
-    subgraph Web
-        W[React Web App<br/>MSAL Authentication]
-    end
-    subgraph Mobile
-        M[React Native + Expo<br/>Offline-first + Push]
-    end
-    subgraph Backend
-        API[Express / Future Hono API<br/>Protected by Entra ID + JWT]
-        Graph[Microsoft Graph Client]
-    end
-    subgraph Microsoft 365
-        Entra[Entra ID + RBAC + SSO]
-        SP[SharePoint Documents]
-        Teams[Teams Notifications]
-        Planner[Planner / Outlook Tasks]
-        PowerBI[Power BI Dashboards]
-    end
-    subgraph Data
-        DB[(PostgreSQL + Audit)]
-        RT[Real-time Layer<br/>Azure SignalR / Web PubSub]
-    end
-    W & M -->|MSAL + JWT| API
-    API --> Graph
-    Graph --> SP & Teams & Planner
-    API --> DB
-    API --> RT
-    RT --> W & M
-    Entra --> API
-    PowerBI -.-> DB
-```
-
 The architecture is designed to evolve cleanly toward full server state management, real-time updates, **Microsoft Entra ID protected APIs with SSO**, and shared code with a future React Native app.
 
 ---
