@@ -142,7 +142,7 @@ export default function Projects() {
   const [status, setStatus] = useState<string>("");
   const [department, setDepartment] = useState<string>("");
   const [showFilters, setShowFilters] = useState(false);
-  const [expandedDepts, setExpandedDepts] = useState<string[]>([]);
+  const [expandedDepts, setExpandedDepts] = useState<string[]>({});
   const [sortBy, setSortBy] = useState("id");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [viewMode, setViewMode] = useState<"table" | "cards" | "map">("table");
@@ -547,9 +547,10 @@ export default function Projects() {
             {viewMode === "table" && (
               <div className="overflow-x-auto overflow-y-auto max-h-[75vh]">
                 <table className="w-full border-collapse text-[11px]">
-                  <thead className="bg-muted/50 sticky top-0 z-20">
+                  {/* PROFESSIONAL FIX: Solid background for header and first column */}
+                  <thead className="bg-white dark:bg-zinc-950 sticky top-0 z-20 border-b">
                     <tr>
-                      <th className="text-left py-3 px-3 font-semibold text-muted-foreground whitespace-nowrap sticky left-0 bg-muted/50 z-30 border-b min-w-[50px]">Nr.</th>
+                      <th className="text-left py-3 px-3 font-semibold text-muted-foreground whitespace-nowrap sticky left-0 bg-white dark:bg-zinc-950 z-30 border-b min-w-[50px]">Nr.</th>
                       <SortHeader column="projektnummer" label="Projektnummer" sortBy={sortBy} onSort={handleSort} />
                       <SortHeader column="bahnhofsmanagement" label="Region" sortBy={sortBy} onSort={handleSort} />
                       <SortHeader column="station" label="Station" sortBy={sortBy} onSort={handleSort} />
@@ -578,7 +579,7 @@ export default function Projects() {
                     </tr>
                     {expandedDepts.length > 0 && (
                       <tr className="border-b bg-muted/20">
-                        <th className="sticky left-0 bg-muted/50 z-30"></th>
+                        <th className="sticky left-0 bg-white dark:bg-zinc-950 z-30"></th>
                         <th></th><th></th><th></th><th></th><th></th><th></th><th></th><th></th><th></th><th></th>
                         {expandedDepts.map((dept) => (
                           <React.Fragment key={`sub-${dept}`}>
@@ -595,7 +596,8 @@ export default function Projects() {
                       const reviews = project.reviews || [];
                       return (
                         <tr key={project.id} className="border-b hover:bg-muted/30 transition-colors group">
-                          <td className="py-3 px-3 text-muted-foreground font-medium sticky left-0 bg-card group-hover:bg-muted/30 z-10 border-r">
+                          {/* PROFESSIONAL FIX: Solid background for first column */}
+                          <td className="py-3 px-3 text-muted-foreground font-medium sticky left-0 bg-white dark:bg-zinc-950 z-10 border-r">
                             {idx + 1}
                           </td>
                           <td className="py-3 px-4 font-mono font-bold whitespace-nowrap">
