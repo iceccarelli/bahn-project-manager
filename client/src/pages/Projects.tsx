@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import { useProjects, useFilters, useAllData, useSearchSuggestions, type Project, type Review } from "@/hooks/useDataQuery";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -132,42 +132,45 @@ function SortHeader({ column, label, sortBy, onSort }: SortHeaderProps) {
 }
 
 export default function Projects() {
-
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const { data: searchSuggestions } = useSearchSuggestions(searchInput);
   const [mapBounds, setMapBounds] = useState<{ minLat?: number; maxLat?: number; minLng?: number; maxLng?: number }>({});
-  const [region, setRegion] = useState<string>("__all__");
-  const [projektleiter, setProjektleiter] = useState<string>("__all__");
-  const [pruefer, setPruefer] = useState<string>("__all__");
-  const [status, setStatus] = useState<string>("__all__");
-  const [department, setDepartment] = useState<string>("__all__");
+  const [region, setRegion] = useState<string>("");
+  const [projektleiter, setProjektleiter] = useState<string>("");
+  const [pruefer, setPruefer] = useState<string>("");
+  const [status, setStatus] = useState<string>("");
+  const [department, setDepartment] = useState<string>("");
   const [showFilters, setShowFilters] = useState(false);
   const [expandedDepts, setExpandedDepts] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState("id");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [viewMode, setViewMode] = useState<"table" | "cards" | "map">("table");
   const [showNewDialog, setShowNewDialog] = useState(false);
   const [newProj, setNewProj] = useState({
     projektnummer: "",
     station: "",
     bahnhofsmanagement: "",
-    projektleiter: "",
+    bahnhofsnummer: "",
+    streckennummer: "",
     projektbeschreibung: "",
+    projektstand: "",
+    projektleiter: "",
+    terminProjektvorstellung: "",
     kommentar: "",
     projektLink: "",
   });
 
   const { data, isLoading, applyEdit, applyReviewEdit, addProject } = useProjects({
     search: search || undefined,
-    region: region === "__all__" ? undefined : region,
-    projektleiter: projektleiter === "__all__" ? undefined : projektleiter,
-    pruefer: pruefer === "__all__" ? undefined : pruefer,
-    status: status === "__all__" ? undefined : status,
-    department: department === "__all__" ? undefined : department,
+    region: region || undefined,
+    projektleiter: projektleiter || undefined,
+    pruefer: pruefer || undefined,
+    status: status || undefined,
+    department: department || undefined,
     sortBy,
     sortDir,
-    showAll: true, // Always load all projects
+    showAll: true,
     ...mapBounds,
   });
 
@@ -213,14 +216,16 @@ export default function Projects() {
       toast.error("Projekt-Erstellung nicht verfügbar");
       return;
     }
-    // The addProject mutation doesn't return the created ID directly, it invalidates queries.
-    // We'll rely on the query invalidation to refresh the list.
     addProject({
       projektnummer: newProj.projektnummer.trim() || null,
       station: newProj.station.trim() || null,
-      bahnhofsmanagement: newProj.bahnhofsmanagement || null,
-      projektleiter: newProj.projektleiter.trim() || null,
+      bahnhofsmanagement: newProj.bahnhofsmanagement.trim() || null,
+      bahnhofsnummer: newProj.bahnhofsnummer.trim() || null,
+      streckennummer: newProj.streckennummer.trim() || null,
       projektbeschreibung: newProj.projektbeschreibung.trim() || null,
+      projektstand: newProj.projektstand.trim() || null,
+      projektleiter: newProj.projektleiter.trim() || null,
+      terminProjektvorstellung: newProj.terminProjektvorstellung || null,
       kommentar: newProj.kommentar.trim() || null,
       projektLink: newProj.projektLink.trim() || null,
     });
@@ -230,8 +235,12 @@ export default function Projects() {
       projektnummer: "",
       station: "",
       bahnhofsmanagement: "",
-      projektleiter: "",
+      bahnhofsnummer: "",
+      streckennummer: "",
       projektbeschreibung: "",
+      projektstand: "",
+      projektleiter: "",
+      terminProjektvorstellung: "",
       kommentar: "",
       projektLink: "",
     });
@@ -243,21 +252,24 @@ export default function Projects() {
       return;
     }
     const headers = [
-      "Nr.", "Projektnummer", "Region", "Station", "Projektleiter", 
-      "Beschreibung", "Kommentar", "ProjektLink", "Hauptstatus"
+      "Nr.", "Projektnummer", "Region", "Station", "Bahnhofsnr.", "Streckennr.",
+      "Beschreibung", "Projektstand", "Projektleiter", "Termin PV",
+      "Kommentar", "ProjektLink"
     ];
     const rows = data.projects.map((p: Project, idx: number) => {
-      const mainReview = p.reviews?.find((r: Review) => r.status) || p.reviews?.[0];
       return [
         idx + 1,
         p.projektnummer || "",
         p.bahnhofsmanagement || "",
         p.station || "",
+        p.bahnhofsnummer || "",
+        p.streckennummer || "",
+        (p.projektbeschreibung || "").replace(/"/g, '""'),
+        p.projektstand || "",
         p.projektleiter || "",
-        (p.projektbeschreibung || "").replace(/"/g, "\"\""),
-        (p.kommentar || "").replace(/"/g, "\"\""),
+        p.terminProjektvorstellung ? new Date(p.terminProjektvorstellung).toLocaleDateString("de-DE") : "",
+        (p.kommentar || "").replace(/"/g, '""'),
         p.projektLink || "",
-        mainReview?.status || "-"
       ];
     });
     const csvContent = [
@@ -337,7 +349,7 @@ export default function Projects() {
               />
               {searchInput.length > 1 && searchSuggestions && searchSuggestions.length > 0 && (
                 <div className="absolute z-10 w-full bg-popover border rounded-md shadow-lg mt-1 max-h-60 overflow-auto">
-                  {searchSuggestions.map((suggestion, index) => (
+                  {searchSuggestions.map((suggestion: string, index: number) => (
                     <div
                       key={index}
                       className="px-4 py-2 cursor-pointer hover:bg-accent hover:text-accent-foreground"
@@ -353,7 +365,7 @@ export default function Projects() {
               )}
             </div>
           </div>
-          <Button onClick={handleSearch} className="aws-button h-10 bg-[#FF0000] hover:bg-[#CC0000]">Suchen</Button>
+          <Button onClick={handleSearch} className="aws-button h-10 bg-[#FF0000] hover:bg-[#CC0000] text-white">Suchen</Button>
           <Button
             variant={showFilters ? "default" : "outline"}
             size="sm"
@@ -363,122 +375,123 @@ export default function Projects() {
             <Filter className="h-4 w-4" />
             Filter
           </Button>
-
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="flex border rounded-lg p-1 bg-muted/50 shadow-sm">
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="flex bg-muted p-1 rounded-lg">
             <Button
-              variant={viewMode === "table" ? "default" : "ghost"}
+              variant={viewMode === "table" ? "secondary" : "ghost"}
               size="sm"
               onClick={() => setViewMode("table")}
-              className="aws-button h-8 w-10 p-0"
+              className="h-8 px-3"
             >
               <Table className="h-4 w-4" />
             </Button>
             <Button
-              variant={viewMode === "cards" ? "default" : "ghost"}
+              variant={viewMode === "cards" ? "secondary" : "ghost"}
               size="sm"
               onClick={() => setViewMode("cards")}
-              className="aws-button h-8 w-10 p-0"
+              className="h-8 px-3"
             >
               <LayoutGrid className="h-4 w-4" />
             </Button>
             <Button
-              variant={viewMode === "map" ? "default" : "ghost"}
+              variant={viewMode === "map" ? "secondary" : "ghost"}
               size="sm"
               onClick={() => setViewMode("map")}
-              className="aws-button h-8 w-10 p-0"
+              className="h-8 px-3"
             >
               <MapPin className="h-4 w-4" />
             </Button>
           </div>
-
-          <Button 
-            onClick={() => setShowNewDialog(true)}
-            className="aws-button bg-[#FF0000] hover:bg-[#E6002B] text-white h-10"
-          >
-            <Plus className="mr-2 h-4 w-4" />
+          <Button onClick={() => setShowNewDialog(true)} className="aws-button bg-[#FF0000] hover:bg-[#CC0000] text-white gap-2 h-10">
+            <Plus className="h-4 w-4" />
             Neues Projekt
           </Button>
-          <Button 
-            variant="outline" 
-            className="aws-button h-10"
-            onClick={handleExport}
-          >
-            <Download className="mr-2 h-4 w-4" />
+          <Button variant="outline" onClick={handleExport} className="aws-button gap-2 h-10">
+            <Download className="h-4 w-4" />
             Export
           </Button>
         </div>
       </div>
 
-      {/* Filters Panel */}
+      {/* Filter Panel */}
       {showFilters && (
-        <Card className="aws-card border-2 border-[#FF0000]/10 animate-in slide-in-from-top-2 fade-in-0 duration-300">
-          <CardContent className="pt-6 pb-2">
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-              <Select value={region} onValueChange={setRegion}>
-                <SelectTrigger className="aws-input">
-                  <SelectValue placeholder="Region" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">Alle Regionen</SelectItem>
-                  {filterOptions?.regions.map((r) => (
-                    <SelectItem key={r} value={r}>{r}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select value={projektleiter} onValueChange={setProjektleiter}>
-                <SelectTrigger className="aws-input">
-                  <SelectValue placeholder="Projektleiter" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">Alle Projektleiter</SelectItem>
-                  {filterOptions?.projektleiter.map((pl) => (
-                    <SelectItem key={pl} value={pl}>{pl}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select value={pruefer} onValueChange={setPruefer}>
-                <SelectTrigger className="aws-input">
-                  <SelectValue placeholder="Prüfer" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">Alle Prüfer</SelectItem>
-                  {filterOptions?.pruefer.map((p) => (
-                    <SelectItem key={p} value={p}>{p}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select value={status} onValueChange={setStatus}>
-                <SelectTrigger className="aws-input">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">Alle Status</SelectItem>
-                  {REVIEW_STATUSES.map((s) => (
-                    <SelectItem key={s} value={s}>{s}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select value={department} onValueChange={setDepartment}>
-                <SelectTrigger className="aws-input">
-                  <SelectValue placeholder="Gewerke" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">Alle Gewerke</SelectItem>
-                  {DEPARTMENTS.map((d) => (
-                    <SelectItem key={d} value={d}>{d}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+        <Card className="aws-card border-[#FF0000]/20 shadow-md animate-in fade-in slide-in-from-top-4 duration-300">
+          <CardContent className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase text-muted-foreground">Region</label>
+                <Select value={region || "all"} onValueChange={(v) => setRegion(v === "all" ? "" : v)}>
+                  <SelectTrigger className="aws-input">
+                    <SelectValue placeholder="Alle Regionen" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Alle Regionen</SelectItem>
+                    {filterOptions?.regions.map((r) => (
+                      <SelectItem key={r} value={r}>{r}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase text-muted-foreground">Projektleiter</label>
+                <Select value={projektleiter || "all"} onValueChange={(v) => setProjektleiter(v === "all" ? "" : v)}>
+                  <SelectTrigger className="aws-input">
+                    <SelectValue placeholder="Alle Projektleiter" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Alle Projektleiter</SelectItem>
+                    {filterOptions?.projektleiter.map((p) => (
+                      <SelectItem key={p} value={p}>{p}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase text-muted-foreground">Prüfer</label>
+                <Select value={pruefer || "all"} onValueChange={(v) => setPruefer(v === "all" ? "" : v)}>
+                  <SelectTrigger className="aws-input">
+                    <SelectValue placeholder="Alle Prüfer" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Alle Prüfer</SelectItem>
+                    {filterOptions?.pruefer.map((p) => (
+                      <SelectItem key={p} value={p}>{p}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase text-muted-foreground">Status</label>
+                <Select value={status || "all"} onValueChange={(v) => setStatus(v === "all" ? "" : v)}>
+                  <SelectTrigger className="aws-input">
+                    <SelectValue placeholder="Alle Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Alle Status</SelectItem>
+                    {REVIEW_STATUSES.map((s) => (
+                      <SelectItem key={s} value={s}>{s}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase text-muted-foreground">Gewerk</label>
+                <Select value={department || "all"} onValueChange={(v) => setDepartment(v === "all" ? "" : v)}>
+                  <SelectTrigger className="aws-input">
+                    <SelectValue placeholder="Alle Gewerke" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Alle Gewerke</SelectItem>
+                    {DEPARTMENTS.map((d) => (
+                      <SelectItem key={d} value={d}>{d}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div className="mt-6 border-t pt-4">
-              <div className="text-sm font-medium text-muted-foreground mb-3">Gewerke-Spalten ein-/ausblenden:</div>
+            <div className="flex justify-between items-center mt-6 pt-6 border-t">
               <div className="flex flex-wrap gap-2">
                 {departmentButtons.map((dept) => (
                   <Button
@@ -486,20 +499,18 @@ export default function Projects() {
                     variant={expandedDepts.includes(dept) ? "default" : "outline"}
                     size="sm"
                     onClick={() => toggleDept(dept)}
-                    className={expandedDepts.includes(dept) ? "bg-[#FF0000] hover:bg-[#CC0000]" : ""}
+                    className={`text-[10px] h-7 px-3 ${expandedDepts.includes(dept) ? "bg-[#FF0000] hover:bg-[#CC0000] text-white" : ""}`}
                   >
-                    {dept}
+                    {dept} Details
                   </Button>
                 ))}
               </div>
-            </div>
-            <div className="flex justify-end mt-4">
-              <Button variant="ghost" onClick={() => {
-                setRegion("__all__");
-                setProjektleiter("__all__");
-                setPruefer("__all__");
-                setStatus("__all__");
-                setDepartment("__all__");
+              <Button variant="ghost" size="sm" className="text-[#FF0000] hover:bg-[#FF0000]/10" onClick={() => {
+                setRegion("");
+                setProjektleiter("");
+                setPruefer("");
+                setStatus("");
+                setDepartment("");
                 setSearch("");
                 setSearchInput("");
                 setExpandedDepts([]);
@@ -510,50 +521,56 @@ export default function Projects() {
         </Card>
       )}
 
+      {/* Results count */}
+      {data && data.total > 0 && (
+        <div className="text-sm text-muted-foreground">
+          <span className="font-semibold text-foreground">{data.total.toLocaleString("de-DE")}</span> Projekte gefunden
+          {search && <span className="ml-2">für &quot;{search}&quot;</span>}
+          {region && <Badge variant="secondary" className="ml-2 text-[10px]">{region} <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => setRegion("")} /></Badge>}
+          {projektleiter && <Badge variant="secondary" className="ml-2 text-[10px]">{projektleiter} <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => setProjektleiter("")} /></Badge>}
+          {pruefer && <Badge variant="secondary" className="ml-2 text-[10px]">{pruefer} <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => setPruefer("")} /></Badge>}
+          {status && <Badge variant="secondary" className="ml-2 text-[10px]">{status} <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => setStatus("")} /></Badge>}
+          {department && <Badge variant="secondary" className="ml-2 text-[10px]">{department} <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => setDepartment("")} /></Badge>}
+        </div>
+      )}
+
       {/* Main Content Area */}
       <div className="bg-card rounded-xl border shadow-sm relative min-h-[600px]">
         {isLoading ? (
           <div className="absolute inset-0 flex items-center justify-center bg-card/80 backdrop-blur-sm z-10 rounded-xl">
             <Loader2 className="h-10 w-10 animate-spin text-[#FF0000]" />
-            <p className="text-muted-foreground animate-pulse font-medium">Lade Projektdaten...</p>
+            <p className="text-muted-foreground animate-pulse font-medium ml-3">Lade Projektdaten...</p>
           </div>
         ) : (
           <>
             {/* TABLE VIEW */}
             {viewMode === "table" && (
-              <div className="table-scroll-container">
+              <div className="overflow-x-auto overflow-y-auto max-h-[75vh]">
                 <table className="w-full border-collapse text-[11px]">
                   <thead className="bg-muted/50 sticky top-0 z-20">
                     <tr>
-                      <th className="text-left py-3 px-4 font-semibold text-muted-foreground whitespace-nowrap sticky left-0 bg-muted/50 z-30 border-b">Nr.</th>
+                      <th className="text-left py-3 px-3 font-semibold text-muted-foreground whitespace-nowrap sticky left-0 bg-muted/50 z-30 border-b min-w-[50px]">Nr.</th>
                       <SortHeader column="projektnummer" label="Projektnummer" sortBy={sortBy} onSort={handleSort} />
                       <SortHeader column="bahnhofsmanagement" label="Region" sortBy={sortBy} onSort={handleSort} />
                       <SortHeader column="station" label="Station" sortBy={sortBy} onSort={handleSort} />
-                      <th className="text-left py-3 px-4 font-semibold text-muted-foreground whitespace-nowrap min-w-[260px] border-b">Beschreibung</th>
+                      <SortHeader column="bahnhofsnummer" label="Bhf-Nr." sortBy={sortBy} onSort={handleSort} />
+                      <SortHeader column="streckennummer" label="Strecken-Nr." sortBy={sortBy} onSort={handleSort} />
+                      <th className="text-left py-3 px-4 font-semibold text-muted-foreground whitespace-nowrap min-w-[220px] border-b">Beschreibung</th>
+                      <SortHeader column="projektstand" label="Projektstand" sortBy={sortBy} onSort={handleSort} />
                       <SortHeader column="projektleiter" label="Projektleiter" sortBy={sortBy} onSort={handleSort} />
+                      <th className="text-left py-3 px-3 font-semibold text-muted-foreground whitespace-nowrap border-b min-w-[100px]">Termin PV</th>
                       <th className="text-center py-3 px-3 font-semibold text-muted-foreground whitespace-nowrap border-b" title="Kommentar & Link">
                         <MessageSquare className="h-4 w-4 inline" />
                       </th>
                       {expandedDepts.length > 0 ? (
                         expandedDepts.map((dept) => (
-                          <th 
-                            key={dept} 
-                            className="text-center py-3 px-3 font-semibold text-muted-foreground whitespace-nowrap border-b border-l bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors" 
-                            colSpan={3}
-                            onClick={() => toggleDept(dept)}
-                            title="Klicken zum Minimieren"
-                          >
+                          <th key={dept} className="text-center py-3 px-3 font-semibold text-muted-foreground whitespace-nowrap border-b border-l bg-muted/30" colSpan={3}>
                             {dept}
                           </th>
                         ))
                       ) : (
                         departmentButtons.map((dept) => (
-                          <th 
-                            key={dept} 
-                            className="text-center py-3 px-2 font-semibold text-muted-foreground whitespace-nowrap border-b border-l bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors"
-                            onClick={() => toggleDept(dept)}
-                            title="Klicken zum Erweitern"
-                          >
+                          <th key={dept} className="text-center py-3 px-2 font-semibold text-muted-foreground whitespace-nowrap border-b border-l bg-muted/30">
                             {dept}
                           </th>
                         ))
@@ -562,7 +579,7 @@ export default function Projects() {
                     {expandedDepts.length > 0 && (
                       <tr className="border-b bg-muted/20">
                         <th className="sticky left-0 bg-muted/50 z-30"></th>
-                        <th></th><th></th><th></th><th></th><th></th><th></th>
+                        <th></th><th></th><th></th><th></th><th></th><th></th><th></th><th></th><th></th><th></th>
                         {expandedDepts.map((dept) => (
                           <React.Fragment key={`sub-${dept}`}>
                             <th className="text-left py-2 px-3 text-[9px] font-bold uppercase text-muted-foreground border-l">Prüfer</th>
@@ -578,10 +595,10 @@ export default function Projects() {
                       const reviews = project.reviews || [];
                       return (
                         <tr key={project.id} className="border-b hover:bg-muted/30 transition-colors group">
-                          <td className="py-3 px-4 text-muted-foreground font-medium sticky left-0 bg-card group-hover:bg-muted/30 z-10">
+                          <td className="py-3 px-3 text-muted-foreground font-medium sticky left-0 bg-card group-hover:bg-muted/30 z-10 border-r">
                             {idx + 1}
                           </td>
-                          <td className="py-3 px-4 font-mono font-bold">
+                          <td className="py-3 px-4 font-mono font-bold whitespace-nowrap">
                             <InlineEditCell
                               value={project.projektnummer}
                               onSave={(val) => applyEdit(project.id, "projektnummer", val)}
@@ -594,11 +611,23 @@ export default function Projects() {
                               onSave={(val) => applyEdit(project.id, "station", val)}
                             />
                           </td>
-                          <td className="py-3 px-4 max-w-[260px]">
+                          <td className="py-3 px-3 whitespace-nowrap text-muted-foreground">
+                            {project.bahnhofsnummer || "-"}
+                          </td>
+                          <td className="py-3 px-3 whitespace-nowrap text-muted-foreground">
+                            {project.streckennummer || "-"}
+                          </td>
+                          <td className="py-3 px-4 max-w-[220px]">
                             <InlineEditCell
                               value={project.projektbeschreibung}
                               onSave={(val) => applyEdit(project.id, "projektbeschreibung", val)}
                               className="line-clamp-2"
+                            />
+                          </td>
+                          <td className="py-3 px-3 whitespace-nowrap">
+                            <InlineEditCell
+                              value={project.projektstand}
+                              onSave={(val) => applyEdit(project.id, "projektstand", val)}
                             />
                           </td>
                           <td className="py-3 px-4 whitespace-nowrap">
@@ -607,6 +636,11 @@ export default function Projects() {
                               onSave={(val) => applyEdit(project.id, "projektleiter", val)}
                             />
                           </td>
+                          <td className="py-3 px-3 whitespace-nowrap text-muted-foreground text-[10px]">
+                            {project.terminProjektvorstellung
+                              ? new Date(project.terminProjektvorstellung).toLocaleDateString("de-DE")
+                              : "-"}
+                          </td>
                           <td className="py-3 px-3 text-center">
                             <Dialog>
                               <DialogTrigger asChild>
@@ -614,7 +648,7 @@ export default function Projects() {
                                   <MessageSquare className="h-4 w-4" />
                                 </button>
                               </DialogTrigger>
-                              <DialogContent className="max-w-md">
+                              <DialogContent className="max-w-md bg-card">
                                 <DialogHeader>
                                   <DialogTitle>Kommentar &amp; Link</DialogTitle>
                                 </DialogHeader>
@@ -662,9 +696,9 @@ export default function Projects() {
                                         value={review.prueferName}
                                         onSave={(val) => applyReviewEdit(project.id, dept, "prueferName", val)}
                                       />
-                                    ) : "-"}
+                                    ) : <span className="text-muted-foreground">-</span>}
                                   </td>
-                                  <td className="py-3 px-3 whitespace-nowrap">
+                                  <td className="py-3 px-3 whitespace-nowrap text-[10px]">
                                     {review?.pruefDatum ? new Date(review.pruefDatum).toLocaleDateString("de-DE") : "-"}
                                   </td>
                                   <td className="py-3 px-3">
@@ -679,7 +713,7 @@ export default function Projects() {
                                           <option key={s} value={s}>{s}</option>
                                         ))}
                                       </select>
-                                    ) : "-"}
+                                    ) : <span className="text-muted-foreground">-</span>}
                                   </td>
                                 </React.Fragment>
                               );
@@ -706,7 +740,7 @@ export default function Projects() {
             {viewMode === "cards" && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 p-6">
                 {data?.projects.map((project: Project) => {
-                  const mainReview = project.reviews?.[0];
+                  const mainReview = project.reviews?.find((r: Review) => r.status && r.status !== "nicht erforderlich") || project.reviews?.[0];
                   return (
                     <Card key={project.id} className="aws-card hover:shadow-xl transition-all group border-2 hover:border-[#FF0000]/20">
                       <CardHeader className="pb-3 space-y-3">
@@ -720,6 +754,12 @@ export default function Projects() {
                       </CardHeader>
                       <CardContent className="space-y-4">
                         <p className="text-xs text-muted-foreground line-clamp-3 min-h-[45px]">{project.projektbeschreibung || "Keine Beschreibung vorhanden."}</p>
+                        {project.projektstand && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-[9px] uppercase text-muted-foreground font-bold">Stand:</span>
+                            <span className="text-xs">{project.projektstand}</span>
+                          </div>
+                        )}
                         <div className="pt-4 border-t flex justify-between items-center">
                           <div className="flex flex-col">
                             <span className="text-[9px] uppercase text-muted-foreground font-bold">Projektleiter</span>
@@ -761,8 +801,7 @@ export default function Projects() {
                     <h4 className="text-sm font-bold">Interaktive Projektkarte</h4>
                   </div>
                   <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    Zeigt alle {data?.projects.length} gefilterten Projekte basierend auf ihren Standorten an. 
-                    Klicken Sie auf einen Marker für detaillierte Informationen.
+                    Zeigt alle {data?.projects.length} gefilterten Projekte basierend auf ihren Standorten an. Klicken Sie auf einen Marker für detaillierte Informationen.
                   </p>
                 </div>
               </>
@@ -771,17 +810,15 @@ export default function Projects() {
         )}
       </div>
 
-
-
       {/* New Project Dialog */}
       <Dialog open={showNewDialog} onOpenChange={setShowNewDialog}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-[600px] bg-card max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Neues Projekt anlegen</DialogTitle>
+            <DialogTitle className="text-xl font-bold">Neues Projekt anlegen</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="projektnummer" className="text-right text-sm">
+              <label htmlFor="projektnummer" className="text-right text-sm font-medium">
                 Projektnummer
               </label>
               <Input
@@ -789,10 +826,11 @@ export default function Projects() {
                 value={newProj.projektnummer}
                 onChange={(e) => setNewProj({ ...newProj, projektnummer: e.target.value })}
                 className="col-span-3"
+                placeholder="z.B. PRJ-2026-001"
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="station" className="text-right text-sm">
+              <label htmlFor="station" className="text-right text-sm font-medium">
                 Station
               </label>
               <Input
@@ -800,10 +838,11 @@ export default function Projects() {
                 value={newProj.station}
                 onChange={(e) => setNewProj({ ...newProj, station: e.target.value })}
                 className="col-span-3"
+                placeholder="z.B. Frankfurt Hbf"
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="bahnhofsmanagement" className="text-right text-sm">
+              <label htmlFor="bahnhofsmanagement" className="text-right text-sm font-medium">
                 Region
               </label>
               <Input
@@ -811,21 +850,35 @@ export default function Projects() {
                 value={newProj.bahnhofsmanagement}
                 onChange={(e) => setNewProj({ ...newProj, bahnhofsmanagement: e.target.value })}
                 className="col-span-3"
+                placeholder="z.B. Frankfurt"
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="projektleiter" className="text-right text-sm">
-                Projektleiter
+              <label htmlFor="bahnhofsnummer" className="text-right text-sm font-medium">
+                Bahnhofsnr.
               </label>
               <Input
-                id="projektleiter"
-                value={newProj.projektleiter}
-                onChange={(e) => setNewProj({ ...newProj, projektleiter: e.target.value })}
+                id="bahnhofsnummer"
+                value={newProj.bahnhofsnummer}
+                onChange={(e) => setNewProj({ ...newProj, bahnhofsnummer: e.target.value })}
                 className="col-span-3"
+                placeholder="z.B. 1234"
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="projektbeschreibung" className="text-right text-sm">
+              <label htmlFor="streckennummer" className="text-right text-sm font-medium">
+                Streckennr.
+              </label>
+              <Input
+                id="streckennummer"
+                value={newProj.streckennummer}
+                onChange={(e) => setNewProj({ ...newProj, streckennummer: e.target.value })}
+                className="col-span-3"
+                placeholder="z.B. 3600"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <label htmlFor="projektbeschreibung" className="text-right text-sm font-medium">
                 Beschreibung
               </label>
               <Input
@@ -833,10 +886,47 @@ export default function Projects() {
                 value={newProj.projektbeschreibung}
                 onChange={(e) => setNewProj({ ...newProj, projektbeschreibung: e.target.value })}
                 className="col-span-3"
+                placeholder="Projektbeschreibung eingeben..."
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="kommentar" className="text-right text-sm">
+              <label htmlFor="projektstand" className="text-right text-sm font-medium">
+                Projektstand
+              </label>
+              <Input
+                id="projektstand"
+                value={newProj.projektstand}
+                onChange={(e) => setNewProj({ ...newProj, projektstand: e.target.value })}
+                className="col-span-3"
+                placeholder="z.B. Planung, Ausführung, Abschluss"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <label htmlFor="projektleiter" className="text-right text-sm font-medium">
+                Projektleiter
+              </label>
+              <Input
+                id="projektleiter"
+                value={newProj.projektleiter}
+                onChange={(e) => setNewProj({ ...newProj, projektleiter: e.target.value })}
+                className="col-span-3"
+                placeholder="Name des Projektleiters"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <label htmlFor="terminProjektvorstellung" className="text-right text-sm font-medium">
+                Termin PV
+              </label>
+              <Input
+                id="terminProjektvorstellung"
+                type="date"
+                value={newProj.terminProjektvorstellung}
+                onChange={(e) => setNewProj({ ...newProj, terminProjektvorstellung: e.target.value })}
+                className="col-span-3"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <label htmlFor="kommentar" className="text-right text-sm font-medium">
                 Kommentar
               </label>
               <Input
@@ -844,10 +934,11 @@ export default function Projects() {
                 value={newProj.kommentar}
                 onChange={(e) => setNewProj({ ...newProj, kommentar: e.target.value })}
                 className="col-span-3"
+                placeholder="Optionaler Kommentar"
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="projektLink" className="text-right text-sm">
+              <label htmlFor="projektLink" className="text-right text-sm font-medium">
                 Projektlink
               </label>
               <Input
@@ -855,11 +946,13 @@ export default function Projects() {
                 value={newProj.projektLink}
                 onChange={(e) => setNewProj({ ...newProj, projektLink: e.target.value })}
                 className="col-span-3"
+                placeholder="https://..."
               />
             </div>
           </div>
-          <div className="flex justify-end">
-            <Button onClick={handleCreateProject} className="aws-button bg-[#FF0000] hover:bg-[#E6002B]">Projekt anlegen</Button>
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <Button variant="outline" onClick={() => setShowNewDialog(false)}>Abbrechen</Button>
+            <Button onClick={handleCreateProject} className="aws-button bg-[#FF0000] hover:bg-[#CC0000] text-white">Projekt anlegen</Button>
           </div>
         </DialogContent>
       </Dialog>
