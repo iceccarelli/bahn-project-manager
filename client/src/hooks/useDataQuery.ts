@@ -8,13 +8,9 @@ import type {
 } from "@/_core/api/client";
 
 // ============================================================================
-// TYPE DEFINITIONS (single source of truth for the frontend)
+// TYPE DEFINITIONS (harmonized with types.ts and data.json)
 // ============================================================================
 
-/**
- * Review type for a single department on a project.
- * Each project has up to 14 department reviews.
- */
 export interface Review {
   department: string;
   status: string | null;
@@ -22,13 +18,6 @@ export interface Review {
   pruefDatum: string | null;
 }
 
-/**
- * Primary Project type used across the application.
- * Matches the Excel Übersichtsliste column structure exactly:
- * Nr. (computed) | Projektnummer | Bahnhofsmanagement | Station | Bahnhofsnummer |
- * Streckennummer | Projektbeschreibung | Projektstand | Projektleiter |
- * Termin Projektvorstellung | [14 dept reviews] | Kommentar | Projektlink
- */
 export interface Project {
   id: number;
   projektnummer: string | null;
@@ -45,9 +34,6 @@ export interface Project {
   reviews: Review[];
 }
 
-/**
- * Dashboard statistics type.
- */
 export interface Stats {
   totalProjects: number;
   statusDistribution: Array<{ status: string; count: number }>;
@@ -56,18 +42,12 @@ export interface Stats {
   departmentStats: Array<{ department: string; status: string; count: number }>;
 }
 
-/**
- * Filter options type.
- */
 export interface Filters {
   regions: string[];
   projektleiter: string[];
   pruefer: string[];
 }
 
-/**
- * Audit log entry type.
- */
 export interface AuditLogEntry {
   id: string;
   timestamp: string;
@@ -77,7 +57,7 @@ export interface AuditLogEntry {
 }
 
 // ============================================================================
-// QUERY KEYS (for cache invalidation)
+// QUERY KEYS
 // ============================================================================
 
 export const queryKeys = {
@@ -100,9 +80,6 @@ export const queryKeys = {
 // QUERY HOOKS
 // ============================================================================
 
-/**
- * Fetch all projects - no pagination, loads everything at once.
- */
 export function useAllProjects() {
   return useQuery({
     queryKey: queryKeys.projects.list({ showAll: true }),
@@ -110,12 +87,10 @@ export function useAllProjects() {
       const projects = await apiClient.projects.list();
       return { projects };
     },
+    staleTime: 5 * 60 * 1000,
   });
 }
 
-/**
- * Fetch single project by ID
- */
 export function useProject(id: number) {
   return useQuery({
     queryKey: queryKeys.projects.detail(id),
@@ -123,9 +98,6 @@ export function useProject(id: number) {
   });
 }
 
-/**
- * Fetch dashboard stats
- */
 export function useDashboardStats() {
   return useQuery({
     queryKey: queryKeys.stats.dashboard(),
@@ -133,9 +105,6 @@ export function useDashboardStats() {
   });
 }
 
-/**
- * Fetch audit log
- */
 export function useAuditLog() {
   return useQuery({
     queryKey: queryKeys.audit.list(),
@@ -147,9 +116,6 @@ export function useAuditLog() {
 // MUTATION HOOKS
 // ============================================================================
 
-/**
- * Create new project
- */
 export function useCreateProject() {
   const queryClient = useQueryClient();
 
@@ -163,9 +129,6 @@ export function useCreateProject() {
   });
 }
 
-/**
- * Update project field
- */
 export function useUpdateProject() {
   const queryClient = useQueryClient();
 
@@ -196,9 +159,6 @@ export function useUpdateProject() {
   });
 }
 
-/**
- * Update review
- */
 export function useUpdateReview() {
   const queryClient = useQueryClient();
 
@@ -237,9 +197,6 @@ export function useUpdateReview() {
   });
 }
 
-/**
- * Delete project
- */
 export function useDeleteProject() {
   const queryClient = useQueryClient();
 
@@ -253,23 +210,9 @@ export function useDeleteProject() {
 }
 
 // ============================================================================
-// COMPOSITE HOOKS (main data access layer for Projects page)
+// COMPOSITE HOOKS
 // ============================================================================
 
-/**
- * useProjects - The primary hook for the Projects page.
- * Fetches ALL projects, applies client-side filtering, sorting, and returns results.
- * No pagination - all 1,298+ projects loaded at once.
- * 
- * Filters supported:
- * - search: Google-like multi-term search across all text fields
- * - region: Exact match on bahnhofsmanagement
- * - projektleiter: Exact match on projektleiter
- * - pruefer: Match on any review's prueferName
- * - status: Match on any review's status (or combined with department)
- * - department: Match on any review's department
- * - sortBy/sortDir: Column sorting (ascending/descending)
- */
 export function useProjects(params: {
   search?: string;
   region?: string;
@@ -310,7 +253,6 @@ export function useProjects(params: {
 
     let filtered = [...allProjects];
 
-    // Enhanced Google-like search: all terms must match at least one field
     if (search) {
       const s = search.toLowerCase().trim();
       const searchTerms = s.split(/\s+/);
@@ -337,19 +279,11 @@ export function useProjects(params: {
       });
     }
 
-    // Region filter (exact match)
     if (region) filtered = filtered.filter((p) => p.bahnhofsmanagement === region);
-    
-    // Projektleiter filter (exact match)
     if (projektleiter) filtered = filtered.filter((p) => p.projektleiter === projektleiter);
-    
-    // Prüfer filter (any review matches)
     if (pruefer) filtered = filtered.filter((p) => p.reviews?.some((r) => r.prueferName === pruefer));
-    
-    // Department filter (any review matches the department)
     if (department) filtered = filtered.filter((p) => p.reviews?.some((r) => r.department === department));
 
-    // Status filter (combined with department if both set, otherwise any review)
     if (status && department) {
       filtered = filtered.filter((p) =>
         p.reviews?.some((r) => r.department === department && r.status === status)
@@ -358,7 +292,6 @@ export function useProjects(params: {
       filtered = filtered.filter((p) => p.reviews?.some((r) => r.status === status));
     }
 
-    // Sorting
     if (sortBy) {
       filtered.sort((a: Project, b: Project) => {
         let va: any = (a as any)[sortBy];
@@ -369,7 +302,6 @@ export function useProjects(params: {
         if (typeof va === "number" && typeof vb === "number") {
           return sortDir === "asc" ? va - vb : vb - va;
         }
-        // String comparison
         va = String(va).toLowerCase();
         vb = String(vb).toLowerCase();
         if (va < vb) return sortDir === "asc" ? -1 : 1;
@@ -411,16 +343,13 @@ export function useProjects(params: {
   };
 }
 
-/**
- * useFilters - Derives filter options from the loaded project data.
- * Returns unique regions, projektleiter, and pruefer values for dropdown menus.
- */
 export function useFilters() {
   const { data: allProjectsData, isLoading } = useAllProjects();
 
   const data: Filters | null = useMemo(() => {
     const allProjects = allProjectsData?.projects || [];
     if (!allProjects || allProjects.length === 0) return null;
+
     const regions = new Set<string>();
     const projektleiter = new Set<string>();
     const pruefer = new Set<string>();
@@ -445,10 +374,6 @@ export function useFilters() {
   return { data, isLoading };
 }
 
-/**
- * useSearchSuggestions - Provides autocomplete suggestions as user types.
- * Searches across station, projektnummer, projektleiter, region, and pruefer fields.
- */
 export function useSearchSuggestions(term: string) {
   return useQuery({
     queryKey: ["searchSuggestions", term],
@@ -458,9 +383,6 @@ export function useSearchSuggestions(term: string) {
   });
 }
 
-/**
- * useAllData - Combined hook for Dashboard and other pages needing projects + stats + filters.
- */
 export function useAllData() {
   const { data: projectsData, isLoading: pLoading } = useAllProjects();
   const { data: stats, isLoading: sLoading } = useDashboardStats();
