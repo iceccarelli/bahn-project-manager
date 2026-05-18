@@ -229,7 +229,7 @@ export default function Projects() {
       kommentar: newProj.kommentar.trim() || null,
       projektLink: newProj.projektLink.trim() || null,
     });
-    toast.success(`Projekt erfolgreich angelegt! (Wird als neuester Eintrag oben mit Nr. ${totalProjects + 1} angezeigt)`);
+    toast.success(`Projekt erfolgreich angelegt! (Wird als neuester Eintrag oben angezeigt)`);
     setShowNewDialog(false);
     setNewProj({
       projektnummer: "",
@@ -258,7 +258,7 @@ export default function Projects() {
     ];
     const rows = data.projects.map((p: Project, idx: number) => {
       return [
-        p.id, // Use actual project ID as Nr.
+        idx + 1,
         p.projektnummer || "",
         p.bahnhofsmanagement || "",
         p.station || "",
@@ -596,9 +596,9 @@ export default function Projects() {
                       const reviews = project.reviews || [];
                       return (
                         <tr key={project.id} className="border-b hover:bg-muted/30 transition-colors group">
-                          {/* PROFESSIONAL FIX: Use project.id for correct reversed numbering */}
-                          <td className="py-3 px-3 text-muted-foreground font-medium sticky left-0 bg-white dark:bg-zinc-950 z-10 border-r font-mono">
-                            {project.id}
+                          {/* PROFESSIONAL FIX: Solid background for first column */}
+                          <td className="py-3 px-3 text-muted-foreground font-medium sticky left-0 bg-white dark:bg-zinc-950 z-10 border-r">
+                            {idx + 1}
                           </td>
                           <td className="py-3 px-4 font-mono font-bold whitespace-nowrap">
                             <InlineEditCell
