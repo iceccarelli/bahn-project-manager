@@ -184,27 +184,27 @@ journey
 
 ---
 
-## Architecture
 
-This is a **monorepo** with clear separation of concerns and **local-first data strategy**.
-
-**Current Data Flow (May 2026):**
+### Current Data Flow (May 2026)
 
 ```mermaid
 flowchart TD
-    subgraph Frontend
-        A[React 19 + Vite<br/>Pages: Projects, Dashboard, BVB-EEA, PSV-ITK]
-        B[Custom Hooks<br/>useProjects, useAllData, useFilters]
-        C[In-memory Cache + Optimistic Updates<br/>+ Local /data.json Fallback]
+    subgraph Frontend["Frontend Layer"]
+        A["React 19 + Vite<br/>Pages: Projects, Dashboard,<br/>BVB-EEA, PSV-ITK"]
+        B["Custom Hooks<br/>useProjects, useAllData, useFilters"]
+        C["In-memory Cache +<br/>Optimistic Updates<br/>+ Local data.json Fallback"]
     end
-    subgraph API Layer
-        D[Express Server + apiClient<br/>Local-first + Remote Fallback]
-        E[Drizzle ORM Queries & Procedures]
+
+    subgraph API["API Layer"]
+        D["Express Server + apiClient<br/>Local-first + Remote Fallback"]
+        E["Drizzle ORM<br/>Queries & Procedures"]
     end
-    subgraph Data Sources
-        F[(PostgreSQL<br/>Neon / Vercel Postgres)]
-        G[/data.json<br/>Local Static Fallback]
+
+    subgraph Data["Data Sources"]
+        F[("PostgreSQL<br/>Neon / Vercel Postgres")]
+        G["/data.json<br/>Local Static Fallback"]
     end
+
     A -->|User interactions| B
     B -->|fetch + mutations| D
     D -->|Local priority| G
@@ -215,11 +215,62 @@ flowchart TD
     D --> B
     B --> C
     C --> A
-    style A fill:#e0f2fe
-    style D fill:#fef3c7
-    style F fill:#dcfce7
-    style G fill:#fefce8
+
+    style A fill:#e0f2fe,stroke:#0284c8
+    style D fill:#fef3c7,stroke:#d97706
+    style F fill:#dcfce7,stroke:#16a34a
+    style G fill:#fefce8,stroke:#ca8a04
 ```
+
+---
+
+### Target Future Architecture (Microsoft 365 + Mobile + SSO)
+
+```mermaid
+flowchart TD
+    subgraph Web["Web Application"]
+        W["React Web App<br/>MSAL Authentication"]
+    end
+
+    subgraph Mobile["Mobile Application"]
+        M["React Native + Expo<br/>Offline-first + Push Notifications"]
+    end
+
+    subgraph Backend["Backend Services"]
+        API["Express / Hono API<br/>Protected by Entra ID + JWT"]
+        Graph["Microsoft Graph Client"]
+    end
+
+    subgraph Microsoft365["Microsoft 365 Ecosystem"]
+        Entra["Entra ID + RBAC + SSO"]
+        SP["SharePoint Documents"]
+        Teams["Teams Notifications"]
+        Planner["Planner / Outlook Tasks"]
+        PowerBI["Power BI Dashboards"]
+    end
+
+    subgraph DataLayer["Data Layer"]
+        DB[("PostgreSQL + Audit Log")]
+        RT["Real-time Layer<br/>Azure SignalR / Web PubSub"]
+    end
+
+    W & M -->|MSAL + JWT| API
+    API --> Graph
+    Graph --> SP & Teams & Planner
+    API --> DB
+    API --> RT
+    RT --> W & M
+    Entra --> API
+    PowerBI -.-> DB
+
+    style W fill:#e0f2fe,stroke:#0284c8
+    style M fill:#e0f2fe,stroke:#0284c8
+    style API fill:#fef3c7,stroke:#d97706
+    style Entra fill:#dbeafe,stroke:#2563eb
+    style DB fill:#dcfce7,stroke:#16a34a
+```
+
+---
 
 **Target Future Architecture (with Microsoft 365 + Mobile + SSO):**
 
