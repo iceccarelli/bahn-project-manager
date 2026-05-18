@@ -144,7 +144,7 @@ export default function Projects() {
   const [showFilters, setShowFilters] = useState(false);
   const [expandedDepts, setExpandedDepts] = useState<string[]>({});
   const [sortBy, setSortBy] = useState("id");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc"); // NEW: Newest first (highest ID first)
   const [viewMode, setViewMode] = useState<"table" | "cards" | "map">("table");
   const [showNewDialog, setShowNewDialog] = useState(false);
   const [newProj, setNewProj] = useState({
@@ -197,7 +197,7 @@ export default function Projects() {
       setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     } else {
       setSortBy(column);
-      setSortDir("asc");
+      setSortDir("desc"); // Always newest first when changing column
     }
   };
 
@@ -229,7 +229,7 @@ export default function Projects() {
       kommentar: newProj.kommentar.trim() || null,
       projektLink: newProj.projektLink.trim() || null,
     });
-    toast.success(`Projekt erfolgreich angelegt!`);
+    toast.success(`Projekt erfolgreich angelegt! (Wird als neuester Eintrag oben angezeigt)`);
     setShowNewDialog(false);
     setNewProj({
       projektnummer: "",
