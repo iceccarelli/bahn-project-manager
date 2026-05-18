@@ -42,19 +42,23 @@ const FACHSPEZIALISTEN = [
 
 interface Project {
   id: number;
-  projektnummer: string;
-  station: string;
-  bahnhofsmanagement: string;
-  projektleiter: string;
-  projektbeschreibung: string;
+  projektnummer: string | null;
+  station: string | null;
+  bahnhofsmanagement: string | null;
+  bahnhofsnummer: string | null;
+  streckennummer: string | null;
+  projektbeschreibung: string | null;
+  projektstand: string | null;
+  projektleiter: string | null;
+  terminProjektvorstellung: string | null;
+  kommentar: string | null;
+  projektLink: string | null;
   reviews: Array<{
     department: string;
     status: string | null;
     prueferName: string | null;
     pruefDatum: string | null;
   }>;
-  kommentar?: string;
-  projektLink?: string;
 }
 
 export default function Dashboard() {
