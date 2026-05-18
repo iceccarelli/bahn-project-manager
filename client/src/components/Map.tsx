@@ -24,11 +24,10 @@ L.Marker.prototype.options.icon = DefaultIcon;
 
 /**
  * PROFESSIONAL DB RED MARKER ENGINE
- * Creates high-performance SVG-based markers with dynamic sizing and clustering indicators.
  */
 const createCustomIcon = (isMajor: boolean, count: number = 1, status?: string) => {
   const size = isMajor ? 36 : 28;
-  const color = "#FF0000"; // DB Red
+  const color = "#FF0000";
   
   return L.divIcon({
     className: "custom-db-marker",
@@ -68,10 +67,6 @@ const createCustomIcon = (isMajor: boolean, count: number = 1, status?: string) 
   });
 };
 
-/**
- * INTELLIGENT GEOGRAPHIC HIERARCHY
- * Maps major German hubs with priority levels for zoom-based progressive disclosure.
- */
 const CITY_COORDINATES: Record<string, { lat: number; lng: number; priority: number }> = {
   "Berlin": { lat: 52.5200, lng: 13.4050, priority: 1 },
   "Hamburg": { lat: 53.5511, lng: 9.9937, priority: 1 },
@@ -153,30 +148,23 @@ const CITY_COORDINATES: Record<string, { lat: number; lng: number; priority: num
   "Cottbus": { lat: 51.7563, lng: 14.3329, priority: 2 },
 };
 
-/**
- * STATION NORMALIZATION ENGINE
- * Resolves station names to geographic coordinates with intelligent fuzzy matching.
- */
 const getCoordinates = (station: string | null) => {
   if (!station) return null;
   
   const normalized = station.toLowerCase();
   
-  // Priority 1: Exact Hub Match
   for (const city in CITY_COORDINATES) {
     if (normalized.includes(city.toLowerCase())) {
       return { ...CITY_COORDINATES[city], name: city };
     }
   }
   
-  // Priority 2: Regional Hub Fallback
   if (normalized.includes("berlin")) return { ...CITY_COORDINATES["Berlin"], name: "Berlin Region" };
   if (normalized.includes("hamburg")) return { ...CITY_COORDINATES["Hamburg"], name: "Hamburg Region" };
   if (normalized.includes("münchen") || normalized.includes("muenchen")) return { ...CITY_COORDINATES["München"], name: "München Region" };
   if (normalized.includes("köln") || normalized.includes("koeln")) return { ...CITY_COORDINATES["Köln"], name: "Köln Region" };
   if (normalized.includes("frankfurt")) return { ...CITY_COORDINATES["Frankfurt"], name: "Frankfurt Region" };
   
-  // Default: Center of Germany (Kassel area)
   return { lat: 51.3127, lng: 9.4797, priority: 3, name: "Zentral-Deutschland" };
 };
 
@@ -186,13 +174,18 @@ interface MapViewProps {
   initialZoom?: number;
   className?: string;
   onBoundsChange?: (bounds: { minLat: number; maxLat: number; minLng: number; maxLng: number }) => void;
+  onProjectSelect?: (projectId: number) => void;
 }
 
-/**
- * ZERO-DEPENDENCY CLUSTERING CONTROLLER
- * Manages marker visibility and grouping based on zoom level without external libraries.
- */
-const MapHierarchyController = ({ projects, onBoundsChange }: { projects: Project[]; onBoundsChange?: (bounds: { minLat: number; maxLat: number; minLng: number; maxLng: number }) => void; }) => {
+const MapHierarchyController = ({ 
+  projects, 
+  onBoundsChange,
+  onProjectSelect 
+}: { 
+  projects: Project[]; 
+  onBoundsChange?: (bounds: { minLat: number; maxLat: number; minLng: number; maxLng: number }) => void;
+  onProjectSelect?: (projectId: number) => void;
+}) => {
   const map = useMap();
   const [zoom, setZoom] = useState(map.getZoom());
 
@@ -210,7 +203,6 @@ const MapHierarchyController = ({ projects, onBoundsChange }: { projects: Projec
 
     map.on("moveend", updateBounds);
     map.on("zoomend", updateBounds);
-    // Initial call to set bounds
     updateBounds();
 
     return () => {
@@ -219,7 +211,6 @@ const MapHierarchyController = ({ projects, onBoundsChange }: { projects: Projec
     };
   }, [map, onBoundsChange]);
 
-  // Group projects by location
   const groupedProjects = useMemo(() => {
     const groups: Record<string, { lat: number; lng: number; priority: number; name: string; projects: Project[] }> = {};
     
@@ -237,10 +228,7 @@ const MapHierarchyController = ({ projects, onBoundsChange }: { projects: Projec
     return Object.values(groups);
   }, [projects]);
 
-  // Intelligent Zoom-Based Filtering
   const visibleGroups = useMemo(() => {
-    // The user requested ALL cities to be displayed at all times, not just major ones.
-    // We bypass the zoom-based filtering to show all projects immediately.
     return groupedProjects;
   }, [groupedProjects, zoom]);
 
@@ -268,7 +256,11 @@ const MapHierarchyController = ({ projects, onBoundsChange }: { projects: Projec
               
               <div className="max-h-[240px] overflow-y-auto space-y-2.5 pr-2 custom-scrollbar">
                 {group.projects.slice(0, 10).map(p => (
-                  <div key={p.id} className="p-3 rounded-xl bg-muted/40 hover:bg-muted/80 transition-all border border-transparent hover:border-[#FF0000]/30 group cursor-pointer">
+                  <div 
+                    key={p.id} 
+                    className="p-3 rounded-xl bg-muted/40 hover:bg-muted/80 transition-all border border-transparent hover:border-[#FF0000]/30 group cursor-pointer"
+                    onClick={() => onProjectSelect?.(p.id)}
+                  >
                     <div className="flex justify-between items-start gap-2">
                       <span className="text-[10px] font-mono font-bold text-[#FF0000] bg-[#FF0000]/5 px-1.5 py-0.5 rounded">
                         {p.projektnummer || "N/A"}
@@ -304,6 +296,11 @@ const MapHierarchyController = ({ projects, onBoundsChange }: { projects: Projec
                 variant="outline" 
                 size="sm" 
                 className="w-full mt-4 h-9 text-[11px] font-bold gap-2 border-[#FF0000]/20 hover:bg-[#FF0000] hover:text-white hover:border-[#FF0000] transition-all rounded-xl"
+                onClick={() => {
+                  if (group.projects.length > 0) {
+                    onProjectSelect?.(group.projects[0].id);
+                  }
+                }}
               >
                 Details in Liste anzeigen <ExternalLink className="h-3.5 w-3.5" />
               </Button>
@@ -315,16 +312,13 @@ const MapHierarchyController = ({ projects, onBoundsChange }: { projects: Projec
   );
 };
 
-/**
- * ULTIMATE MAP VIEW COMPONENT
- * A high-performance, production-grade map explorer for the BAHN PROJECT MANAGER.
- */
 export const MapView: React.FC<MapViewProps> = ({
   projects,
   initialCenter = { lat: 51.1657, lng: 10.4515 },
   initialZoom = 6,
   className = "h-full w-full",
   onBoundsChange,
+  onProjectSelect,
 }) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -350,10 +344,13 @@ export const MapView: React.FC<MapViewProps> = ({
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         <ZoomControl position="bottomright" />
-        <MapHierarchyController projects={projects} onBoundsChange={onBoundsChange} />
+        <MapHierarchyController 
+          projects={projects} 
+          onBoundsChange={onBoundsChange} 
+          onProjectSelect={onProjectSelect} 
+        />
       </MapContainer>
       
-      {/* Professional Floating HUD */}
       <div className="absolute top-6 left-6 z-[1000] pointer-events-none">
         <Card className="p-4 bg-background/95 backdrop-blur-xl shadow-2xl border-[#FF0000]/30 pointer-events-auto rounded-2xl">
           <div className="flex items-center gap-4">
@@ -376,7 +373,6 @@ export const MapView: React.FC<MapViewProps> = ({
         </Card>
       </div>
       
-      {/* Intelligent Legend */}
       <div className="absolute bottom-6 left-6 z-[1000] pointer-events-none">
         <div className="flex flex-col gap-3 bg-background/90 backdrop-blur-lg p-4 rounded-2xl border-2 border-border/50 text-[11px] font-bold pointer-events-auto shadow-xl">
           <div className="flex items-center gap-3">
@@ -398,7 +394,6 @@ export const MapView: React.FC<MapViewProps> = ({
         </div>
       </div>
 
-      {/* Map Search Overlay (Visual Only) */}
       <div className="absolute top-6 right-16 z-[1000] pointer-events-none hidden md:block">
         <div className="flex items-center gap-2 bg-background/95 backdrop-blur-xl p-2 rounded-2xl border-2 border-border/50 shadow-2xl pointer-events-auto">
           <div className="relative">
@@ -411,7 +406,6 @@ export const MapView: React.FC<MapViewProps> = ({
         </div>
       </div>
 
-      {/* Fullscreen Toggle */}
       <div className="absolute top-6 right-6 z-[1000]">
         <Button 
           variant="outline" 
