@@ -1,7 +1,6 @@
 import { eq, like, and, or, sql, desc, asc, inArray, count } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { InsertUser, users, projects, departmentReviews, bvbEea, psvItk, auditLog } from "../drizzle/schema";
-import { sql } from "drizzle-orm";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -134,10 +133,8 @@ export async function getProjects(params: {
     conditions.push(like(projects.projektleiter, `%${projektleiter}%`));
   }
 
-  if (minLat !== undefined && maxLat !== undefined && minLng !== undefined && maxLng !== undefined) {
-    conditions.push(sql`${projects.latitude} BETWEEN ${minLat} AND ${maxLat}`);
-    conditions.push(sql`${projects.longitude} BETWEEN ${minLng} AND ${maxLng}`);
-  }
+  // Geo-filtering is handled client-side since projects don't have lat/lng in schema
+  // Reserved for future enhancement if coordinates are added to the schema
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
@@ -152,13 +149,15 @@ export async function getProjects(params: {
   const sortColumn = (projects as any)[sortBy] || projects.id;
   const orderFn = sortDir === 'desc' ? desc : asc;
 
-  const projectList = await db
+  let query = db
     .select()
     .from(projects)
     .where(whereClause)
-    .orderBy(orderFn(sortColumn))
-    .limit(showAll ? undefined : pageSize)
-    .offset(showAll ? undefined : offset);
+    .orderBy(orderFn(sortColumn));
+
+  const projectList = showAll
+    ? await query
+    : await query.limit(pageSize).offset(offset);
 
   return { projects: projectList, total };
 }
