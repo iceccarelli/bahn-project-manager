@@ -92,7 +92,7 @@ export const appRouter = router({
         department: z.string().optional(),
         status: z.string().optional(),
         sortBy: z.string().default('id'),
-        sortDir: z.enum([\"asc\", \"desc\"]).default(\"asc\"),
+        sortDir: z.enum(["asc", "desc"]).default("asc"),
         minLat: z.number().optional(),
         maxLat: z.number().optional(),
         minLng: z.number().optional(),
@@ -164,13 +164,21 @@ export const appRouter = router({
         bahnhofsnummer: z.string().optional(),
         streckennummer: z.string().optional(),
         projektbeschreibung: z.string().optional(),
+        projektstand: z.string().optional(),
         eigvEinstufung: z.string().optional(),
         projektleiter: z.string().optional(),
+        terminProjektvorstellung: z.string().optional(),
         kommentar: z.string().optional(),
         projektLink: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
-        const id = await createProject(input);
+        const createData: any = { ...input };
+        // Convert terminProjektvorstellung string to Date if provided
+        if (input.terminProjektvorstellung) {
+          createData.terminProjektvorstellung = new Date(input.terminProjektvorstellung);
+        }
+
+        const id = await createProject(createData);
 
         await createAuditEntry({
           userId: ctx.user.id,
