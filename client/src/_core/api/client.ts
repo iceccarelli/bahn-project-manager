@@ -3,6 +3,11 @@
  * 
  * Handles data fetching, persistence, and simulated server procedures.
  * Integrated with your provided data.json URL for initial source of truth.
+ * 
+ * Project fields match Excel Übersichtsliste column structure exactly:
+ * Nr. (computed) | Projektnummer | Bahnhofsmanagement | Station | Bahnhofsnummer |
+ * Streckennummer | Projektbeschreibung | Projektstand | Projektleiter |
+ * Termin Projektvorstellung | [14 dept reviews] | Kommentar | Projektlink
  */
 
 import type { Project, Review, Stats, AuditLogEntry } from "@/hooks/useDataQuery";
@@ -27,7 +32,9 @@ export interface ProjectCreateInput {
   bahnhofsnummer?: string;
   streckennummer?: string;
   projektbeschreibung?: string;
+  projektstand?: string;
   projektleiter?: string;
+  terminProjektvorstellung?: string;
   kommentar?: string;
   projektLink?: string;
 }
@@ -82,7 +89,7 @@ export const apiClient = {
       const maxId = projects.length > 0 ? Math.max(...projects.map((p) => p.id)) : 0;
 
       const ALL_DEPARTMENTS = [
-        "EEA", "ITK", "GA", "Energie", "HFT", "HKLS", "TBQ", "BS",
+        "EEA", "ITK", "BS", "GA", "Energie", "HFT", "HKLS", "TBQ",
         "UM", "BIM", "LST", "Vermessung", "Baubetriebstechnologie", "Baubetriebsplanung",
       ];
 
@@ -91,8 +98,12 @@ export const apiClient = {
         projektnummer: input.projektnummer || null,
         bahnhofsmanagement: input.bahnhofsmanagement || null,
         station: input.station || null,
+        bahnhofsnummer: input.bahnhofsnummer || null,
+        streckennummer: input.streckennummer || null,
         projektbeschreibung: input.projektbeschreibung || null,
+        projektstand: input.projektstand || null,
         projektleiter: input.projektleiter || null,
+        terminProjektvorstellung: input.terminProjektvorstellung || null,
         kommentar: input.kommentar || null,
         projektLink: input.projektLink || null,
         reviews: ALL_DEPARTMENTS.map((dept) => ({
@@ -100,11 +111,11 @@ export const apiClient = {
           status: null,
           prueferName: null,
           pruefDatum: null,
-          kommentar: null,
         })),
       };
 
-      projects.unshift(newProject);
+      // Add new project at end (ascending order: Nr. 1 at top, newest at bottom)
+      projects.push(newProject);
       localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
       recordAudit("Projekt erstellt", `Projekt ${newProject.projektnummer} (${newProject.station}) angelegt.`);
 
@@ -145,6 +156,28 @@ export const apiClient = {
         key: STORAGE_KEY_PROJECTS,
         newValue: JSON.stringify(filtered),
       }));
+    },
+
+    async searchSuggestions(term: string): Promise<string[]> {
+      const projects = await this.list();
+      if (!term || term.length < 2) return [];
+      const lower = term.toLowerCase();
+      const suggestions = new Set<string>();
+
+      for (const p of projects) {
+        if (p.station?.toLowerCase().includes(lower)) suggestions.add(p.station);
+        if (p.projektnummer?.toLowerCase().includes(lower)) suggestions.add(p.projektnummer);
+        if (p.projektleiter?.toLowerCase().includes(lower)) suggestions.add(p.projektleiter);
+        if (p.bahnhofsmanagement?.toLowerCase().includes(lower)) suggestions.add(p.bahnhofsmanagement);
+        if (p.projektstand?.toLowerCase().includes(lower)) suggestions.add(p.projektstand);
+        for (const r of p.reviews || []) {
+          if (r.prueferName?.toLowerCase().includes(lower)) suggestions.add(r.prueferName);
+          if (r.department?.toLowerCase().includes(lower)) suggestions.add(r.department);
+        }
+        if (suggestions.size >= 10) break;
+      }
+
+      return Array.from(suggestions).slice(0, 10);
     },
   },
 
