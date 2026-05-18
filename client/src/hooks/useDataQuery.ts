@@ -2,15 +2,79 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import { apiClient } from "@/_core/api/client";
 import type {
-  Project,
-  Review,
-  Stats,
-  Filters,
   ProjectUpdateInput,
   ReviewUpdateInput,
   ProjectCreateInput,
-  AuditLogEntry,
 } from "@/_core/api/client";
+
+// ============================================================================
+// TYPE DEFINITIONS (single source of truth for the frontend)
+// ============================================================================
+
+/**
+ * Review type for a single department on a project.
+ * Each project has up to 14 department reviews.
+ */
+export interface Review {
+  department: string;
+  status: string | null;
+  prueferName: string | null;
+  pruefDatum: string | null;
+}
+
+/**
+ * Primary Project type used across the application.
+ * Matches the Excel Übersichtsliste column structure exactly:
+ * Nr. (computed) | Projektnummer | Bahnhofsmanagement | Station | Bahnhofsnummer |
+ * Streckennummer | Projektbeschreibung | Projektstand | Projektleiter |
+ * Termin Projektvorstellung | [14 dept reviews] | Kommentar | Projektlink
+ */
+export interface Project {
+  id: number;
+  projektnummer: string | null;
+  bahnhofsmanagement: string | null;
+  station: string | null;
+  bahnhofsnummer: string | null;
+  streckennummer: string | null;
+  projektbeschreibung: string | null;
+  projektstand: string | null;
+  projektleiter: string | null;
+  terminProjektvorstellung: string | null;
+  kommentar: string | null;
+  projektLink: string | null;
+  reviews: Review[];
+}
+
+/**
+ * Dashboard statistics type.
+ */
+export interface Stats {
+  totalProjects: number;
+  statusDistribution: Array<{ status: string; count: number }>;
+  regionStats: Array<{ region: string; count: number }>;
+  prueferWorkload: Array<{ name: string; count: number }>;
+  departmentStats: Array<{ department: string; status: string; count: number }>;
+}
+
+/**
+ * Filter options type.
+ */
+export interface Filters {
+  regions: string[];
+  projektleiter: string[];
+  pruefer: string[];
+}
+
+/**
+ * Audit log entry type.
+ */
+export interface AuditLogEntry {
+  id: string;
+  timestamp: string;
+  user: string;
+  action: string;
+  details: string;
+}
 
 // ============================================================================
 // QUERY KEYS (for cache invalidation)
@@ -37,14 +101,14 @@ export const queryKeys = {
 // ============================================================================
 
 /**
- * Fetch all projects
+ * Fetch all projects - no pagination, loads everything at once.
  */
 export function useAllProjects() {
   return useQuery({
-    queryKey: queryKeys.projects.list({ showAll: true }), // Always fetch all for global context
+    queryKey: queryKeys.projects.list({ showAll: true }),
     queryFn: async () => {
       const projects = await apiClient.projects.list();
-      return { projects }; // Ensure it always returns an object with a projects array
+      return { projects };
     },
   });
 }
@@ -106,7 +170,7 @@ export function useUpdateProject() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: ProjectUpdateInput) => apiClient.projects.update(input.id, input),
+    mutationFn: (input: ProjectUpdateInput) => apiClient.projects.update(input),
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: queryKeys.projects.all });
       const previousProjectsData = queryClient.getQueryData<{ projects: Project[] }>(queryKeys.projects.list({ showAll: true }));
@@ -139,7 +203,7 @@ export function useUpdateReview() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: ReviewUpdateInput) => apiClient.reviews.update(input.id, input),
+    mutationFn: (input: ReviewUpdateInput) => apiClient.reviews.update(input),
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: queryKeys.projects.all });
       const previousProjectsData = queryClient.getQueryData<{ projects: Project[] }>(queryKeys.projects.list({ showAll: true }));
@@ -189,9 +253,23 @@ export function useDeleteProject() {
 }
 
 // ============================================================================
-// COMPOSITE HOOKS (for backward compatibility with existing code)
+// COMPOSITE HOOKS (main data access layer for Projects page)
 // ============================================================================
 
+/**
+ * useProjects - The primary hook for the Projects page.
+ * Fetches ALL projects, applies client-side filtering, sorting, and returns results.
+ * No pagination - all 1,298+ projects loaded at once.
+ * 
+ * Filters supported:
+ * - search: Google-like multi-term search across all text fields
+ * - region: Exact match on bahnhofsmanagement
+ * - projektleiter: Exact match on projektleiter
+ * - pruefer: Match on any review's prueferName
+ * - status: Match on any review's status (or combined with department)
+ * - department: Match on any review's department
+ * - sortBy/sortDir: Column sorting (ascending/descending)
+ */
 export function useProjects(params: {
   search?: string;
   region?: string;
@@ -201,6 +279,7 @@ export function useProjects(params: {
   department?: string;
   sortBy?: string;
   sortDir?: "asc" | "desc";
+  showAll?: boolean;
   minLat?: number;
   maxLat?: number;
   minLng?: number;
@@ -219,29 +298,24 @@ export function useProjects(params: {
     status,
     department,
     sortBy = "id",
-    sortDir = "desc",
-  minLat,
-  maxLat,
-  minLng,
-  maxLng,
+    sortDir = "asc",
   } = params;
 
   const result = useMemo(() => {
-    const allProjects = allProjectsData?.projects || []; // Safely access projects array
+    const allProjects = allProjectsData?.projects || [];
 
-    if (!allProjects) {
+    if (!allProjects || allProjects.length === 0) {
       return { projects: [], total: 0 };
     }
 
     let filtered = [...allProjects];
 
-    // Enhanced Google-like search
+    // Enhanced Google-like search: all terms must match at least one field
     if (search) {
       const s = search.toLowerCase().trim();
       const searchTerms = s.split(/\s+/);
       
       filtered = filtered.filter((p) => {
-        // Check if all search terms match at least one field
         return searchTerms.every(term => {
           return (
             p.station?.toLowerCase().includes(term) ||
@@ -249,6 +323,9 @@ export function useProjects(params: {
             p.projektnummer?.toLowerCase().includes(term) ||
             p.projektleiter?.toLowerCase().includes(term) ||
             p.bahnhofsmanagement?.toLowerCase().includes(term) ||
+            p.projektstand?.toLowerCase().includes(term) ||
+            p.bahnhofsnummer?.toLowerCase().includes(term) ||
+            p.streckennummer?.toLowerCase().includes(term) ||
             p.kommentar?.toLowerCase().includes(term) ||
             p.reviews?.some(r => 
               r.prueferName?.toLowerCase().includes(term) || 
@@ -260,11 +337,19 @@ export function useProjects(params: {
       });
     }
 
+    // Region filter (exact match)
     if (region) filtered = filtered.filter((p) => p.bahnhofsmanagement === region);
+    
+    // Projektleiter filter (exact match)
     if (projektleiter) filtered = filtered.filter((p) => p.projektleiter === projektleiter);
+    
+    // Prüfer filter (any review matches)
     if (pruefer) filtered = filtered.filter((p) => p.reviews?.some((r) => r.prueferName === pruefer));
+    
+    // Department filter (any review matches the department)
     if (department) filtered = filtered.filter((p) => p.reviews?.some((r) => r.department === department));
 
+    // Status filter (combined with department if both set, otherwise any review)
     if (status && department) {
       filtered = filtered.filter((p) =>
         p.reviews?.some((r) => r.department === department && r.status === status)
@@ -273,6 +358,7 @@ export function useProjects(params: {
       filtered = filtered.filter((p) => p.reviews?.some((r) => r.status === status));
     }
 
+    // Sorting
     if (sortBy) {
       filtered.sort((a: Project, b: Project) => {
         let va: any = (a as any)[sortBy];
@@ -280,24 +366,20 @@ export function useProjects(params: {
         if (va == null && vb == null) return 0;
         if (va == null) return sortDir === "asc" ? 1 : -1;
         if (vb == null) return sortDir === "asc" ? -1 : 1;
-        if (typeof va === "string" || typeof vb === "string") {
-          va = String(va).toLowerCase();
-          vb = String(vb).toLowerCase();
-        } else if (typeof va === "number" && typeof vb === "number") {
+        if (typeof va === "number" && typeof vb === "number") {
           return sortDir === "asc" ? va - vb : vb - va;
         }
+        // String comparison
+        va = String(va).toLowerCase();
+        vb = String(vb).toLowerCase();
         if (va < vb) return sortDir === "asc" ? -1 : 1;
         if (va > vb) return sortDir === "asc" ? 1 : -1;
         return 0;
       });
     }
 
-    const total = filtered.length;
-    
-    const projects = filtered;
-
-    return { projects, total };
-  }, [allProjectsData, search, region, projektleiter, pruefer, status, department, sortBy, sortDir, minLat, maxLat, minLng, maxLng]);
+    return { projects: filtered, total: filtered.length };
+  }, [allProjectsData, search, region, projektleiter, pruefer, status, department, sortBy, sortDir]);
 
   const applyEdit = useCallback(
     (projectId: number, field: string, value: string) => {
@@ -329,12 +411,16 @@ export function useProjects(params: {
   };
 }
 
+/**
+ * useFilters - Derives filter options from the loaded project data.
+ * Returns unique regions, projektleiter, and pruefer values for dropdown menus.
+ */
 export function useFilters() {
   const { data: allProjectsData, isLoading } = useAllProjects();
 
   const data: Filters | null = useMemo(() => {
-    const allProjects = allProjectsData?.projects || []; // Safely access projects array
-    if (!allProjects) return null;
+    const allProjects = allProjectsData?.projects || [];
+    if (!allProjects || allProjects.length === 0) return null;
     const regions = new Set<string>();
     const projektleiter = new Set<string>();
     const pruefer = new Set<string>();
@@ -342,7 +428,11 @@ export function useFilters() {
     allProjects.forEach((p) => {
       if (p.bahnhofsmanagement) regions.add(p.bahnhofsmanagement);
       if (p.projektleiter) projektleiter.add(p.projektleiter);
-      p.reviews?.forEach((r) => { if (r.prueferName) pruefer.add(r.prueferName); });
+      p.reviews?.forEach((r) => { 
+        if (r.prueferName && r.prueferName !== 'Zuordnung erforderlich') {
+          pruefer.add(r.prueferName); 
+        }
+      });
     });
 
     return {
@@ -355,49 +445,34 @@ export function useFilters() {
   return { data, isLoading };
 }
 
+/**
+ * useSearchSuggestions - Provides autocomplete suggestions as user types.
+ * Searches across station, projektnummer, projektleiter, region, and pruefer fields.
+ */
 export function useSearchSuggestions(term: string) {
   return useQuery({
     queryKey: ["searchSuggestions", term],
     queryFn: () => apiClient.projects.searchSuggestions(term),
-    enabled: !!term && term.length > 1, // Only fetch if term is not empty and has at least 2 characters
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    enabled: !!term && term.length > 1,
+    staleTime: 5 * 60 * 1000,
   });
 }
 
+/**
+ * useAllData - Combined hook for Dashboard and other pages needing projects + stats + filters.
+ */
 export function useAllData() {
   const { data: projectsData, isLoading: pLoading } = useAllProjects();
   const { data: stats, isLoading: sLoading } = useDashboardStats();
   const { data: filters, isLoading: fLoading } = useFilters();
 
   const data = useMemo(() => {
-    const projects = projectsData?.projects || []; // Safely access projects array
-    if (!projects || !stats || !filters) return null;
+    const projects = projectsData?.projects || [];
+    if (!projects || projects.length === 0 || !stats || !filters) return null;
     return { projects, stats, filters };
   }, [projectsData, stats, filters]);
 
   return { data, isLoading: pLoading || sLoading || fLoading };
 }
 
-export type { Project, Review, Stats, Filters, AuditLogEntry };
-
-declare module "@/_core/api/client" {
-  export interface ApiClient {
-    projects: {
-      list(): Promise<Project[]>;
-      get(id: number): Promise<Project | null>;
-      create(input: ProjectCreateInput): Promise<Project>;
-      update(id: number, input: ProjectUpdateInput): Promise<Project>;
-      delete(id: number): Promise<void>;
-      searchSuggestions(term: string): Promise<string[]>;
-    };
-    reviews: {
-      update(input: ReviewUpdateInput): Promise<Project>;
-    };
-    dashboard: {
-      getStats(): Promise<Stats>;
-    };
-    audit: {
-      list(): Promise<AuditLogEntry[]>;
-    };
-  }
-}
+export type { ProjectUpdateInput, ReviewUpdateInput, ProjectCreateInput };
