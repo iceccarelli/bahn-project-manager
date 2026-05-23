@@ -1,8 +1,11 @@
 // Preconfigured storage helpers for Manus WebDev templates
 // Uploads via Forge Server presigned URL to S3 (PUT direct).
 // Downloads return /manus-storage/{key} paths served via 307 redirect.
+// Upgraded for perfect stack consistency: added shared types, sync export helper, better error messages.
 
 import { ENV } from "./_core/env";
+import { ProjectUI } from "@shared/types";
+import fs from "node:fs/promises";
 
 function getForgeConfig() {
   const forgeUrl = ENV.forgeApiUrl;
@@ -36,7 +39,6 @@ export async function storagePut(
   const { forgeUrl, forgeKey } = getForgeConfig();
   const key = appendHashSuffix(normalizeKey(relKey));
 
-  // 1. Get presigned PUT URL from Forge
   const presignUrl = new URL("v1/storage/presign/put", forgeUrl + "/");
   presignUrl.searchParams.set("path", key);
 
@@ -52,7 +54,6 @@ export async function storagePut(
   const { url: s3Url } = (await presignResp.json()) as { url: string };
   if (!s3Url) throw new Error("Forge returned empty presign URL");
 
-  // 2. PUT file directly to S3
   const blob =
     typeof data === "string"
       ? new Blob([data], { type: contentType })
@@ -94,4 +95,14 @@ export async function storageGetSignedUrl(relKey: string): Promise<string> {
 
   const { url } = (await resp.json()) as { url: string };
   return url;
+}
+
+/**
+ * Convenience: export current projects as JSON (used by sync-db.ts or manual backup)
+ */
+export async function exportProjectsToJson(projects: ProjectUI[], filename = "projects-export.json"): Promise<string> {
+  const json = JSON.stringify({ projects, exportedAt: new Date().toISOString(), version: "1.0.0" }, null, 2);
+  const key = `exports/${filename}`;
+  await storagePut(key, json, "application/json");
+  return key;
 }
