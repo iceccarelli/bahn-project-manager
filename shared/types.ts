@@ -1,10 +1,15 @@
 /**
  * Unified type exports
  * Import shared types from this single entry point.
+ * Perfectly aligned with drizzle/schema.ts, data.json, and OData layer.
  */
+
+import { z } from "zod";
+import { DEPARTMENTS, REVIEW_STATUSES, REGIONS, PROJECT_STANDS, ProjectStand } from "./const"; // will be re-exported
 
 export type * from "../drizzle/schema";
 export * from "./_core/errors";
+export * from "./const"; // now includes PROJECT_STAND etc.
 
 /**
  * Department names - the 14 technical review departments (Fachbereiche)
@@ -66,7 +71,39 @@ export const REGIONS = [
 export type Region = (typeof REGIONS)[number];
 
 /**
- * Project with department reviews - flattened for table display
+ * Zod validators for runtime safety (used in API input, seed, hooks).
+ */
+export const ReviewSchema = z.object({
+  department: z.enum(DEPARTMENTS),
+  status: z.enum(REVIEW_STATUSES).nullable().optional(),
+  prueferName: z.string().nullable().optional(),
+  pruefDatum: z.string().nullable().optional(), // ISO date string
+});
+
+export const ProjectUISchema = z.object({
+  id: z.number(),
+  originalRowIndex: z.number().nullable().optional(),
+  projektnummer: z.string().nullable().optional(),
+  bahnhofsmanagement: z.string().nullable().optional(),
+  station: z.string().nullable().optional(),
+  bahnhofsnummer: z.string().nullable().optional(),
+  streckennummer: z.string().nullable().optional(),
+  projektbeschreibung: z.string().nullable().optional(),
+  projektstand: z.enum(PROJECT_STANDS).nullable().optional(),
+  eigvEinstufung: z.string().nullable().optional(),
+  projektleiter: z.string().nullable().optional(),
+  terminProjektvorstellung: z.union([z.string(), z.date()]).nullable().optional(),
+  kommentar: z.string().nullable().optional(),
+  projektLink: z.string().nullable().optional(),
+  reviews: z.array(ReviewSchema),
+  createdAt: z.union([z.string(), z.date()]).nullable().optional(),
+  updatedAt: z.union([z.string(), z.date()]).nullable().optional(),
+});
+
+export type ValidatedProjectUI = z.infer<typeof ProjectUISchema>;
+
+/**
+ * Project with department reviews - flattened for table display (legacy, kept for compatibility)
  */
 export interface ProjectWithReviews {
   id: number;
@@ -122,7 +159,7 @@ export interface ProjectUI {
   bahnhofsnummer: string | null;
   streckennummer: string | null;
   projektbeschreibung: string | null;
-  projektstand: string | null;
+  projektstand: ProjectStand | null;
   eigvEinstufung: string | null;
   projektleiter: string | null;
   terminProjektvorstellung: string | Date | null;
@@ -151,6 +188,7 @@ export interface Filters {
   regions: string[];
   projektleiter: string[];
   pruefer: string[];
+  projektstands?: ProjectStand[];
 }
 
 /**
@@ -188,6 +226,8 @@ export interface ProjectsParams {
   maxLat?: number;
   minLng?: number;
   maxLng?: number;
+  // OData passthrough for future
+  odataQuery?: import("./server/odata").ODataQuery;
 }
 
 /**
@@ -200,6 +240,11 @@ export type EditableProjectField = keyof Omit<ProjectUI, "id" | "reviews" | "cre
  * Editable fields on a Review (for applyReviewEdit status/pruefer/date changes).
  */
 export type EditableReviewField = keyof Omit<Review, "department">;
+
+/**
+ * OData specific response for /odata/projects
+ */
+export interface ODataProjectsResponse extends import("./server/odata").ODataResponse<ProjectUI> {}
 
 /**
  * Convenience re-export of DB types under Db namespace so you can still access
