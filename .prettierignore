@@ -1,3 +1,4 @@
+.prettierignore
 # Dependencies
 node_modules/
 .pnpm-store/
@@ -6,10 +7,13 @@ node_modules/
 dist/
 build/
 *.dist
+client/dist/
 
 # Generated files
 *.tsbuildinfo
 coverage/
+odata-metadata.json
+drizzle/migrations/*.sql
 
 # Package files
 package-lock.json
@@ -22,6 +26,7 @@ pnpm-lock.yaml
 
 # Logs
 *.log
+.manus-logs/
 
 # Environment files
 .env*
@@ -33,3 +38,6 @@ pnpm-lock.yaml
 # OS files
 .DS_Store
 Thumbs.db
+
+# Seed / OData generated
+seed-*.json
