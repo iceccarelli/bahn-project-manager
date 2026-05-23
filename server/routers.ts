@@ -28,6 +28,9 @@ import {
   upsertUser,
   getUserByOpenId,
 } from "./db";
+import { odataRouter as expressODataRouter } from "./odata/router"; // Express OData router (mounted separately in _core)
+import { ODataQuerySchema, parseODataFilter } from "@shared/server/odata";
+import { ProjectUI } from "@shared/types";
 
 // Demo users for authentication without OAuth
 const DEMO_USERS = [
@@ -173,7 +176,6 @@ export const appRouter = router({
       }))
       .mutation(async ({ input, ctx }) => {
         const createData: any = { ...input };
-        // Convert terminProjektvorstellung string to Date if provided
         if (input.terminProjektvorstellung) {
           createData.terminProjektvorstellung = new Date(input.terminProjektvorstellung);
         }
@@ -381,6 +383,54 @@ export const appRouter = router({
       return getFilterOptions();
     }),
   }),
+
+  // ============= ODATA (tRPC facade + full Express router available at /odata) =============
+  odata: router({
+    /**
+     * tRPC-friendly OData query (used by future React Query hooks)
+     * Returns standard ODataResponse shape
+     */
+    queryProjects: publicProcedure
+      .input(ODataQuerySchema)
+      .query(async ({ input }) => {
+        // In production, delegate to the same logic as Express router
+        // For now returns a minimal compatible response
+        const { $filter, $top = 100, $skip = 0, $expand } = input;
+        const includeReviews = $expand?.includes("reviews") ?? false;
+
+        // Simplified: reuse existing getProjects + manual filter
+        const result = await getProjects({ showAll: true });
+        let filtered = result.projects;
+
+        if ($filter) {
+          const parsed = parseODataFilter($filter);
+          if (parsed.station) {
+            filtered = filtered.filter(p => p.station?.toLowerCase().includes(parsed.station.toLowerCase()));
+          }
+          if (parsed.projektstand) {
+            filtered = filtered.filter(p => p.projektstand === parsed.projektstand);
+          }
+        }
+
+        const page = filtered.slice($skip, $skip + $top);
+        return {
+          value: page,
+          "@odata.count": filtered.length,
+          "@odata.context": "/odata/$metadata#projects",
+        };
+      }),
+
+    /**
+     * Returns the EDM metadata (same as Express $metadata)
+     */
+    metadata: publicProcedure.query(() => {
+      return { metadataUrl: "/odata/$metadata", version: "4.0" };
+    }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;
+
+// Note: The full Express OData router (odataRouter) is exported from ./odata/router
+// and should be mounted in server/_core/index.ts like:
+// app.use("/odata", expressODataRouter);
