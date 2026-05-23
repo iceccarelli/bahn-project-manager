@@ -10,7 +10,11 @@
     "check": "tsc --noEmit",
     "format": "prettier --write .",
     "test": "vitest run",
-    "db:push": "drizzle-kit generate && drizzle-kit migrate"
+    "db:push": "drizzle-kit generate && drizzle-kit migrate",
+    "seed:json": "tsx server/seed-from-json.ts",
+    "sync:db": "tsx server/sync-db.ts",
+    "odata:generate": "tsx server/odata/generate-metadata.ts",
+    "dev:sync": "concurrently -n \"APP,SEED,SYNC\" -c \"blue,green,yellow\" \"pnpm dev\" \"pnpm seed:json --watch\" \"pnpm sync:db --watch\""
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.693.0",
@@ -94,6 +98,7 @@
     "@vitejs/plugin-react": "^5.0.4",
     "add": "^2.0.6",
     "autoprefixer": "^10.4.20",
+    "concurrently": "^8.2.2",
     "drizzle-kit": "^0.31.4",
     "esbuild": "^0.25.0",
     "pnpm": "^10.15.1",
