@@ -1,4 +1,5 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, datetime, json } from "drizzle-orm/mysql-core";
+import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, datetime, json, index, uniqueIndex } from "drizzle-orm/mysql-core";
+import { relations } from "drizzle-orm";
 
 /**
  * Core user table backing auth flow.
@@ -13,7 +14,10 @@ export const users = mysqlTable("users", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
-});
+}, (table) => ({
+  openIdIdx: uniqueIndex("openId_idx").on(table.openId),
+  roleIdx: index("role_idx").on(table.role),
+}));
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
@@ -22,6 +26,7 @@ export type InsertUser = typeof users.$inferInsert;
  * Projects table - main entity representing a Bahnhof project.
  * Each row corresponds to one row in the Excel Übersichtsliste.
  * Enhanced with originalRowIndex + fullRowData for perfect data fidelity (zero cell loss on import).
+ * Added syncVersion for round-trip change detection with data.json.
  * 
  * Column order matches Excel: Projektnummer, Bahnhofsmanagement, Station, Bahnhofsnummer,
  * Streckennummer, Projektbeschreibung, Projektstand, Projektleiter, Termin Projektvorstellung,
@@ -43,9 +48,20 @@ export const projects = mysqlTable("projects", {
   terminProjektvorstellung: datetime("terminProjektvorstellung"),
   kommentar: text("kommentar"),
   projektLink: text("projektLink"),
+  syncVersion: varchar("syncVersion", { length: 32 }).default("1.0.0"), // for perfect data.json ↔ DB sync
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+}, (table) => ({
+  // Indexes for fast filtering (used by useProjects hook + OData $filter)
+  projektnummerIdx: index("projektnummer_idx").on(table.projektnummer),
+  bahnhofsmanagementIdx: index("bahnhofsmanagement_idx").on(table.bahnhofsmanagement),
+  stationIdx: index("station_idx").on(table.station),
+  projektstandIdx: index("projektstand_idx").on(table.projektstand),
+  projektleiterIdx: index("projektleiter_idx").on(table.projektleiter),
+  syncVersionIdx: index("syncVersion_idx").on(table.syncVersion),
+  // Composite for common queries
+  regionStandIdx: index("region_stand_idx").on(table.bahnhofsmanagement, table.projektstand),
+}));
 
 export type Project = typeof projects.$inferSelect;
 export type InsertProject = typeof projects.$inferInsert;
@@ -53,6 +69,7 @@ export type InsertProject = typeof projects.$inferInsert;
 /**
  * Department reviews - stores the review status for each of the 14 departments per project.
  * Each project has up to 14 department review records.
+ * Added unique constraint on (projectId, department) for idempotent upserts in seed/sync.
  */
 export const departmentReviews = mysqlTable("department_reviews", {
   id: int("id").autoincrement().primaryKey(),
@@ -63,7 +80,12 @@ export const departmentReviews = mysqlTable("department_reviews", {
   status: varchar("status", { length: 64 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+}, (table) => ({
+  projectDeptUnique: uniqueIndex("project_dept_unique").on(table.projectId, table.department),
+  projectIdIdx: index("projectId_idx").on(table.projectId),
+  departmentIdx: index("department_idx").on(table.department),
+  statusIdx: index("status_idx").on(table.status),
+}));
 
 export type DepartmentReview = typeof departmentReviews.$inferSelect;
 export type InsertDepartmentReview = typeof departmentReviews.$inferInsert;
@@ -87,7 +109,9 @@ export const bvbEea = mysqlTable("bvb_eea", {
   kosteneinsparung: text("kosteneinsparung"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+}, (table) => ({
+  projektnummerIdx: index("bvb_projektnummer_idx").on(table.projektnummer),
+}));
 
 export type BvbEea = typeof bvbEea.$inferSelect;
 export type InsertBvbEea = typeof bvbEea.$inferInsert;
@@ -111,13 +135,16 @@ export const psvItk = mysqlTable("psv_itk", {
   kommentar: text("kommentar"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+}, (table) => ({
+  projektnummerIdx: index("psv_projektnummer_idx").on(table.projektnummer),
+}));
 
 export type PsvItk = typeof psvItk.$inferSelect;
 export type InsertPsvItk = typeof psvItk.$inferInsert;
 
 /**
  * Audit log - tracks all changes to projects and reviews.
+ * Added indexes for fast audit queries per entity/user.
  */
 export const auditLog = mysqlTable("audit_log", {
   id: int("id").autoincrement().primaryKey(),
@@ -130,7 +157,25 @@ export const auditLog = mysqlTable("audit_log", {
   oldValue: text("oldValue"),
   newValue: text("newValue"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-});
+}, (table) => ({
+  entityIdx: index("entity_idx").on(table.entityType, table.entityId),
+  userIdx: index("user_idx").on(table.userId),
+  createdAtIdx: index("createdAt_idx").on(table.createdAt),
+}));
 
 export type AuditLog = typeof auditLog.$inferSelect;
 export type InsertAuditLog = typeof auditLog.$inferInsert;
+
+/**
+ * Relations for type-safe joins (used by drizzle-orm queries in server procedures).
+ */
+export const projectsRelations = relations(projects, ({ many }) => ({
+  reviews: many(departmentReviews),
+}));
+
+export const departmentReviewsRelations = relations(departmentReviews, ({ one }) => ({
+  project: one(projects, {
+    fields: [departmentReviews.projectId],
+    references: [projects.id],
+  }),
+}));
