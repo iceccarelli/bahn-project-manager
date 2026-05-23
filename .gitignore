@@ -6,6 +6,7 @@
 dist/
 build/
 *.dist
+client/dist/
 
 # Environment variables
 .env
@@ -38,6 +39,7 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+.manus-logs/
 
 # Runtime data
 pids
@@ -111,3 +113,13 @@ temp/
 
 # Manus version file (auto-generated, not part of source)
 client/public/__manus__/version.json
+
+# OData / Sync artifacts (generated metadata, seed temp files)
+odata-metadata.json
+seed-*.json
+drizzle/seed-output/
+*.seed.log
+
+# Drizzle kit temp
+drizzle/meta/
+drizzle/migrations/*.sql.bak
