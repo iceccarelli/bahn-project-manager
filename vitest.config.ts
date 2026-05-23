@@ -14,6 +14,27 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["server/**/*.test.ts", "server/**/*.spec.ts"],
+    include: [
+      "server/**/*.test.ts", 
+      "server/**/*.spec.ts",
+      // NEW: End-to-end sync tests for perfect JSON ↔ DB round-trip
+      "server/**/*.sync.test.ts",
+      "tests/e2e/**/*.test.ts"
+    ],
+    setupFiles: ["./vitest.setup.ts"], // For global sync test utils (create if missing)
+    globals: true,
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "json", "html"],
+      exclude: ["node_modules", "dist", "client"],
+    },
+    // Perfect execution: parallel threads for faster test runs on large data.json
+    pool: "threads",
+    poolOptions: {
+      threads: {
+        singleThread: false,
+        maxThreads: 4,
+      },
+    },
   },
 });
