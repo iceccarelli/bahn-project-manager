@@ -7,19 +7,20 @@ if (!connectionString) {
 
 export default defineConfig({
   schema: "./drizzle/schema.ts",
-  out: "./drizzle",
-  dialect: "mysql",
+  out: "./drizzle/migrations",
+  dialect: "mysql", // TODO: Migrate to 'pg' for full-text search + better performance (Neon/Vercel Postgres recommended)
   dbCredentials: {
     url: connectionString,
   },
-  // NEW: Point to seeding migration for perfect data.json ↔ DB round-trip sync
-  // Run with: pnpm db:push && pnpm seed:json
-  // This ensures migrations include seed-from-json logic for initial 1,298+ projects
+  // Perfect consistency: migrations folder + strict mode
   migrations: {
     table: "__drizzle_migrations",
-    schema: "public", // adjust if using different DB schema
+    schema: "public",
   },
-  // Strict for perfect consistency
+  // Enhanced for perfect seeding & relations
   strict: true,
   verbose: true,
+  // Future-proof: enable when switching to Postgres
+  // dialect: "pg",
+  // dbCredentials: { url: connectionString },
 });
