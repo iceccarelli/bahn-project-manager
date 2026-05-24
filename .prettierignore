@@ -1,4 +1,3 @@
-.prettierignore
 # Dependencies
 node_modules/
 .pnpm-store/
@@ -8,12 +7,14 @@ dist/
 build/
 *.dist
 client/dist/
+.vercel/
 
 # Generated files
 *.tsbuildinfo
 coverage/
 odata-metadata.json
 drizzle/migrations/*.sql
+**/*.generated.*
 
 # Package files
 package-lock.json
@@ -41,3 +42,11 @@ Thumbs.db
 
 # Seed / OData generated
 seed-*.json
+public/data.json
+
+# New enterprise files
+.github/
+ROADMAP.md
+README-ARCHITECTURE.md
+.env.example
+biome.json
