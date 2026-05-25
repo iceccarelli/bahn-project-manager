@@ -123,3 +123,7 @@ drizzle/seed-output/
 # Drizzle kit temp
 drizzle/meta/
 drizzle/migrations/*.sql.bak
+
+# Vercel static SPA deployment artifacts (perfect integration)
+.vercel/
+.vercel/output/
