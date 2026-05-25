@@ -218,20 +218,20 @@ export default function Projects() {
       return;
     }
 
-  const createdId = addProject({
-    projektnummer: newProj.projektnummer.trim() || null,
-    station: newProj.station.trim() || null,
-    bahnhofsmanagement: newProj.bahnhofsmanagement.trim() || null,
-    bahnhofsnummer: newProj.bahnhofsnummer.trim() || null,     // ← ADD
-    streckennummer: newProj.streckennummer.trim() || null,     // ← ADD
-    projektbeschreibung: newProj.projektbeschreibung.trim() || null,
-    projektstand: newProj.projektstand.trim() || null,
-    projektleiter: newProj.projektleiter.trim() || null,
-    terminProjektvorstellung: newProj.terminProjektvorstellung || null,
-    kommentar: newProj.kommentar.trim() || null,
-    projektLink: newProj.projektLink.trim() || null,
-    reviews: [],
-  });
+    addProject({
+      projektnummer: newProj.projektnummer.trim() || null,
+      station: newProj.station.trim() || null,
+      bahnhofsmanagement: newProj.bahnhofsmanagement.trim() || null,
+      bahnhofsnummer: newProj.bahnhofsnummer.trim() || null,
+      streckennummer: newProj.streckennummer.trim() || null,
+      projektbeschreibung: newProj.projektbeschreibung.trim() || null,
+      projektstand: newProj.projektstand.trim() || null,
+      projektleiter: newProj.projektleiter.trim() || null,
+      terminProjektvorstellung: newProj.terminProjektvorstellung || null,
+      kommentar: newProj.kommentar.trim() || null,
+      projektLink: newProj.projektLink.trim() || null,
+      reviews: [],
+    });
 
     toast.success(`Projekt erfolgreich angelegt! (Wird als neuester Eintrag oben mit Nr. ${totalProjects + 1} angezeigt)`);
     setShowNewDialog(false);
