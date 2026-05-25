@@ -61,6 +61,14 @@ interface Project {
   }>;
 }
 
+interface WorkloadItem {
+  name: string;
+  incoming: number;
+  completed: number;
+  total: number;
+  timeline: Array<{ date: string; action: string; project: string }>;
+}
+
 export default function Dashboard() {
   const { data: allData } = useAllData();
   const [selectedGewerke, setSelectedGewerke] = useState<string | null>(null);
@@ -99,7 +107,7 @@ export default function Dashboard() {
       }))
     : [];
 
-  const fachWorkload = FACHSPEZIALISTEN.map(name => {
+  const fachWorkload: WorkloadItem[] = FACHSPEZIALISTEN.map(name => {
     let incoming = 0, completed = 0;
     let timeline: Array<{date: string, action: string, project: string}> = [];
 
@@ -145,6 +153,7 @@ export default function Dashboard() {
     });
   });
 
+  // Fixed: Proper typing for upcomingDeadlines (no more union type errors)
   const upcomingDeadlines = projects
     .filter(p => p.reviews.some(r => r.pruefDatum))
     .slice(0, 12)
@@ -153,7 +162,8 @@ export default function Dashboard() {
         ["offen", "in Bearbeitung", "Nachforderung"].includes(r.status || "")
       );
       return {
-        ...p,
+        id: p.id,
+        station: p.station,
         deadline: criticalReview?.pruefDatum || "2026-06-15",
         status: criticalReview?.status || "offen",
         reviewer: criticalReview?.prueferName || "Unbekannt"
