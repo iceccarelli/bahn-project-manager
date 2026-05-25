@@ -217,6 +217,8 @@ export default function Projects() {
       toast.error("Projekt-Erstellung nicht verfügbar");
       return;
     }
+
+    // FIXED: Complete addProject call with all required fields + reviews: []
     addProject({
       projektnummer: newProj.projektnummer.trim() || null,
       station: newProj.station.trim() || null,
@@ -229,7 +231,9 @@ export default function Projects() {
       terminProjektvorstellung: newProj.terminProjektvorstellung || null,
       kommentar: newProj.kommentar.trim() || null,
       projektLink: newProj.projektLink.trim() || null,
+      reviews: [], // Required for type safety
     });
+
     toast.success(`Projekt erfolgreich angelegt! (Wird als neuester Eintrag oben mit Nr. ${totalProjects + 1} angezeigt)`);
     setShowNewDialog(false);
     setNewProj({
@@ -253,7 +257,7 @@ export default function Projects() {
       return;
     }
     const headers = [
-      "Nr.", "Projektnummer", "Region", "Station", "Bahnhofsnr.", "Streckennr.",
+      "Nr.", "Projektnummer", "Region", "Station", "Bhf-Nr.", "Strecken-Nr.",
       "Beschreibung", "Projektstand", "Projektleiter", "Termin PV",
       "Kommentar", "ProjektLink"
     ];
@@ -296,7 +300,6 @@ export default function Projects() {
   // Map integration callback
   const handleMapProjectSelect = (projectId: number) => {
     setViewMode("table");
-    // Optional: could add a highlight or scroll to row in future
     toast.info(`Projekt #${projectId} in der Tabelle angezeigt`);
   };
 
