@@ -147,7 +147,7 @@ export function useUpdateProject() {
 
       return { previousProjectsData };
     },
-    onError: (err, input, context) => {
+    onError: (_err, _input, context) => {
       if (context?.previousProjectsData?.projects) {
         queryClient.setQueryData(queryKeys.projects.list({ showAll: true }), context.previousProjectsData);
       }
@@ -185,7 +185,7 @@ export function useUpdateReview() {
 
       return { previousProjectsData };
     },
-    onError: (err, input, context) => {
+    onError: (_err, _input, context) => {
       if (context?.previousProjectsData?.projects) {
         queryClient.setQueryData(queryKeys.projects.list({ showAll: true }), context.previousProjectsData);
       }

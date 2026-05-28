@@ -6,38 +6,10 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import {
-  Table as UITable,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Loader2,
-  Search,
-  ChevronLeft,
-  ChevronRight,
-  Filter,
-  X,
-  ArrowUpDown,
-  ExternalLink,
-  MessageSquare,
-  Plus,
-  Download,
-  Table,
-  LayoutGrid,
-  MapPin,
-  Command,
-  Check,
-  ChevronsUpDown,
-} from "lucide-react";
+import { Plus, Download, Table, LayoutGrid, MapPin, Filter, X, ArrowUpDown, ExternalLink, MessageSquare, Search, Loader2 } from "lucide-react";
 import { DEPARTMENTS, REVIEW_STATUSES } from "@shared/types";
 import { toast } from "sonner";
 import { MapView } from "@/components/Map";
-import { useTheme } from "@/contexts/ThemeContext";
-
 // DB Corporate Status Colors (perfect harmony with Dashboard.tsx)
 const STATUS_COLORS: Record<string, string> = {
   "nicht erforderlich": "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
@@ -176,7 +148,6 @@ export default function Projects() {
 
   const { data: filterOptions } = useFilters();
   const { data: allData } = useAllData();
-  const { theme } = useTheme();
 
   // Fully dynamic KPIs
   const totalProjects = allData?.projects?.length || 0;

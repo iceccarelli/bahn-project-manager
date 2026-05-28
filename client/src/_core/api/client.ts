@@ -147,23 +147,18 @@ export const apiClient = {
     },
 
     async update(input: ProjectUpdateInput): Promise<Project> {
-      const projects = await this.list();
-      const index = projects.findIndex((p) => p.id === input.id);
-      if (index === -1) throw new Error("Project not found");
-
-      const oldVal = (projects[index] as any)[input.field];
-      (projects[index] as any)[input.field] = input.value;
-
-      localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
-      recordAudit("Projekt aktualisiert", `Feld '${input.field}' von '${oldVal}' auf '${input.value}' geändert.`);
-
-      window.dispatchEvent(new StorageEvent("storage", {
-        key: STORAGE_KEY_PROJECTS,
-        newValue: JSON.stringify(projects),
-      }));
-
-      return projects[index];
-    },
+    const projects = await this.list();
+    const index = projects.findIndex((p) => p.id === input.id);
+    if (index === -1) throw new Error("Project not found");
+    const project = projects[index];
+    if (!project) throw new Error("Project not found");
+    const oldVal = (project as any)[input.field];
+    (project as any)[input.field] = input.value;
+    localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
+    recordAudit("Projekt aktualisiert", `Feld ${input.field} von ${oldVal} auf ${input.value} geändert.`);
+    window.dispatchEvent(new StorageEvent("storage", { key: STORAGE_KEY_PROJECTS, newValue: JSON.stringify(projects) }));
+    return project;
+  },
 
     async delete(id: number): Promise<void> {
       const projects = await this.list();
@@ -202,29 +197,23 @@ export const apiClient = {
 
   reviews: {
     async update(input: ReviewUpdateInput): Promise<Project> {
-      const projects = await apiClient.projects.list();
-      const index = projects.findIndex((p) => p.id === input.projectId);
-      if (index === -1) throw new Error("Project not found");
-
-      const reviewIndex = projects[index].reviews.findIndex((r) => r.department === input.department);
-      if (reviewIndex === -1) throw new Error("Review not found");
-
-      const oldVal = (projects[index].reviews[reviewIndex] as any)[input.field];
-      projects[index].reviews[reviewIndex] = {
-        ...projects[index].reviews[reviewIndex],
-        [input.field]: input.value,
-      };
-
-      localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
-      recordAudit("Prüfung aktualisiert", `${input.department}: ${input.field} von '${oldVal}' auf '${input.value}' gesetzt.`);
-
-      window.dispatchEvent(new StorageEvent("storage", {
-        key: STORAGE_KEY_PROJECTS,
-        newValue: JSON.stringify(projects),
-      }));
-
-      return projects[index];
-    },
+    const projects = await apiClient.projects.list();
+    const index = projects.findIndex((p) => p.id === input.projectId);
+    if (index === -1) throw new Error("Project not found");
+    const project = projects[index];
+    if (!project || !project.reviews) throw new Error("Project or reviews not found");
+    const reviewIndex = project.reviews.findIndex((r) => r.department === input.department);
+    if (reviewIndex === -1) throw new Error("Review not found");
+    const oldVal = (project.reviews[reviewIndex] as any)[input.field];
+    project.reviews[reviewIndex] = {
+      ...project.reviews[reviewIndex],
+      [input.field]: input.value,
+    };
+    localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
+    recordAudit("Prüfung aktualisiert", `${input.department}: ${input.field} von ${oldVal} auf ${input.value} gesetzt.`);
+    window.dispatchEvent(new StorageEvent("storage", { key: STORAGE_KEY_PROJECTS, newValue: JSON.stringify(projects) }));
+    return project;
+  },
   },
 
   dashboard: {
