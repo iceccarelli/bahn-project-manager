@@ -62,20 +62,6 @@ export const ProjectSchema = z.object({
   createdAt: z.string().datetime().optional(),
   updatedAt: z.string().datetime().optional(),
 });
-  bahnhofsnummer: z.string().nullable().optional(),
-  streckennummer: z.string().nullable().optional(),
-  projektbeschreibung: z.string().nullable().optional(),
-  projektstand: z.enum(PROJECT_STANDS).nullable().optional(),
-  eigvEinstufung: z.string().nullable().optional(),
-  projektleiter: z.string().nullable().optional(),
-  terminProjektvorstellung: z.string().datetime().nullable().optional(),
-  kommentar: z.string().nullable().optional(),
-  projektLink: z.string().url().nullable().optional(),
-  reviews: z.array(ReviewSchema).default([]),
-  syncVersion: z.number().default(1),
-  createdAt: z.string().datetime().optional(),
-  updatedAt: z.string().datetime().optional(),
-});
 
 export const DepartmentReviewSchema = z.object({
   id: z.number().optional(),
