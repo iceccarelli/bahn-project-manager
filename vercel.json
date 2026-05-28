@@ -1,15 +1,13 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
+  "framework": null,
   "installCommand": "pnpm install --frozen-lockfile",
   "buildCommand": "pnpm build:client",
   "outputDirectory": "dist/public",
-  "framework": null,
   "regions": ["iad1"],
   "rewrites": [
-    {
-      "source": "/((?!assets/|.*\\.(js|css|png|jpg|svg|ico|webmanifest|json)).*)",
-      "destination": "/index.html"
-    }
+    { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [
     {
