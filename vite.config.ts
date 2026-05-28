@@ -188,9 +188,24 @@ export default defineConfig({
     sourcemap: true,
     rollupOptions: {
       output: {
-        manualChunks: {
-          vendor: ["react", "react-dom", "zod", "@tanstack/react-query"],
-          ui: ["@radix-ui/react-*", "lucide-react", "framer-motion"],
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return undefined;
+          if (
+            id.includes("@radix-ui") ||
+            id.includes("lucide-react") ||
+            id.includes("framer-motion")
+          ) {
+            return "ui";
+          }
+          if (
+            id.includes("/react/") ||
+            id.includes("/react-dom/") ||
+            id.includes("/zod/") ||
+            id.includes("@tanstack/react-query")
+          ) {
+            return "vendor";
+          }
+          return undefined;
         },
       },
     },
