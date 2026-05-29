@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback } from "react";
 
+import { Table } from "@/components/ui/table";
 import {
   Table as UITable,
   TableBody,
