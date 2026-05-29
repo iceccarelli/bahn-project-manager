@@ -21,7 +21,6 @@ export default defineConfig({
       "server/**/*.sync.test.ts",
       "tests/e2e/**/*.test.ts"
     ],
-    setupFiles: ["./vitest.setup.ts"], // For global sync test utils (create if missing)
     globals: true,
     coverage: {
       provider: "v8",
