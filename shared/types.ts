@@ -6,12 +6,10 @@
 import { z } from "zod";
 import {
   DEPARTMENTS, REVIEW_STATUSES, PROJECT_STANDS, REGIONS,
-  ReviewSchema, ProjectSchema, DepartmentReviewSchema,
-  BvbEeaSchema, PsvItkSchema, AuditLogSchema,
+  ReviewSchema, ProjectSchema,
   StatsSchema, FiltersSchema
 } from "./validation";
 
-export type * from "../drizzle/schema";
 export type {
   Review, Project, DepartmentReview, BvbEea, PsvItk, AuditLog,
   ProjectInput, BulkImport, Stats, Filters

@@ -108,7 +108,7 @@ export async function getProjects(params: {
   const db = await getDb();
   if (!db) return { projects: [], total: 0 };
 
-  const { page = 1, pageSize = 50, search, region, projektleiter, sortBy = 'id', sortDir = 'asc', showAll = false, minLat, maxLat, minLng, maxLng } = params;
+  const { page = 1, pageSize = 50, search, region, projektleiter, sortBy = 'id', sortDir = 'asc', showAll = false, minLat: _minLat, maxLat: _maxLat, minLng: _minLng, maxLng: _maxLng } = params;
   const offset = (page - 1) * pageSize;
 
   const conditions: any[] = [];

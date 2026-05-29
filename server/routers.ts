@@ -26,11 +26,8 @@ import {
   getFilterOptions,
   getSearchSuggestions,
   upsertUser,
-  getUserByOpenId,
 } from "./db";
-import { odataRouter as expressODataRouter } from "./odata/router"; // Express OData router (mounted separately in _core)
 import { ODataQuerySchema, parseODataFilter } from "@shared/server/odata";
-import { ProjectUI } from "@shared/types";
 
 // Demo users for authentication without OAuth
 const DEMO_USERS = [
@@ -114,7 +111,7 @@ export const appRouter = router({
           if (!reviewsByProject[review.projectId]) {
             reviewsByProject[review.projectId] = [];
           }
-          reviewsByProject[review.projectId].push(review);
+          reviewsByProject[review.projectId]!.push(review);
         }
 
         const projectsWithReviews = result.projects.map(p => ({
@@ -396,19 +393,21 @@ export const appRouter = router({
         // In production, delegate to the same logic as Express router
         // For now returns a minimal compatible response
         const { $filter, $top = 100, $skip = 0, $expand } = input;
-        const includeReviews = $expand?.includes("reviews") ?? false;
+        const _ = $expand; // $expand reserved for future reviews expansion
+        void _;
 
         // Simplified: reuse existing getProjects + manual filter
         const result = await getProjects({ showAll: true });
         let filtered = result.projects;
 
         if ($filter) {
-          const parsed = parseODataFilter($filter);
-          if (parsed.station) {
-            filtered = filtered.filter(p => p.station?.toLowerCase().includes(parsed.station.toLowerCase()));
+          const parsed = parseODataFilter($filter) as Record<string, string | undefined>;
+          if (parsed["station"]) {
+            const stationFilter = parsed["station"].toLowerCase();
+            filtered = filtered.filter(p => p.station?.toLowerCase().includes(stationFilter));
           }
-          if (parsed.projektstand) {
-            filtered = filtered.filter(p => p.projektstand === parsed.projektstand);
+          if (parsed["projektstand"]) {
+            filtered = filtered.filter(p => p.projektstand === parsed["projektstand"]);
           }
         }
 

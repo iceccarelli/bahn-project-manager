@@ -13,12 +13,14 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useSearchSuggestions } from "@/hooks/useDataQuery";
 
 export default function Header() {
   const [searchTerm, setSearchTerm] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
   const { theme, toggleTheme } = useTheme();
   const { user } = useAuth();
+  const { data: suggestions } = useSearchSuggestions(searchTerm);
 
   const userInitials = useMemo(() => 
     user?.name?.split(" ").map(n => n[0]).join("") || "DB",
@@ -57,6 +59,19 @@ export default function Header() {
             </button>
           )}
         </div>
+        {showSuggestions && suggestions && suggestions.length > 0 && (
+          <div className="absolute top-full left-0 right-0 mt-1 bg-background border border-border rounded-lg shadow-lg z-50 max-h-60 overflow-y-auto">
+            {suggestions.map((s, i) => (
+              <button
+                key={i}
+                className="w-full text-left px-4 py-2 text-sm hover:bg-muted/80 transition-colors"
+                onMouseDown={() => { setSearchTerm(s); setShowSuggestions(false); }}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="flex items-center gap-3">

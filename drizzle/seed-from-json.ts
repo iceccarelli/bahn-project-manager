@@ -20,8 +20,7 @@ import { drizzle } from "drizzle-orm/mysql2";
 import mysql from "mysql2/promise";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { z } from "zod";
-import { ProjectUISchema, ReviewSchema, type ProjectUI, type Review, DEPARTMENTS } from "../shared/types";
+import { ProjectSchema as ProjectUISchema, type Review, DEPARTMENTS } from "../shared/validation";
 import { projects, departmentReviews, auditLog } from "./schema";
 import { eq } from "drizzle-orm";
 import { SYNC_VERSION, DATA_JSON_PATH } from "../shared/const";
@@ -38,7 +37,8 @@ async function main() {
   }
 
   const connection = await mysql.createConnection(dbUrl);
-  const db = drizzle(connection, { schema: { projects, departmentReviews, auditLog } });
+  // Cast to any to avoid Drizzle generic overload issues with schema param
+  const db = drizzle(connection, { schema: { projects, departmentReviews, auditLog }, mode: "default" } as any) as any;
 
   // Load and parse data.json (supports both array root or {projects: []})
   const dataPath = path.resolve(process.cwd(), DATA_JSON_PATH);
@@ -60,11 +60,13 @@ async function main() {
 
   for (const rawProject of projectsData) {
     try {
+      const projectId = Number(rawProject.id);
+
       // Normalize to ProjectUI shape (reviews as array)
-      const normalized: ProjectUI = {
-        id: Number(rawProject.id),
+      const normalized = {
+        id: projectId,
         originalRowIndex: rawProject.originalRowIndex ?? null,
-        projektnummer: rawProject.projektnummer ?? null,
+        projektnummer: rawProject.projektnummer ?? "",
         bahnhofsmanagement: rawProject.bahnhofsmanagement ?? null,
         station: rawProject.station ?? null,
         bahnhofsnummer: rawProject.bahnhofsnummer ?? null,
@@ -76,8 +78,9 @@ async function main() {
         terminProjektvorstellung: rawProject.terminProjektvorstellung ?? null,
         kommentar: rawProject.kommentar ?? null,
         projektLink: rawProject.projektLink ?? null,
+        syncVersion: SYNC_VERSION,
         reviews: (rawProject.reviews || []).map((r: any, idx: number) => ({
-          department: (r.department || DEPARTMENTS[idx]) as any, // fallback
+          department: (r.department || DEPARTMENTS[idx]) as any,
           status: r.status ?? null,
           prueferName: r.prueferName ?? null,
           pruefDatum: r.pruefDatum ?? null,
@@ -91,13 +94,13 @@ async function main() {
 
       // Check existing
       const existing = await db.query.projects.findFirst({
-        where: eq(projects.id, validated.id),
+        where: eq(projects.id, projectId),
         with: { reviews: true },
       });
 
       const projectData = {
         originalRowIndex: validated.originalRowIndex,
-        fullRowData: rawProject, // keep raw for fidelity
+        fullRowData: rawProject,
         projektnummer: validated.projektnummer,
         bahnhofsmanagement: validated.bahnhofsmanagement,
         station: validated.station,
@@ -114,7 +117,7 @@ async function main() {
       };
 
       if (DRY_RUN) {
-        console.log(`✅ [dry] Would upsert project ${validated.id} (${validated.station})`);
+        console.log(`✅ [dry] Would upsert project ${projectId} (${validated.station})`);
         skipped++;
         continue;
       }
@@ -123,21 +126,21 @@ async function main() {
         // Update project
         await db.update(projects)
           .set({ ...projectData, updatedAt: new Date() })
-          .where(eq(projects.id, validated.id));
+          .where(eq(projects.id, projectId));
 
         // Delete old reviews and re-insert (simpler than diff for seed)
-        await db.delete(departmentReviews).where(eq(departmentReviews.projectId, validated.id));
+        await db.delete(departmentReviews).where(eq(departmentReviews.projectId, projectId));
 
         updated++;
       } else {
-        await db.insert(projects).values({ id: validated.id, ...projectData });
+        await db.insert(projects).values({ id: projectId, ...projectData });
         inserted++;
       }
 
       // Insert reviews (always fresh for seed)
       if (validated.reviews.length > 0) {
         const reviewInserts = validated.reviews.map((r: Review) => ({
-          projectId: validated.id,
+          projectId: projectId,
           department: r.department,
           prueferName: r.prueferName,
           datum: r.pruefDatum ? new Date(r.pruefDatum) : null,
@@ -148,10 +151,10 @@ async function main() {
 
       // Audit
       await db.insert(auditLog).values({
-        userId: 0, // system
+        userId: 0,
         userName: "seed-from-json",
         entityType: "project",
-        entityId: validated.id,
+        entityId: projectId,
         action: existing ? "update" : "insert",
         field: "sync",
         oldValue: existing ? JSON.stringify({ syncVersion: existing.syncVersion }) : null,

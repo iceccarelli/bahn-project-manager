@@ -22,7 +22,7 @@ export const PROJECT_STANDS = [
   "EP/ EIGV", "Gestoppt", "Projektstoppt siehe Ersatzprojekt", "Mieterumbau",
   "realisiert", "VEP", "TBQ GP", "EIGV erfolgt", "Umbau Start Q2 2024",
   "Mieterumbau iAG", "Mieterumbau MAG", "VEP, Projekt gestoppt, Mail PL vom 25.04.2022",
-  "doppelt siehe Zeile 197", "FA - Stand Spalte AJ", null
+  "doppelt siehe Zeile 197", "FA - Stand Spalte AJ"
 ] as const;
 
 export const REGIONS = [
@@ -44,7 +44,7 @@ export const ReviewSchema = z.object({
 export const ProjectSchema = z.object({
   id: z.number().optional(),
   originalRowIndex: z.number().nullable().optional(),
-  fullRowData: z.record(z.any()).nullable().optional(),
+  fullRowData: z.record(z.string(), z.any()).nullable().optional(),
   projektnummer: z.string().min(1).max(256),
   bahnhofsmanagement: z.string().max(128).nullable().optional(),
   station: z.string().max(256).nullable().optional(),
@@ -54,13 +54,13 @@ export const ProjectSchema = z.object({
   projektstand: z.enum(PROJECT_STANDS).nullable().optional(),
   eigvEinstufung: z.string().max(1000).nullable().optional(),
   projektleiter: z.string().max(256).nullable().optional(),
-  terminProjektvorstellung: z.string().datetime().nullable().optional(),
+  terminProjektvorstellung: z.string().nullable().optional(),
   kommentar: z.string().max(5000).nullable().optional(),
   projektLink: z.string().url().max(2048).nullable().optional(),
   syncVersion: z.number().int().default(1),
   reviews: z.array(ReviewSchema).default([]),
-  createdAt: z.string().datetime().optional(),
-  updatedAt: z.string().datetime().optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
 });
 
 export const DepartmentReviewSchema = z.object({
@@ -68,7 +68,7 @@ export const DepartmentReviewSchema = z.object({
   projectId: z.number(),
   department: z.enum(DEPARTMENTS),
   prueferName: z.string().nullable().optional(),
-  datum: z.string().datetime().nullable().optional(),
+  datum: z.string().nullable().optional(),
   status: z.enum(REVIEW_STATUSES).nullable().optional(),
 });
 
@@ -81,8 +81,8 @@ export const BvbEeaSchema = z.object({
   streckennummer: z.string().nullable().optional(),
   projektbeschreibung: z.string().nullable().optional(),
   projektleiter: z.string().nullable().optional(),
-  eigvAnzeige: z.string().datetime().nullable().optional(),
-  datum: z.string().datetime().nullable().optional(),
+  eigvAnzeige: z.string().nullable().optional(),
+  datum: z.string().nullable().optional(),
   kommentar: z.string().nullable().optional(),
   freigabeNummer: z.string().nullable().optional(),
   kosteneinsparung: z.string().nullable().optional(),
@@ -98,9 +98,9 @@ export const PsvItkSchema = z.object({
   projektbeschreibung: z.string().nullable().optional(),
   projektstand: z.enum(PROJECT_STANDS).nullable().optional(),
   projektleiter: z.string().nullable().optional(),
-  terminProjektvorstellung: z.string().datetime().nullable().optional(),
+  terminProjektvorstellung: z.string().nullable().optional(),
   itkPruefer: z.string().nullable().optional(),
-  datum: z.string().datetime().nullable().optional(),
+  datum: z.string().nullable().optional(),
   kommentar: z.string().nullable().optional(),
 });
 
@@ -114,7 +114,7 @@ export const AuditLogSchema = z.object({
   field: z.string().nullable().optional(),
   oldValue: z.any().nullable().optional(),
   newValue: z.any().nullable().optional(),
-  createdAt: z.string().datetime().optional(),
+  createdAt: z.string().optional(),
 });
 
 // ================== INPUT SCHEMAS ==================
@@ -151,8 +151,8 @@ export const FiltersSchema = z.object({
   status: z.enum(REVIEW_STATUSES).optional(),
   department: z.enum(DEPARTMENTS).optional(),
   projektstand: z.enum(PROJECT_STANDS).optional(),
-  dateFrom: z.string().datetime().optional(),
-  dateTo: z.string().datetime().optional(),
+  dateFrom: z.string().optional(),
+  dateTo: z.string().optional(),
 });
 
 // ================== TYPE EXPORTS ==================

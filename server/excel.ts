@@ -42,7 +42,7 @@ import { Express, Request, Response } from 'express';
 import * as XLSX from 'xlsx';
 import { getDb } from './db';
 import { projects, departmentReviews } from '../drizzle/schema';
-import { eq, asc } from 'drizzle-orm';
+import { asc } from 'drizzle-orm';
 
 // Canonical department list - EXACT order from the uploaded Übersichtsliste.xlsm header row
 // This ensures perfect visual and logical harmony across UI, export, import and database
@@ -65,7 +65,7 @@ const DEPARTMENTS = [
 
 export function registerExcelRoutes(app: Express) {
   // Export all projects as Excel (modern format - recommended for new workflows)
-  app.get('/api/export/excel', async (req: Request, res: Response) => {
+  app.get('/api/export/excel', async (_req: Request, res: Response) => {
     try {
       const db = await getDb();
       if (!db) {
@@ -79,7 +79,7 @@ export function registerExcelRoutes(app: Express) {
       const reviewsByProject: Record<number, typeof allReviews> = {};
       for (const review of allReviews) {
         if (!reviewsByProject[review.projectId]) reviewsByProject[review.projectId] = [];
-        reviewsByProject[review.projectId].push(review);
+        reviewsByProject[review.projectId]!.push(review);
       }
 
       const rows: any[] = [];
@@ -172,8 +172,12 @@ export function registerExcelRoutes(app: Express) {
           }
 
           const wb = XLSX.read(buffer, { type: 'buffer', cellDates: true, cellNF: true, raw: false });
-          const sheetName = wb.SheetNames[0];
+          const sheetName = wb.SheetNames[0] ?? 'Sheet1';
           const ws = wb.Sheets[sheetName];
+          if (!ws) {
+            res.status(400).json({ error: 'Could not read worksheet from file' });
+            return;
+          }
           const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }) as any[][];
 
           if (data.length === 0) {
@@ -206,9 +210,9 @@ export function registerExcelRoutes(app: Express) {
                 } else {
                   const parts = cleaned.match(/(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})/);
                   if (parts) {
-                    const day = parts[1].padStart(2, '0');
-                    const month = parts[2].padStart(2, '0');
-                    const year = parts[3];
+                    const day = (parts[1] ?? '01').padStart(2, '0');
+                    const month = (parts[2] ?? '01').padStart(2, '0');
+                    const year = parts[3] ?? '2025';
                     const parsed = new Date(`${year}-${month}-${day}`);
                     if (!isNaN(parsed.getTime())) terminPV = parsed;
                   }
@@ -291,9 +295,9 @@ export function registerExcelRoutes(app: Express) {
                     } else {
                       const parts = cleaned.match(/(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})/);
                       if (parts) {
-                        const day = parts[1].padStart(2, '0');
-                        const month = parts[2].padStart(2, '0');
-                        const year = parts[3];
+                        const day = (parts[1] ?? '01').padStart(2, '0');
+                        const month = (parts[2] ?? '01').padStart(2, '0');
+                        const year = parts[3] ?? '2025';
                         const parsed = new Date(`${year}-${month}-${day}`);
                         if (!isNaN(parsed.getTime())) datum = parsed;
                       }

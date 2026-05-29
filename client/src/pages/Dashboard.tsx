@@ -148,7 +148,8 @@ export default function Dashboard() {
       const entry = overallStatusData.find(s => s.name === r.status);
       if (entry) entry.value++;
       else if (["abgelehnt", "Nachforderung", "gestoppt"].includes(r.status)) {
-        overallStatusData[4].value++;
+        const sonstige = overallStatusData[4];
+        if (sonstige) sonstige.value++;
       }
     });
   });
@@ -187,7 +188,6 @@ export default function Dashboard() {
     { type: "info", message: "Neue Excel-Datei hochgeladen: 47 Projekte", time: "vor 6 Std" },
   ];
 
-  const handleProjectClick = (project: Project) => setSelectedProject(project);
 
   const handleMicrosoftConnect = () => {
     setShowMicrosoftInfo(true);

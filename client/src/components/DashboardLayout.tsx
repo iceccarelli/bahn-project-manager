@@ -9,7 +9,6 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
-  SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useIsMobile } from "@/hooks/useMobile";
@@ -131,6 +130,7 @@ function DashboardLayoutContent({
   const isMobile = useIsMobile();
 
   useEffect(() => {
+    if (isMobile) return; // No resize on mobile
     const handleMouseMove = (e: MouseEvent) => {
       if (!isResizing) return;
       const sidebarLeft = sidebarRef.current?.getBoundingClientRect().left ?? 0;
@@ -155,7 +155,7 @@ function DashboardLayoutContent({
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
     };
-  }, [isResizing, setSidebarWidth]);
+  }, [isResizing, setSidebarWidth, isMobile]);
 
   return (
     <div className="flex min-h-screen w-full bg-background overflow-hidden">

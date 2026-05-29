@@ -5,18 +5,25 @@
  * Run with: pnpm seed:perfect
  */
 
-import { db } from "../server/_core/db";
-import { projects, departmentReviews } from "../drizzle/schema";
+import { getDb } from "../server/db";
+import { projects } from "../drizzle/schema";
 import { eq } from "drizzle-orm";
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
-import { ProjectInputSchema } from "../shared/validation";
+import { ProjectSchema } from "../shared/validation";
+import { SYNC_VERSION } from "../shared/const";
 
 const DATA_JSON_PATH = path.resolve("public/data.json");
 
 async function seedPerfect() {
   console.log("🌱 Starting perfect seed with checksum validation...");
+
+  const db = await getDb();
+  if (!db) {
+    console.error("❌ Database not available. Set DATABASE_URL.");
+    process.exit(1);
+  }
 
   if (!fs.existsSync(DATA_JSON_PATH)) {
     console.error("❌ data.json not found!");
@@ -34,27 +41,48 @@ async function seedPerfect() {
   let updated = 0;
 
   for (const rawProject of validatedProjects) {
-    const project = ProjectInputSchema.parse(rawProject);
+    const project = ProjectSchema.parse(rawProject);
+    const projectId = project.id;
+
+    if (!projectId) {
+      console.warn(`⚠️ Skipping project without id: ${project.projektnummer}`);
+      continue;
+    }
 
     // Check if exists
-    const existing = await db.query.projects.findFirst({
-      where: eq(projects.projektnummer, project.projektnummer),
-    });
+    const [existing] = await db.select().from(projects).where(eq(projects.projektnummer, project.projektnummer)).limit(1);
 
     if (existing) {
       // Update if syncVersion changed or data differs
-      if (existing.syncVersion !== project.syncVersion) {
+      if (existing.syncVersion !== SYNC_VERSION) {
         await db.update(projects)
-          .set({ ...project, syncVersion: (existing.syncVersion || 0) + 1, updatedAt: new Date() })
+          .set({
+            projektnummer: project.projektnummer,
+            station: project.station,
+            projektstand: project.projektstand,
+            projektleiter: project.projektleiter,
+            syncVersion: SYNC_VERSION,
+            updatedAt: new Date(),
+          })
           .where(eq(projects.id, existing.id));
         updated++;
       }
     } else {
       await db.insert(projects).values({
-        ...project,
-        syncVersion: 1,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        id: projectId,
+        projektnummer: project.projektnummer,
+        bahnhofsmanagement: project.bahnhofsmanagement,
+        station: project.station,
+        bahnhofsnummer: project.bahnhofsnummer,
+        streckennummer: project.streckennummer,
+        projektbeschreibung: project.projektbeschreibung,
+        projektstand: project.projektstand,
+        eigvEinstufung: project.eigvEinstufung,
+        projektleiter: project.projektleiter,
+        terminProjektvorstellung: project.terminProjektvorstellung ? new Date(project.terminProjektvorstellung) : null,
+        kommentar: project.kommentar,
+        projektLink: project.projektLink,
+        syncVersion: SYNC_VERSION,
       });
       inserted++;
     }

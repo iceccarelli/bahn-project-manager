@@ -25,7 +25,7 @@ L.Marker.prototype.options.icon = DefaultIcon;
 /**
  * PROFESSIONAL DB RED MARKER ENGINE
  */
-const createCustomIcon = (isMajor: boolean, count: number = 1, status?: string) => {
+const createCustomIcon = (isMajor: boolean, count: number = 1, _status?: string) => {
   const size = isMajor ? 36 : 28;
   const color = "#FF0000";
   
@@ -155,15 +155,16 @@ const getCoordinates = (station: string | null) => {
   
   for (const city in CITY_COORDINATES) {
     if (normalized.includes(city.toLowerCase())) {
-      return { ...CITY_COORDINATES[city], name: city };
+      const c = CITY_COORDINATES[city];
+      if (c) return { lat: c.lat, lng: c.lng, priority: c.priority, name: city };
     }
   }
   
-  if (normalized.includes("berlin")) return { ...CITY_COORDINATES["Berlin"], name: "Berlin Region" };
-  if (normalized.includes("hamburg")) return { ...CITY_COORDINATES["Hamburg"], name: "Hamburg Region" };
-  if (normalized.includes("münchen") || normalized.includes("muenchen")) return { ...CITY_COORDINATES["München"], name: "München Region" };
-  if (normalized.includes("köln") || normalized.includes("koeln")) return { ...CITY_COORDINATES["Köln"], name: "Köln Region" };
-  if (normalized.includes("frankfurt")) return { ...CITY_COORDINATES["Frankfurt"], name: "Frankfurt Region" };
+  if (normalized.includes("berlin")) return { lat: 52.5200, lng: 13.4050, priority: 1, name: "Berlin Region" };
+  if (normalized.includes("hamburg")) return { lat: 53.5511, lng: 9.9937, priority: 1, name: "Hamburg Region" };
+  if (normalized.includes("münchen") || normalized.includes("muenchen")) return { lat: 48.1351, lng: 11.5820, priority: 1, name: "München Region" };
+  if (normalized.includes("köln") || normalized.includes("koeln")) return { lat: 50.9375, lng: 6.9603, priority: 1, name: "Köln Region" };
+  if (normalized.includes("frankfurt")) return { lat: 50.1109, lng: 8.6821, priority: 1, name: "Frankfurt Region" };
   
   return { lat: 51.3127, lng: 9.4797, priority: 3, name: "Zentral-Deutschland" };
 };
@@ -219,9 +220,9 @@ const MapHierarchyController = ({
       if (coords) {
         const key = `${coords.lat.toFixed(4)},${coords.lng.toFixed(4)}`;
         if (!groups[key]) {
-          groups[key] = { ...coords, projects: [] };
+          groups[key] = { lat: coords.lat, lng: coords.lng, priority: coords.priority, name: coords.name, projects: [] };
         }
-        groups[key].projects.push(p);
+        groups[key]!.projects.push(p);
       }
     });
     
@@ -297,8 +298,9 @@ const MapHierarchyController = ({
                 size="sm" 
                 className="w-full mt-4 h-9 text-[11px] font-bold gap-2 border-[#FF0000]/20 hover:bg-[#FF0000] hover:text-white hover:border-[#FF0000] transition-all rounded-xl"
                 onClick={() => {
-                  if (group.projects.length > 0) {
-                    onProjectSelect?.(group.projects[0].id);
+                  const firstProject = group.projects[0];
+                  if (firstProject) {
+                    onProjectSelect?.(firstProject.id);
                   }
                 }}
               >

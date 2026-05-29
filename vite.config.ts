@@ -33,9 +33,10 @@ function trimLogFile(logPath: string, maxSize: number) {
     let keptBytes = 0;
     const targetSize = TRIM_TARGET_BYTES;
     for (let i = lines.length - 1; i >= 0; i--) {
-      const lineBytes = Buffer.byteLength(`${lines[i]}\n`, "utf-8");
+      const line = lines[i] ?? "";
+      const lineBytes = Buffer.byteLength(`${line}\n`, "utf-8");
       if (keptBytes + lineBytes > targetSize) break;
-      keptLines.unshift(lines[i]);
+      keptLines.unshift(line);
       keptBytes += lineBytes;
     }
     fs.writeFileSync(logPath, keptLines.join("\n"), "utf-8");

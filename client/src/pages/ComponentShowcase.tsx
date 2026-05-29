@@ -516,8 +516,9 @@ export default function ComponentShowcase() {
                                   : "00:00"
                               }
                               onChange={e => {
-                                const [hours, minutes] =
-                                  e.target.value.split(":");
+                                const parts = e.target.value.split(":");
+                                const hours = parts[0] ?? "0";
+                                const minutes = parts[1] ?? "0";
                                 const newDate = datePickerDate
                                   ? new Date(datePickerDate)
                                   : new Date();

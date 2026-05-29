@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useAuth } from "./useAuth";
 
 export interface PresenceUser {
@@ -42,7 +42,7 @@ function savePresence(presence: Record<string, PresenceUser>) {
 export function usePresence(): PresenceState {
   const { user: authUser, isAuthenticated } = useAuth();
   const [presence, setPresence] = useState<Record<string, PresenceUser>>(() => getStoredPresence());
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading] = useState(false);
   
   const updateMyPresence = useCallback(() => {
     if (!isAuthenticated || !authUser) return;
@@ -69,7 +69,9 @@ export function usePresence(): PresenceState {
     let changed = false;
 
     Object.keys(current).forEach(id => {
-      const lastSeen = new Date(current[id].lastSeen).getTime();
+      const entry = current[id];
+      if (!entry) return;
+      const lastSeen = new Date(entry.lastSeen).getTime();
       if (now - lastSeen > TIMEOUT) {
         delete current[id];
         changed = true;

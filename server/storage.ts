@@ -5,7 +5,6 @@
 
 import { ENV } from "./_core/env";
 import { ProjectUI } from "@shared/types";
-import fs from "node:fs/promises";
 
 function getForgeConfig() {
   const forgeUrl = ENV.forgeApiUrl;

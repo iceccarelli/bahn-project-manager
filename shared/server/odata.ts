@@ -74,11 +74,11 @@ export function parseODataFilter(filter?: string): Record<string, unknown> {
   const andParts = filter.split(" and ");
   for (const part of andParts) {
     const eqMatch = part.match(/(\w+)\s+eq\s+'?([^']+)'?/);
-    if (eqMatch) {
+    if (eqMatch && eqMatch[1] && eqMatch[2]) {
       result[eqMatch[1]] = eqMatch[2];
     }
     const containsMatch = part.match(/contains\((\w+),\s*'([^']+)'\)/);
-    if (containsMatch) {
+    if (containsMatch && containsMatch[1] && containsMatch[2]) {
       result[`${containsMatch[1]}_contains`] = containsMatch[2];
     }
   }
@@ -88,7 +88,7 @@ export function parseODataFilter(filter?: string): Record<string, unknown> {
 /**
  * Build Drizzle where clause from OData query (to be used in server procedures).
  */
-export function buildDrizzleWhereFromOData(query: ODataQuery, table: any) {
+export function buildDrizzleWhereFromOData(query: ODataQuery, _table: unknown) {
   // Placeholder - implement with drizzle-orm sql in actual router
   // For now returns parsed filter object for use in and/or conditions
   return parseODataFilter(query.$filter);

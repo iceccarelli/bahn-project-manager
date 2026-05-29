@@ -6,8 +6,8 @@
 export interface ApiError {
   code: number;
   message: string;
-  details?: Record<string, unknown>;
-  field?: string;
+  details?: Record<string, unknown> | undefined;
+  field?: string | undefined;
 }
 
 export const ERROR_CODES = {

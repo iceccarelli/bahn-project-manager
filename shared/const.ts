@@ -9,7 +9,7 @@ export const AXIOS_TIMEOUT_MS = 30_000;
 export const UNAUTHED_ERR_MSG = 'Please login (10001)';
 export const NOT_ADMIN_ERR_MSG = 'You do not have required permission (10002)';
 
-export const SYNC_VERSION = "2.0.0";
+export const SYNC_VERSION = 2;
 export const DATA_JSON_PATH = "public/data.json";
 export const ODATA_BASE_PATH = "/odata";
 export const MAX_PROJECTS_PER_PAGE = 1000;

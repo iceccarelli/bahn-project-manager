@@ -204,9 +204,11 @@ export const apiClient = {
     if (!project || !project.reviews) throw new Error("Project or reviews not found");
     const reviewIndex = project.reviews.findIndex((r) => r.department === input.department);
     if (reviewIndex === -1) throw new Error("Review not found");
-    const oldVal = (project.reviews[reviewIndex] as any)[input.field];
+    const existingReview = project.reviews[reviewIndex];
+    if (!existingReview) throw new Error("Review not found");
+    const oldVal = (existingReview as any)[input.field];
     project.reviews[reviewIndex] = {
-      ...project.reviews[reviewIndex],
+      ...existingReview,
       [input.field]: input.value,
     };
     localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projects));

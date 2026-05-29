@@ -5,19 +5,24 @@
  * Usage: pnpm sync:json-db --checksum --dry-run
  */
 
-import { db } from "../server/_core/db";
+import { getDb } from "../server/db";
 import { projects } from "../drizzle/schema";
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
-import { ProjectSchema } from "../shared/validation";
 
 const DATA_JSON_PATH = path.resolve("public/data.json");
 
 async function syncJsonDb(dryRun = false, force = false) {
   console.log("🔄 Starting bidirectional sync...");
 
-  const dbProjects = await db.query.projects.findMany();
+  const db = await getDb();
+  if (!db) {
+    console.error("❌ Database not available. Set DATABASE_URL.");
+    process.exit(1);
+  }
+
+  const dbProjects = await db.select().from(projects);
   const dbChecksum = crypto.createHash("sha256")
     .update(JSON.stringify(dbProjects))
     .digest("hex");

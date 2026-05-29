@@ -1,12 +1,7 @@
 import React, { useState, useMemo, useCallback } from "react";
 
 import {
-  Table as UITable,
   TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
 } from "@/components/ui/table";
 import { useProjects, useFilters, useAllData, useSearchSuggestions, type Project, type Review } from "@/hooks/useDataQuery";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -116,7 +111,7 @@ export default function Projects() {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const { data: searchSuggestions } = useSearchSuggestions(searchInput);
-  const [mapBounds, setMapBounds] = useState<{ minLat?: number; maxLat?: number; minLng?: number; maxLng?: number }>({});
+  const [mapBounds, setMapBounds] = useState<{ minLat?: number; maxLat?: number; minLng?: number; maxLng?: number } | Record<string, never>>({});
   const [region, setRegion] = useState<string>("");
   const [projektleiter, setProjektleiter] = useState<string>("");
   const [pruefer, setPruefer] = useState<string>("");
@@ -240,7 +235,7 @@ export default function Projects() {
       "Beschreibung", "Projektstand", "Projektleiter", "Termin PV",
       "Kommentar", "ProjektLink"
     ];
-    const rows = data.projects.map((p: Project, idx: number) => {
+    const rows = data.projects.map((p: Project) => {
       return [
         p.id,
         p.projektnummer || "",
@@ -581,7 +576,7 @@ export default function Projects() {
                     )}
                   </thead>
                   <TableBody>
-                    {data?.projects.map((project: Project, idx: number) => {
+                    {data?.projects.map((project: Project) => {
                       const reviews = project.reviews || [];
                       return (
                         <tr key={project.id} className="border-b hover:bg-muted/30 transition-colors group">
