@@ -31,5 +31,10 @@
       "quoteStyle": "double",
       "trailingCommas": "es5"
     }
+  },
+  "files": {
+    "ignore": [
+      "client/src/_prototypes/**"
+    ]
   }
 }

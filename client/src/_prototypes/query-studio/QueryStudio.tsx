@@ -1,3 +1,17 @@
+// @ts-nocheck
+// PROTOTYPE — NOT PART OF THE PRODUCTION BUILD
+// This file is preserved for future feature extraction (NL query, AI insights
+// panel, styled Excel export). It is NOT type-checked, NOT linted, and NOT
+// imported by any production code. It references project.lat/project.lng
+// fields that do not exist in client/public/data.json, so it is not runnable
+// against the real dataset without modification.
+//
+// To port a feature from here into the real app, rewrite it against:
+//   - shared/types.ts             (Project, Review, Stats, Filters)
+//   - client/src/_core/api/client.ts  (apiClient)
+//   - client/src/hooks/useDataQuery.ts (React Query hooks)
+// Do not import from this folder in production code.
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { Toaster, toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
