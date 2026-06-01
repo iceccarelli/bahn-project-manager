@@ -134,12 +134,12 @@ Each of the 1,298 projects has this shape:
 {
   "id": 1,
   "projektnummer": "G.011511006",
-  "bahnhofsmanagement": "Kassel",
-  "station": "Bad Hersfeld",
-  "bahnhofsnummer": null,
+  "bahnhofsmanagement": "Kassel", // DROPDOWN FEST
+  "station": "Bad Hersfeld", // DROPDOWN FEST
+  "bahnhofsnummer": null, // DROPDOWN FEST
   "streckennummer": null,
   "projektbeschreibung": "Erhoehung des Hausbahnsteig...",
-  "projektstand": "EP",
+  "projektstand": "EP", // DROPDOWN FEST
   "projektleiter": "Daniel Roethlinger",
   "terminProjektvorstellung": "2020-08-19",
   "kommentar": null,
