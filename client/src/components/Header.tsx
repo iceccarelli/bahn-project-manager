@@ -1,7 +1,8 @@
 import { useState, useMemo } from "react";
-import { Search, Bell, Sun, Moon, X } from "lucide-react";
+import { Search, Bell, Sun, Moon, X, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useSidebar } from "@/components/ui/sidebar";
 import PresenceIndicator from "./PresenceIndicator";
 import { useAuth } from "@/_core/hooks/useAuth";
 import {
@@ -19,6 +20,7 @@ export default function Header() {
   const [searchTerm, setSearchTerm] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
   const { theme, toggleTheme } = useTheme();
+  const { toggleSidebar } = useSidebar();
   const { user } = useAuth();
   const { data: suggestions } = useSearchSuggestions(searchTerm);
 
@@ -28,18 +30,28 @@ export default function Header() {
   );
 
   return (
-    <header className="fixed top-0 right-0 left-0 z-50 flex h-[60px] items-center justify-between border-b bg-background/95 px-6 backdrop-blur transition-colors duration-300">
-      <div className="flex items-center gap-x-3 flex-shrink-0">
+    <header className="fixed top-0 right-0 left-0 z-50 flex h-[60px] items-center justify-between border-b bg-background/95 px-3 sm:px-6 backdrop-blur transition-colors duration-300">
+      <div className="flex items-center gap-x-2 sm:gap-x-3 flex-shrink-0">
+        {/* Mobile-only navigation trigger — opens the off-canvas sidebar sheet */}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={toggleSidebar}
+          aria-label="Navigation öffnen"
+          className="h-9 w-9 rounded-lg text-foreground hover:bg-accent md:hidden"
+        >
+          <Menu className="h-5 w-5" />
+        </Button>
         <div className="w-9 h-9 bg-[#FF0000] rounded flex items-center justify-center text-white font-bold text-3xl leading-none pt-0.5 shadow-inner ring-1 ring-white/20">
           DB
         </div>
-        <div className="flex items-baseline hidden md:flex">
+        <div className="items-baseline hidden md:flex">
           <span className="font-bold tracking-[-0.5px] text-2xl">Bahn</span>
           <span className="text-[#FF0000] font-bold tracking-[-0.5px] text-2xl ml-1">Project Manager</span>
         </div>
       </div>
 
-      <div className="flex-1 max-w-3xl relative mx-4">
+      <div className="flex-1 max-w-3xl relative mx-2 sm:mx-4">
         <div className="relative group">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-[#FF0000]" />
           <Input
@@ -74,10 +86,12 @@ export default function Header() {
         )}
       </div>
 
-      <div className="flex items-center gap-3">
-        <PresenceIndicator />
+      <div className="flex items-center gap-1.5 sm:gap-3">
+        <div className="hidden sm:block">
+          <PresenceIndicator />
+        </div>
         
-        <Button variant="ghost" size="icon" onClick={toggleTheme} className="h-9 w-9 rounded-lg text-foreground hover:bg-accent">
+        <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="Theme wechseln" className="h-9 w-9 rounded-lg text-foreground hover:bg-accent">
           {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </Button>
 
