@@ -179,14 +179,14 @@ export const apiClient = {
       const suggestions = new Set<string>();
 
       for (const p of projects) {
-        if (p.station?.toLowerCase().includes(lower)) suggestions.add(p.station);
-        if (p.projektnummer?.toLowerCase().includes(lower)) suggestions.add(p.projektnummer);
-        if (p.projektleiter?.toLowerCase().includes(lower)) suggestions.add(p.projektleiter);
-        if (p.bahnhofsmanagement?.toLowerCase().includes(lower)) suggestions.add(p.bahnhofsmanagement);
-        if (p.projektstand?.toLowerCase().includes(lower)) suggestions.add(p.projektstand);
+        if (String(p.station ?? "").toLowerCase().includes(lower)) suggestions.add(String(p.station));
+        if (String(p.projektnummer ?? "").toLowerCase().includes(lower)) suggestions.add(String(p.projektnummer));
+        if (String(p.projektleiter ?? "").toLowerCase().includes(lower)) suggestions.add(String(p.projektleiter));
+        if (String(p.bahnhofsmanagement ?? "").toLowerCase().includes(lower)) suggestions.add(String(p.bahnhofsmanagement));
+        if (String(p.projektstand ?? "").toLowerCase().includes(lower)) suggestions.add(String(p.projektstand));
         for (const r of p.reviews || []) {
-          if (r.prueferName?.toLowerCase().includes(lower)) suggestions.add(r.prueferName);
-          if (r.department?.toLowerCase().includes(lower)) suggestions.add(r.department);
+          if (String(r.prueferName ?? "").toLowerCase().includes(lower)) suggestions.add(String(r.prueferName));
+          if (String(r.department ?? "").toLowerCase().includes(lower)) suggestions.add(String(r.department));
         }
         if (suggestions.size >= 10) break;
       }
