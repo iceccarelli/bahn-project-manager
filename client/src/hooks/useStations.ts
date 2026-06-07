@@ -16,6 +16,9 @@ export interface StationRecord {
   PLZ: number;
   Ort: string;
   "Aufgabenträger": string;
+  /** Exact WGS84 coordinates (baked in from DB station master data). null only for stations with no known location. */
+  lat: number | null;
+  lng: number | null;
 }
 
 /**
