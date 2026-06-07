@@ -267,8 +267,8 @@ export function useProjects(params: {
             (p.projektleiter?.toLowerCase() || "").includes(lowerTerm) ||
             (p.bahnhofsmanagement?.toLowerCase() || "").includes(lowerTerm) ||
             (p.projektstand?.toLowerCase() || "").includes(lowerTerm) ||
-            (p.bahnhofsnummer?.toLowerCase() || "").includes(lowerTerm) ||
-            (p.streckennummer?.toLowerCase() || "").includes(lowerTerm) ||
+            (String(p.bahnhofsnummer ?? "").toLowerCase()).includes(lowerTerm) ||
+            (String(p.streckennummer ?? "").toLowerCase()).includes(lowerTerm) ||
             (p.kommentar?.toLowerCase() || "").includes(lowerTerm) ||
             p.reviews?.some((r) =>
               (r.prueferName?.toLowerCase() || "").includes(lowerTerm) ||
