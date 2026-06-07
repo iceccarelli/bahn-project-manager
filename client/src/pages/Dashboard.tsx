@@ -457,7 +457,7 @@ export default function Dashboard() {
                         exit={{ height: 0, opacity: 0 }}
                         className="border-t bg-muted/30 px-4 py-4"
                       >
-                        <div className="grid grid-cols-3 gap-4 mb-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
                           <div className="text-center">
                             <div className="text-2xl font-bold text-amber-600">{fach.incoming}</div>
                             <div className="text-xs">Eingehend</div>
@@ -617,7 +617,7 @@ export default function Dashboard() {
               <p className="text-xs text-muted-foreground">Optional - Klicken Sie oben zum Verbinden</p>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-center">
                 <div>
                   <div className="text-emerald-500 text-xs">OUTLOOK</div>
                   <div className="font-mono text-[10px]">Verfügbar</div>
