@@ -17,8 +17,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     if (savedTheme === 'light' || savedTheme === 'dark') {
       return savedTheme;
     }
-    // Default to professional dark (DB brand)
-    return 'dark';
+    // Default to light (white) theme across all pages.
+    return 'light';
   });
 
   // Persist to localStorage whenever theme changes

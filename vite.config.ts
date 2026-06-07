@@ -161,14 +161,18 @@ function vitePluginDataValidationAndCache(): Plugin {
   };
 }
 
+const isProduction = process.env.NODE_ENV === "production";
+
 const plugins = [
   react(),
   tailwindcss(),
-  jsxLocPlugin(),
-  vitePluginManusRuntime(),
-  // Manus debug collector is automatically stripped in production (see plugin logic)
-  vitePluginManusDebugCollector(),
-  vitePluginDataValidationAndCache()
+  // jsxLoc + Manus runtime are DEV-ONLY tooling. They inline a large
+  // source-location/CSS map into index.html (~360 kB) and must never ship
+  // to production. Excluded from production builds below.
+  ...(!isProduction
+    ? [jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector()]
+    : []),
+  vitePluginDataValidationAndCache(),
 ];
 
 export default defineConfig({
@@ -186,7 +190,19 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
-    sourcemap: true,
+    // Do NOT ship a 5.6 MB sourcemap to production. "hidden" keeps maps for
+    // error tooling without referencing them from shipped assets.
+    sourcemap: isProduction ? "hidden" : true,
+    chunkSizeWarningLimit: 900,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          "vendor-react": ["react", "react-dom"],
+          "vendor-charts": ["recharts"],
+          "vendor-leaflet": ["leaflet", "react-leaflet"],
+        },
+      },
+    },
 },
   server: {
     host: true,
