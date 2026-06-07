@@ -4,6 +4,7 @@ import {
   TableBody,
 } from "@/components/ui/table";
 import { useProjects, useFilters, useAllData, useSearchSuggestions, type Project, type Review } from "@/hooks/useDataQuery";
+import { useStations, PROJEKTSTAND_OPTIONS } from "@/hooks/useStations";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -152,6 +153,9 @@ export default function Projects() {
 
   const { data: filterOptions } = useFilters();
   const { data: allData } = useAllData();
+
+  // BM -> Station -> Bf. Nr. cascade for the "Neues Projekt" dialog dropdowns.
+  const { regions: stationRegions, stationsByRegion, bfNrByStation } = useStations();
 
   // Fully dynamic KPIs
   const totalProjects = allData?.projects?.length || 0;
@@ -815,30 +819,56 @@ export default function Projects() {
                 placeholder="z.B. PRJ-2026-001"
               />
             </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="station" className="text-right text-sm font-medium">
-                Station
-              </label>
-              <Input
-                id="station"
-                value={newProj.station}
-                onChange={(e) => setNewProj({ ...newProj, station: e.target.value })}
-                className="col-span-3"
-                placeholder="z.B. Frankfurt Hbf"
-              />
-            </div>
+            {/* Region (BM) — drives the Station list below */}
             <div className="grid grid-cols-4 items-center gap-4">
               <label htmlFor="bahnhofsmanagement" className="text-right text-sm font-medium">
                 Region
               </label>
-              <Input
-                id="bahnhofsmanagement"
-                value={newProj.bahnhofsmanagement}
-                onChange={(e) => setNewProj({ ...newProj, bahnhofsmanagement: e.target.value })}
-                className="col-span-3"
-                placeholder="z.B. Frankfurt"
-              />
+              <Select
+                value={newProj.bahnhofsmanagement || undefined}
+                onValueChange={(v) =>
+                  setNewProj({ ...newProj, bahnhofsmanagement: v, station: "", bahnhofsnummer: "" })
+                }
+              >
+                <SelectTrigger id="bahnhofsmanagement" className="col-span-3">
+                  <SelectValue placeholder="Region wählen (BM)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {stationRegions.map((r) => (
+                    <SelectItem key={r} value={r}>{r}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
+            {/* Station — filtered by the selected Region; selecting it auto-fills Bahnhofsnr. */}
+            <div className="grid grid-cols-4 items-center gap-4">
+              <label htmlFor="station" className="text-right text-sm font-medium">
+                Station
+              </label>
+              <Select
+                value={newProj.station || undefined}
+                disabled={!newProj.bahnhofsmanagement}
+                onValueChange={(v) =>
+                  setNewProj({
+                    ...newProj,
+                    station: v,
+                    bahnhofsnummer: bfNrByStation[v] != null ? String(bfNrByStation[v]) : "",
+                  })
+                }
+              >
+                <SelectTrigger id="station" className="col-span-3">
+                  <SelectValue
+                    placeholder={newProj.bahnhofsmanagement ? "Station wählen" : "Zuerst Region wählen"}
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {(stationsByRegion[newProj.bahnhofsmanagement] ?? []).map((s) => (
+                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {/* Bahnhofsnr. — hard-derived from the selected Station (read-only) */}
             <div className="grid grid-cols-4 items-center gap-4">
               <label htmlFor="bahnhofsnummer" className="text-right text-sm font-medium">
                 Bahnhofsnr.
@@ -846,9 +876,11 @@ export default function Projects() {
               <Input
                 id="bahnhofsnummer"
                 value={newProj.bahnhofsnummer}
-                onChange={(e) => setNewProj({ ...newProj, bahnhofsnummer: e.target.value })}
-                className="col-span-3"
-                placeholder="z.B. 1234"
+                readOnly
+                tabIndex={-1}
+                aria-readonly="true"
+                className="col-span-3 bg-muted text-muted-foreground cursor-not-allowed"
+                placeholder="– automatisch aus Station –"
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
@@ -879,13 +911,19 @@ export default function Projects() {
               <label htmlFor="projektstand" className="text-right text-sm font-medium">
                 Projektstand
               </label>
-              <Input
-                id="projektstand"
-                value={newProj.projektstand}
-                onChange={(e) => setNewProj({ ...newProj, projektstand: e.target.value })}
-                className="col-span-3"
-                placeholder="z.B. Planung, Ausführung, Abschluss"
-              />
+              <Select
+                value={newProj.projektstand || undefined}
+                onValueChange={(v) => setNewProj({ ...newProj, projektstand: v })}
+              >
+                <SelectTrigger id="projektstand" className="col-span-3">
+                  <SelectValue placeholder="Projektstand wählen" />
+                </SelectTrigger>
+                <SelectContent>
+                  {PROJEKTSTAND_OPTIONS.map((p) => (
+                    <SelectItem key={p} value={p}>{p}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <label htmlFor="projektleiter" className="text-right text-sm font-medium">
