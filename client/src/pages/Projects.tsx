@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 
 import {
   TableBody,
@@ -170,6 +170,12 @@ export default function Projects() {
 
   const handleSearch = useCallback(() => {
     setSearch(searchInput);
+  }, [searchInput]);
+
+  // Live search: debounce typing so table, cards AND map filter as you type.
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(searchInput), 250);
+    return () => clearTimeout(t);
   }, [searchInput]);
 
   const handleSort = (column: string) => {
