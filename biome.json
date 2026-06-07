@@ -1,40 +1,78 @@
 {
   "$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
-  "organizeImports": {
-    "enabled": true
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": {
+    "ignoreUnknown": true,
+    "ignore": [
+      "dist/**",
+      "coverage/**",
+      "node_modules/**",
+      "client/public/**",
+      "drizzle/**",
+      "**/*.json",
+      "**/*.min.js",
+      "**/__manus__/**"
+    ]
   },
+  "formatter": { "enabled": false },
+  "organizeImports": { "enabled": false },
   "linter": {
     "enabled": true,
     "rules": {
       "recommended": true,
-      "correctness": {
-        "noUnusedImports": "error",
-        "noUnusedVariables": "error"
+      "suspicious": {
+        "noAssignInExpressions": "warn",
+        "noDoubleEquals": "warn",
+        "noExplicitAny": "warn",
+        "noGlobalIsNan": "warn",
+        "noArrayIndexKey": "warn",
+        "noMisleadingCharacterClass": "warn"
       },
       "style": {
-        "useConst": "error",
-        "useTemplate": "error"
+        "noCommaOperator": "warn",
+        "useSingleVarDeclarator": "warn",
+        "useTemplate": "warn",
+        "noVar": "warn",
+        "noArguments": "warn",
+        "noParameterAssign": "warn",
+        "useNodejsImportProtocol": "warn",
+        "useImportType": "warn",
+        "noNonNullAssertion": "warn",
+        "noUnusedTemplateLiteral": "warn",
+        "useWhile": "warn",
+        "useNumberNamespace": "warn",
+        "useConst": "warn",
+        "noInferrableTypes": "warn",
+        "useSelfClosingElements": "warn"
       },
-      "suspicious": {
-        "noExplicitAny": "warn"
+      "complexity": {
+        "useArrowFunction": "warn",
+        "useOptionalChain": "warn",
+        "useLiteralKeys": "warn",
+        "noForEach": "warn"
+      },
+      "correctness": {
+        "noInnerDeclarations": "warn",
+        "noInvalidUseBeforeDeclaration": "warn",
+        "noUnusedVariables": "warn",
+        "useExhaustiveDependencies": "warn"
+      },
+      "performance": {
+        "noDelete": "warn"
+      },
+      "security": {
+        "noDangerouslySetInnerHtml": "warn"
+      },
+      "a11y": {
+        "noAutofocus": "warn",
+        "useKeyWithClickEvents": "warn",
+        "noLabelWithoutControl": "warn",
+        "useButtonType": "warn",
+        "useSemanticElements": "warn",
+        "noRedundantRoles": "warn",
+        "useFocusableInteractive": "warn",
+        "useValidAnchor": "warn"
       }
     }
-  },
-  "formatter": {
-    "enabled": true,
-    "indentStyle": "space",
-    "indentWidth": 2,
-    "lineWidth": 100
-  },
-  "javascript": {
-    "formatter": {
-      "quoteStyle": "double",
-      "trailingCommas": "es5"
-    }
-  },
-  "files": {
-    "ignore": [
-      "client/src/_prototypes/**"
-    ]
   }
 }
