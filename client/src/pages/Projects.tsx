@@ -284,7 +284,7 @@ export default function Projects() {
   return (
     <div className="space-y-8 p-6 bg-background min-h-screen">
       {/* DB KPI Cards - 100% Dynamic */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         <Card className="aws-card border-l-4 border-l-[#FF0000] shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Gesamtprojekte</CardTitle>
@@ -324,9 +324,9 @@ export default function Projects() {
       </div>
 
       {/* Controls Bar */}
-      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between bg-card p-4 rounded-xl border shadow-sm">
-        <div className="flex items-center gap-3 w-full sm:w-auto">
-          <div className="relative flex-1 sm:w-80">
+      <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-center justify-between bg-card p-4 rounded-xl border shadow-sm">
+        <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto min-w-0">
+          <div className="relative flex-1 min-w-[180px] sm:flex-none sm:w-80">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <div className="relative flex-1 sm:w-80">
               <Input
@@ -366,7 +366,7 @@ export default function Projects() {
           </Button>
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
+        <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-start lg:justify-end">
           <div className="flex bg-muted p-1 rounded-lg">
             <Button
               variant={viewMode === "table" ? "secondary" : "ghost"}
