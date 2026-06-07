@@ -261,19 +261,19 @@ export function useProjects(params: {
         return searchTerms.every((term) => {
           const lowerTerm = term.toLowerCase();
           return (
-            (p.station?.toLowerCase() || "").includes(lowerTerm) ||
-            (p.projektbeschreibung?.toLowerCase() || "").includes(lowerTerm) ||
-            (p.projektnummer?.toLowerCase() || "").includes(lowerTerm) ||
-            (p.projektleiter?.toLowerCase() || "").includes(lowerTerm) ||
-            (p.bahnhofsmanagement?.toLowerCase() || "").includes(lowerTerm) ||
-            (p.projektstand?.toLowerCase() || "").includes(lowerTerm) ||
+            (String(p.station ?? "").toLowerCase()).includes(lowerTerm) ||
+            (String(p.projektbeschreibung ?? "").toLowerCase()).includes(lowerTerm) ||
+            (String(p.projektnummer ?? "").toLowerCase()).includes(lowerTerm) ||
+            (String(p.projektleiter ?? "").toLowerCase()).includes(lowerTerm) ||
+            (String(p.bahnhofsmanagement ?? "").toLowerCase()).includes(lowerTerm) ||
+            (String(p.projektstand ?? "").toLowerCase()).includes(lowerTerm) ||
             (String(p.bahnhofsnummer ?? "").toLowerCase()).includes(lowerTerm) ||
             (String(p.streckennummer ?? "").toLowerCase()).includes(lowerTerm) ||
-            (p.kommentar?.toLowerCase() || "").includes(lowerTerm) ||
+            (String(p.kommentar ?? "").toLowerCase()).includes(lowerTerm) ||
             p.reviews?.some((r) =>
-              (r.prueferName?.toLowerCase() || "").includes(lowerTerm) ||
-              (r.department?.toLowerCase() || "").includes(lowerTerm) ||
-              (r.status?.toLowerCase() || "").includes(lowerTerm)
+              (String(r.prueferName ?? "").toLowerCase()).includes(lowerTerm) ||
+              (String(r.department ?? "").toLowerCase()).includes(lowerTerm) ||
+              (String(r.status ?? "").toLowerCase()).includes(lowerTerm)
             )
           );
         });
