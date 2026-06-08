@@ -1,146 +1,144 @@
 # Bahn Project Manager
 
-> Enterprise platform for managing Deutsche Bahn infrastructure and station development projects across 14 technical departments (Fachbereiche).
+> Enterprise platform for managing Deutsche Bahn infrastructure and station‑development projects across 14 technical departments (*Fachbereiche*). Single‑page React app, data‑driven from a 1,298‑project dataset, deployed as a static SPA on Vercel.
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react)](https://react.dev/)
 [![Vite](https://img.shields.io/badge/Vite-7-646CFF?logo=vite)](https://vitejs.dev/)
-[![Drizzle](https://img.shields.io/badge/Drizzle_ORM-0.44-FF6B6B)](https://orm.drizzle.team/)
+[![Biome](https://img.shields.io/badge/Biome-1.9.4-60A5FA?logo=biome)](https://biomejs.dev/)
 [![Vercel](https://img.shields.io/badge/Deployed_on-Vercel-black?logo=vercel)](https://vercel.com/)
-[![Build](https://img.shields.io/badge/Build-Passing-brightgreen)]()
-[![TSC](https://img.shields.io/badge/TypeScript_Errors-0-brightgreen)]()
+[![Build](https://img.shields.io/badge/Build-passing-brightgreen)]()
+[![Typecheck](https://img.shields.io/badge/tsc_errors-0-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-5_passed_/_6_skipped-brightgreen)]()
 
 ---
 
-## Brutally Honest Status (May 2026)
+## Verified Status — June 2026
 
-This section tells the truth about what works, what is broken, and what is missing.
+Every row below was confirmed by running the command against `main` (commit `13537e8`) on Node 22 / pnpm 10.15.1. This is not aspirational; it is the measured state of the repository.
 
-### What Works Right Now
+### Pipeline — green end to end
 
-| Component | Status | Evidence |
-|-----------|--------|----------|
-| **Vite Build** | Passing | `pnpm build` produces clean output, 0 errors |
-| **TypeScript** | 0 errors | `npx tsc --noEmit` returns clean |
-| **Vercel Deployment** | Live | Static SPA at `dist/public/`, `vercel.json` configured correctly |
-| **Data Loading** | Working | 1,298 projects loaded from `/data.json` via `localStorage` cache |
-| **Login Flow** | Working (Demo) | `admin@bahn.de`/`admin` and `pruefer@bahn.de`/`user` via `localStorage` |
-| **Routing** | Working | `/`, `/projects`, `/bvb-eea`, `/psv-itk`, `/audit`, `/login` via `wouter` |
-| **Dark/Light Mode** | Working | `ThemeContext` with `localStorage` persistence, no flash |
-| **Dashboard** | Working | KPI cards, charts, status distribution from 1,298 projects |
-| **Projects Table** | Working | Inline editing, filters, search, sorting, 947 lines |
-| **Map View** | Working | Leaflet markers with city coordinates, filter-synced |
-| **Excel Export** | Working (Client-side) | XLSX generation from current view |
-| **Audit Log** | Working (Client-side) | Change tracking in `localStorage` |
+| Command | What it does | Result |
+|---|---|---|
+| `pnpm install --frozen-lockfile` | Install exactly as Vercel/CI do | ✅ passes (see build‑script note below) |
+| `pnpm check` (`tsc --noEmit`) | TypeScript typecheck | ✅ **0 errors** |
+| `pnpm lint` (`biome check .`) | Linting | ✅ **exit 0**, 297 warnings (non‑blocking) |
+| `pnpm test:cov` | Vitest + coverage | ✅ **5 passed, 6 skipped** |
+| `pnpm build:client` | The production build Vercel runs | ✅ passes, emits `dist/public/` |
+| `pnpm build:parallel` | CI build job (client + server bundle) | ✅ passes |
+| `pnpm dev` | Express + Vite dev server | ✅ boots on **http://localhost:3000** |
+| GitHub Actions CI | lint‑typecheck → test → build → deploy | ✅ all jobs green; deploy jobs self‑skip without Vercel secrets |
 
-### What Is Broken or Incomplete
+> **Build‑script note.** pnpm 10 blocks post‑install scripts by default and prints `Ignored build scripts: @biomejs/biome, @tailwindcss/oxide, esbuild`. The build still succeeds because those tools ship prebuilt platform binaries as optional dependencies. If you ever see a native‑binary error locally, run `pnpm approve-builds` once. Vercel handles this transparently.
 
-| Component | Status | Problem |
-|-----------|--------|---------|
-| **GitHub Actions CI** | Failing | `pnpm lint` calls `biome check .` — 134 lint errors remain (mostly a11y: `useButtonType`, `noArrayIndexKey`, `noStaticElementInteractions`). CI also calls `pnpm test:cov` which requires a DB connection that does not exist in CI. |
-| **Backend Server** | Not functional in production | Express + tRPC server exists but Vercel deployment is static-only. No serverless functions configured. Server code is dead weight in production. |
-| **Database** | Not connected | Schema is MySQL (drizzle-orm/mysql2) but no `DATABASE_URL` configured anywhere. `getDb()` returns `null` gracefully. All data comes from static `data.json`. |
-| **Authentication** | Demo only | `localStorage`-based mock. No real Microsoft Entra ID / MSAL integration. The `@azure/msal-browser` and `@azure/msal-react` packages are installed but unused. |
-| **Data Persistence** | None | All mutations (inline edits, new projects, review updates) are stored in `localStorage` only. Refresh on a new device loses all changes. |
-| **BVB-EEA Page** | Minimal | 107 lines, placeholder view |
-| **PSV-ITK Page** | Minimal | 107 lines, placeholder view |
-| **"Add New Project" Button** | Client-only | Creates a project in `localStorage`, not persisted to any backend |
-| **Filter Data Quality** | Dirty | Regions include duplicates (`Koblenz`, `Koblenz `, `koblenz`), placeholders (`???`, `Bitte auswählen`). 113 projects have null region. |
-| **Biome Linter** | 134 errors | Config migrated from v1.9.4 to v2.4.16. Remaining: 36 `useButtonType`, 29 `noArrayIndexKey`, 16 `noInnerDeclarations`, 16 `noLabelWithoutControl`, 10 `noArguments` |
-| **Tests** | Not runnable | `vitest run` requires DB connection. No unit tests for frontend components. |
-| **React Peer Dependencies** | Warnings | `react-leaflet@4.2.1` and `@azure/msal-react@2.2.0` expect React 18, but React 19 is installed. |
+### What works in the browser today
 
-### What Does Not Exist Yet
+| Area | State | Notes |
+|---|---|---|
+| Routing | ✅ | `wouter`: `/`, `/projects`, `/bvb-eea`, `/psv-itk`, `/audit`, `/login` |
+| Auth gate | ✅ (demo) | `localStorage` session; redirects unauthenticated users to `/login` |
+| Dark / light theme | ✅ | `ThemeContext`, synchronous init from `localStorage`, no flash; light is default |
+| Data loading | ✅ | 1,298 projects + 18,172 review rows from `/data.json`, cached in `localStorage` |
+| Dashboard | ✅ | KPI cards, status distribution, region and *Prüfer* workload charts |
+| Projects table | ✅ | 991 lines: inline edit, per‑department review columns, sort, filters, search |
+| Add‑Project dialog | ✅ (client‑only) | Cascading Region → Station → Bf‑Nr. dropdowns; writes to `localStorage` |
+| Live search | ✅ | Debounced; numeric fields are string‑coerced (the old numeric‑field crash is fixed) |
+| Map view | ✅ | Vanilla‑Leaflet rewrite (no re‑init crash), filter‑synced markers |
+| BVB‑EEA page | ✅ | Real filtered EEA‑*Freigaben* table (not a placeholder) |
+| PSV‑ITK page | ✅ | Filtered ITK view |
+| Excel export | ✅ | Client‑side XLSX of the current view |
+| Audit log | ✅ (client‑only) | Change history in `localStorage` |
 
-| Feature | Current State |
-|---------|---------------|
-| Real database connection | Schema exists, no deployment |
-| Server-side API (production) | Code exists, not deployed |
-| Microsoft Entra ID SSO | Packages installed, zero integration |
-| SharePoint / Teams / Planner | Not started |
-| Real-time collaboration | Not started |
-| Mobile app (React Native) | Not started |
-| E2E tests (Playwright) | Not started |
-| Role-based access control (real) | Demo roles in localStorage |
-| Excel Import (server-side) | Server code exists, not reachable in production |
+### What is intentionally not wired up yet
+
+| Area | Reality |
+|---|---|
+| **Persistence** | Everything is `localStorage`‑only. Edits, new projects and audit entries do **not** survive on another device or browser. |
+| **Backend** | `server/` (Express + tRPC) and `drizzle/` (MySQL schema) exist and compile, but Vercel serves **static files only** — `vercel.json` defines no API routes. The server is not reachable in production. |
+| **Database** | No `DATABASE_URL` is provisioned. `getDb()` returns `null` gracefully. The MySQL schema and seed scripts are ready but unused. |
+| **Real auth** | `@azure/msal-browser` / `@azure/msal-react` are installed but not integrated. Login is two hard‑coded demo users. |
+| **CI deploy** | Deploy jobs are guarded and skip cleanly unless `VERCEL_TOKEN` etc. are set; Vercel's Git integration handles deploys instead. |
+
+---
+
+## Known real issues (prioritised, evidence‑based)
+
+These are the things genuinely worth fixing. None of them block the build.
+
+1. **Filter dropdowns show dirty data.** `useFilters()` builds option lists with a plain `Set` + `sort`, with no trimming or case‑folding. The dataset contains `"Frankfurt"` vs `"Frankfurt "`, `"Koblenz"` / `"koblenz"` / `"Koblenz "`, `"Gießen"` / `"Gießen "`, plus placeholders `"???"` and `"Bitte auswählen"`, and **113 projects with a null region**. All of these surface as separate filter entries.
+2. **No durable persistence.** Mutations live only in `localStorage`. This is the single biggest gap between "demo" and "product."
+3. **`projektstand` is free‑text.** 80 distinct values, many one‑offs — they cannot be reliably bucketed for reporting until normalised.
+4. **A few lint warnings carry real risk.** Of 297 warnings, only two rules matter for correctness: `noArrayIndexKey` (28 — list keys derived from array index can cause subtle reconciliation bugs) and `useExhaustiveDependencies` (6 — possible stale closures). The remaining ~263 are style (`noExplicitAny` 62, `useImportType` 54, `useLiteralKeys` 19, …).
+5. **Single large JS chunk.** The main bundle is ~718 kB (≈215 kB gzip) on top of vendor chunks; route‑level `React.lazy` would cut first‑load cost.
+6. **Repo clutter.** One‑shot codemod scripts (`apply-search-fix.mjs`, `check-search.mjs`) and a `client/src/_prototypes/` folder remain in the tree; the dev HTML injects a `__manus__/debug-collector.js`. None affect production, but they should be pruned.
+7. **Peer‑dependency warnings.** `react-leaflet@4.2.1` and `@azure/msal-react@2` declare React 18 peers while React 19 is installed — cosmetic, and the Map no longer depends on `react-leaflet` at runtime after the vanilla rewrite.
 
 ---
 
 ## Architecture
 
-### Current Reality (Static SPA)
+### Today — static SPA
 
 ```mermaid
 flowchart TD
-    subgraph Vercel["Vercel (Static Hosting)"]
-        HTML["index.html + JS bundle (1.3MB)"]
-        DATA["/data.json (1,298 projects)"]
+    subgraph Vercel["Vercel — static hosting"]
+        HTML["index.html + hashed JS/CSS"]
+        DATA["/data.json — 1,298 projects"]
     end
-
-    subgraph Browser["User Browser"]
+    subgraph Browser["User browser"]
         REACT["React 19 SPA"]
-        LS["localStorage (mutations + auth)"]
+        LS["localStorage — mutations + session"]
     end
-
-    Vercel -->|"HTTP GET"| Browser
-    REACT -->|"fetch /data.json on first load"| DATA
-    REACT -->|"read/write mutations"| LS
-    LS -->|"hydrate on reload"| REACT
-
+    Vercel -->|HTTP GET| Browser
+    REACT -->|fetch /data.json on first load| DATA
+    REACT -->|read/write| LS
+    LS -->|hydrate on reload| REACT
     style Vercel fill:#000,color:#fff
     style LS fill:#fef3c7,stroke:#d97706
 ```
 
-**The backend server code exists but is not deployed.** Vercel serves only the static `dist/public/` directory. There are no serverless functions, no API routes, no database connection in production.
-
-### Target Architecture (Not Yet Implemented)
+### Target — once the backend is deployed
 
 ```mermaid
 flowchart TD
-    subgraph Frontend["React 19 + Vite"]
+    subgraph FE["React 19 + Vite"]
         UI["Pages: Dashboard, Projects, BVB-EEA, PSV-ITK, Audit"]
         HOOKS["useProjects, useAllData, useFilters"]
-        CACHE["TanStack Query Cache"]
+        CACHE["TanStack Query cache"]
     end
-
-    subgraph Backend["Express + tRPC (Vercel Serverless or Dedicated)"]
-        API["tRPC Router + Express Routes"]
-        DRIZZLE["Drizzle ORM"]
+    subgraph BE["tRPC API (Vercel functions or dedicated host)"]
+        API["tRPC router + Express routes"]
+        ORM["Drizzle ORM"]
     end
-
-    subgraph Database["MySQL / PostgreSQL"]
-        DB[("projects, department_reviews, audit_log, bvb_eea, psv_itk")]
+    subgraph DB["MySQL / PostgreSQL"]
+        T[("projects · department_reviews · audit_log · bvb_eea · psv_itk")]
     end
-
-    subgraph Auth["Microsoft Entra ID"]
-        MSAL["MSAL.js + JWT Validation"]
+    subgraph AUTH["Microsoft Entra ID"]
+        MSAL["MSAL.js + JWT validation"]
     end
-
-    UI --> HOOKS --> API
-    API --> DRIZZLE --> DB
+    UI --> HOOKS --> CACHE --> API --> ORM --> T
     UI --> MSAL
     API --> MSAL
 ```
 
 ---
 
-## Data Model
+## Data model
 
-### data.json Structure (Source of Truth Today)
-
-Each of the 1,298 projects has this shape:
+Each project in `client/public/data.json`:
 
 ```json
 {
   "id": 1,
   "projektnummer": "G.011511006",
-  "bahnhofsmanagement": "Kassel", // DROPDOWN FEST
-  "station": "Bad Hersfeld", // DROPDOWN FEST
-  "bahnhofsnummer": null, // DROPDOWN FEST
+  "bahnhofsmanagement": "Kassel",
+  "station": "Bad Hersfeld",
+  "bahnhofsnummer": null,
   "streckennummer": null,
-  "projektbeschreibung": "Erhoehung des Hausbahnsteig...",
-  "projektstand": "EP", // DROPDOWN FEST
-  "projektleiter": "Daniel Roethlinger",
+  "projektbeschreibung": "Erhöhung des Hausbahnsteigs …",
+  "projektstand": "EP",
+  "projektleiter": "Daniel Röthlinger",
   "terminProjektvorstellung": "2020-08-19",
   "kommentar": null,
   "projektLink": null,
@@ -150,282 +148,117 @@ Each of the 1,298 projects has this shape:
 }
 ```
 
-### 14 Departments (Fachbereiche)
+**14 departments:** BIM, BS, Baubetriebsplanung, Baubetriebstechnologie, EEA, Energie, GA, HFT, HKLS, ITK, LST, TBQ, UM, Vermessung.
 
-BIM, BS, Baubetriebsplanung, Baubetriebstechnologie, EEA, Energie, GA, HFT, HKLS, ITK, LST, TBQ, UM, Vermessung
-
-### 14 Review Statuses
-
-`Zustimmung erteilt`, `in Bearbeitung`, `offen`, `nicht erforderlich`, `Pruefung erfolgt`, `Nachforderung`, `prueffaehig`, `abgelehnt`, `gestoppt`, `zurueckgestellt`, `Projektkonfig.`, `Projektkonfiguration`, `Niederschrift erstellt`, `Niederschrift erstellt (LP05-05-01-F31)`
-
-### Data Quality Issues (Must Be Fixed)
-
-| Issue | Count | Impact |
-|-------|-------|--------|
-| Null `bahnhofsmanagement` (Region) | 113 | Filter shows empty entries |
-| Duplicate regions (`Koblenz` vs `Koblenz ` vs `koblenz`) | 5 variants | Filters show duplicates |
-| Placeholder values (`???`, `Bitte auswählen`) | Present | Pollutes dropdowns |
-| Leading whitespace in `projektleiter` | Multiple | Duplicate filter entries |
-| 80 unique `projektstand` values (many are free-text) | 80 | Cannot reliably categorize |
+**Dataset facts (measured):** 1,298 projects · 18,172 review rows · 19 distinct region values (3 differ only by case/whitespace) · 113 null regions · 80 distinct `projektstand` values.
 
 ---
 
-## Project Structure
+## Project structure
 
 ```
 bahn-project-manager/
 ├── client/
-│   ├── public/data.json              # 1,298 projects (SOURCE OF TRUTH)
-│   ├── src/
-│   │   ├── _core/
-│   │   │   ├── api/client.ts         # Mock API client (localStorage-based)
-│   │   │   ├── hooks/useAuth.ts      # Demo auth (localStorage)
-│   │   │   ├── hooks/usePresence.ts  # Presence indicators
-│   │   │   └── query/                # TanStack Query setup
-│   │   ├── components/
-│   │   │   ├── AuthGate.tsx          # Route guard (demo)
-│   │   │   ├── DashboardLayout.tsx   # Sidebar + header + footer
-│   │   │   ├── Header.tsx            # Search + theme toggle
-│   │   │   ├── Map.tsx               # Leaflet map (423 lines)
-│   │   │   └── ui/                   # shadcn/ui components (50+ files)
-│   │   ├── contexts/ThemeContext.tsx  # Dark/light mode
-│   │   ├── hooks/
-│   │   │   ├── useDataQuery.ts       # Main data hook (TanStack Query)
-│   │   │   ├── useData.ts            # Legacy data hook
-│   │   │   └── useComposition.ts     # Composition utilities
-│   │   └── pages/
-│   │       ├── Dashboard.tsx          # KPIs + charts (841 lines)
-│   │       ├── Projects.tsx           # Main table (947 lines)
-│   │       ├── BvbEea.tsx             # Placeholder (107 lines)
-│   │       ├── PsvItk.tsx             # Placeholder (107 lines)
-│   │       ├── AuditLog.tsx           # Change history
-│   │       ├── Login.tsx              # Demo login form
-│   │       └── ComponentShowcase.tsx  # Dev-only UI showcase
-│   └── tailwind.config.ts
-├── server/                            # EXISTS BUT NOT DEPLOYED
-│   ├── _core/index.ts                # Express entry point
-│   ├── _core/trpc.ts                 # tRPC setup
-│   ├── routers.ts                    # tRPC procedures
-│   ├── db.ts                         # getDb() returns null without DATABASE_URL
-│   ├── excel.ts                      # Server-side Excel import/export
-│   ├── odata/router.ts              # OData-style query endpoint
-│   ├── sync-db.ts                   # JSON-to-DB sync logic
-│   └── storage.ts                   # File storage
-├── shared/
-│   ├── types.ts                     # Shared TypeScript interfaces
-│   ├── validation.ts                # Zod schemas (Zod 4)
-│   ├── const.ts                     # Constants (departments, statuses)
-│   └── server/odata.ts             # OData query parsing
-├── drizzle/
-│   ├── schema.ts                    # MySQL table definitions
-│   ├── relations.ts                 # Drizzle relations
-│   └── seed-from-json.ts           # Seed DB from data.json
-├── scripts/
-│   ├── seed-perfect.ts             # Alternative seeder
-│   └── sync-json-db.ts            # Bidirectional sync script
-├── .github/workflows/ci.yml        # CI pipeline (CURRENTLY FAILING)
-├── biome.json                       # Linter config (v2.4.16)
-├── tsconfig.json                    # TypeScript config (strict, 0 errors)
-├── vite.config.ts                   # Client build config
-├── vercel.json                      # Static SPA deployment
-└── package.json                     # Scripts + dependencies
+│   ├── public/data.json            # 1,298 projects — source of truth today
+│   ├── index.html
+│   └── src/
+│       ├── _core/                  # api/client.ts (mock backend), hooks (useAuth…), query setup
+│       ├── components/             # DashboardLayout, Header, Map, AuthGate, ErrorBoundary, ui/ (53 files)
+│       ├── contexts/ThemeContext.tsx
+│       ├── hooks/                  # useDataQuery (main), useData, useStations, useMobile…
+│       ├── lib/                    # stationGeo, trpc, utils
+│       └── pages/                  # Dashboard, Projects, BvbEea, PsvItk, AuditLog, Login, NotFound
+├── server/                         # Express + tRPC — compiles, NOT deployed to Vercel
+├── shared/                         # types, Zod validation, constants, OData helpers
+├── drizzle/                        # MySQL schema + seed-from-json — ready, not provisioned
+├── scripts/                        # seed-perfect, sync-json-db
+├── .github/workflows/ci.yml        # lint-typecheck → test → build → guarded deploy
+├── biome.json                      # Biome 1.9.4, all rules "warn"
+├── vite.config.ts · vercel.json · tsconfig.json · vitest.config.ts
+└── package.json                    # pnpm@10.15.1
 ```
 
 ---
 
-## Getting Started
+## Getting started
 
-### Prerequisites
-
-- **Node.js** 20+ (LTS)
-- **pnpm** 9+ (`corepack enable pnpm`)
-
-### Installation
+**Prerequisites:** Node 20+ (CI uses 22), pnpm 10 (`corepack enable pnpm`).
 
 ```bash
 git clone https://github.com/iceccarelli/bahn-project-manager.git
 cd bahn-project-manager
-pnpm install
+pnpm install                 # if you see a native-binary error: pnpm approve-builds
+
+pnpm dev                     # Express + Vite → http://localhost:3000
+                             # login: admin@bahn.de / admin  (or pruefer@bahn.de / user)
 ```
 
-### Development
+Quality gates:
 
 ```bash
-pnpm dev
+pnpm check                   # tsc --noEmit            → 0 errors
+pnpm lint                    # biome check .           → exit 0 (warnings only)
+pnpm test:cov                # vitest + coverage       → 5 passed, 6 skipped
+pnpm build                   # vite build → dist/public (what Vercel runs)
 ```
 
-Opens at `http://localhost:5173`. Login with `admin@bahn.de` / `admin`.
-
-### Build and Verify
-
-```bash
-pnpm build        # Client only (what Vercel runs)
-pnpm check        # TypeScript type checking (0 errors)
-pnpm lint         # Biome linting (134 warnings/errors remain)
-```
-
-### Deployment (Vercel)
-
-Push to `main`. Vercel auto-deploys using:
-- `installCommand`: `pnpm install --frozen-lockfile`
-- `buildCommand`: `pnpm build:client`
-- `outputDirectory`: `dist/public`
-- SPA fallback: all routes rewrite to `/index.html`
+**Deployment.** Push to `main`; Vercel auto‑deploys with `installCommand: pnpm install --frozen-lockfile`, `buildCommand: pnpm build:client`, `outputDirectory: dist/public`, and an SPA fallback rewrite to `/index.html`.
 
 ---
 
-## What Must Be Done (Priority Order)
+## Roadmap (in priority order)
 
-### P0 — Fix CI Pipeline (Blocks All Future Work)
+### P0 — Data hygiene (highest ROI, ~half a day, no infra)
+- Normalise filter options at read time in `useFilters()`: trim, case‑fold, drop `"???"` / `"Bitte auswählen"`, and label null regions as *"Ohne Zuordnung"* instead of hiding them.
+- Add a one‑off cleanup script that rewrites `data.json` canonically (merge `Koblenz` variants, etc.) so the underlying data is fixed, not just masked.
+- Map the 80 `projektstand` strings to a small canonical set (EP, AP, EIGV, Mieterumbau, Gestoppt, Sonstiges).
 
-| Task | Effort | Details |
-|------|--------|---------|
-| Ensure `@biomejs/biome` is in `devDependencies` | Done | `pnpm add -D @biomejs/biome` already executed |
-| Fix 134 Biome lint errors OR relax rules | 30 min | Add `type="button"` to 36 buttons, use stable keys instead of array index (29), move inner declarations (16) |
-| Fix `pnpm test:cov` in CI | 10 min | Skip tests in CI until DB exists, or mock the database |
-| Commit lockfile with biome | 1 min | `git add -A && git commit && git push` |
+### P1 — Persistence
+- Provision a database (PlanetScale/TiDB for the existing MySQL schema, or migrate to Postgres — the `postgres` driver is already a dependency), set `DATABASE_URL`, run `pnpm db:push`, seed via `pnpm seed:perfect`.
+- Expose the tRPC router as Vercel serverless functions (`api/trpc/[trpc].ts`) and add the `/api/**` rewrite to `vercel.json`.
+- Switch `_core/api/client.ts` from `localStorage` to real `fetch('/api/trpc/…')`; keep `localStorage` as an offline cache only.
 
-### P1 — Data Quality Cleanup
+### P2 — Real authentication
+- Register an Entra ID app, wire `msalInstance.loginPopup()` in place of `loginDemo()`, validate JWTs server‑side, and map security groups to admin/user roles. Remove the hard‑coded demo users.
 
-| Task | Effort | Details |
-|------|--------|---------|
-| Normalize region names | 1 hour | Trim whitespace, fix casing (`koblenz` to `Koblenz`), merge `Koblenz LOS 2/3/4`, remove `???` and `Bitte auswählen` |
-| Normalize `projektleiter` names | 1 hour | Trim whitespace, deduplicate |
-| Categorize `projektstand` | 2 hours | Map 80 free-text values to canonical categories (EP, AP, EIGV, Mieterumbau, Gestoppt, Sonstiges) |
-| Fill null `bahnhofsmanagement` | 1 hour | 113 projects without region |
+### P3 — Quality & performance
+- Fix the two correctness lint families (`noArrayIndexKey`, `useExhaustiveDependencies`); then progressively clear the style warnings or relax those rules in `biome.json` deliberately.
+- Route‑level `React.lazy` + `Suspense` to split the ~718 kB main chunk.
+- Delete repo clutter (`apply-search-fix.mjs`, `check-search.mjs`, `client/src/_prototypes/`), and strip the `__manus__` debug injector from production HTML.
 
-### P2 — Connect Real Database
-
-| Task | Effort | Details |
-|------|--------|---------|
-| Choose DB provider | Decision | Schema is MySQL (drizzle-orm/mysql2). Options: PlanetScale, TiDB Cloud, Railway, or migrate to PostgreSQL |
-| Set up `DATABASE_URL` | 30 min | Create instance, add env var to Vercel |
-| Run migrations | 30 min | `pnpm db:push` |
-| Seed from data.json | 30 min | `pnpm seed:perfect` (1,298 projects + 18,172 reviews) |
-| Switch client from localStorage to real API | 4 hours | Replace mock `apiClient` with real `fetch('/api/trpc/...')` |
-
-### P3 — Deploy Backend
-
-| Task | Effort | Details |
-|------|--------|---------|
-| Convert to Vercel Serverless Functions | 4 hours | Move tRPC to `api/trpc/[trpc].ts` |
-| OR deploy Express separately | 2 hours | Railway, Render, or Fly.io |
-| Update `vercel.json` with API rewrites | 30 min | `/api/**` to serverless |
-| Remove localStorage fallback | 1 hour | Once real API is live |
-
-### P4 — Real Authentication
-
-| Task | Effort | Details |
-|------|--------|---------|
-| Register Azure AD App | 1 hour | Azure Portal, configure redirect URIs |
-| Implement MSAL login flow | 4 hours | Replace `loginDemo()` with `msalInstance.loginPopup()` |
-| Add JWT validation to backend | 2 hours | Verify tokens on every request |
-| Map Entra ID groups to roles | 2 hours | Admin vs User from security groups |
-| Remove demo auth code | 30 min | Delete hardcoded users |
-
-### P5 — UI/UX Polish
-
-| Task | Effort | Details |
-|------|--------|---------|
-| Add `type="button"` to all non-submit buttons | 30 min | 36 Biome violations |
-| Replace `key={index}` with stable keys | 1 hour | 29 instances |
-| BVB-EEA page: build real content | 4 hours | Currently placeholder |
-| PSV-ITK page: build real content | 4 hours | Currently placeholder |
-| Fix filter dropdowns showing dirty data | 1 hour | Trim, deduplicate, sort |
-| Code-split the 1.3MB bundle | 2 hours | `React.lazy()` + `Suspense` |
-
-### P6 — Microsoft 365 Integration
-
-| Task | Effort | Details |
-|------|--------|---------|
-| SharePoint document libraries per project | 8 hours | Microsoft Graph API |
-| Teams adaptive cards on status change | 4 hours | Webhook + card template |
-| Planner task sync for review deadlines | 4 hours | Graph API |
-| Power BI embedded dashboards | 8 hours | Embed token + iframe |
-
-### P7 — Mobile App
-
-| Task | Effort | Details |
-|------|--------|---------|
-| Expo + React Native scaffold | 4 hours | Shared types from `shared/` |
-| Offline-first with SQLite | 8 hours | Expo SQLite + sync |
-| Push notifications | 4 hours | Azure Notification Hubs |
+### P4 — Microsoft 365 & beyond
+- SharePoint document libraries per project, Teams adaptive cards on status change, Planner sync for review deadlines (Microsoft Graph). E2E tests with Playwright (already a dev dependency). Optional Expo mobile client sharing `shared/` types.
 
 ---
 
-## Tech Stack
+## Tech stack
 
-| Layer | Technology | Version | Status |
-|-------|-----------|---------|--------|
-| Frontend Framework | React | 19.2.1 | Working |
-| Build Tool | Vite | 7.1.9 | Working |
-| Language | TypeScript | 5.9 | 0 errors |
-| UI Components | shadcn/ui + Radix | Latest | Working |
-| Styling | Tailwind CSS | 4.x | Working |
-| Routing | wouter | Latest | Working |
-| State/Cache | TanStack Query | 5.x | Working (client-only) |
-| Maps | Leaflet + react-leaflet | 4.2.1 | Working (React 18 peer warning) |
-| Icons | Lucide React | Latest | Working |
-| Toasts | Sonner | Latest | Working |
-| Backend | Express + tRPC | 4.21 / 11.x | Code exists, not deployed |
-| ORM | Drizzle | 0.44 | Schema defined, not connected |
-| Database | MySQL (schema) | - | Not provisioned |
-| Auth | MSAL (packages) | 3.24 / 2.2 | Installed, not integrated |
-| Linter | Biome | 2.4.16 | 134 remaining issues |
-| Testing | Vitest | 2.x | Not runnable without DB |
-| Deployment | Vercel | Static SPA | Working |
-| CI/CD | GitHub Actions | - | Failing (lint + test) |
-
----
-
-## Scripts Reference
-
-```bash
-pnpm dev              # Start Express dev server with Vite
-pnpm build            # Build client only (Vercel production)
-pnpm build:client     # Same as above
-pnpm build:server     # Bundle server with esbuild
-pnpm build:parallel   # Build client + server concurrently
-pnpm check            # TypeScript type check (0 errors)
-pnpm lint             # Biome check (134 issues remain)
-pnpm format           # Prettier format
-pnpm test             # Vitest run (requires DB)
-pnpm test:cov         # Vitest with coverage (requires DB)
-pnpm db:push          # Generate + run Drizzle migrations
-pnpm seed:perfect     # Seed DB from data.json
-pnpm sync:json-db     # Bidirectional JSON-DB sync
-```
-
----
-
-## Environment Variables
-
-| Variable | Required | Used By | Current State |
-|----------|----------|---------|---------------|
-| `DATABASE_URL` | For backend | `server/db.ts` | Not set (graceful null) |
-| `MICROSOFT_CLIENT_ID` | For auth | MSAL config | Not set |
-| `MICROSOFT_TENANT_ID` | For auth | MSAL config | Not set |
-| `MICROSOFT_CLIENT_SECRET` | For auth | Backend JWT | Not set |
-| `VERCEL_TOKEN` | For CI deploy | GitHub Actions | Not set |
-| `VERCEL_ORG_ID` | For CI deploy | GitHub Actions | Not set |
-| `VERCEL_PROJECT_ID` | For CI deploy | GitHub Actions | Not set |
+| Layer | Technology | Status |
+|---|---|---|
+| UI | React 19 · Vite 7 · TypeScript 5.9 | ✅ |
+| Components | shadcn/ui · Radix · Tailwind 4 | ✅ |
+| Routing | wouter | ✅ |
+| Data/cache | TanStack Query 5 (client‑only) | ✅ |
+| Maps | Leaflet (vanilla) | ✅ |
+| Lint | Biome 1.9.4 (warnings only) | ✅ |
+| Tests | Vitest 2 | ✅ 5 passed / 6 skipped |
+| Deploy | Vercel (static SPA) | ✅ |
+| Backend | Express + tRPC 11 | ⏸ compiles, not deployed |
+| ORM / DB | Drizzle 0.44 / MySQL schema | ⏸ ready, not provisioned |
+| Auth | MSAL packages | ⏸ installed, not integrated |
 
 ---
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/your-feature`)
-3. Ensure `pnpm check` passes (0 TypeScript errors)
-4. Ensure `pnpm build` succeeds
-5. Open a Pull Request
-
----
+1. Branch from `main` (`git checkout -b fix/your-change`).
+2. Keep the gates green: `pnpm check` (0 errors), `pnpm lint` (exit 0), `pnpm build`.
+3. Open a PR; CI runs lint‑typecheck → test → build automatically.
 
 ## License
 
-MIT License. 2025-2026 Bahn Project Manager contributors.
+MIT © 2025–2026 Bahn Project Manager contributors.
 
 ---
 
-**This README is the single source of truth about the project's real state. Updated May 29, 2026.**
+*This README reflects the measured state of `main` (commit `13537e8`) as of June 2026. Every status claim above was verified by executing the corresponding command.*
