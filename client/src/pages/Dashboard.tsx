@@ -13,7 +13,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useAllData } from '@/hooks/useDataQuery';
+import { useAllData, useAuditLog, useRecordAudit } from '@/hooks/useDataQuery';
 import { toast } from 'sonner';
 
 // DB Corporate Status Colors (perfect harmony with Projects.tsx)
@@ -71,6 +71,8 @@ interface WorkloadItem {
 
 export default function Dashboard() {
   const { data: allData } = useAllData();
+  const { data: auditEntries } = useAuditLog();
+  const recordAudit = useRecordAudit();
   const [selectedGewerke, setSelectedGewerke] = useState<string | null>(null);
   const [expandedFach, setExpandedFach] = useState<string | null>(null);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
@@ -83,6 +85,37 @@ export default function Dashboard() {
     sum + p.reviews.filter(r => r.status === "offen" || r.status === "in Bearbeitung").length, 0);
   const criticalProjects = projects.filter(p => 
     p.reviews.some(r => r.status === "abgelehnt" || r.status === "Nachforderung")).length;
+
+  // --- Real, data-derived KPIs (replacing hardcoded literals) ---------------
+  const allReviews = projects.flatMap(p => p.reviews || []);
+  const totalReviews = allReviews.length;
+  const relevantReviews = allReviews.filter(r => r.status && r.status !== "nicht erforderlich");
+  const approvedReviews = allReviews.filter(r =>
+    r.status === "Zustimmung erteilt" || r.status === "Niederschrift erstellt");
+  const successRate = relevantReviews.length > 0
+    ? (approvedReviews.length / relevantReviews.length) * 100 : 0;
+  const avgReviewsPerProject = totalProjects > 0 ? totalReviews / totalProjects : 0;
+
+  // "Delayed" = presentation date is in the past but at least one review is still open.
+  const today = new Date();
+  const delayedProjects = projects.filter(p => {
+    const d = p.terminProjektvorstellung ? new Date(p.terminProjektvorstellung) : null;
+    const stillOpen = p.reviews.some(r => r.status === "offen" || r.status === "in Bearbeitung");
+    return d && !Number.isNaN(d.getTime()) && d < today && stillOpen;
+  }).length;
+
+  // Real regional distribution from actual bahnhofsmanagement values (top 5).
+  const regionDistribution = (() => {
+    const counts: Record<string, number> = {};
+    for (const p of projects) {
+      if (p.bahnhofsmanagement) counts[p.bahnhofsmanagement] = (counts[p.bahnhofsmanagement] || 0) + 1;
+    }
+    const palette = ["#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ef4444"];
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([region, count], i) => ({ region, count, color: palette[i % palette.length] }));
+  })();
 
   const gewerkeStatusData = GEWERKE.map(gew => {
     const counts: Record<string, number> = {};
@@ -171,14 +204,30 @@ export default function Dashboard() {
       };
     });
 
-  const activityFeed = [
-    { user: "Oker", action: "hat Status auf 'Zustimmung erteilt' gesetzt", project: "Hamburg Hbf", time: "vor 8 Min", icon: CheckCircle },
-    { user: "Engstfeld", action: "hat Nachforderung gestellt", project: "Stuttgart 21", time: "vor 23 Min", icon: AlertTriangle },
-    { user: "Aydogdu", action: "hat Prüfung abgeschlossen", project: "Berlin Hbf", time: "vor 1 Std", icon: CheckCircle },
-    { user: "System", action: "hat 23 neue Projekte aus Excel importiert", project: "", time: "vor 3 Std", icon: Zap },
-    { user: "Schomber", action: "hat Status auf 'prüffähig' gesetzt", project: "München Ost", time: "vor 4 Std", icon: CheckCircle },
-    { user: "Ries", action: "hat neue Prüfung gestartet", project: "Köln Messe/Deutz", time: "vor 5 Std", icon: Clock },
-  ];
+  const relativeTime = (iso: string): string => {
+    const diff = Date.now() - new Date(iso).getTime();
+    const m = Math.floor(diff / 60000);
+    if (m < 1) return "gerade eben";
+    if (m < 60) return `vor ${m} Min`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `vor ${h} Std`;
+    return `vor ${Math.floor(h / 24)} Tg`;
+  };
+  const iconForAction = (action: string) => {
+    const a = action.toLowerCase();
+    if (a.includes("abgelehnt") || a.includes("nachforderung") || a.includes("eskal")) return AlertTriangle;
+    if (a.includes("erstellt") || a.includes("import")) return Zap;
+    if (a.includes("erinnerung") || a.includes("benachrichtig")) return Bell;
+    if (a.includes("aktualisiert") || a.includes("prüfung")) return Clock;
+    return CheckCircle;
+  };
+  const activityFeed = (auditEntries || []).slice(0, 8).map((e) => ({
+    user: e.user,
+    action: e.action,
+    project: e.details,
+    time: relativeTime(e.timestamp),
+    icon: iconForAction(e.action),
+  }));
 
   const notifications = [
     { type: "urgent", message: "Projekt Bad Hersfeld - Nachforderung von ITK", time: "vor 12 Min" },
@@ -215,7 +264,7 @@ export default function Dashboard() {
             <LogIn className="h-4 w-4" /> Mit Microsoft 365 verbinden (Optional)
           </Button>
           
-          <Button onClick={() => toast.success("Daten synchronisiert")} className="gap-2">
+          <Button onClick={() => { recordAudit.mutate({ action: "Daten synchronisiert", details: "Manuelle Synchronisierung ausgelöst" }); toast.success("Daten synchronisiert"); }} className="gap-2">
             <TrendingUp className="h-4 w-4" /> Aktualisieren
           </Button>
         </div>
@@ -513,7 +562,7 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent className="space-y-3 max-h-[280px] overflow-auto pr-1">
               {upcomingDeadlines.length > 0 ? upcomingDeadlines.map((p, idx) => (
-                <div key={idx} className="flex items-start gap-3 p-3 rounded-xl border bg-card hover:bg-muted/50 transition-colors">
+                <div key={idx} onClick={() => setSelectedProject(projects.find(pr => pr.id === p.id) || null)} className="flex items-start gap-3 p-3 rounded-xl border bg-card hover:bg-muted/50 transition-colors cursor-pointer">
                   <div className="mt-1">
                     {p.status === "Nachforderung" || p.status === "abgelehnt" ? 
                       <AlertTriangle className="h-4 w-4 text-rose-500" /> : 
@@ -524,7 +573,7 @@ export default function Dashboard() {
                     <div className="text-xs text-muted-foreground">{p.reviewer} • {p.deadline}</div>
                     <Badge variant="outline" className="mt-1 text-[10px]">{p.status}</Badge>
                   </div>
-                  <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => toast.success(`Erinnerung für ${p.station} wurde vorbereitet`)}>
+                  <Button size="sm" variant="ghost" className="h-7 px-2" onClick={(e) => { e.stopPropagation(); toast.success(`Erinnerung für ${p.station} wurde vorbereitet`); }}>
                     <Send className="h-3 w-3" />
                   </Button>
                 </div>
@@ -554,7 +603,7 @@ export default function Dashboard() {
                     <div className="text-sm font-medium leading-tight">{n.message}</div>
                     <div className="text-[10px] text-muted-foreground mt-1">{n.time}</div>
                   </div>
-                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => toast.success("Benachrichtigung gesendet")}>
+                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { recordAudit.mutate({ action: "Benachrichtigung gesendet", details: "Benachrichtigung an Team versendet" }); toast.success("Benachrichtigung gesendet"); }}>
                     Senden
                   </Button>
                 </motion.div>
@@ -591,16 +640,16 @@ export default function Dashboard() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <Button variant="outline" className="w-full justify-start gap-2 h-11" onClick={() => toast.success("Status-Update-E-Mail wurde vorbereitet")}>
+              <Button variant="outline" className="w-full justify-start gap-2 h-11" onClick={() => { recordAudit.mutate({ action: "Status-Update vorbereitet", details: "Status-Update-E-Mail erstellt" }); toast.success("Status-Update-E-Mail wurde vorbereitet"); }}>
                 <Mail className="h-4 w-4" /> Status-Update an alle Projektleiter
               </Button>
-              <Button variant="outline" className="w-full justify-start gap-2 h-11" onClick={() => toast.success("Outlook-Termin wurde vorbereitet")}>
+              <Button variant="outline" className="w-full justify-start gap-2 h-11" onClick={() => { recordAudit.mutate({ action: "Outlook-Termin vorbereitet", details: "Kalendereintrag erstellt" }); toast.success("Outlook-Termin wurde vorbereitet"); }}>
                 <Calendar className="h-4 w-4" /> Outlook-Termin erstellen
               </Button>
-              <Button variant="outline" className="w-full justify-start gap-2 h-11" onClick={() => toast.success("Zusammenfassung wurde für Teams vorbereitet")}>
+              <Button variant="outline" className="w-full justify-start gap-2 h-11" onClick={() => { recordAudit.mutate({ action: "Teams-Zusammenfassung vorbereitet", details: "Zusammenfassung für Teams erstellt" }); toast.success("Zusammenfassung wurde für Teams vorbereitet"); }}>
                 <MessageSquare className="h-4 w-4" /> In Teams-Kanal posten
               </Button>
-              <Button variant="destructive" className="w-full justify-start gap-2 h-11" onClick={() => toast.success("Kritische Fälle wurden eskaliert")}>
+              <Button variant="destructive" className="w-full justify-start gap-2 h-11" onClick={() => { recordAudit.mutate({ action: "Kritische Fälle eskaliert", details: `${criticalProjects} kritische Projekte eskaliert` }); toast.success("Kritische Fälle wurden eskaliert"); }}>
                 <AlertTriangle className="h-4 w-4" /> Kritische Fälle eskalieren
               </Button>
             </CardContent>
@@ -660,20 +709,20 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
-                <div>Durchschnittliche Bearbeitungszeit</div>
-                <div className="font-mono font-bold">14.3 Tage</div>
+                <div>Prüfungen je Projekt (Ø)</div>
+                <div className="font-mono font-bold">{avgReviewsPerProject.toFixed(1)}</div>
               </div>
               <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
                 <div>Projekte mit Verzögerung</div>
-                <div className="font-mono font-bold text-rose-600">187</div>
+                <div className="font-mono font-bold text-rose-600">{delayedProjects.toLocaleString("de-DE")}</div>
               </div>
               <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
-                <div>Erfolgsquote diese Woche</div>
-                <div className="font-mono font-bold text-emerald-600">94.2%</div>
+                <div>Erfolgsquote (erteilte Zustimmungen)</div>
+                <div className="font-mono font-bold text-emerald-600">{successRate.toFixed(1)}%</div>
               </div>
               <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
-                <div>Neue Projekte diesen Monat</div>
-                <div className="font-mono font-bold">312</div>
+                <div>Projekte gesamt</div>
+                <div className="font-mono font-bold">{totalProjects.toLocaleString("de-DE")}</div>
               </div>
             </CardContent>
           </Card>
@@ -684,13 +733,7 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {[
-                  { region: "Nord", count: 342, color: "#3b82f6" },
-                  { region: "Süd", count: 287, color: "#10b981" },
-                  { region: "Ost", count: 198, color: "#f59e0b" },
-                  { region: "West", count: 256, color: "#8b5cf6" },
-                  { region: "Zentrale", count: 215, color: "#ef4444" },
-                ].map((r, idx) => (
+                {regionDistribution.map((r, idx) => (
                   <div key={idx} className="flex items-center gap-3">
                     <div className="w-3 h-3 rounded-full" style={{ backgroundColor: r.color }} />
                     <div className="flex-1">{r.region}</div>

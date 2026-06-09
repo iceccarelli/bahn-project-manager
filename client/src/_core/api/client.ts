@@ -42,6 +42,39 @@ const STORAGE_KEY_AUDIT = "bahn_audit_log";
 // Local-first data source (served automatically by Vercel from public/data.json)
 const LOCAL_DATA_JSON_URL = "/data.json";
 
+// --- Data normalization ----------------------------------------------------
+// Source data (Excel import) contains trailing whitespace ("Frankfurt ") and
+// placeholder tokens ("???", "Bitte auswählen") that break exact-match filters
+// and pollute dropdowns. Normalize once, at the single read chokepoint, so that
+// filter options, `===` filtering, and display are always consistent.
+const PLACEHOLDER_TOKENS = new Set(["", "???", "n/a", "na", "null", "bitte auswählen"]);
+
+function cleanStr(v: unknown): string | null {
+  if (v == null) return null;
+  const s = String(v).replace(/\s+/g, " ").trim();
+  if (PLACEHOLDER_TOKENS.has(s.toLowerCase())) return null;
+  return s;
+}
+
+function normalizeProjects(projects: any[]): Project[] {
+  if (!Array.isArray(projects)) return [];
+  return projects.map((p) => ({
+    ...p,
+    bahnhofsmanagement: cleanStr(p?.bahnhofsmanagement),
+    station: cleanStr(p?.station),
+    projektleiter: cleanStr(p?.projektleiter),
+    projektstand: cleanStr(p?.projektstand),
+    projektnummer: cleanStr(p?.projektnummer),
+    reviews: Array.isArray(p?.reviews)
+      ? p.reviews.map((r: any) => ({
+          ...r,
+          prueferName: cleanStr(r?.prueferName),
+          status: cleanStr(r?.status),
+        }))
+      : [],
+  })) as Project[];
+}
+
 async function initializeStorage() {
   const stored = localStorage.getItem(STORAGE_KEY_PROJECTS);
   if (stored) {
@@ -91,12 +124,13 @@ function recordAudit(action: string, details: string) {
   };
   audit.unshift(entry);
   localStorage.setItem(STORAGE_KEY_AUDIT, JSON.stringify(audit.slice(0, 1000)));
+  return entry;
 }
 
 export const apiClient = {
   projects: {
     async list(): Promise<Project[]> {
-      return await initializeStorage();
+      return normalizeProjects(await initializeStorage());
     },
 
     async get(id: number): Promise<Project | null> {
@@ -248,6 +282,12 @@ export const apiClient = {
   audit: {
     async list(): Promise<AuditLogEntry[]> {
       return JSON.parse(localStorage.getItem(STORAGE_KEY_AUDIT) || "[]");
+    },
+
+    async record(action: string, details: string): Promise<AuditLogEntry> {
+      const entry = recordAudit(action, details);
+      window.dispatchEvent(new StorageEvent("storage", { key: STORAGE_KEY_AUDIT }));
+      return entry;
     },
   },
 };

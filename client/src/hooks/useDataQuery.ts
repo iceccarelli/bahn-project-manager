@@ -112,6 +112,17 @@ export function useAuditLog() {
   });
 }
 
+export function useRecordAudit() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ action, details }: { action: string; details: string }) =>
+      apiClient.audit.record(action, details),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.audit.all });
+    },
+  });
+}
+
 // ============================================================================
 // MUTATION HOOKS
 // ============================================================================
