@@ -131,20 +131,24 @@ Each project in `client/public/data.json`:
 ```json
 {
   "id": 1,
-  "projektnummer": "G.011511006",
-  "bahnhofsmanagement": "Kassel",
-  "station": "Bad Hersfeld",
+  # Projekt Antraggeber (BM) -> 
+  "projektnummer": "G.011511006", # Projektnummer OHNE (separat auswählbar) # Projektnummer von BM, von Vermietung, zum Erstellen BS konzepte
+  "bahnhofsmanagement": "Kassel", # Region -> BM zu eintragen.
+  "station": "Bad Hersfeld", 
   "bahnhofsnummer": null,
   "streckennummer": null,
   "projektbeschreibung": "Erhöhung des Hausbahnsteigs …",
   "projektstand": "EP",
   "projektleiter": "Daniel Röthlinger",
-  "terminProjektvorstellung": "2020-08-19",
+  "terminProjektvorstellung": "2020-08-19", # Projektvorstellung => (Terminauswahlliste) Per Email Informiert ()=>{check.liste.muster}
+  # smtp.protocol.IP.standorte
+  # Tabelle (Termine FREI und nicht Parallel) 
+  # TODO (keine Projektvorstellung Termin) abzugleichen.
   "kommentar": null,
   "projektLink": null,
   "reviews": [
     { "department": "EEA", "status": "Zustimmung erteilt", "prueferName": "Oker", "pruefDatum": "2020-10-15" }
-  ]
+  ] # Checkliste wird Erfolg Vorhanden.  (Falls Projektnummer vorhanden ist ()=> neues anlegen)
 }
 ```
 
