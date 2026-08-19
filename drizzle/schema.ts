@@ -117,6 +117,90 @@ export const psvItk = mysqlTable("psv_itk", {
   projektnummerIdx: index("psv_projektnummer_idx").on(table.projektnummer),
 }));
 
+/**
+ * Projektanmeldung checklist — the entity behind
+ * "Projektanmeldung Fachspezialistenprüfung_neu.xlsm".
+ *
+ * One row per submitted (or drafted) checklist. The 22 answers live in
+ * project_checklist_answers; the header fields of `Formular` rows 6-9 and the
+ * four administrative questions (rows 13-16) live here, because they are
+ * single-valued and queried directly.
+ *
+ * The booked slot is denormalised onto this row rather than referencing a
+ * termin_slots table: the `Zeit auswählen` calendar arrives in Stage 4, and half
+ * an entity is worse than none.
+ */
+export const projectChecklists = mysqlTable("project_checklists", {
+  id: int("id").autoincrement().primaryKey(),
+  /** null while the checklist is still a draft — it is what creates the project */
+  projectId: int("projectId"),
+  /** "Projektanmeldung" | "Projektkonfiguration" — see shared/checklist.ts */
+  mode: varchar("mode", { length: 32 }).notNull(),
+  status: mysqlEnum("status", ["draft", "submitted", "cancelled"]).default("draft").notNull(),
+
+  // --- Formular rows 6-9 ---------------------------------------------------
+  projektnummer: varchar("projektnummer", { length: 256 }),
+  projektbezeichnung: varchar("projektbezeichnung", { length: 512 }),
+  stationsname: varchar("stationsname", { length: 256 }),
+  bahnhofsnummer: varchar("bahnhofsnummer", { length: 32 }),
+  streckennummer: varchar("streckennummer", { length: 32 }),
+  projektstand: varchar("projektstand", { length: 128 }),
+  bahnhofsmanagement: varchar("bahnhofsmanagement", { length: 128 }),
+  projektleitung: varchar("projektleitung", { length: 256 }),
+
+  // --- Formular rows 13-16 (administrative answers) ------------------------
+  pkpLink: text("pkpLink"),
+  freischaltungFaa: varchar("freischaltungFaa", { length: 64 }),
+  unterschriftenblatt: varchar("unterschriftenblatt", { length: 64 }),
+  mitProjektvorstellung: varchar("mitProjektvorstellung", { length: 8 }),
+  /** only filled when mitProjektvorstellung = "Nein" (Formular G16) */
+  uebergabeDatum: datetime("uebergabeDatum"),
+  anmerkungen: text("anmerkungen"),
+
+  // --- booked Fachspezialistenprüfung slot ---------------------------------
+  terminDatum: datetime("terminDatum"),
+  terminVon: varchar("terminVon", { length: 8 }),
+  terminBis: varchar("terminBis", { length: 8 }),
+
+  submittedAt: timestamp("submittedAt"),
+  submittedBy: varchar("submittedBy", { length: 256 }),
+  syncVersion: int("syncVersion").default(1).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  checklistProjectIdx: index("checklist_projectId_idx").on(table.projectId),
+  checklistStatusIdx: index("checklist_status_idx").on(table.status),
+  checklistProjektnummerIdx: index("checklist_projektnummer_idx").on(table.projektnummer),
+  checklistTerminIdx: index("checklist_termin_idx").on(table.terminDatum),
+  checklistBmIdx: index("checklist_bahnhofsmanagement_idx").on(table.bahnhofsmanagement),
+}));
+
+/**
+ * One row per checklist question. 22 rows per checklist, keyed by the stable
+ * `questionKey` from shared/checklist.ts rather than by the workbook row number,
+ * so a future edition of the form cannot silently re-point existing answers.
+ */
+export const projectChecklistAnswers = mysqlTable("project_checklist_answers", {
+  id: int("id").autoincrement().primaryKey(),
+  checklistId: int("checklistId").notNull(),
+  /** CHECKLIST_QUESTIONS[].key */
+  questionKey: varchar("questionKey", { length: 64 }).notNull(),
+  /** the Nr. printed in Formular column A — 1-5 and 7-23; there is no 6 */
+  nr: int("nr").notNull(),
+  /** column F: "Ja" | "Nein" | a Freischaltung option | free text */
+  answer: varchar("answer", { length: 512 }),
+  /** column H: the second Ja/Nein on rows 17, 18 and 19 only */
+  secondary: varchar("secondary", { length: 8 }),
+  /** column G */
+  comment: text("comment"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  answerUnique: uniqueIndex("checklist_question_unique").on(table.checklistId, table.questionKey),
+  answerChecklistIdx: index("answer_checklistId_idx").on(table.checklistId),
+  answerQuestionIdx: index("answer_questionKey_idx").on(table.questionKey),
+}));
+
 // Audit Log
 export const auditLog = mysqlTable("audit_log", {
   id: int("id").autoincrement().primaryKey(),
@@ -138,12 +222,28 @@ export const auditLog = mysqlTable("audit_log", {
 // Relations
 export const projectsRelations = relations(projects, ({ many }) => ({
   reviews: many(departmentReviews),
+  checklists: many(projectChecklists),
 }));
 
 export const departmentReviewsRelations = relations(departmentReviews, ({ one }) => ({
   project: one(projects, {
     fields: [departmentReviews.projectId],
     references: [projects.id],
+  }),
+}));
+
+export const projectChecklistsRelations = relations(projectChecklists, ({ one, many }) => ({
+  project: one(projects, {
+    fields: [projectChecklists.projectId],
+    references: [projects.id],
+  }),
+  answers: many(projectChecklistAnswers),
+}));
+
+export const projectChecklistAnswersRelations = relations(projectChecklistAnswers, ({ one }) => ({
+  checklist: one(projectChecklists, {
+    fields: [projectChecklistAnswers.checklistId],
+    references: [projectChecklists.id],
   }),
 }));
 
@@ -160,3 +260,7 @@ export type PsvItk = typeof psvItk.$inferSelect;
 export type InsertPsvItk = typeof psvItk.$inferInsert;
 export type AuditLog = typeof auditLog.$inferSelect;
 export type InsertAuditLog = typeof auditLog.$inferInsert;
+export type ProjectChecklist = typeof projectChecklists.$inferSelect;
+export type InsertProjectChecklist = typeof projectChecklists.$inferInsert;
+export type ProjectChecklistAnswer = typeof projectChecklistAnswers.$inferSelect;
+export type InsertProjectChecklistAnswer = typeof projectChecklistAnswers.$inferInsert;

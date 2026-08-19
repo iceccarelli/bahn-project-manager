@@ -10,6 +10,11 @@
  *   projects[].station              -> whitespace-collapsed, trimmed
  *   projects[].<text fields>        -> whitespace-collapsed, trimmed,
  *                                      placeholder tokens -> null
+ *   projects[].terminProjektvorstellung
+ *   reviews[].pruefDatum            -> ISO yyyy-mm-dd. The workbook produced
+ *                                      German dd.mm.yyyy for 253 rows, which
+ *                                      `new Date()` reads as Invalid Date and a
+ *                                      `datetime` column would drop.
  *   stats.regionStats               -> recomputed from the cleaned rows
  *   filters.regions                 -> recomputed from the cleaned rows
  *
@@ -17,11 +22,16 @@
  *   - Station names are never rewritten to match the master. "Fulda Hbf" stays
  *     "Fulda Hbf"; reconciling it to the station "Fulda" is a map-resolution
  *     concern, not a stored-value one. Unresolved names are reported instead.
- *   - projektstand / review status vocabularies (81 and 15 distinct values) are
- *     left untouched - they are a data-model decision, deferred to Stage 2.
- *   - terminProjektvorstellung date formats (278 rows carry dd.mm.yyyy, 18 carry
- *     "-") are reported but not converted - also Stage 2, where the column type
- *     is settled.
+ *   - projektstand and review status keep their historical free-text values (81
+ *     and 14 distinct). Collapsing them to an enum would delete real meaning -
+ *     "Plausibilitätsprüfung gBSK", "Niederschrift erstellt (LP05-05-01-F31)".
+ *     Grouping happens in code via shared/projektstand.ts and
+ *     shared/review-status.ts, so filters and statistics stay clean without the
+ *     source being rewritten.
+ *   - Values that are not a single usable date are left exactly as they are and
+ *     reported: "30.12.20025" (a typo year), "01.02.2023/12.9.23" and three
+ *     cells holding two dates. Guessing which one is meant is a business
+ *     decision, not a script's.
  *
  * OUTPUTS
  *   client/public/data.json               rewritten in place (same key order)
@@ -37,8 +47,8 @@
  * LOCALSTORAGE MIGRATION
  *   The live SPA caches this file under the localStorage key defined by
  *   STORAGE_KEY_PROJECTS in client/src/_core/api/client.ts. That key carries a
- *   schema suffix; Stage 1 bumps it, so every browser discards its stale copy
- *   and re-seeds from the cleaned data.json on next load. No user action needed.
+ *   schema version; bump it whenever this script changes stored values, so every
+ *   browser discards its stale copy and re-seeds. No user action needed.
  */
 
 import { createHash } from "node:crypto";
@@ -46,6 +56,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { normalizeBahnhofsmanagement } from "../shared/bahnhofsmanagement";
+import { parseStoredDate } from "../shared/date";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DATA_PATH = path.join(ROOT, "client", "public", "data.json");
@@ -145,6 +156,8 @@ function main() {
 
   const changes: Change[] = [];
   const unmappedBm = new Map<string, number>();
+  const dateReasons = new Map<string, number>();
+  const unparseableDates: Array<{ id: number; value: string }> = [];
   let bfNrFilled = 0;
 
   console.log("[2/4] normalising");
@@ -171,10 +184,45 @@ function main() {
       }
     }
 
+    // --- dates: German dd.mm.yyyy -> ISO ---------------------------------
+    {
+      const parsed = parseStoredDate(p.terminProjektvorstellung);
+      dateReasons.set(parsed.reason, (dateReasons.get(parsed.reason) ?? 0) + 1);
+      // Only rewrite when we produced a date, or when the value was a pure
+      // placeholder. Anything unparseable keeps its original text.
+      const next =
+        parsed.iso ?? (parsed.reason === "placeholder" || parsed.reason === "empty" ? null : undefined);
+      if (next !== undefined && p.terminProjektvorstellung !== next) {
+        changes.push({
+          id: p.id,
+          field: "terminProjektvorstellung",
+          from: p.terminProjektvorstellung,
+          to: next,
+        });
+        p.terminProjektvorstellung = next;
+      }
+      if (parsed.reason === "ambiguous" || parsed.reason === "unrecognised") {
+        unparseableDates.push({ id: p.id, value: String(p.terminProjektvorstellung) });
+      }
+    }
+
     // --- reviews ----------------------------------------------------------
     if (Array.isArray(p.reviews)) {
       for (const r of p.reviews) {
-        for (const f of ["prueferName", "status", "pruefDatum"] as const) {
+        const parsedDatum = parseStoredDate(r.pruefDatum);
+        const nextDatum =
+          parsedDatum.iso ??
+          (parsedDatum.reason === "placeholder" || parsedDatum.reason === "empty" ? null : undefined);
+        if (nextDatum !== undefined && r.pruefDatum !== nextDatum) {
+          changes.push({
+            id: p.id,
+            field: `reviews.${r.department}.pruefDatum`,
+            from: r.pruefDatum,
+            to: nextDatum,
+          });
+          r.pruefDatum = nextDatum;
+        }
+        for (const f of ["prueferName", "status"] as const) {
           const next = cleanStr(r[f]);
           if (r[f] !== next) {
             changes.push({
@@ -281,12 +329,20 @@ function main() {
       projectsWithoutBm: projects.filter((p) => !p.bahnhofsmanagement).length,
       unmapped: Object.fromEntries([...unmappedBm].sort((a, b) => b[1] - a[1])),
     },
-    deferredToStage2: {
-      note: "reported, deliberately not changed by Stage 1",
-      nonIsoTerminProjektvorstellung: {
+    dates: {
+      parsedAs: Object.fromEntries([...dateReasons].sort((a, b) => b[1] - a[1])),
+      leftAsIs: {
+        note: "not a single usable date - deciding which date is meant is a business call",
+        count: unparseableDates.length,
+        values: unparseableDates,
+      },
+      remainingNonIso: {
         count: nonIsoTermine.length,
         samples: nonIsoTermine.slice(0, 20),
       },
+    },
+    deferred: {
+      note: "reported, deliberately not changed",
       distinctProjektstand: [...new Set(projects.map((p) => p.projektstand).filter(Boolean))]
         .length,
       distinctReviewStatus: [
@@ -341,7 +397,10 @@ function main() {
   console.log(
     `      station names not in master: ${unresolvedStations.size} distinct / ${report.stationNamesNotInMaster.projectsAffected} projects`,
   );
-  console.log(`      non-ISO Termin values (deferred to Stage 2): ${nonIsoTermine.length}`);
+  console.log(
+    `      dates: ${[...dateReasons].sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k}=${v}`).join(" | ")}`,
+  );
+  console.log(`      dates left as-is (not a single usable date): ${unparseableDates.length}`);
   if (wouldClobber) {
     console.log(
       `      nothing to change - kept the existing ${path.relative(ROOT, REPORT_PATH)} (audit trail of the last run that did).`,

@@ -1,9 +1,13 @@
 /**
- * scripts/verify-stations.ts
+ * scripts/verify-data.ts
  * ---------------------------------------------------------------------------
- * Integrity gate for the station master and the project dataset. Runs on the
- * committed artifacts only - it needs no Excel file and no database, so it is
- * safe to run in CI on every push.
+ * Operator-facing integrity report for the station master and the project
+ * dataset. Runs on the committed artifacts only - no source workbook, no
+ * database - so it is safe in CI on every push.
+ *
+ * The vitest suite in shared/*.test.ts is the primary gate and asserts the same
+ * invariants in more detail; this script exists because a failing CI step that
+ * prints the actual numbers is faster to act on than a test diff.
  *
  * It fails the build when any of these stop holding:
  *   S1  stations.json parses, is non-empty, and every Bf. Nr. is unique
@@ -15,7 +19,7 @@
  *   D3  the project/review row counts are unchanged (1298 / 18172)
  *   G1  map resolution does not regress past the committed baseline
  *
- * Usage:  node --import tsx scripts/verify-stations.ts
+ * Usage:  node --import tsx scripts/verify-data.ts
  */
 
 import fs from "node:fs";
@@ -24,6 +28,10 @@ import { fileURLToPath } from "node:url";
 import { buildStationGeo, resolveAll } from "../client/src/lib/stationGeo";
 import type { StationRecord } from "../client/src/hooks/useStations";
 import { BAHNHOFSMANAGEMENT, STATION_BAHNHOFSMANAGEMENT } from "../shared/bahnhofsmanagement";
+import { CHECKLIST_QUESTIONS, DEPARTMENT_QUESTIONS } from "../shared/checklist";
+import { parseStoredDate } from "../shared/date";
+import { normalizeProjektstand } from "../shared/projektstand";
+import { normalizeReviewStatus } from "../shared/review-status";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const STATIONS = path.join(ROOT, "client", "public", "stations.json");
@@ -52,7 +60,7 @@ function check(id: string, ok: boolean, message: string) {
 }
 
 function main() {
-  console.log("[verify-stations]");
+  console.log("[verify-data]");
 
   // ---------------------------------------------------------------- stations
   const stations = JSON.parse(fs.readFileSync(STATIONS, "utf8")) as StationRecord[];
@@ -104,6 +112,8 @@ function main() {
     projects: Array<{
       bahnhofsmanagement: string | null;
       station: string | null;
+      projektstand: string | null;
+      terminProjektvorstellung: string | null;
       reviews: unknown[];
     }>;
     stats: { regionStats: Array<{ region: string; count: number }> };
@@ -149,6 +159,40 @@ function main() {
     .sort()
     .join(" ");
   check("D2", declaredStats === derivedStats, `stats.regionStats drifted from the rows\n      declared: ${declaredStats}\n      derived : ${derivedStats}`);
+
+  // -------------------------------------------------------------- vocabularies
+  const psCanonical = data.projects.filter((p) => normalizeProjektstand(p.projektstand).canonical).length;
+  const psUnmapped = new Map<string, number>();
+  for (const p of data.projects) {
+    const u = normalizeProjektstand(p.projektstand).unmapped;
+    if (u) psUnmapped.set(u, (psUnmapped.get(u) ?? 0) + 1);
+  }
+  const badStatus = new Set<string>();
+  for (const p of data.projects) {
+    for (const r of p.reviews as Array<{ status?: string | null }>) {
+      if (r.status && normalizeReviewStatus(r.status) === null) badStatus.add(r.status);
+    }
+  }
+  check("V1", badStatus.size === 0, `review statuses outside the canonical vocabulary: ${[...badStatus].join(", ")}`);
+  notes.push(
+    `projektstand: ${psCanonical} canonical | ${[...psUnmapped.values()].reduce((a, b) => a + b, 0)} free-text (${psUnmapped.size} distinct)`,
+  );
+
+  // -------------------------------------------------------------------- dates
+  const dateReasons = new Map<string, number>();
+  for (const p of data.projects) {
+    const r = parseStoredDate(p.terminProjektvorstellung as string | null);
+    dateReasons.set(r.reason, (dateReasons.get(r.reason) ?? 0) + 1);
+  }
+  check("V2", (dateReasons.get("german") ?? 0) === 0, `${dateReasons.get("german")} terminProjektvorstellung values are still German dd.mm.yyyy`);
+  check("V3", (dateReasons.get("invalid-date") ?? 0) === 0, `${dateReasons.get("invalid-date")} impossible calendar dates`);
+  notes.push(`dates: ${[...dateReasons].sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k}=${v}`).join(" | ")}`);
+
+  // ---------------------------------------------------------------- checklist
+  const deptQ = DEPARTMENT_QUESTIONS.map((q) => q.department);
+  check("C1", CHECKLIST_QUESTIONS.length === 22, `checklist has ${CHECKLIST_QUESTIONS.length} questions, expected 22`);
+  check("C2", new Set(deptQ).size === 14, `checklist maps to ${new Set(deptQ).size} departments, expected 14`);
+  notes.push(`checklist: ${CHECKLIST_QUESTIONS.length} questions | ${deptQ.length} department mappings`);
 
   // --------------------------------------------------------------------- geo
   const index = buildStationGeo(stations);

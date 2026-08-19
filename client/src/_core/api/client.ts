@@ -45,8 +45,10 @@ export interface ProjectCreateInput {
  *
  * v2: Stage 1 — canonical Bahnhofsmanagement, string bahnhofsnummer /
  *     streckennummer, whitespace-normalised text fields.
+ * v3: Stage 2 — terminProjektvorstellung and reviews[].pruefDatum converted
+ *     from German dd.mm.yyyy to ISO yyyy-mm-dd.
  */
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 const STORAGE_KEY_PROJECTS = `bahn_projects_v${SCHEMA_VERSION}`;
 const STORAGE_KEY_AUDIT = "bahn_audit_log";
 

@@ -121,7 +121,10 @@ drizzle/seed-output/
 *.seed.log
 
 # Drizzle kit temp
-drizzle/meta/
+# drizzle/meta/ holds the migration snapshots and _journal.json — drizzle-kit
+# needs them to diff future schema changes, and they were already tracked while
+# being listed here, so new snapshots were silently never added.
+# drizzle/meta/
 drizzle/migrations/*.sql.bak
 
 # Vercel static SPA deployment artifacts (perfect integration)

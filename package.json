@@ -23,7 +23,7 @@
     "stations:generate": "tsx scripts/generate-stations-master.ts",
     "stations:check": "tsx scripts/generate-stations-master.ts --check",
     "data:normalize": "tsx scripts/normalize-existing-data.ts",
-    "verify:data": "tsx scripts/verify-stations.ts",
+    "verify:data": "tsx scripts/verify-data.ts",
     "sync:json-db": "tsx scripts/sync-json-db.ts --checksum",
     "dev:sync": "concurrently -n \"APP,SEED,SYNC\" -c \"blue,green,yellow\" \"pnpm dev\" \"pnpm seed:perfect --watch\" \"pnpm sync:json-db --watch\""
   },

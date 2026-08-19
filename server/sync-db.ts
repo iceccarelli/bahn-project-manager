@@ -4,6 +4,7 @@ import { getDb } from "./db";
 import { projects } from "../drizzle/schema";
 import { eq, sql } from "drizzle-orm";
 import { SYNC_VERSION, DATA_JSON_PATH } from "@shared/const";
+import { toDate } from "@shared/date";
 
 /**
  * Real-time / scheduled sync between client/public/data.json and DB.
@@ -54,7 +55,7 @@ export async function syncDataJsonToDb(options: { force?: boolean; dryRun?: bool
           projektbeschreibung: p.projektbeschreibung ?? null,
           projektstand: p.projektstand ?? null,
           projektleiter: p.projektleiter ?? null,
-          terminProjektvorstellung: p.terminProjektvorstellung ?? null,
+          terminProjektvorstellung: toDate(p.terminProjektvorstellung),
           kommentar: p.kommentar ?? null,
           projektLink: p.projektLink ?? null,
           syncVersion: SYNC_VERSION,
