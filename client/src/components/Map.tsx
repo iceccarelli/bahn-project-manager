@@ -3,7 +3,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { Project } from "@/hooks/useDataQuery";
 import { useStations } from "@/hooks/useStations";
-import { buildStationGeo, type ResolvedStation } from "@/lib/stationGeo";
+import { buildStationGeo, type MatchPrecision, type ResolvedStation } from "@/lib/stationGeo";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { MapPin, Info, Maximize, Minimize, LocateFixed } from "lucide-react";
@@ -13,9 +13,39 @@ interface StationGroup {
   name: string;
   lat: number;
   lng: number;
-  exact: boolean;
+  precision: MatchPrecision;
+  /** true only for precision === "exact" */
+  isPrecise: boolean;
+  /** at least one project in this group matched an equally-scoring alternative */
+  ambiguous: boolean;
+  /** how each member project was matched — a station can be reached exactly by
+   *  one project and only reconciled by another */
+  counts: Record<MatchPrecision, number>;
+  /** the matched station's own BM — null for the regional fallback */
+  bm: string | null;
   projects: Project[];
 }
+
+/**
+ * Marker colour encodes match quality honestly:
+ *   red    — the project names this exact station
+ *   amber  — the name was reconciled (word order / containment); right town,
+ *            possibly the wrong stop
+ *   grey   — no station matched; the marker sits on the region centroid
+ */
+const PRECISION_RANK: Record<MatchPrecision, number> = {
+  exact: 0,
+  tokens: 1,
+  fuzzy: 2,
+  region: 3,
+};
+
+const PRECISION_STYLE: Record<MatchPrecision, { bg: string; ring: string; label: string }> = {
+  exact: { bg: "#FF0000", ring: "rgba(255,0,0,0.30)", label: "exakt" },
+  tokens: { bg: "#F59E0B", ring: "rgba(245,158,11,0.28)", label: "zugeordnet" },
+  fuzzy: { bg: "#F59E0B", ring: "rgba(245,158,11,0.28)", label: "zugeordnet" },
+  region: { bg: "#9ca3af", ring: "rgba(0,0,0,0.18)", label: "ungenau verortet (Region)" },
+};
 
 interface MapViewProps {
   projects: Project[];
@@ -26,10 +56,9 @@ interface MapViewProps {
   onProjectSelect?: (projectId: number) => void;
 }
 
-const createDotIcon = (count: number, exact: boolean) => {
+const createDotIcon = (count: number, precision: MatchPrecision) => {
   const size = count > 1 ? 34 : 26;
-  const bg = exact ? "#FF0000" : "#9ca3af";
-  const ring = exact ? "rgba(255,0,0,0.30)" : "rgba(0,0,0,0.18)";
+  const { bg, ring } = PRECISION_STYLE[precision];
   return L.divIcon({
     className: "db-dot-marker",
     html:
@@ -63,6 +92,10 @@ function popupHtml(group: StationGroup): string {
         `</button>`
     )
     .join("");
+  const style = PRECISION_STYLE[group.precision];
+  const mix = (Object.keys(PRECISION_STYLE) as MatchPrecision[])
+    .filter((k) => group.counts[k] > 0)
+    .map((k) => `${group.counts[k]} ${PRECISION_STYLE[k].label}`);
   const more =
     group.projects.length > 12
       ? `<div style="text-align:center;font-size:10px;color:#888;font-style:italic;padding:4px;">+ ${group.projects.length - 12} weitere Projekte an dieser Station</div>`
@@ -70,8 +103,13 @@ function popupHtml(group: StationGroup): string {
   return (
     `<div style="min-width:240px;max-width:300px;">` +
     `<div style="font:800 14px system-ui;line-height:1.2;">${esc(group.name)}</div>` +
-    `<div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;font-weight:800;color:${group.exact ? "#888" : "#b45309"};margin-top:2px;">` +
-    `${group.projects.length} ${group.projects.length === 1 ? "Projekt" : "Projekte"}${group.exact ? "" : " · ungenau verortet"}</div>` +
+    `<div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;font-weight:800;color:${group.isPrecise ? "#888" : "#b45309"};margin-top:2px;">` +
+    `${group.projects.length} ${group.projects.length === 1 ? "Projekt" : "Projekte"}` +
+    `${group.isPrecise ? "" : ` · ${esc(style.label)}`}${group.ambiguous ? " · mehrdeutig" : ""}</div>` +
+    (group.bm ? `<div style="font-size:9px;color:#888;margin-top:1px;">BM ${esc(group.bm)}</div>` : "") +
+    (mix.length > 1
+      ? `<div style="font-size:9px;color:#888;margin-top:1px;">${mix.join(" · ")}</div>`
+      : "") +
     `<div style="max-height:240px;overflow-y:auto;margin-top:8px;border-top:1px solid #eee;padding-top:6px;">${rows}${more}</div>` +
     `</div>`
   );
@@ -101,13 +139,47 @@ export const MapView: React.FC<MapViewProps> = ({
       const r: ResolvedStation | null = geo.resolve(p.station, p.bahnhofsmanagement);
       if (!r) continue;
       const g = map.get(r.key);
-      if (g) g.projects.push(p);
-      else map.set(r.key, { key: r.key, name: r.name, lat: r.lat, lng: r.lng, exact: r.exact, projects: [p] });
+      if (g) {
+        g.projects.push(p);
+        g.counts[r.precision] += 1;
+        if (r.ambiguous) g.ambiguous = true;
+        // marker colour reflects the best evidence for this station
+        if (PRECISION_RANK[r.precision] < PRECISION_RANK[g.precision]) {
+          g.precision = r.precision;
+          g.isPrecise = r.isPrecise;
+        }
+      } else {
+        map.set(r.key, {
+          key: r.key,
+          name: r.name,
+          lat: r.lat,
+          lng: r.lng,
+          precision: r.precision,
+          isPrecise: r.isPrecise,
+          ambiguous: r.ambiguous,
+          bm: r.bm,
+          counts: { exact: 0, tokens: 0, fuzzy: 0, region: 0, [r.precision]: 1 } as Record<
+            MatchPrecision,
+            number
+          >,
+          projects: [p],
+        });
+      }
     }
     return Array.from(map.values());
   }, [projects, geo]);
 
-  const exactCount = useMemo(() => groups.filter((g) => g.exact).reduce((n, g) => n + g.projects.length, 0), [groups]);
+  /**
+   * Projects that could not be placed at all — no station match and no usable
+   * BM. Previously these were dropped with `if (!r) continue` and never
+   * reported, so the map silently understated its own coverage.
+   */
+  const placedCount = useMemo(() => groups.reduce((n, g) => n + g.projects.length, 0), [groups]);
+  const unplacedCount = projects.length - placedCount;
+  /** counted per project, not per marker — a station can host both exact and reconciled matches */
+  const exactCount = useMemo(() => groups.reduce((n, g) => n + g.counts.exact, 0), [groups]);
+  /** groups sitting on a real station (exact or reconciled), i.e. not a region centroid */
+  const stationGroups = useMemo(() => groups.filter((g) => g.precision !== "region"), [groups]);
 
   // latest callbacks in refs so the init effect can stay mount-only
   const onBoundsRef = useRef(onBoundsChange);
@@ -187,14 +259,16 @@ export const MapView: React.FC<MapViewProps> = ({
     layer.clearLayers();
 
     for (const g of groups) {
-      const marker = L.marker([g.lat, g.lng], { icon: createDotIcon(g.projects.length, g.exact) });
+      const marker = L.marker([g.lat, g.lng], { icon: createDotIcon(g.projects.length, g.precision) });
       marker.bindPopup(popupHtml(g), { minWidth: 240, maxWidth: 320, className: "db-popup" });
       marker.on("click", () => map.flyTo([g.lat, g.lng], Math.max(map.getZoom(), 13), { duration: 0.6 }));
       layer.addLayer(marker);
     }
 
     if (!didFitRef.current && groups.length) {
-      const pts = groups.filter((g) => g.exact).map((g) => [g.lat, g.lng]) as [number, number][];
+      const pts = groups
+        .filter((g) => g.precision !== "region")
+        .map((g) => [g.lat, g.lng]) as [number, number][];
       if (pts.length) {
         map.fitBounds(L.latLngBounds(pts).pad(0.15));
         didFitRef.current = true;
@@ -213,7 +287,9 @@ export const MapView: React.FC<MapViewProps> = ({
   const fitAll = useCallback(() => {
     const map = mapRef.current;
     if (!map) return;
-    const pts = groups.filter((g) => g.exact).map((g) => [g.lat, g.lng]) as [number, number][];
+    const pts = groups
+      .filter((g) => g.precision !== "region")
+      .map((g) => [g.lat, g.lng]) as [number, number][];
     if (pts.length) map.fitBounds(L.latLngBounds(pts).pad(0.15));
   }, [groups]);
 
@@ -234,8 +310,15 @@ export const MapView: React.FC<MapViewProps> = ({
             <div>
               <h4 className="text-base font-black leading-none tracking-tight">Netz-Explorer</h4>
               <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-black mt-1.5">
-                {groups.filter((g) => g.exact).length.toLocaleString("de-DE")} Stationen · {exactCount.toLocaleString("de-DE")} Projekte exakt verortet
+                {stationGroups.length.toLocaleString("de-DE")} Stationen ·{" "}
+                {exactCount.toLocaleString("de-DE")} exakt · {placedCount.toLocaleString("de-DE")}/
+                {projects.length.toLocaleString("de-DE")} verortet
               </p>
+              {unplacedCount > 0 && (
+                <p className="text-[10px] text-amber-600 dark:text-amber-500 font-black mt-0.5">
+                  {unplacedCount.toLocaleString("de-DE")} ohne Station &amp; ohne BM – nicht darstellbar
+                </p>
+              )}
             </div>
           </div>
         </Card>
@@ -252,6 +335,10 @@ export const MapView: React.FC<MapViewProps> = ({
               12
             </div>
             <span className="text-foreground/80">Projekte je Station</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="w-4 h-4 rounded-full bg-[#F59E0B] border-2 border-white shadow-md" />
+            <span className="text-foreground/80">Station (zugeordnet)</span>
           </div>
           <div className="flex items-center gap-3">
             <div className="w-4 h-4 rounded-full bg-[#9ca3af] border-2 border-white shadow-md" />
@@ -272,6 +359,7 @@ export const MapView: React.FC<MapViewProps> = ({
           size="icon"
           onClick={fitAll}
           title="Alle Stationen anzeigen"
+          aria-label="Alle Stationen anzeigen"
           className="bg-background/95 backdrop-blur-xl border-2 border-border/50 shadow-2xl hover:bg-muted"
         >
           <LocateFixed className="h-4 w-4" />
@@ -280,6 +368,8 @@ export const MapView: React.FC<MapViewProps> = ({
           variant="outline"
           size="icon"
           onClick={() => setIsFullscreen((v) => !v)}
+          title={isFullscreen ? "Vollbild beenden" : "Vollbild"}
+          aria-label={isFullscreen ? "Vollbild beenden" : "Vollbild"}
           className="bg-background/95 backdrop-blur-xl border-2 border-border/50 shadow-2xl hover:bg-muted"
         >
           {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}

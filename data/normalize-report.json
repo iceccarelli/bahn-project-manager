@@ -1,0 +1,6107 @@
+{
+  "input": {
+    "file": "client/public/data.json",
+    "sha256Before": "0f1a4f509290c4b8d70db12f0c54b2f511f418de4fffafcc10388f5f248e47a8",
+    "projects": 1298
+  },
+  "output": {
+    "sha256After": "88d3e2f768d3cda6602c69928a39e0010e5b08350adbcd904d649f8258bab64e",
+    "dryRun": false
+  },
+  "summary": {
+    "totalCellsChanged": 987,
+    "byField": {
+      "reviews.*.pruefDatum": 716,
+      "terminProjektvorstellung": 271
+    },
+    "bahnhofsnummerFilled": 0,
+    "numberToStringCoercions": {
+      "note": "type corrections, not value changes - the declared type in useDataQuery.ts, shared/validation.ts and drizzle/schema.ts is `string | null`",
+      "total": 0,
+      "byField": {}
+    },
+    "realValueChanges": 987
+  },
+  "bahnhofsmanagement": {
+    "canonicalDistribution": {
+      "Frankfurt": 331,
+      "Darmstadt": 162,
+      "Koblenz": 148,
+      "Kassel": 131,
+      "Saarbrücken": 112,
+      "Kaiserslautern": 104,
+      "Mainz": 97,
+      "Gießen": 87
+    },
+    "projectsWithoutBm": 126,
+    "unmapped": {}
+  },
+  "dates": {
+    "parsedAs": {
+      "iso": 766,
+      "empty": 254,
+      "german": 253,
+      "placeholder": 18,
+      "ambiguous": 4,
+      "unrecognised": 3
+    },
+    "leftAsIs": {
+      "note": "not a single usable date - deciding which date is meant is a business call",
+      "count": 7,
+      "values": [
+        {
+          "id": 272,
+          "value": "01.02.2023/12.9.23"
+        },
+        {
+          "id": 286,
+          "value": "08.09.2023\n14.03.2024"
+        },
+        {
+          "id": 497,
+          "value": "17.11.2023\n02.02.2024"
+        },
+        {
+          "id": 498,
+          "value": "22.08.2023\n09.02.2024"
+        },
+        {
+          "id": 1202,
+          "value": "30.12.20025"
+        },
+        {
+          "id": 1203,
+          "value": "30.12.20025"
+        },
+        {
+          "id": 1204,
+          "value": "30.12.20025"
+        }
+      ]
+    },
+    "remainingNonIso": {
+      "count": 7,
+      "samples": [
+        {
+          "id": 272,
+          "value": "01.02.2023/12.9.23"
+        },
+        {
+          "id": 286,
+          "value": "08.09.2023\n14.03.2024"
+        },
+        {
+          "id": 497,
+          "value": "17.11.2023\n02.02.2024"
+        },
+        {
+          "id": 498,
+          "value": "22.08.2023\n09.02.2024"
+        },
+        {
+          "id": 1202,
+          "value": "30.12.20025"
+        },
+        {
+          "id": 1203,
+          "value": "30.12.20025"
+        },
+        {
+          "id": 1204,
+          "value": "30.12.20025"
+        }
+      ]
+    }
+  },
+  "deferred": {
+    "note": "reported, deliberately not changed",
+    "distinctProjektstand": 77,
+    "distinctReviewStatus": [
+      "Nachforderung",
+      "Niederschrift erstellt",
+      "Niederschrift erstellt (LP05-05-01-F31)",
+      "Projektkonfig.",
+      "Projektkonfiguration",
+      "Prüfung erfolgt",
+      "Zustimmung erteilt",
+      "abgelehnt",
+      "gestoppt",
+      "in Bearbeitung",
+      "nicht erforderlich",
+      "offen",
+      "prüffähig",
+      "zurückgestellt"
+    ]
+  },
+  "stationNamesNotInMaster": {
+    "note": "not rewritten - input for the Stage 5 map-resolution pass",
+    "distinct": 374,
+    "projectsAffected": 629,
+    "top": {
+      "Regionalbahnhof Frankfurt Flughafen": 16,
+      "Fulda Hbf": 15,
+      "FFM Hauptwache": 11,
+      "FFM Ostendstraße": 11,
+      "Kassel Wilhelmshöhe": 11,
+      "Hbf Mainz": 10,
+      "FFM Mühlberg": 9,
+      "DHL Packstationen": 9,
+      "Offenbach-Kaiserlei": 7,
+      "Frankfurt Lokalbahnhof": 7,
+      "Gießen Hbf": 7,
+      "Wittlich": 7,
+      "Friedberg (Hessen)": 7,
+      "Ludwigshafen Hbf": 6,
+      "Saarbrücken HBF": 6,
+      "Marburg Lahn": 5,
+      "FFM Niederrad": 5,
+      "Kaiserslautern": 5,
+      "Groß Gerau Dornberg": 5,
+      "Stockstadt": 5,
+      "Frankfurt Konstablerwache": 5,
+      "Frankfurt-Hauptwache": 5,
+      "Neunkirchen": 4,
+      "Hofheim": 4,
+      "OF Ledermuseum": 4,
+      "Kassel HBF": 4,
+      "Riedstadt Goddelau": 4,
+      "Ludwigshafen HBF": 4,
+      "Bullay": 4,
+      "FFM HBF": 3,
+      "Offenbach Ost": 3,
+      "Hanau HBF": 3,
+      "FFM Stresemannallee": 3,
+      "Mühlheim": 3,
+      "FFM Stadion Bahnhof": 3,
+      "Wolfskehlen": 3,
+      "Frankfurt am Main Stadion": 3,
+      "Neustadt (Weinstr.) Hbf": 3,
+      "Koblenz HBF": 3,
+      "Assenheim": 3
+    }
+  },
+  "changes": [
+    {
+      "id": 178,
+      "field": "terminProjektvorstellung",
+      "from": "05.07.2022",
+      "to": "2022-07-05"
+    },
+    {
+      "id": 179,
+      "field": "terminProjektvorstellung",
+      "from": "05.07.2022",
+      "to": "2022-07-05"
+    },
+    {
+      "id": 180,
+      "field": "terminProjektvorstellung",
+      "from": "02.08.2022",
+      "to": "2022-08-02"
+    },
+    {
+      "id": 187,
+      "field": "terminProjektvorstellung",
+      "from": "06.09.2022",
+      "to": "2022-09-06"
+    },
+    {
+      "id": 188,
+      "field": "terminProjektvorstellung",
+      "from": "06.09.2022",
+      "to": "2022-09-06"
+    },
+    {
+      "id": 213,
+      "field": "terminProjektvorstellung",
+      "from": "06.09.2022",
+      "to": "2022-09-06"
+    },
+    {
+      "id": 237,
+      "field": "terminProjektvorstellung",
+      "from": "01.11.2022",
+      "to": "2022-11-01"
+    },
+    {
+      "id": 238,
+      "field": "terminProjektvorstellung",
+      "from": "06.09.2022",
+      "to": "2022-09-06"
+    },
+    {
+      "id": 242,
+      "field": "terminProjektvorstellung",
+      "from": "12.09.2023",
+      "to": "2023-09-12"
+    },
+    {
+      "id": 245,
+      "field": "terminProjektvorstellung",
+      "from": "02.08.2022",
+      "to": "2022-08-02"
+    },
+    {
+      "id": 246,
+      "field": "terminProjektvorstellung",
+      "from": "06.12.2022",
+      "to": "2022-12-06"
+    },
+    {
+      "id": 255,
+      "field": "terminProjektvorstellung",
+      "from": "24.01.2023",
+      "to": "2023-01-24"
+    },
+    {
+      "id": 257,
+      "field": "terminProjektvorstellung",
+      "from": "14.02.2023",
+      "to": "2023-02-14"
+    },
+    {
+      "id": 258,
+      "field": "terminProjektvorstellung",
+      "from": "14.02.2023",
+      "to": "2023-02-14"
+    },
+    {
+      "id": 260,
+      "field": "terminProjektvorstellung",
+      "from": "17.01.2023",
+      "to": "2023-01-17"
+    },
+    {
+      "id": 264,
+      "field": "terminProjektvorstellung",
+      "from": "11.04.2023",
+      "to": "2023-04-11"
+    },
+    {
+      "id": 271,
+      "field": "terminProjektvorstellung",
+      "from": "01.11.2022",
+      "to": "2022-11-01"
+    },
+    {
+      "id": 284,
+      "field": "terminProjektvorstellung",
+      "from": "14.03.2023",
+      "to": "2023-03-14"
+    },
+    {
+      "id": 291,
+      "field": "terminProjektvorstellung",
+      "from": "21.03.2023",
+      "to": "2023-03-21"
+    },
+    {
+      "id": 292,
+      "field": "terminProjektvorstellung",
+      "from": "21.03.2023",
+      "to": "2023-03-21"
+    },
+    {
+      "id": 293,
+      "field": "terminProjektvorstellung",
+      "from": "21.03.2023",
+      "to": "2023-03-21"
+    },
+    {
+      "id": 294,
+      "field": "terminProjektvorstellung",
+      "from": "21.03.2023",
+      "to": "2023-03-21"
+    },
+    {
+      "id": 295,
+      "field": "terminProjektvorstellung",
+      "from": "21.03.2023",
+      "to": "2023-03-21"
+    },
+    {
+      "id": 296,
+      "field": "terminProjektvorstellung",
+      "from": "21.03.2023",
+      "to": "2023-03-21"
+    },
+    {
+      "id": 302,
+      "field": "terminProjektvorstellung",
+      "from": "31.01.2023",
+      "to": "2023-01-31"
+    },
+    {
+      "id": 306,
+      "field": "terminProjektvorstellung",
+      "from": "04.04.2023",
+      "to": "2023-04-04"
+    },
+    {
+      "id": 311,
+      "field": "terminProjektvorstellung",
+      "from": "25.04.2023",
+      "to": "2023-04-25"
+    },
+    {
+      "id": 315,
+      "field": "terminProjektvorstellung",
+      "from": "02.05.2023",
+      "to": "2023-05-02"
+    },
+    {
+      "id": 319,
+      "field": "terminProjektvorstellung",
+      "from": "09.05.2023",
+      "to": "2023-05-09"
+    },
+    {
+      "id": 321,
+      "field": "terminProjektvorstellung",
+      "from": "16.05.2023",
+      "to": "2023-05-16"
+    },
+    {
+      "id": 322,
+      "field": "terminProjektvorstellung",
+      "from": "16.05.2023",
+      "to": "2023-05-16"
+    },
+    {
+      "id": 323,
+      "field": "terminProjektvorstellung",
+      "from": "11.04.2023",
+      "to": "2023-04-11"
+    },
+    {
+      "id": 324,
+      "field": "terminProjektvorstellung",
+      "from": "15.11.2022",
+      "to": "2022-11-15"
+    },
+    {
+      "id": 325,
+      "field": "terminProjektvorstellung",
+      "from": "30.05.2023",
+      "to": "2023-05-30"
+    },
+    {
+      "id": 328,
+      "field": "terminProjektvorstellung",
+      "from": "06.06.2023",
+      "to": "2023-06-06"
+    },
+    {
+      "id": 329,
+      "field": "terminProjektvorstellung",
+      "from": "18.04.2023",
+      "to": "2023-04-18"
+    },
+    {
+      "id": 330,
+      "field": "terminProjektvorstellung",
+      "from": "18.04.2023",
+      "to": "2023-04-18"
+    },
+    {
+      "id": 331,
+      "field": "terminProjektvorstellung",
+      "from": "04.04.2023",
+      "to": "2023-04-04"
+    },
+    {
+      "id": 332,
+      "field": "terminProjektvorstellung",
+      "from": "14.03.2023",
+      "to": "2023-03-14"
+    },
+    {
+      "id": 333,
+      "field": "terminProjektvorstellung",
+      "from": "16.05.2023",
+      "to": "2023-05-16"
+    },
+    {
+      "id": 339,
+      "field": "terminProjektvorstellung",
+      "from": "20.06.2023",
+      "to": "2023-06-20"
+    },
+    {
+      "id": 340,
+      "field": "terminProjektvorstellung",
+      "from": "17.01.2023",
+      "to": "2023-01-17"
+    },
+    {
+      "id": 341,
+      "field": "terminProjektvorstellung",
+      "from": "04.04.2023",
+      "to": "2023-04-04"
+    },
+    {
+      "id": 342,
+      "field": "terminProjektvorstellung",
+      "from": "27.06.2023",
+      "to": "2023-06-27"
+    },
+    {
+      "id": 343,
+      "field": "terminProjektvorstellung",
+      "from": "27.06.2023",
+      "to": "2023-06-27"
+    },
+    {
+      "id": 347,
+      "field": "terminProjektvorstellung",
+      "from": "04.07.2023",
+      "to": "2023-07-04"
+    },
+    {
+      "id": 349,
+      "field": "terminProjektvorstellung",
+      "from": "11.07.2023",
+      "to": "2023-07-11"
+    },
+    {
+      "id": 351,
+      "field": "terminProjektvorstellung",
+      "from": "04.07.2023",
+      "to": "2023-07-04"
+    },
+    {
+      "id": 352,
+      "field": "terminProjektvorstellung",
+      "from": "04.07.2023",
+      "to": "2023-07-04"
+    },
+    {
+      "id": 353,
+      "field": "terminProjektvorstellung",
+      "from": "04.07.2023",
+      "to": "2023-07-04"
+    },
+    {
+      "id": 354,
+      "field": "terminProjektvorstellung",
+      "from": "04.07.2023",
+      "to": "2023-07-04"
+    },
+    {
+      "id": 355,
+      "field": "terminProjektvorstellung",
+      "from": "04.07.2023",
+      "to": "2023-07-04"
+    },
+    {
+      "id": 356,
+      "field": "terminProjektvorstellung",
+      "from": "04.07.2023",
+      "to": "2023-07-04"
+    },
+    {
+      "id": 359,
+      "field": "terminProjektvorstellung",
+      "from": "04.07.2023",
+      "to": "2023-07-04"
+    },
+    {
+      "id": 360,
+      "field": "terminProjektvorstellung",
+      "from": "25.07.2023",
+      "to": "2023-07-25"
+    },
+    {
+      "id": 370,
+      "field": "terminProjektvorstellung",
+      "from": "09.05.2023",
+      "to": "2023-05-09"
+    },
+    {
+      "id": 374,
+      "field": "terminProjektvorstellung",
+      "from": "11.04.2023",
+      "to": "2023-04-11"
+    },
+    {
+      "id": 377,
+      "field": "terminProjektvorstellung",
+      "from": "05.09.2023",
+      "to": "2023-09-05"
+    },
+    {
+      "id": 427,
+      "field": "terminProjektvorstellung",
+      "from": "06.06.2023",
+      "to": "2023-06-06"
+    },
+    {
+      "id": 428,
+      "field": "terminProjektvorstellung",
+      "from": "04.04.2023",
+      "to": "2023-04-04"
+    },
+    {
+      "id": 429,
+      "field": "terminProjektvorstellung",
+      "from": "17.10.2023",
+      "to": "2023-10-17"
+    },
+    {
+      "id": 430,
+      "field": "terminProjektvorstellung",
+      "from": "17.10.2023",
+      "to": "2023-10-17"
+    },
+    {
+      "id": 433,
+      "field": "terminProjektvorstellung",
+      "from": "13.06.2023",
+      "to": "2023-06-13"
+    },
+    {
+      "id": 440,
+      "field": "terminProjektvorstellung",
+      "from": "31.10.2023",
+      "to": "2023-10-31"
+    },
+    {
+      "id": 441,
+      "field": "terminProjektvorstellung",
+      "from": "07.11.2023",
+      "to": "2023-11-07"
+    },
+    {
+      "id": 443,
+      "field": "terminProjektvorstellung",
+      "from": "21.11.2023",
+      "to": "2023-11-21"
+    },
+    {
+      "id": 445,
+      "field": "terminProjektvorstellung",
+      "from": "24.10.2023",
+      "to": "2023-10-24"
+    },
+    {
+      "id": 449,
+      "field": "terminProjektvorstellung",
+      "from": "21.11.2023",
+      "to": "2023-11-21"
+    },
+    {
+      "id": 450,
+      "field": "terminProjektvorstellung",
+      "from": "27.06.2023",
+      "to": "2023-06-27"
+    },
+    {
+      "id": 453,
+      "field": "terminProjektvorstellung",
+      "from": "16.05.2023",
+      "to": "2023-05-16"
+    },
+    {
+      "id": 454,
+      "field": "terminProjektvorstellung",
+      "from": "28.11.2023",
+      "to": "2023-11-28"
+    },
+    {
+      "id": 468,
+      "field": "terminProjektvorstellung",
+      "from": "14.02.2023",
+      "to": "2023-02-14"
+    },
+    {
+      "id": 469,
+      "field": "terminProjektvorstellung",
+      "from": "19.12.2023",
+      "to": "2023-12-19"
+    },
+    {
+      "id": 470,
+      "field": "terminProjektvorstellung",
+      "from": "19.12.2023",
+      "to": "2023-12-19"
+    },
+    {
+      "id": 471,
+      "field": "terminProjektvorstellung",
+      "from": "05.12.2023",
+      "to": "2023-12-05"
+    },
+    {
+      "id": 473,
+      "field": "terminProjektvorstellung",
+      "from": "-",
+      "to": null
+    },
+    {
+      "id": 474,
+      "field": "terminProjektvorstellung",
+      "from": "-",
+      "to": null
+    },
+    {
+      "id": 475,
+      "field": "terminProjektvorstellung",
+      "from": "16.01.2024",
+      "to": "2024-01-16"
+    },
+    {
+      "id": 477,
+      "field": "terminProjektvorstellung",
+      "from": "23.01.2024",
+      "to": "2024-01-23"
+    },
+    {
+      "id": 481,
+      "field": "terminProjektvorstellung",
+      "from": "28.11.2023",
+      "to": "2023-11-28"
+    },
+    {
+      "id": 482,
+      "field": "terminProjektvorstellung",
+      "from": "30.01.2024",
+      "to": "2024-01-30"
+    },
+    {
+      "id": 484,
+      "field": "terminProjektvorstellung",
+      "from": "16.01.2024",
+      "to": "2024-01-16"
+    },
+    {
+      "id": 499,
+      "field": "terminProjektvorstellung",
+      "from": "28.11.2023",
+      "to": "2023-11-28"
+    },
+    {
+      "id": 503,
+      "field": "terminProjektvorstellung",
+      "from": "27.02.2024",
+      "to": "2024-02-27"
+    },
+    {
+      "id": 505,
+      "field": "terminProjektvorstellung",
+      "from": "05.03.2024",
+      "to": "2024-03-05"
+    },
+    {
+      "id": 508,
+      "field": "terminProjektvorstellung",
+      "from": "06.02.2024",
+      "to": "2024-02-06"
+    },
+    {
+      "id": 511,
+      "field": "terminProjektvorstellung",
+      "from": "21.03.2023",
+      "to": "2023-03-21"
+    },
+    {
+      "id": 513,
+      "field": "terminProjektvorstellung",
+      "from": "19.03.2024",
+      "to": "2024-03-19"
+    },
+    {
+      "id": 514,
+      "field": "terminProjektvorstellung",
+      "from": "19.03.2024",
+      "to": "2024-03-19"
+    },
+    {
+      "id": 519,
+      "field": "terminProjektvorstellung",
+      "from": "12.09.2023",
+      "to": "2023-09-12"
+    },
+    {
+      "id": 520,
+      "field": "terminProjektvorstellung",
+      "from": "13.02.2024",
+      "to": "2024-02-13"
+    },
+    {
+      "id": 521,
+      "field": "terminProjektvorstellung",
+      "from": "26.03.2024",
+      "to": "2024-03-26"
+    },
+    {
+      "id": 522,
+      "field": "terminProjektvorstellung",
+      "from": "26.03.2024",
+      "to": "2024-03-26"
+    },
+    {
+      "id": 531,
+      "field": "terminProjektvorstellung",
+      "from": "24.01.2023",
+      "to": "2023-01-24"
+    },
+    {
+      "id": 533,
+      "field": "terminProjektvorstellung",
+      "from": "16.04.2024",
+      "to": "2024-04-16"
+    },
+    {
+      "id": 534,
+      "field": "terminProjektvorstellung",
+      "from": "16.04.2024",
+      "to": "2024-04-16"
+    },
+    {
+      "id": 537,
+      "field": "terminProjektvorstellung",
+      "from": "23.04.2024",
+      "to": "2024-04-23"
+    },
+    {
+      "id": 538,
+      "field": "terminProjektvorstellung",
+      "from": "23.04.2024",
+      "to": "2024-04-23"
+    },
+    {
+      "id": 539,
+      "field": "terminProjektvorstellung",
+      "from": "23.04.2024",
+      "to": "2024-04-23"
+    },
+    {
+      "id": 542,
+      "field": "terminProjektvorstellung",
+      "from": "30.04.2024",
+      "to": "2024-04-30"
+    },
+    {
+      "id": 547,
+      "field": "terminProjektvorstellung",
+      "from": "24.10.2023",
+      "to": "2023-10-24"
+    },
+    {
+      "id": 551,
+      "field": "terminProjektvorstellung",
+      "from": "21.05.2024",
+      "to": "2024-05-21"
+    },
+    {
+      "id": 556,
+      "field": "terminProjektvorstellung",
+      "from": "04.06.2024",
+      "to": "2024-06-04"
+    },
+    {
+      "id": 557,
+      "field": "terminProjektvorstellung",
+      "from": "04.06.2024",
+      "to": "2024-06-04"
+    },
+    {
+      "id": 558,
+      "field": "terminProjektvorstellung",
+      "from": "04.06.2024",
+      "to": "2024-06-04"
+    },
+    {
+      "id": 559,
+      "field": "terminProjektvorstellung",
+      "from": "23.05.2023",
+      "to": "2023-05-23"
+    },
+    {
+      "id": 562,
+      "field": "terminProjektvorstellung",
+      "from": "14.03.2023",
+      "to": "2023-03-14"
+    },
+    {
+      "id": 565,
+      "field": "terminProjektvorstellung",
+      "from": "11.06.2024",
+      "to": "2024-06-11"
+    },
+    {
+      "id": 575,
+      "field": "terminProjektvorstellung",
+      "from": "18.06.2024",
+      "to": "2024-06-18"
+    },
+    {
+      "id": 576,
+      "field": "terminProjektvorstellung",
+      "from": "21.03.2023",
+      "to": "2023-03-21"
+    },
+    {
+      "id": 577,
+      "field": "terminProjektvorstellung",
+      "from": "30.04.2024",
+      "to": "2024-04-30"
+    },
+    {
+      "id": 578,
+      "field": "terminProjektvorstellung",
+      "from": "04.04.2023",
+      "to": "2023-04-04"
+    },
+    {
+      "id": 580,
+      "field": "terminProjektvorstellung",
+      "from": "30.04.2024",
+      "to": "2024-04-30"
+    },
+    {
+      "id": 584,
+      "field": "terminProjektvorstellung",
+      "from": "02.07.2024",
+      "to": "2024-07-02"
+    },
+    {
+      "id": 585,
+      "field": "terminProjektvorstellung",
+      "from": "02.07.2024",
+      "to": "2024-07-02"
+    },
+    {
+      "id": 585,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "02.07.2024",
+      "to": "2024-07-02"
+    },
+    {
+      "id": 587,
+      "field": "terminProjektvorstellung",
+      "from": "24.10.2023",
+      "to": "2023-10-24"
+    },
+    {
+      "id": 593,
+      "field": "terminProjektvorstellung",
+      "from": "-",
+      "to": null
+    },
+    {
+      "id": 594,
+      "field": "terminProjektvorstellung",
+      "from": "05.09.2023",
+      "to": "2023-09-05"
+    },
+    {
+      "id": 595,
+      "field": "terminProjektvorstellung",
+      "from": "16.07.2024",
+      "to": "2024-07-16"
+    },
+    {
+      "id": 595,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "16.07.2024",
+      "to": "2024-07-16"
+    },
+    {
+      "id": 595,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "16.07.2024",
+      "to": "2024-07-16"
+    },
+    {
+      "id": 601,
+      "field": "terminProjektvorstellung",
+      "from": "23.07.2024",
+      "to": "2024-07-23"
+    },
+    {
+      "id": 614,
+      "field": "terminProjektvorstellung",
+      "from": "20.08.2024",
+      "to": "2024-08-20"
+    },
+    {
+      "id": 614,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "20.08.2024",
+      "to": "2024-08-20"
+    },
+    {
+      "id": 630,
+      "field": "terminProjektvorstellung",
+      "from": "07.11.2023",
+      "to": "2023-11-07"
+    },
+    {
+      "id": 639,
+      "field": "terminProjektvorstellung",
+      "from": "05.03.2024",
+      "to": "2024-03-05"
+    },
+    {
+      "id": 640,
+      "field": "terminProjektvorstellung",
+      "from": "18.06.2024",
+      "to": "2024-06-18"
+    },
+    {
+      "id": 674,
+      "field": "terminProjektvorstellung",
+      "from": "12.11.2024",
+      "to": "2024-11-12"
+    },
+    {
+      "id": 696,
+      "field": "terminProjektvorstellung",
+      "from": "18.06.2024",
+      "to": "2024-06-18"
+    },
+    {
+      "id": 724,
+      "field": "terminProjektvorstellung",
+      "from": "21.01.2025",
+      "to": "2025-01-21"
+    },
+    {
+      "id": 724,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "21.01.2025",
+      "to": "2025-01-21"
+    },
+    {
+      "id": 724,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "21.01.2025",
+      "to": "2025-01-21"
+    },
+    {
+      "id": 725,
+      "field": "terminProjektvorstellung",
+      "from": "25.02.2025",
+      "to": "2025-02-25"
+    },
+    {
+      "id": 725,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "25.02.2025",
+      "to": "2025-02-25"
+    },
+    {
+      "id": 725,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "25.02.2025",
+      "to": "2025-02-25"
+    },
+    {
+      "id": 745,
+      "field": "terminProjektvorstellung",
+      "from": "26.11.2024",
+      "to": "2024-11-26"
+    },
+    {
+      "id": 745,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "26.11.2024",
+      "to": "2024-11-26"
+    },
+    {
+      "id": 745,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "26.11.2024",
+      "to": "2024-11-26"
+    },
+    {
+      "id": 746,
+      "field": "terminProjektvorstellung",
+      "from": "17.12.2024",
+      "to": "2024-12-17"
+    },
+    {
+      "id": 749,
+      "field": "terminProjektvorstellung",
+      "from": "02.07.2024",
+      "to": "2024-07-02"
+    },
+    {
+      "id": 753,
+      "field": "terminProjektvorstellung",
+      "from": "28.01.2025",
+      "to": "2025-01-28"
+    },
+    {
+      "id": 753,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "28.01.2025",
+      "to": "2025-01-28"
+    },
+    {
+      "id": 753,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "28.01.2025",
+      "to": "2025-01-28"
+    },
+    {
+      "id": 787,
+      "field": "terminProjektvorstellung",
+      "from": "22.04.2025",
+      "to": "2025-04-22"
+    },
+    {
+      "id": 787,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "22.04.2025",
+      "to": "2025-04-22"
+    },
+    {
+      "id": 787,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "22.04.2025",
+      "to": "2025-04-22"
+    },
+    {
+      "id": 791,
+      "field": "terminProjektvorstellung",
+      "from": "-",
+      "to": null
+    },
+    {
+      "id": 795,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "01.10.2024",
+      "to": "2024-10-01"
+    },
+    {
+      "id": 795,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "01.10.2024",
+      "to": "2024-10-01"
+    },
+    {
+      "id": 796,
+      "field": "terminProjektvorstellung",
+      "from": "03.09.2024",
+      "to": "2024-09-03"
+    },
+    {
+      "id": 796,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "03.09.2024",
+      "to": "2024-09-03"
+    },
+    {
+      "id": 796,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "03.09.2024",
+      "to": "2024-09-03"
+    },
+    {
+      "id": 797,
+      "field": "terminProjektvorstellung",
+      "from": "03.09.2024",
+      "to": "2024-09-03"
+    },
+    {
+      "id": 797,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "03.09.2024",
+      "to": "2024-09-03"
+    },
+    {
+      "id": 797,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "03.09.2024",
+      "to": "2024-09-03"
+    },
+    {
+      "id": 798,
+      "field": "terminProjektvorstellung",
+      "from": "03.12.2024",
+      "to": "2024-12-03"
+    },
+    {
+      "id": 798,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "03.12.2024",
+      "to": "2024-12-03"
+    },
+    {
+      "id": 798,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "03.12.2024",
+      "to": "2024-12-03"
+    },
+    {
+      "id": 799,
+      "field": "terminProjektvorstellung",
+      "from": "04.03.2025",
+      "to": "2025-03-04"
+    },
+    {
+      "id": 799,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "04.03.2025",
+      "to": "2025-03-04"
+    },
+    {
+      "id": 799,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "04.03.2025",
+      "to": "2025-03-04"
+    },
+    {
+      "id": 800,
+      "field": "terminProjektvorstellung",
+      "from": "04.03.2025",
+      "to": "2025-03-04"
+    },
+    {
+      "id": 800,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "04.03.2025",
+      "to": "2025-03-04"
+    },
+    {
+      "id": 800,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "04.03.2025",
+      "to": "2025-03-04"
+    },
+    {
+      "id": 801,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "08.10.2024",
+      "to": "2024-10-08"
+    },
+    {
+      "id": 801,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "08.10.2024",
+      "to": "2024-10-08"
+    },
+    {
+      "id": 802,
+      "field": "terminProjektvorstellung",
+      "from": "08.10.2024",
+      "to": "2024-10-08"
+    },
+    {
+      "id": 802,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "08.10.2024",
+      "to": "2024-10-08"
+    },
+    {
+      "id": 802,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "08.10.2024",
+      "to": "2024-10-08"
+    },
+    {
+      "id": 803,
+      "field": "terminProjektvorstellung",
+      "from": "10.12.2024",
+      "to": "2024-12-10"
+    },
+    {
+      "id": 803,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "10.12.2024",
+      "to": "2024-12-10"
+    },
+    {
+      "id": 803,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "10.12.2024",
+      "to": "2024-12-10"
+    },
+    {
+      "id": 804,
+      "field": "terminProjektvorstellung",
+      "from": "10.12.2024",
+      "to": "2024-12-10"
+    },
+    {
+      "id": 804,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "10.12.2024",
+      "to": "2024-12-10"
+    },
+    {
+      "id": 804,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "10.12.2024",
+      "to": "2024-12-10"
+    },
+    {
+      "id": 805,
+      "field": "terminProjektvorstellung",
+      "from": "11.03.2025",
+      "to": "2025-03-11"
+    },
+    {
+      "id": 805,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "11.03.2025",
+      "to": "2025-03-11"
+    },
+    {
+      "id": 805,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "11.03.2025",
+      "to": "2025-03-11"
+    },
+    {
+      "id": 806,
+      "field": "terminProjektvorstellung",
+      "from": "12.11.2024",
+      "to": "2024-11-12"
+    },
+    {
+      "id": 806,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "12.11.2024",
+      "to": "2024-11-12"
+    },
+    {
+      "id": 806,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "12.11.2024",
+      "to": "2024-11-12"
+    },
+    {
+      "id": 807,
+      "field": "terminProjektvorstellung",
+      "from": "12.11.2024",
+      "to": "2024-11-12"
+    },
+    {
+      "id": 807,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "12.11.2024",
+      "to": "2024-11-12"
+    },
+    {
+      "id": 807,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "12.11.2024",
+      "to": "2024-11-12"
+    },
+    {
+      "id": 808,
+      "field": "terminProjektvorstellung",
+      "from": "13.05.2025",
+      "to": "2025-05-13"
+    },
+    {
+      "id": 808,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "13.05.2025",
+      "to": "2025-05-13"
+    },
+    {
+      "id": 808,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "13.05.2025",
+      "to": "2025-05-13"
+    },
+    {
+      "id": 809,
+      "field": "terminProjektvorstellung",
+      "from": "15.04.2025",
+      "to": "2025-04-15"
+    },
+    {
+      "id": 809,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "15.04.2025",
+      "to": "2025-04-15"
+    },
+    {
+      "id": 809,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "15.04.2025",
+      "to": "2025-04-15"
+    },
+    {
+      "id": 810,
+      "field": "terminProjektvorstellung",
+      "from": "17.09.2024",
+      "to": "2024-09-17"
+    },
+    {
+      "id": 810,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "17.09.2024",
+      "to": "2024-09-17"
+    },
+    {
+      "id": 810,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "17.09.2024",
+      "to": "2024-09-17"
+    },
+    {
+      "id": 811,
+      "field": "terminProjektvorstellung",
+      "from": "17.12.2024",
+      "to": "2024-12-17"
+    },
+    {
+      "id": 811,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "17.12.2024",
+      "to": "2024-12-17"
+    },
+    {
+      "id": 811,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "17.12.2024",
+      "to": "2024-12-17"
+    },
+    {
+      "id": 812,
+      "field": "terminProjektvorstellung",
+      "from": "18.03.2025",
+      "to": "2025-03-18"
+    },
+    {
+      "id": 812,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "18.03.2025",
+      "to": "2025-03-18"
+    },
+    {
+      "id": 812,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "18.03.2025",
+      "to": "2025-03-18"
+    },
+    {
+      "id": 813,
+      "field": "terminProjektvorstellung",
+      "from": "20.05.2025",
+      "to": "2025-05-20"
+    },
+    {
+      "id": 814,
+      "field": "terminProjektvorstellung",
+      "from": "21.01.2025",
+      "to": "2025-01-21"
+    },
+    {
+      "id": 814,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "21.01.2025",
+      "to": "2025-01-21"
+    },
+    {
+      "id": 814,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "21.01.2025",
+      "to": "2025-01-21"
+    },
+    {
+      "id": 815,
+      "field": "terminProjektvorstellung",
+      "from": "23.07.2024",
+      "to": "2024-07-23"
+    },
+    {
+      "id": 815,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "23.07.2024",
+      "to": "2024-07-23"
+    },
+    {
+      "id": 815,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "23.07.2024",
+      "to": "2024-07-23"
+    },
+    {
+      "id": 816,
+      "field": "terminProjektvorstellung",
+      "from": "23.07.2024",
+      "to": "2024-07-23"
+    },
+    {
+      "id": 816,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "23.07.2024",
+      "to": "2024-07-23"
+    },
+    {
+      "id": 816,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "23.07.2024",
+      "to": "2024-07-23"
+    },
+    {
+      "id": 817,
+      "field": "terminProjektvorstellung",
+      "from": "27.08.2024",
+      "to": "2024-08-27"
+    },
+    {
+      "id": 817,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "27.08.2024",
+      "to": "2024-08-27"
+    },
+    {
+      "id": 817,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "27.08.2024",
+      "to": "2024-08-27"
+    },
+    {
+      "id": 818,
+      "field": "terminProjektvorstellung",
+      "from": "29.10.2024",
+      "to": "2024-10-29"
+    },
+    {
+      "id": 818,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "29.10.2024",
+      "to": "2024-10-29"
+    },
+    {
+      "id": 818,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "29.10.2024",
+      "to": "2024-10-29"
+    },
+    {
+      "id": 819,
+      "field": "terminProjektvorstellung",
+      "from": "29.10.2024",
+      "to": "2024-10-29"
+    },
+    {
+      "id": 819,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "29.10.2024",
+      "to": "2024-10-29"
+    },
+    {
+      "id": 819,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "29.10.2024",
+      "to": "2024-10-29"
+    },
+    {
+      "id": 820,
+      "field": "terminProjektvorstellung",
+      "from": "05.11.2024",
+      "to": "2024-11-05"
+    },
+    {
+      "id": 820,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "05.11.2024",
+      "to": "2024-11-05"
+    },
+    {
+      "id": 820,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "05.11.2024",
+      "to": "2024-11-05"
+    },
+    {
+      "id": 821,
+      "field": "terminProjektvorstellung",
+      "from": "05.11.2024",
+      "to": "2024-11-05"
+    },
+    {
+      "id": 821,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "05.11.2024",
+      "to": "2024-11-05"
+    },
+    {
+      "id": 821,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "05.11.2024",
+      "to": "2024-11-05"
+    },
+    {
+      "id": 822,
+      "field": "terminProjektvorstellung",
+      "from": "10.12.2024",
+      "to": "2024-12-10"
+    },
+    {
+      "id": 822,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "10.12.2024",
+      "to": "2024-12-10"
+    },
+    {
+      "id": 822,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "10.12.2024",
+      "to": "2024-12-10"
+    },
+    {
+      "id": 823,
+      "field": "terminProjektvorstellung",
+      "from": "10.12.2024",
+      "to": "2024-12-10"
+    },
+    {
+      "id": 823,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "10.12.2024",
+      "to": "2024-12-10"
+    },
+    {
+      "id": 823,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "10.12.2024",
+      "to": "2024-12-10"
+    },
+    {
+      "id": 824,
+      "field": "terminProjektvorstellung",
+      "from": "17.12.2024",
+      "to": "2024-12-17"
+    },
+    {
+      "id": 824,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "17.12.2024",
+      "to": "2024-12-17"
+    },
+    {
+      "id": 824,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "17.12.2024",
+      "to": "2024-12-17"
+    },
+    {
+      "id": 860,
+      "field": "terminProjektvorstellung",
+      "from": "-",
+      "to": null
+    },
+    {
+      "id": 862,
+      "field": "terminProjektvorstellung",
+      "from": "02.05.2023",
+      "to": "2023-05-02"
+    },
+    {
+      "id": 863,
+      "field": "terminProjektvorstellung",
+      "from": "03.12.2024",
+      "to": "2024-12-03"
+    },
+    {
+      "id": 864,
+      "field": "terminProjektvorstellung",
+      "from": "04.04.2023",
+      "to": "2023-04-04"
+    },
+    {
+      "id": 865,
+      "field": "terminProjektvorstellung",
+      "from": "05.11.2024",
+      "to": "2024-11-05"
+    },
+    {
+      "id": 866,
+      "field": "terminProjektvorstellung",
+      "from": "07.01.2025",
+      "to": "2025-01-07"
+    },
+    {
+      "id": 867,
+      "field": "terminProjektvorstellung",
+      "from": "09.04.2024",
+      "to": "2024-04-09"
+    },
+    {
+      "id": 868,
+      "field": "terminProjektvorstellung",
+      "from": "09.07.2024",
+      "to": "2024-07-09"
+    },
+    {
+      "id": 869,
+      "field": "terminProjektvorstellung",
+      "from": "12.09.2023",
+      "to": "2023-09-12"
+    },
+    {
+      "id": 870,
+      "field": "terminProjektvorstellung",
+      "from": "12.09.2023",
+      "to": "2023-09-12"
+    },
+    {
+      "id": 872,
+      "field": "terminProjektvorstellung",
+      "from": "15.10.2024",
+      "to": "2024-10-15"
+    },
+    {
+      "id": 873,
+      "field": "terminProjektvorstellung",
+      "from": "22.08.2023",
+      "to": "2023-08-22"
+    },
+    {
+      "id": 874,
+      "field": "terminProjektvorstellung",
+      "from": "23.04.2024",
+      "to": "2024-04-23"
+    },
+    {
+      "id": 875,
+      "field": "terminProjektvorstellung",
+      "from": "24.10.2023",
+      "to": "2023-10-24"
+    },
+    {
+      "id": 876,
+      "field": "terminProjektvorstellung",
+      "from": "25.06.2024",
+      "to": "2024-06-25"
+    },
+    {
+      "id": 877,
+      "field": "terminProjektvorstellung",
+      "from": "26.11.2024",
+      "to": "2024-11-26"
+    },
+    {
+      "id": 878,
+      "field": "terminProjektvorstellung",
+      "from": "26.11.2024",
+      "to": "2024-11-26"
+    },
+    {
+      "id": 879,
+      "field": "terminProjektvorstellung",
+      "from": "26.11.2024",
+      "to": "2024-11-26"
+    },
+    {
+      "id": 880,
+      "field": "terminProjektvorstellung",
+      "from": "27.02.2024",
+      "to": "2024-02-27"
+    },
+    {
+      "id": 881,
+      "field": "terminProjektvorstellung",
+      "from": "28.05.2024",
+      "to": "2024-05-28"
+    },
+    {
+      "id": 882,
+      "field": "terminProjektvorstellung",
+      "from": "29.08.2023",
+      "to": "2023-08-29"
+    },
+    {
+      "id": 883,
+      "field": "terminProjektvorstellung",
+      "from": "29.08.2023",
+      "to": "2023-08-29"
+    },
+    {
+      "id": 884,
+      "field": "terminProjektvorstellung",
+      "from": "29.08.2023",
+      "to": "2023-08-29"
+    },
+    {
+      "id": 962,
+      "field": "terminProjektvorstellung",
+      "from": "21.01.2025",
+      "to": "2025-01-21"
+    },
+    {
+      "id": 1036,
+      "field": "terminProjektvorstellung",
+      "from": "27.05.2025",
+      "to": "2025-05-27"
+    },
+    {
+      "id": 1036,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "27.05.2025",
+      "to": "2025-05-27"
+    },
+    {
+      "id": 1036,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "27.05.2025",
+      "to": "2025-05-27"
+    },
+    {
+      "id": 1038,
+      "field": "terminProjektvorstellung",
+      "from": "03.06.2025",
+      "to": "2025-06-03"
+    },
+    {
+      "id": 1038,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "03.06.2025",
+      "to": "2025-06-03"
+    },
+    {
+      "id": 1038,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "03.06.2025",
+      "to": "2025-06-03"
+    },
+    {
+      "id": 1041,
+      "field": "terminProjektvorstellung",
+      "from": "27.05.2025",
+      "to": "2025-05-27"
+    },
+    {
+      "id": 1041,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "27.05.2025",
+      "to": "2025-05-27"
+    },
+    {
+      "id": 1041,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "27.05.2025",
+      "to": "2025-05-27"
+    },
+    {
+      "id": 1042,
+      "field": "terminProjektvorstellung",
+      "from": "03.06.2025",
+      "to": "2025-06-03"
+    },
+    {
+      "id": 1042,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "03.06.2025",
+      "to": "2025-06-03"
+    },
+    {
+      "id": 1042,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "03.06.2025",
+      "to": "2025-06-03"
+    },
+    {
+      "id": 1043,
+      "field": "terminProjektvorstellung",
+      "from": "03.06.2025",
+      "to": "2025-06-03"
+    },
+    {
+      "id": 1044,
+      "field": "terminProjektvorstellung",
+      "from": "03.06.2025",
+      "to": "2025-06-03"
+    },
+    {
+      "id": 1044,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "03.06.2025",
+      "to": "2025-06-03"
+    },
+    {
+      "id": 1044,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "03.06.2025",
+      "to": "2025-06-03"
+    },
+    {
+      "id": 1045,
+      "field": "terminProjektvorstellung",
+      "from": "03.06.2025",
+      "to": "2025-06-03"
+    },
+    {
+      "id": 1045,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "03.06.2025",
+      "to": "2025-06-03"
+    },
+    {
+      "id": 1045,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "03.06.2025",
+      "to": "2025-06-03"
+    },
+    {
+      "id": 1046,
+      "field": "terminProjektvorstellung",
+      "from": "03.06.2025",
+      "to": "2025-06-03"
+    },
+    {
+      "id": 1046,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "03.06.2025",
+      "to": "2025-06-03"
+    },
+    {
+      "id": 1046,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "03.06.2025",
+      "to": "2025-06-03"
+    },
+    {
+      "id": 1047,
+      "field": "terminProjektvorstellung",
+      "from": "17.06.2025",
+      "to": "2025-06-17"
+    },
+    {
+      "id": 1047,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "17.06.2025",
+      "to": "2025-06-17"
+    },
+    {
+      "id": 1047,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "17.06.2025",
+      "to": "2025-06-17"
+    },
+    {
+      "id": 1059,
+      "field": "terminProjektvorstellung",
+      "from": "24.06.2025",
+      "to": "2025-06-24"
+    },
+    {
+      "id": 1059,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "24.06.2025",
+      "to": "2025-06-24"
+    },
+    {
+      "id": 1059,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "24.06.2025",
+      "to": "2025-06-24"
+    },
+    {
+      "id": 1060,
+      "field": "terminProjektvorstellung",
+      "from": "01.07.2025",
+      "to": "2025-07-01"
+    },
+    {
+      "id": 1060,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "01.07.2025",
+      "to": "2025-07-01"
+    },
+    {
+      "id": 1060,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "01.07.2025",
+      "to": "2025-07-01"
+    },
+    {
+      "id": 1064,
+      "field": "terminProjektvorstellung",
+      "from": "01.07.2025",
+      "to": "2025-07-01"
+    },
+    {
+      "id": 1066,
+      "field": "terminProjektvorstellung",
+      "from": "15.07.2025",
+      "to": "2025-07-15"
+    },
+    {
+      "id": 1066,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "15.07.2025",
+      "to": "2025-07-15"
+    },
+    {
+      "id": 1066,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "15.07.2025",
+      "to": "2025-07-15"
+    },
+    {
+      "id": 1068,
+      "field": "terminProjektvorstellung",
+      "from": "01.07.2025",
+      "to": "2025-07-01"
+    },
+    {
+      "id": 1069,
+      "field": "terminProjektvorstellung",
+      "from": "08.07.2025",
+      "to": "2025-07-08"
+    },
+    {
+      "id": 1069,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "08.07.2025",
+      "to": "2025-07-08"
+    },
+    {
+      "id": 1069,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "08.07.2025",
+      "to": "2025-07-08"
+    },
+    {
+      "id": 1070,
+      "field": "terminProjektvorstellung",
+      "from": "08.07.2025",
+      "to": "2025-07-08"
+    },
+    {
+      "id": 1070,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "08.07.2025",
+      "to": "2025-07-08"
+    },
+    {
+      "id": 1070,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "08.07.2025",
+      "to": "2025-07-08"
+    },
+    {
+      "id": 1083,
+      "field": "terminProjektvorstellung",
+      "from": "08.07.2025",
+      "to": "2025-07-08"
+    },
+    {
+      "id": 1083,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "08.07.2025",
+      "to": "2025-07-08"
+    },
+    {
+      "id": 1083,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "08.07.2025",
+      "to": "2025-07-08"
+    },
+    {
+      "id": 1084,
+      "field": "terminProjektvorstellung",
+      "from": "22.07.2025",
+      "to": "2025-07-22"
+    },
+    {
+      "id": 1084,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "22.07.2025",
+      "to": "2025-07-22"
+    },
+    {
+      "id": 1084,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "22.07.2025",
+      "to": "2025-07-22"
+    },
+    {
+      "id": 1085,
+      "field": "terminProjektvorstellung",
+      "from": "12.08.2025",
+      "to": "2025-08-12"
+    },
+    {
+      "id": 1085,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "12.08.2025",
+      "to": "2025-08-12"
+    },
+    {
+      "id": 1085,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "12.08.2025",
+      "to": "2025-08-12"
+    },
+    {
+      "id": 1086,
+      "field": "terminProjektvorstellung",
+      "from": "19.08.2025",
+      "to": "2025-08-19"
+    },
+    {
+      "id": 1086,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "19.08.2025",
+      "to": "2025-08-19"
+    },
+    {
+      "id": 1086,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "19.08.2025",
+      "to": "2025-08-19"
+    },
+    {
+      "id": 1087,
+      "field": "terminProjektvorstellung",
+      "from": "12.08.2025",
+      "to": "2025-08-12"
+    },
+    {
+      "id": 1087,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "12.08.2025",
+      "to": "2025-08-12"
+    },
+    {
+      "id": 1087,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "12.08.2025",
+      "to": "2025-08-12"
+    },
+    {
+      "id": 1088,
+      "field": "terminProjektvorstellung",
+      "from": "22.07.2025",
+      "to": "2025-07-22"
+    },
+    {
+      "id": 1088,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "22.07.2025",
+      "to": "2025-07-22"
+    },
+    {
+      "id": 1088,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "22.07.2025",
+      "to": "2025-07-22"
+    },
+    {
+      "id": 1093,
+      "field": "terminProjektvorstellung",
+      "from": "26.08.2025",
+      "to": "2025-08-26"
+    },
+    {
+      "id": 1093,
+      "field": "reviews.EEA.pruefDatum",
+      "from": "26.08.2025",
+      "to": "2025-08-26"
+    },
+    {
+      "id": 1093,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "26.08.2025",
+      "to": "2025-08-26"
+    },
+    {
+      "id": 1093,
+      "field": "reviews.BS.pruefDatum",
+      "from": "26.08.2025",
+      "to": "2025-08-26"
+    },
+    {
+      "id": 1093,
+      "field": "reviews.GA.pruefDatum",
+      "from": "26.08.2025",
+      "to": "2025-08-26"
+    },
+    {
+      "id": 1093,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "26.08.2025",
+      "to": "2025-08-26"
+    },
+    {
+      "id": 1093,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "26.08.2025",
+      "to": "2025-08-26"
+    },
+    {
+      "id": 1093,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "26.08.2025",
+      "to": "2025-08-26"
+    },
+    {
+      "id": 1093,
+      "field": "reviews.UM.pruefDatum",
+      "from": "26.08.2025",
+      "to": "2025-08-26"
+    },
+    {
+      "id": 1093,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "26.08.2025",
+      "to": "2025-08-26"
+    },
+    {
+      "id": 1093,
+      "field": "reviews.LST.pruefDatum",
+      "from": "26.08.2025",
+      "to": "2025-08-26"
+    },
+    {
+      "id": 1093,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "26.08.2025",
+      "to": "2025-08-26"
+    },
+    {
+      "id": 1093,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "26.08.2025",
+      "to": "2025-08-26"
+    },
+    {
+      "id": 1093,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "26.08.2025",
+      "to": "2025-08-26"
+    },
+    {
+      "id": 1098,
+      "field": "terminProjektvorstellung",
+      "from": "23.09.2025",
+      "to": "2025-09-23"
+    },
+    {
+      "id": 1098,
+      "field": "reviews.EEA.pruefDatum",
+      "from": "23.09.2025",
+      "to": "2025-09-23"
+    },
+    {
+      "id": 1098,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "23.09.2025",
+      "to": "2025-09-23"
+    },
+    {
+      "id": 1098,
+      "field": "reviews.BS.pruefDatum",
+      "from": "23.09.2025",
+      "to": "2025-09-23"
+    },
+    {
+      "id": 1098,
+      "field": "reviews.GA.pruefDatum",
+      "from": "23.09.2025",
+      "to": "2025-09-23"
+    },
+    {
+      "id": 1098,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "23.09.2025",
+      "to": "2025-09-23"
+    },
+    {
+      "id": 1098,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "23.09.2025",
+      "to": "2025-09-23"
+    },
+    {
+      "id": 1098,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "23.09.2025",
+      "to": "2025-09-23"
+    },
+    {
+      "id": 1098,
+      "field": "reviews.UM.pruefDatum",
+      "from": "23.09.2025",
+      "to": "2025-09-23"
+    },
+    {
+      "id": 1098,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "23.09.2025",
+      "to": "2025-09-23"
+    },
+    {
+      "id": 1098,
+      "field": "reviews.LST.pruefDatum",
+      "from": "23.09.2025",
+      "to": "2025-09-23"
+    },
+    {
+      "id": 1098,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "23.09.2025",
+      "to": "2025-09-23"
+    },
+    {
+      "id": 1098,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "23.09.2025",
+      "to": "2025-09-23"
+    },
+    {
+      "id": 1098,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "23.09.2025",
+      "to": "2025-09-23"
+    },
+    {
+      "id": 1099,
+      "field": "terminProjektvorstellung",
+      "from": "12.08.2025",
+      "to": "2025-08-12"
+    },
+    {
+      "id": 1099,
+      "field": "reviews.EEA.pruefDatum",
+      "from": "12.08.2025",
+      "to": "2025-08-12"
+    },
+    {
+      "id": 1099,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "12.08.2025",
+      "to": "2025-08-12"
+    },
+    {
+      "id": 1099,
+      "field": "reviews.BS.pruefDatum",
+      "from": "12.08.2025",
+      "to": "2025-08-12"
+    },
+    {
+      "id": 1099,
+      "field": "reviews.GA.pruefDatum",
+      "from": "12.08.2025",
+      "to": "2025-08-12"
+    },
+    {
+      "id": 1099,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "12.08.2025",
+      "to": "2025-08-12"
+    },
+    {
+      "id": 1099,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "12.08.2025",
+      "to": "2025-08-12"
+    },
+    {
+      "id": 1099,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "12.08.2025",
+      "to": "2025-08-12"
+    },
+    {
+      "id": 1099,
+      "field": "reviews.UM.pruefDatum",
+      "from": "12.08.2025",
+      "to": "2025-08-12"
+    },
+    {
+      "id": 1099,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "12.08.2025",
+      "to": "2025-08-12"
+    },
+    {
+      "id": 1099,
+      "field": "reviews.LST.pruefDatum",
+      "from": "12.08.2025",
+      "to": "2025-08-12"
+    },
+    {
+      "id": 1099,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "12.08.2025",
+      "to": "2025-08-12"
+    },
+    {
+      "id": 1099,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "12.08.2025",
+      "to": "2025-08-12"
+    },
+    {
+      "id": 1099,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "12.08.2025",
+      "to": "2025-08-12"
+    },
+    {
+      "id": 1102,
+      "field": "terminProjektvorstellung",
+      "from": "19.08.2025",
+      "to": "2025-08-19"
+    },
+    {
+      "id": 1105,
+      "field": "terminProjektvorstellung",
+      "from": "26.08.2025",
+      "to": "2025-08-26"
+    },
+    {
+      "id": 1105,
+      "field": "reviews.EEA.pruefDatum",
+      "from": "26.08.2025",
+      "to": "2025-08-26"
+    },
+    {
+      "id": 1105,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "26.08.2025",
+      "to": "2025-08-26"
+    },
+    {
+      "id": 1105,
+      "field": "reviews.BS.pruefDatum",
+      "from": "26.08.2025",
+      "to": "2025-08-26"
+    },
+    {
+      "id": 1105,
+      "field": "reviews.GA.pruefDatum",
+      "from": "26.08.2025",
+      "to": "2025-08-26"
+    },
+    {
+      "id": 1105,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "26.08.2025",
+      "to": "2025-08-26"
+    },
+    {
+      "id": 1105,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "26.08.2025",
+      "to": "2025-08-26"
+    },
+    {
+      "id": 1105,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "26.08.2025",
+      "to": "2025-08-26"
+    },
+    {
+      "id": 1105,
+      "field": "reviews.UM.pruefDatum",
+      "from": "26.08.2025",
+      "to": "2025-08-26"
+    },
+    {
+      "id": 1105,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "26.08.2025",
+      "to": "2025-08-26"
+    },
+    {
+      "id": 1105,
+      "field": "reviews.LST.pruefDatum",
+      "from": "26.08.2025",
+      "to": "2025-08-26"
+    },
+    {
+      "id": 1105,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "26.08.2025",
+      "to": "2025-08-26"
+    },
+    {
+      "id": 1105,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "26.08.2025",
+      "to": "2025-08-26"
+    },
+    {
+      "id": 1105,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "26.08.2025",
+      "to": "2025-08-26"
+    },
+    {
+      "id": 1108,
+      "field": "terminProjektvorstellung",
+      "from": "09.09.2025",
+      "to": "2025-09-09"
+    },
+    {
+      "id": 1108,
+      "field": "reviews.EEA.pruefDatum",
+      "from": "09.09.2025",
+      "to": "2025-09-09"
+    },
+    {
+      "id": 1108,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "09.09.2025",
+      "to": "2025-09-09"
+    },
+    {
+      "id": 1108,
+      "field": "reviews.BS.pruefDatum",
+      "from": "09.09.2025",
+      "to": "2025-09-09"
+    },
+    {
+      "id": 1108,
+      "field": "reviews.GA.pruefDatum",
+      "from": "09.09.2025",
+      "to": "2025-09-09"
+    },
+    {
+      "id": 1108,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "09.09.2025",
+      "to": "2025-09-09"
+    },
+    {
+      "id": 1108,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "09.09.2025",
+      "to": "2025-09-09"
+    },
+    {
+      "id": 1108,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "09.09.2025",
+      "to": "2025-09-09"
+    },
+    {
+      "id": 1108,
+      "field": "reviews.UM.pruefDatum",
+      "from": "09.09.2025",
+      "to": "2025-09-09"
+    },
+    {
+      "id": 1108,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "09.09.2025",
+      "to": "2025-09-09"
+    },
+    {
+      "id": 1108,
+      "field": "reviews.LST.pruefDatum",
+      "from": "09.09.2025",
+      "to": "2025-09-09"
+    },
+    {
+      "id": 1108,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "09.09.2025",
+      "to": "2025-09-09"
+    },
+    {
+      "id": 1108,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "09.09.2025",
+      "to": "2025-09-09"
+    },
+    {
+      "id": 1108,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "09.09.2025",
+      "to": "2025-09-09"
+    },
+    {
+      "id": 1110,
+      "field": "terminProjektvorstellung",
+      "from": "-",
+      "to": null
+    },
+    {
+      "id": 1111,
+      "field": "terminProjektvorstellung",
+      "from": "-",
+      "to": null
+    },
+    {
+      "id": 1116,
+      "field": "terminProjektvorstellung",
+      "from": "23.09.2025",
+      "to": "2025-09-23"
+    },
+    {
+      "id": 1116,
+      "field": "reviews.EEA.pruefDatum",
+      "from": "23.09.2025",
+      "to": "2025-09-23"
+    },
+    {
+      "id": 1116,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "23.09.2025",
+      "to": "2025-09-23"
+    },
+    {
+      "id": 1116,
+      "field": "reviews.BS.pruefDatum",
+      "from": "23.09.2025",
+      "to": "2025-09-23"
+    },
+    {
+      "id": 1116,
+      "field": "reviews.GA.pruefDatum",
+      "from": "23.09.2025",
+      "to": "2025-09-23"
+    },
+    {
+      "id": 1116,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "23.09.2025",
+      "to": "2025-09-23"
+    },
+    {
+      "id": 1116,
+      "field": "reviews.HFT.pruefDatum",
+      "from": "23.09.2025",
+      "to": "2025-09-23"
+    },
+    {
+      "id": 1116,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "23.09.2025",
+      "to": "2025-09-23"
+    },
+    {
+      "id": 1116,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "23.09.2025",
+      "to": "2025-09-23"
+    },
+    {
+      "id": 1116,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "23.09.2025",
+      "to": "2025-09-23"
+    },
+    {
+      "id": 1116,
+      "field": "reviews.LST.pruefDatum",
+      "from": "23.09.2025",
+      "to": "2025-09-23"
+    },
+    {
+      "id": 1116,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "23.09.2025",
+      "to": "2025-09-23"
+    },
+    {
+      "id": 1116,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "23.09.2025",
+      "to": "2025-09-23"
+    },
+    {
+      "id": 1116,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "23.09.2025",
+      "to": "2025-09-23"
+    },
+    {
+      "id": 1117,
+      "field": "terminProjektvorstellung",
+      "from": "23.09.2025",
+      "to": "2025-09-23"
+    },
+    {
+      "id": 1117,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "23.09.2025",
+      "to": "2025-09-23"
+    },
+    {
+      "id": 1117,
+      "field": "reviews.BS.pruefDatum",
+      "from": "23.09.2025",
+      "to": "2025-09-23"
+    },
+    {
+      "id": 1117,
+      "field": "reviews.GA.pruefDatum",
+      "from": "23.09.2025",
+      "to": "2025-09-23"
+    },
+    {
+      "id": 1117,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "23.09.2025",
+      "to": "2025-09-23"
+    },
+    {
+      "id": 1117,
+      "field": "reviews.HFT.pruefDatum",
+      "from": "23.09.2025",
+      "to": "2025-09-23"
+    },
+    {
+      "id": 1117,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "23.09.2025",
+      "to": "2025-09-23"
+    },
+    {
+      "id": 1117,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "23.09.2025",
+      "to": "2025-09-23"
+    },
+    {
+      "id": 1117,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "23.09.2025",
+      "to": "2025-09-23"
+    },
+    {
+      "id": 1117,
+      "field": "reviews.LST.pruefDatum",
+      "from": "23.09.2025",
+      "to": "2025-09-23"
+    },
+    {
+      "id": 1117,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "23.09.2025",
+      "to": "2025-09-23"
+    },
+    {
+      "id": 1117,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "23.09.2025",
+      "to": "2025-09-23"
+    },
+    {
+      "id": 1117,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "23.09.2025",
+      "to": "2025-09-23"
+    },
+    {
+      "id": 1120,
+      "field": "terminProjektvorstellung",
+      "from": "30.09.2025",
+      "to": "2025-09-30"
+    },
+    {
+      "id": 1120,
+      "field": "reviews.EEA.pruefDatum",
+      "from": "30.09.2025",
+      "to": "2025-09-30"
+    },
+    {
+      "id": 1120,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "30.09.2025",
+      "to": "2025-09-30"
+    },
+    {
+      "id": 1120,
+      "field": "reviews.BS.pruefDatum",
+      "from": "30.09.2025",
+      "to": "2025-09-30"
+    },
+    {
+      "id": 1120,
+      "field": "reviews.GA.pruefDatum",
+      "from": "30.09.2025",
+      "to": "2025-09-30"
+    },
+    {
+      "id": 1120,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "30.09.2025",
+      "to": "2025-09-30"
+    },
+    {
+      "id": 1120,
+      "field": "reviews.HFT.pruefDatum",
+      "from": "30.09.2025",
+      "to": "2025-09-30"
+    },
+    {
+      "id": 1120,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "30.09.2025",
+      "to": "2025-09-30"
+    },
+    {
+      "id": 1120,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "30.09.2025",
+      "to": "2025-09-30"
+    },
+    {
+      "id": 1120,
+      "field": "reviews.UM.pruefDatum",
+      "from": "30.09.2025",
+      "to": "2025-09-30"
+    },
+    {
+      "id": 1120,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "30.09.2025",
+      "to": "2025-09-30"
+    },
+    {
+      "id": 1120,
+      "field": "reviews.LST.pruefDatum",
+      "from": "30.09.2025",
+      "to": "2025-09-30"
+    },
+    {
+      "id": 1120,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "30.09.2025",
+      "to": "2025-09-30"
+    },
+    {
+      "id": 1120,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "30.09.2025",
+      "to": "2025-09-30"
+    },
+    {
+      "id": 1120,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "30.09.2025",
+      "to": "2025-09-30"
+    },
+    {
+      "id": 1125,
+      "field": "terminProjektvorstellung",
+      "from": "07.10.2025",
+      "to": "2025-10-07"
+    },
+    {
+      "id": 1125,
+      "field": "reviews.EEA.pruefDatum",
+      "from": "07.10.2025",
+      "to": "2025-10-07"
+    },
+    {
+      "id": 1125,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "07.10.2025",
+      "to": "2025-10-07"
+    },
+    {
+      "id": 1125,
+      "field": "reviews.BS.pruefDatum",
+      "from": "07.10.2025",
+      "to": "2025-10-07"
+    },
+    {
+      "id": 1125,
+      "field": "reviews.GA.pruefDatum",
+      "from": "07.10.2025",
+      "to": "2025-10-07"
+    },
+    {
+      "id": 1125,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "07.10.2025",
+      "to": "2025-10-07"
+    },
+    {
+      "id": 1125,
+      "field": "reviews.HFT.pruefDatum",
+      "from": "07.10.2025",
+      "to": "2025-10-07"
+    },
+    {
+      "id": 1125,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "07.10.2025",
+      "to": "2025-10-07"
+    },
+    {
+      "id": 1125,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "07.10.2025",
+      "to": "2025-10-07"
+    },
+    {
+      "id": 1125,
+      "field": "reviews.UM.pruefDatum",
+      "from": "07.10.2025",
+      "to": "2025-10-07"
+    },
+    {
+      "id": 1125,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "07.10.2025",
+      "to": "2025-10-07"
+    },
+    {
+      "id": 1125,
+      "field": "reviews.LST.pruefDatum",
+      "from": "07.10.2025",
+      "to": "2025-10-07"
+    },
+    {
+      "id": 1125,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "07.10.2025",
+      "to": "2025-10-07"
+    },
+    {
+      "id": 1125,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "07.10.2025",
+      "to": "2025-10-07"
+    },
+    {
+      "id": 1125,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "07.10.2025",
+      "to": "2025-10-07"
+    },
+    {
+      "id": 1126,
+      "field": "terminProjektvorstellung",
+      "from": "07.10.2025",
+      "to": "2025-10-07"
+    },
+    {
+      "id": 1126,
+      "field": "reviews.EEA.pruefDatum",
+      "from": "07.10.2025",
+      "to": "2025-10-07"
+    },
+    {
+      "id": 1126,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "07.10.2025",
+      "to": "2025-10-07"
+    },
+    {
+      "id": 1126,
+      "field": "reviews.GA.pruefDatum",
+      "from": "07.10.2025",
+      "to": "2025-10-07"
+    },
+    {
+      "id": 1126,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "07.10.2025",
+      "to": "2025-10-07"
+    },
+    {
+      "id": 1126,
+      "field": "reviews.HFT.pruefDatum",
+      "from": "07.10.2025",
+      "to": "2025-10-07"
+    },
+    {
+      "id": 1126,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "07.10.2025",
+      "to": "2025-10-07"
+    },
+    {
+      "id": 1126,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "07.10.2025",
+      "to": "2025-10-07"
+    },
+    {
+      "id": 1126,
+      "field": "reviews.UM.pruefDatum",
+      "from": "07.10.2025",
+      "to": "2025-10-07"
+    },
+    {
+      "id": 1126,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "07.10.2025",
+      "to": "2025-10-07"
+    },
+    {
+      "id": 1126,
+      "field": "reviews.LST.pruefDatum",
+      "from": "07.10.2025",
+      "to": "2025-10-07"
+    },
+    {
+      "id": 1126,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "07.10.2025",
+      "to": "2025-10-07"
+    },
+    {
+      "id": 1126,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "07.10.2025",
+      "to": "2025-10-07"
+    },
+    {
+      "id": 1126,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "07.10.2025",
+      "to": "2025-10-07"
+    },
+    {
+      "id": 1127,
+      "field": "terminProjektvorstellung",
+      "from": "07.10.2025",
+      "to": "2025-10-07"
+    },
+    {
+      "id": 1127,
+      "field": "reviews.EEA.pruefDatum",
+      "from": "07.10.2025",
+      "to": "2025-10-07"
+    },
+    {
+      "id": 1127,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "07.10.2025",
+      "to": "2025-10-07"
+    },
+    {
+      "id": 1127,
+      "field": "reviews.BS.pruefDatum",
+      "from": "07.10.2025",
+      "to": "2025-10-07"
+    },
+    {
+      "id": 1127,
+      "field": "reviews.GA.pruefDatum",
+      "from": "07.10.2025",
+      "to": "2025-10-07"
+    },
+    {
+      "id": 1127,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "07.10.2025",
+      "to": "2025-10-07"
+    },
+    {
+      "id": 1127,
+      "field": "reviews.HFT.pruefDatum",
+      "from": "07.10.2025",
+      "to": "2025-10-07"
+    },
+    {
+      "id": 1127,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "07.10.2025",
+      "to": "2025-10-07"
+    },
+    {
+      "id": 1127,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "07.10.2025",
+      "to": "2025-10-07"
+    },
+    {
+      "id": 1127,
+      "field": "reviews.UM.pruefDatum",
+      "from": "07.10.2025",
+      "to": "2025-10-07"
+    },
+    {
+      "id": 1127,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "07.10.2025",
+      "to": "2025-10-07"
+    },
+    {
+      "id": 1127,
+      "field": "reviews.LST.pruefDatum",
+      "from": "07.10.2025",
+      "to": "2025-10-07"
+    },
+    {
+      "id": 1127,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "07.10.2025",
+      "to": "2025-10-07"
+    },
+    {
+      "id": 1127,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "07.10.2025",
+      "to": "2025-10-07"
+    },
+    {
+      "id": 1127,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "07.10.2025",
+      "to": "2025-10-07"
+    },
+    {
+      "id": 1129,
+      "field": "terminProjektvorstellung",
+      "from": "14.10.2025",
+      "to": "2025-10-14"
+    },
+    {
+      "id": 1129,
+      "field": "reviews.EEA.pruefDatum",
+      "from": "14.10.2025",
+      "to": "2025-10-14"
+    },
+    {
+      "id": 1129,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "14.10.2025",
+      "to": "2025-10-14"
+    },
+    {
+      "id": 1129,
+      "field": "reviews.BS.pruefDatum",
+      "from": "14.10.2025",
+      "to": "2025-10-14"
+    },
+    {
+      "id": 1129,
+      "field": "reviews.GA.pruefDatum",
+      "from": "14.10.2025",
+      "to": "2025-10-14"
+    },
+    {
+      "id": 1129,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "14.10.2025",
+      "to": "2025-10-14"
+    },
+    {
+      "id": 1129,
+      "field": "reviews.HFT.pruefDatum",
+      "from": "14.10.2025",
+      "to": "2025-10-14"
+    },
+    {
+      "id": 1129,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "14.10.2025",
+      "to": "2025-10-14"
+    },
+    {
+      "id": 1129,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "14.10.2025",
+      "to": "2025-10-14"
+    },
+    {
+      "id": 1129,
+      "field": "reviews.UM.pruefDatum",
+      "from": "14.10.2025",
+      "to": "2025-10-14"
+    },
+    {
+      "id": 1129,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "14.10.2025",
+      "to": "2025-10-14"
+    },
+    {
+      "id": 1129,
+      "field": "reviews.LST.pruefDatum",
+      "from": "14.10.2025",
+      "to": "2025-10-14"
+    },
+    {
+      "id": 1129,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "14.10.2025",
+      "to": "2025-10-14"
+    },
+    {
+      "id": 1129,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "14.10.2025",
+      "to": "2025-10-14"
+    },
+    {
+      "id": 1129,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "14.10.2025",
+      "to": "2025-10-14"
+    },
+    {
+      "id": 1130,
+      "field": "terminProjektvorstellung",
+      "from": "21.10.2025",
+      "to": "2025-10-21"
+    },
+    {
+      "id": 1130,
+      "field": "reviews.EEA.pruefDatum",
+      "from": "21.10.2025",
+      "to": "2025-10-21"
+    },
+    {
+      "id": 1130,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "21.10.2025",
+      "to": "2025-10-21"
+    },
+    {
+      "id": 1130,
+      "field": "reviews.BS.pruefDatum",
+      "from": "21.10.2025",
+      "to": "2025-10-21"
+    },
+    {
+      "id": 1130,
+      "field": "reviews.GA.pruefDatum",
+      "from": "21.10.2025",
+      "to": "2025-10-21"
+    },
+    {
+      "id": 1130,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "21.10.2025",
+      "to": "2025-10-21"
+    },
+    {
+      "id": 1130,
+      "field": "reviews.HFT.pruefDatum",
+      "from": "21.10.2025",
+      "to": "2025-10-21"
+    },
+    {
+      "id": 1130,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "21.10.2025",
+      "to": "2025-10-21"
+    },
+    {
+      "id": 1130,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "21.10.2025",
+      "to": "2025-10-21"
+    },
+    {
+      "id": 1130,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "21.10.2025",
+      "to": "2025-10-21"
+    },
+    {
+      "id": 1130,
+      "field": "reviews.LST.pruefDatum",
+      "from": "21.10.2025",
+      "to": "2025-10-21"
+    },
+    {
+      "id": 1130,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "21.10.2025",
+      "to": "2025-10-21"
+    },
+    {
+      "id": 1130,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "21.10.2025",
+      "to": "2025-10-21"
+    },
+    {
+      "id": 1130,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "21.10.2025",
+      "to": "2025-10-21"
+    },
+    {
+      "id": 1136,
+      "field": "terminProjektvorstellung",
+      "from": "11.11.2025",
+      "to": "2025-11-11"
+    },
+    {
+      "id": 1136,
+      "field": "reviews.EEA.pruefDatum",
+      "from": "11.11.2025",
+      "to": "2025-11-11"
+    },
+    {
+      "id": 1136,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "11.11.2025",
+      "to": "2025-11-11"
+    },
+    {
+      "id": 1136,
+      "field": "reviews.BS.pruefDatum",
+      "from": "11.11.2025",
+      "to": "2025-11-11"
+    },
+    {
+      "id": 1136,
+      "field": "reviews.GA.pruefDatum",
+      "from": "11.11.2025",
+      "to": "2025-11-11"
+    },
+    {
+      "id": 1136,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "11.11.2025",
+      "to": "2025-11-11"
+    },
+    {
+      "id": 1136,
+      "field": "reviews.HFT.pruefDatum",
+      "from": "11.11.2025",
+      "to": "2025-11-11"
+    },
+    {
+      "id": 1136,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "11.11.2025",
+      "to": "2025-11-11"
+    },
+    {
+      "id": 1136,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "11.11.2025",
+      "to": "2025-11-11"
+    },
+    {
+      "id": 1136,
+      "field": "reviews.UM.pruefDatum",
+      "from": "11.11.2025",
+      "to": "2025-11-11"
+    },
+    {
+      "id": 1136,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "11.11.2025",
+      "to": "2025-11-11"
+    },
+    {
+      "id": 1136,
+      "field": "reviews.LST.pruefDatum",
+      "from": "11.11.2025",
+      "to": "2025-11-11"
+    },
+    {
+      "id": 1136,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "11.11.2025",
+      "to": "2025-11-11"
+    },
+    {
+      "id": 1136,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "11.11.2025",
+      "to": "2025-11-11"
+    },
+    {
+      "id": 1136,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "11.11.2025",
+      "to": "2025-11-11"
+    },
+    {
+      "id": 1151,
+      "field": "terminProjektvorstellung",
+      "from": "18.11.2025",
+      "to": "2025-11-18"
+    },
+    {
+      "id": 1151,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "18.11.2025",
+      "to": "2025-11-18"
+    },
+    {
+      "id": 1151,
+      "field": "reviews.BS.pruefDatum",
+      "from": "18.11.2025",
+      "to": "2025-11-18"
+    },
+    {
+      "id": 1151,
+      "field": "reviews.GA.pruefDatum",
+      "from": "18.11.2025",
+      "to": "2025-11-18"
+    },
+    {
+      "id": 1151,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "18.11.2025",
+      "to": "2025-11-18"
+    },
+    {
+      "id": 1151,
+      "field": "reviews.HFT.pruefDatum",
+      "from": "18.11.2025",
+      "to": "2025-11-18"
+    },
+    {
+      "id": 1151,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "18.11.2025",
+      "to": "2025-11-18"
+    },
+    {
+      "id": 1151,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "18.11.2025",
+      "to": "2025-11-18"
+    },
+    {
+      "id": 1151,
+      "field": "reviews.UM.pruefDatum",
+      "from": "18.11.2025",
+      "to": "2025-11-18"
+    },
+    {
+      "id": 1151,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "18.11.2025",
+      "to": "2025-11-18"
+    },
+    {
+      "id": 1151,
+      "field": "reviews.LST.pruefDatum",
+      "from": "18.11.2025",
+      "to": "2025-11-18"
+    },
+    {
+      "id": 1151,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "18.11.2025",
+      "to": "2025-11-18"
+    },
+    {
+      "id": 1151,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "18.11.2025",
+      "to": "2025-11-18"
+    },
+    {
+      "id": 1151,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "18.11.2025",
+      "to": "2025-11-18"
+    },
+    {
+      "id": 1152,
+      "field": "terminProjektvorstellung",
+      "from": "18.11.2025",
+      "to": "2025-11-18"
+    },
+    {
+      "id": 1152,
+      "field": "reviews.EEA.pruefDatum",
+      "from": "18.11.2025",
+      "to": "2025-11-18"
+    },
+    {
+      "id": 1152,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "18.11.2025",
+      "to": "2025-11-18"
+    },
+    {
+      "id": 1152,
+      "field": "reviews.BS.pruefDatum",
+      "from": "18.11.2025",
+      "to": "2025-11-18"
+    },
+    {
+      "id": 1152,
+      "field": "reviews.GA.pruefDatum",
+      "from": "18.11.2025",
+      "to": "2025-11-18"
+    },
+    {
+      "id": 1152,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "18.11.2025",
+      "to": "2025-11-18"
+    },
+    {
+      "id": 1152,
+      "field": "reviews.HFT.pruefDatum",
+      "from": "18.11.2025",
+      "to": "2025-11-18"
+    },
+    {
+      "id": 1152,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "18.11.2025",
+      "to": "2025-11-18"
+    },
+    {
+      "id": 1152,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "18.11.2025",
+      "to": "2025-11-18"
+    },
+    {
+      "id": 1152,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "18.11.2025",
+      "to": "2025-11-18"
+    },
+    {
+      "id": 1152,
+      "field": "reviews.LST.pruefDatum",
+      "from": "18.11.2025",
+      "to": "2025-11-18"
+    },
+    {
+      "id": 1152,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "18.11.2025",
+      "to": "2025-11-18"
+    },
+    {
+      "id": 1152,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "18.11.2025",
+      "to": "2025-11-18"
+    },
+    {
+      "id": 1152,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "18.11.2025",
+      "to": "2025-11-18"
+    },
+    {
+      "id": 1153,
+      "field": "terminProjektvorstellung",
+      "from": "11.11.2025",
+      "to": "2025-11-11"
+    },
+    {
+      "id": 1153,
+      "field": "reviews.EEA.pruefDatum",
+      "from": "11.11.2025",
+      "to": "2025-11-11"
+    },
+    {
+      "id": 1153,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "11.11.2025",
+      "to": "2025-11-11"
+    },
+    {
+      "id": 1153,
+      "field": "reviews.BS.pruefDatum",
+      "from": "11.11.2025",
+      "to": "2025-11-11"
+    },
+    {
+      "id": 1153,
+      "field": "reviews.GA.pruefDatum",
+      "from": "11.11.2025",
+      "to": "2025-11-11"
+    },
+    {
+      "id": 1153,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "11.11.2025",
+      "to": "2025-11-11"
+    },
+    {
+      "id": 1153,
+      "field": "reviews.HFT.pruefDatum",
+      "from": "11.11.2025",
+      "to": "2025-11-11"
+    },
+    {
+      "id": 1153,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "11.11.2025",
+      "to": "2025-11-11"
+    },
+    {
+      "id": 1153,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "11.11.2025",
+      "to": "2025-11-11"
+    },
+    {
+      "id": 1153,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "11.11.2025",
+      "to": "2025-11-11"
+    },
+    {
+      "id": 1153,
+      "field": "reviews.LST.pruefDatum",
+      "from": "11.11.2025",
+      "to": "2025-11-11"
+    },
+    {
+      "id": 1153,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "11.11.2025",
+      "to": "2025-11-11"
+    },
+    {
+      "id": 1153,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "11.11.2025",
+      "to": "2025-11-11"
+    },
+    {
+      "id": 1153,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "11.11.2025",
+      "to": "2025-11-11"
+    },
+    {
+      "id": 1154,
+      "field": "terminProjektvorstellung",
+      "from": "25.11.2025",
+      "to": "2025-11-25"
+    },
+    {
+      "id": 1154,
+      "field": "reviews.EEA.pruefDatum",
+      "from": "25.11.2025",
+      "to": "2025-11-25"
+    },
+    {
+      "id": 1154,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "25.11.2025",
+      "to": "2025-11-25"
+    },
+    {
+      "id": 1154,
+      "field": "reviews.BS.pruefDatum",
+      "from": "25.11.2025",
+      "to": "2025-11-25"
+    },
+    {
+      "id": 1154,
+      "field": "reviews.GA.pruefDatum",
+      "from": "25.11.2025",
+      "to": "2025-11-25"
+    },
+    {
+      "id": 1154,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "25.11.2025",
+      "to": "2025-11-25"
+    },
+    {
+      "id": 1154,
+      "field": "reviews.HFT.pruefDatum",
+      "from": "25.11.2025",
+      "to": "2025-11-25"
+    },
+    {
+      "id": 1154,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "25.11.2025",
+      "to": "2025-11-25"
+    },
+    {
+      "id": 1154,
+      "field": "reviews.UM.pruefDatum",
+      "from": "25.11.2025",
+      "to": "2025-11-25"
+    },
+    {
+      "id": 1154,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "25.11.2025",
+      "to": "2025-11-25"
+    },
+    {
+      "id": 1154,
+      "field": "reviews.LST.pruefDatum",
+      "from": "25.11.2025",
+      "to": "2025-11-25"
+    },
+    {
+      "id": 1154,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "25.11.2025",
+      "to": "2025-11-25"
+    },
+    {
+      "id": 1154,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "25.11.2025",
+      "to": "2025-11-25"
+    },
+    {
+      "id": 1154,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "25.11.2025",
+      "to": "2025-11-25"
+    },
+    {
+      "id": 1157,
+      "field": "terminProjektvorstellung",
+      "from": "02.12.2025",
+      "to": "2025-12-02"
+    },
+    {
+      "id": 1157,
+      "field": "reviews.EEA.pruefDatum",
+      "from": "02.12.2025",
+      "to": "2025-12-02"
+    },
+    {
+      "id": 1157,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "02.12.2025",
+      "to": "2025-12-02"
+    },
+    {
+      "id": 1157,
+      "field": "reviews.BS.pruefDatum",
+      "from": "02.12.2025",
+      "to": "2025-12-02"
+    },
+    {
+      "id": 1157,
+      "field": "reviews.GA.pruefDatum",
+      "from": "02.12.2025",
+      "to": "2025-12-02"
+    },
+    {
+      "id": 1157,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "02.12.2025",
+      "to": "2025-12-02"
+    },
+    {
+      "id": 1157,
+      "field": "reviews.HFT.pruefDatum",
+      "from": "02.12.2025",
+      "to": "2025-12-02"
+    },
+    {
+      "id": 1157,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "02.12.2025",
+      "to": "2025-12-02"
+    },
+    {
+      "id": 1157,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "02.12.2025",
+      "to": "2025-12-02"
+    },
+    {
+      "id": 1157,
+      "field": "reviews.UM.pruefDatum",
+      "from": "02.12.2025",
+      "to": "2025-12-02"
+    },
+    {
+      "id": 1157,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "02.12.2025",
+      "to": "2025-12-02"
+    },
+    {
+      "id": 1157,
+      "field": "reviews.LST.pruefDatum",
+      "from": "02.12.2025",
+      "to": "2025-12-02"
+    },
+    {
+      "id": 1157,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "02.12.2025",
+      "to": "2025-12-02"
+    },
+    {
+      "id": 1157,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "02.12.2025",
+      "to": "2025-12-02"
+    },
+    {
+      "id": 1157,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "02.12.2025",
+      "to": "2025-12-02"
+    },
+    {
+      "id": 1158,
+      "field": "terminProjektvorstellung",
+      "from": "-",
+      "to": null
+    },
+    {
+      "id": 1166,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "02.12.2025",
+      "to": "2025-12-02"
+    },
+    {
+      "id": 1166,
+      "field": "reviews.BS.pruefDatum",
+      "from": "02.12.2025",
+      "to": "2025-12-02"
+    },
+    {
+      "id": 1166,
+      "field": "reviews.GA.pruefDatum",
+      "from": "02.12.2025",
+      "to": "2025-12-02"
+    },
+    {
+      "id": 1166,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "02.12.2025",
+      "to": "2025-12-02"
+    },
+    {
+      "id": 1166,
+      "field": "reviews.HFT.pruefDatum",
+      "from": "02.12.2025",
+      "to": "2025-12-02"
+    },
+    {
+      "id": 1166,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "02.12.2025",
+      "to": "2025-12-02"
+    },
+    {
+      "id": 1166,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "02.12.2025",
+      "to": "2025-12-02"
+    },
+    {
+      "id": 1166,
+      "field": "reviews.UM.pruefDatum",
+      "from": "02.12.2025",
+      "to": "2025-12-02"
+    },
+    {
+      "id": 1166,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "02.12.2025",
+      "to": "2025-12-02"
+    },
+    {
+      "id": 1166,
+      "field": "reviews.LST.pruefDatum",
+      "from": "02.12.2025",
+      "to": "2025-12-02"
+    },
+    {
+      "id": 1166,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "02.12.2025",
+      "to": "2025-12-02"
+    },
+    {
+      "id": 1166,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "02.12.2025",
+      "to": "2025-12-02"
+    },
+    {
+      "id": 1166,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "02.12.2025",
+      "to": "2025-12-02"
+    },
+    {
+      "id": 1168,
+      "field": "terminProjektvorstellung",
+      "from": "13.01.2026",
+      "to": "2026-01-13"
+    },
+    {
+      "id": 1168,
+      "field": "reviews.EEA.pruefDatum",
+      "from": "13.01.2026",
+      "to": "2026-01-13"
+    },
+    {
+      "id": 1168,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "13.01.2026",
+      "to": "2026-01-13"
+    },
+    {
+      "id": 1168,
+      "field": "reviews.BS.pruefDatum",
+      "from": "13.01.2026",
+      "to": "2026-01-13"
+    },
+    {
+      "id": 1168,
+      "field": "reviews.GA.pruefDatum",
+      "from": "13.01.2026",
+      "to": "2026-01-13"
+    },
+    {
+      "id": 1168,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "13.01.2026",
+      "to": "2026-01-13"
+    },
+    {
+      "id": 1168,
+      "field": "reviews.HFT.pruefDatum",
+      "from": "13.01.2026",
+      "to": "2026-01-13"
+    },
+    {
+      "id": 1168,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "13.01.2026",
+      "to": "2026-01-13"
+    },
+    {
+      "id": 1168,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "13.01.2026",
+      "to": "2026-01-13"
+    },
+    {
+      "id": 1168,
+      "field": "reviews.UM.pruefDatum",
+      "from": "13.01.2026",
+      "to": "2026-01-13"
+    },
+    {
+      "id": 1168,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "13.01.2026",
+      "to": "2026-01-13"
+    },
+    {
+      "id": 1168,
+      "field": "reviews.LST.pruefDatum",
+      "from": "13.01.2026",
+      "to": "2026-01-13"
+    },
+    {
+      "id": 1168,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "13.01.2026",
+      "to": "2026-01-13"
+    },
+    {
+      "id": 1168,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "13.01.2026",
+      "to": "2026-01-13"
+    },
+    {
+      "id": 1168,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "13.01.2026",
+      "to": "2026-01-13"
+    },
+    {
+      "id": 1172,
+      "field": "terminProjektvorstellung",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1172,
+      "field": "reviews.EEA.pruefDatum",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1172,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1172,
+      "field": "reviews.BS.pruefDatum",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1172,
+      "field": "reviews.GA.pruefDatum",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1172,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1172,
+      "field": "reviews.HFT.pruefDatum",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1172,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1172,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1172,
+      "field": "reviews.UM.pruefDatum",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1172,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1172,
+      "field": "reviews.LST.pruefDatum",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1172,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1172,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1172,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1197,
+      "field": "terminProjektvorstellung",
+      "from": "13.01.2026",
+      "to": "2026-01-13"
+    },
+    {
+      "id": 1197,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "13.01.2026",
+      "to": "2026-01-13"
+    },
+    {
+      "id": 1197,
+      "field": "reviews.BS.pruefDatum",
+      "from": "13.01.2026",
+      "to": "2026-01-13"
+    },
+    {
+      "id": 1197,
+      "field": "reviews.GA.pruefDatum",
+      "from": "13.01.2026",
+      "to": "2026-01-13"
+    },
+    {
+      "id": 1197,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "13.01.2026",
+      "to": "2026-01-13"
+    },
+    {
+      "id": 1197,
+      "field": "reviews.HFT.pruefDatum",
+      "from": "13.01.2026",
+      "to": "2026-01-13"
+    },
+    {
+      "id": 1197,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "13.01.2026",
+      "to": "2026-01-13"
+    },
+    {
+      "id": 1197,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "13.01.2026",
+      "to": "2026-01-13"
+    },
+    {
+      "id": 1197,
+      "field": "reviews.UM.pruefDatum",
+      "from": "13.01.2026",
+      "to": "2026-01-13"
+    },
+    {
+      "id": 1197,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "13.01.2026",
+      "to": "2026-01-13"
+    },
+    {
+      "id": 1197,
+      "field": "reviews.LST.pruefDatum",
+      "from": "13.01.2026",
+      "to": "2026-01-13"
+    },
+    {
+      "id": 1197,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "13.01.2026",
+      "to": "2026-01-13"
+    },
+    {
+      "id": 1197,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "13.01.2026",
+      "to": "2026-01-13"
+    },
+    {
+      "id": 1197,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "13.01.2026",
+      "to": "2026-01-13"
+    },
+    {
+      "id": 1199,
+      "field": "terminProjektvorstellung",
+      "from": "13.01.2026",
+      "to": "2026-01-13"
+    },
+    {
+      "id": 1199,
+      "field": "reviews.EEA.pruefDatum",
+      "from": "13.01.2026",
+      "to": "2026-01-13"
+    },
+    {
+      "id": 1199,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "13.01.2026",
+      "to": "2026-01-13"
+    },
+    {
+      "id": 1199,
+      "field": "reviews.BS.pruefDatum",
+      "from": "13.01.2026",
+      "to": "2026-01-13"
+    },
+    {
+      "id": 1199,
+      "field": "reviews.GA.pruefDatum",
+      "from": "13.01.2026",
+      "to": "2026-01-13"
+    },
+    {
+      "id": 1199,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "13.01.2026",
+      "to": "2026-01-13"
+    },
+    {
+      "id": 1199,
+      "field": "reviews.HFT.pruefDatum",
+      "from": "13.01.2026",
+      "to": "2026-01-13"
+    },
+    {
+      "id": 1199,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "13.01.2026",
+      "to": "2026-01-13"
+    },
+    {
+      "id": 1199,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "13.01.2026",
+      "to": "2026-01-13"
+    },
+    {
+      "id": 1199,
+      "field": "reviews.UM.pruefDatum",
+      "from": "13.01.2026",
+      "to": "2026-01-13"
+    },
+    {
+      "id": 1199,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "13.01.2026",
+      "to": "2026-01-13"
+    },
+    {
+      "id": 1199,
+      "field": "reviews.LST.pruefDatum",
+      "from": "13.01.2026",
+      "to": "2026-01-13"
+    },
+    {
+      "id": 1199,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "13.01.2026",
+      "to": "2026-01-13"
+    },
+    {
+      "id": 1199,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "13.01.2026",
+      "to": "2026-01-13"
+    },
+    {
+      "id": 1199,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "13.01.2026",
+      "to": "2026-01-13"
+    },
+    {
+      "id": 1200,
+      "field": "terminProjektvorstellung",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1200,
+      "field": "reviews.EEA.pruefDatum",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1200,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1200,
+      "field": "reviews.BS.pruefDatum",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1200,
+      "field": "reviews.GA.pruefDatum",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1200,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1200,
+      "field": "reviews.HFT.pruefDatum",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1200,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1200,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1200,
+      "field": "reviews.UM.pruefDatum",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1200,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1200,
+      "field": "reviews.LST.pruefDatum",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1200,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1200,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1200,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1206,
+      "field": "terminProjektvorstellung",
+      "from": "-",
+      "to": null
+    },
+    {
+      "id": 1210,
+      "field": "terminProjektvorstellung",
+      "from": "-",
+      "to": null
+    },
+    {
+      "id": 1211,
+      "field": "terminProjektvorstellung",
+      "from": "20.01.2026",
+      "to": "2026-01-20"
+    },
+    {
+      "id": 1211,
+      "field": "reviews.EEA.pruefDatum",
+      "from": "20.01.2026",
+      "to": "2026-01-20"
+    },
+    {
+      "id": 1211,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "20.01.2026",
+      "to": "2026-01-20"
+    },
+    {
+      "id": 1211,
+      "field": "reviews.BS.pruefDatum",
+      "from": "20.01.2026",
+      "to": "2026-01-20"
+    },
+    {
+      "id": 1211,
+      "field": "reviews.GA.pruefDatum",
+      "from": "20.01.2026",
+      "to": "2026-01-20"
+    },
+    {
+      "id": 1211,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "20.01.2026",
+      "to": "2026-01-20"
+    },
+    {
+      "id": 1211,
+      "field": "reviews.HFT.pruefDatum",
+      "from": "20.01.2026",
+      "to": "2026-01-20"
+    },
+    {
+      "id": 1211,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "20.01.2026",
+      "to": "2026-01-20"
+    },
+    {
+      "id": 1211,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "20.01.2026",
+      "to": "2026-01-20"
+    },
+    {
+      "id": 1211,
+      "field": "reviews.UM.pruefDatum",
+      "from": "20.01.2026",
+      "to": "2026-01-20"
+    },
+    {
+      "id": 1211,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "20.01.2026",
+      "to": "2026-01-20"
+    },
+    {
+      "id": 1211,
+      "field": "reviews.LST.pruefDatum",
+      "from": "20.01.2026",
+      "to": "2026-01-20"
+    },
+    {
+      "id": 1211,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "20.01.2026",
+      "to": "2026-01-20"
+    },
+    {
+      "id": 1211,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "20.01.2026",
+      "to": "2026-01-20"
+    },
+    {
+      "id": 1211,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "20.01.2026",
+      "to": "2026-01-20"
+    },
+    {
+      "id": 1212,
+      "field": "terminProjektvorstellung",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1212,
+      "field": "reviews.EEA.pruefDatum",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1212,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1212,
+      "field": "reviews.BS.pruefDatum",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1212,
+      "field": "reviews.GA.pruefDatum",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1212,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1212,
+      "field": "reviews.HFT.pruefDatum",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1212,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1212,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1212,
+      "field": "reviews.UM.pruefDatum",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1212,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1212,
+      "field": "reviews.LST.pruefDatum",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1212,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1212,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1212,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "27.01.2026",
+      "to": "2026-01-27"
+    },
+    {
+      "id": 1213,
+      "field": "terminProjektvorstellung",
+      "from": "10.02.2026",
+      "to": "2026-02-10"
+    },
+    {
+      "id": 1213,
+      "field": "reviews.EEA.pruefDatum",
+      "from": "10.02.2026",
+      "to": "2026-02-10"
+    },
+    {
+      "id": 1213,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "10.02.2026",
+      "to": "2026-02-10"
+    },
+    {
+      "id": 1213,
+      "field": "reviews.BS.pruefDatum",
+      "from": "10.02.2026",
+      "to": "2026-02-10"
+    },
+    {
+      "id": 1213,
+      "field": "reviews.GA.pruefDatum",
+      "from": "10.02.2026",
+      "to": "2026-02-10"
+    },
+    {
+      "id": 1213,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "10.02.2026",
+      "to": "2026-02-10"
+    },
+    {
+      "id": 1213,
+      "field": "reviews.HFT.pruefDatum",
+      "from": "10.02.2026",
+      "to": "2026-02-10"
+    },
+    {
+      "id": 1213,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "10.02.2026",
+      "to": "2026-02-10"
+    },
+    {
+      "id": 1213,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "10.02.2026",
+      "to": "2026-02-10"
+    },
+    {
+      "id": 1213,
+      "field": "reviews.UM.pruefDatum",
+      "from": "10.02.2026",
+      "to": "2026-02-10"
+    },
+    {
+      "id": 1213,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "10.02.2026",
+      "to": "2026-02-10"
+    },
+    {
+      "id": 1213,
+      "field": "reviews.LST.pruefDatum",
+      "from": "10.02.2026",
+      "to": "2026-02-10"
+    },
+    {
+      "id": 1213,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "10.02.2026",
+      "to": "2026-02-10"
+    },
+    {
+      "id": 1213,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "10.02.2026",
+      "to": "2026-02-10"
+    },
+    {
+      "id": 1213,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "10.02.2026",
+      "to": "2026-02-10"
+    },
+    {
+      "id": 1214,
+      "field": "terminProjektvorstellung",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1214,
+      "field": "reviews.EEA.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1214,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1214,
+      "field": "reviews.BS.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1214,
+      "field": "reviews.GA.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1214,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1214,
+      "field": "reviews.HFT.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1214,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1214,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1214,
+      "field": "reviews.UM.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1214,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1214,
+      "field": "reviews.LST.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1214,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1214,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1214,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1215,
+      "field": "terminProjektvorstellung",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1215,
+      "field": "reviews.EEA.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1215,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1215,
+      "field": "reviews.BS.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1215,
+      "field": "reviews.GA.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1215,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1215,
+      "field": "reviews.HFT.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1215,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1215,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1215,
+      "field": "reviews.UM.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1215,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1215,
+      "field": "reviews.LST.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1215,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1215,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1215,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1216,
+      "field": "terminProjektvorstellung",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1216,
+      "field": "reviews.EEA.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1216,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1216,
+      "field": "reviews.BS.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1216,
+      "field": "reviews.GA.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1216,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1216,
+      "field": "reviews.HFT.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1216,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1216,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1216,
+      "field": "reviews.UM.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1216,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1216,
+      "field": "reviews.LST.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1216,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1216,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1216,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1218,
+      "field": "terminProjektvorstellung",
+      "from": "24.10.2023",
+      "to": "2023-10-24"
+    },
+    {
+      "id": 1219,
+      "field": "terminProjektvorstellung",
+      "from": "10.02.2026",
+      "to": "2026-02-10"
+    },
+    {
+      "id": 1219,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "10.02.2026",
+      "to": "2026-02-10"
+    },
+    {
+      "id": 1219,
+      "field": "reviews.BS.pruefDatum",
+      "from": "10.02.2026",
+      "to": "2026-02-10"
+    },
+    {
+      "id": 1219,
+      "field": "reviews.GA.pruefDatum",
+      "from": "10.02.2026",
+      "to": "2026-02-10"
+    },
+    {
+      "id": 1219,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "10.02.2026",
+      "to": "2026-02-10"
+    },
+    {
+      "id": 1219,
+      "field": "reviews.HFT.pruefDatum",
+      "from": "10.02.2026",
+      "to": "2026-02-10"
+    },
+    {
+      "id": 1219,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "10.02.2026",
+      "to": "2026-02-10"
+    },
+    {
+      "id": 1219,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "10.02.2026",
+      "to": "2026-02-10"
+    },
+    {
+      "id": 1219,
+      "field": "reviews.UM.pruefDatum",
+      "from": "10.02.2026",
+      "to": "2026-02-10"
+    },
+    {
+      "id": 1219,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "10.02.2026",
+      "to": "2026-02-10"
+    },
+    {
+      "id": 1219,
+      "field": "reviews.LST.pruefDatum",
+      "from": "10.02.2026",
+      "to": "2026-02-10"
+    },
+    {
+      "id": 1219,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "10.02.2026",
+      "to": "2026-02-10"
+    },
+    {
+      "id": 1219,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "10.02.2026",
+      "to": "2026-02-10"
+    },
+    {
+      "id": 1219,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "10.02.2026",
+      "to": "2026-02-10"
+    },
+    {
+      "id": 1220,
+      "field": "terminProjektvorstellung",
+      "from": "10.02.2026",
+      "to": "2026-02-10"
+    },
+    {
+      "id": 1220,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "10.02.2026",
+      "to": "2026-02-10"
+    },
+    {
+      "id": 1220,
+      "field": "reviews.BS.pruefDatum",
+      "from": "10.02.2026",
+      "to": "2026-02-10"
+    },
+    {
+      "id": 1220,
+      "field": "reviews.GA.pruefDatum",
+      "from": "10.02.2026",
+      "to": "2026-02-10"
+    },
+    {
+      "id": 1220,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "10.02.2026",
+      "to": "2026-02-10"
+    },
+    {
+      "id": 1220,
+      "field": "reviews.HFT.pruefDatum",
+      "from": "10.02.2026",
+      "to": "2026-02-10"
+    },
+    {
+      "id": 1220,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "10.02.2026",
+      "to": "2026-02-10"
+    },
+    {
+      "id": 1220,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "10.02.2026",
+      "to": "2026-02-10"
+    },
+    {
+      "id": 1220,
+      "field": "reviews.UM.pruefDatum",
+      "from": "10.02.2026",
+      "to": "2026-02-10"
+    },
+    {
+      "id": 1220,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "10.02.2026",
+      "to": "2026-02-10"
+    },
+    {
+      "id": 1220,
+      "field": "reviews.LST.pruefDatum",
+      "from": "10.02.2026",
+      "to": "2026-02-10"
+    },
+    {
+      "id": 1220,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "10.02.2026",
+      "to": "2026-02-10"
+    },
+    {
+      "id": 1220,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "10.02.2026",
+      "to": "2026-02-10"
+    },
+    {
+      "id": 1220,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "10.02.2026",
+      "to": "2026-02-10"
+    },
+    {
+      "id": 1223,
+      "field": "terminProjektvorstellung",
+      "from": "-",
+      "to": null
+    },
+    {
+      "id": 1224,
+      "field": "terminProjektvorstellung",
+      "from": "-",
+      "to": null
+    },
+    {
+      "id": 1228,
+      "field": "terminProjektvorstellung",
+      "from": "-",
+      "to": null
+    },
+    {
+      "id": 1231,
+      "field": "terminProjektvorstellung",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1231,
+      "field": "reviews.EEA.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1231,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1231,
+      "field": "reviews.BS.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1231,
+      "field": "reviews.GA.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1231,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1231,
+      "field": "reviews.HFT.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1231,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1231,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1231,
+      "field": "reviews.UM.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1231,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1231,
+      "field": "reviews.LST.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1231,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1231,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1231,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "17.02.2026",
+      "to": "2026-02-17"
+    },
+    {
+      "id": 1238,
+      "field": "terminProjektvorstellung",
+      "from": "-",
+      "to": null
+    },
+    {
+      "id": 1245,
+      "field": "terminProjektvorstellung",
+      "from": "17.03.2026",
+      "to": "2026-03-17"
+    },
+    {
+      "id": 1245,
+      "field": "reviews.EEA.pruefDatum",
+      "from": "17.03.2026",
+      "to": "2026-03-17"
+    },
+    {
+      "id": 1245,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "17.03.2026",
+      "to": "2026-03-17"
+    },
+    {
+      "id": 1245,
+      "field": "reviews.GA.pruefDatum",
+      "from": "17.03.2026",
+      "to": "2026-03-17"
+    },
+    {
+      "id": 1245,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "17.03.2026",
+      "to": "2026-03-17"
+    },
+    {
+      "id": 1245,
+      "field": "reviews.HFT.pruefDatum",
+      "from": "17.03.2026",
+      "to": "2026-03-17"
+    },
+    {
+      "id": 1245,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "17.03.2026",
+      "to": "2026-03-17"
+    },
+    {
+      "id": 1245,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "17.03.2026",
+      "to": "2026-03-17"
+    },
+    {
+      "id": 1245,
+      "field": "reviews.UM.pruefDatum",
+      "from": "17.03.2026",
+      "to": "2026-03-17"
+    },
+    {
+      "id": 1245,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "17.03.2026",
+      "to": "2026-03-17"
+    },
+    {
+      "id": 1245,
+      "field": "reviews.LST.pruefDatum",
+      "from": "17.03.2026",
+      "to": "2026-03-17"
+    },
+    {
+      "id": 1245,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "17.03.2026",
+      "to": "2026-03-17"
+    },
+    {
+      "id": 1245,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "17.03.2026",
+      "to": "2026-03-17"
+    },
+    {
+      "id": 1245,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "17.03.2026",
+      "to": "2026-03-17"
+    },
+    {
+      "id": 1246,
+      "field": "terminProjektvorstellung",
+      "from": "14.04.2026",
+      "to": "2026-04-14"
+    },
+    {
+      "id": 1246,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "14.04.2026",
+      "to": "2026-04-14"
+    },
+    {
+      "id": 1246,
+      "field": "reviews.GA.pruefDatum",
+      "from": "14.04.2026",
+      "to": "2026-04-14"
+    },
+    {
+      "id": 1246,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "14.04.2026",
+      "to": "2026-04-14"
+    },
+    {
+      "id": 1246,
+      "field": "reviews.HFT.pruefDatum",
+      "from": "14.04.2026",
+      "to": "2026-04-14"
+    },
+    {
+      "id": 1246,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "14.04.2026",
+      "to": "2026-04-14"
+    },
+    {
+      "id": 1246,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "14.04.2026",
+      "to": "2026-04-14"
+    },
+    {
+      "id": 1246,
+      "field": "reviews.UM.pruefDatum",
+      "from": "14.04.2026",
+      "to": "2026-04-14"
+    },
+    {
+      "id": 1246,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "14.04.2026",
+      "to": "2026-04-14"
+    },
+    {
+      "id": 1246,
+      "field": "reviews.LST.pruefDatum",
+      "from": "14.04.2026",
+      "to": "2026-04-14"
+    },
+    {
+      "id": 1246,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "14.04.2026",
+      "to": "2026-04-14"
+    },
+    {
+      "id": 1246,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "14.04.2026",
+      "to": "2026-04-14"
+    },
+    {
+      "id": 1246,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "14.04.2026",
+      "to": "2026-04-14"
+    },
+    {
+      "id": 1247,
+      "field": "terminProjektvorstellung",
+      "from": "14.04.2026",
+      "to": "2026-04-14"
+    },
+    {
+      "id": 1247,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "14.04.2026",
+      "to": "2026-04-14"
+    },
+    {
+      "id": 1247,
+      "field": "reviews.GA.pruefDatum",
+      "from": "14.04.2026",
+      "to": "2026-04-14"
+    },
+    {
+      "id": 1247,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "14.04.2026",
+      "to": "2026-04-14"
+    },
+    {
+      "id": 1247,
+      "field": "reviews.HFT.pruefDatum",
+      "from": "14.04.2026",
+      "to": "2026-04-14"
+    },
+    {
+      "id": 1247,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "14.04.2026",
+      "to": "2026-04-14"
+    },
+    {
+      "id": 1247,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "14.04.2026",
+      "to": "2026-04-14"
+    },
+    {
+      "id": 1247,
+      "field": "reviews.UM.pruefDatum",
+      "from": "14.04.2026",
+      "to": "2026-04-14"
+    },
+    {
+      "id": 1247,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "14.04.2026",
+      "to": "2026-04-14"
+    },
+    {
+      "id": 1247,
+      "field": "reviews.LST.pruefDatum",
+      "from": "14.04.2026",
+      "to": "2026-04-14"
+    },
+    {
+      "id": 1247,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "14.04.2026",
+      "to": "2026-04-14"
+    },
+    {
+      "id": 1247,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "14.04.2026",
+      "to": "2026-04-14"
+    },
+    {
+      "id": 1247,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "14.04.2026",
+      "to": "2026-04-14"
+    },
+    {
+      "id": 1264,
+      "field": "terminProjektvorstellung",
+      "from": "17.03.2026",
+      "to": "2026-03-17"
+    },
+    {
+      "id": 1264,
+      "field": "reviews.EEA.pruefDatum",
+      "from": "17.03.2026",
+      "to": "2026-03-17"
+    },
+    {
+      "id": 1264,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "17.03.2026",
+      "to": "2026-03-17"
+    },
+    {
+      "id": 1264,
+      "field": "reviews.BS.pruefDatum",
+      "from": "17.03.2026",
+      "to": "2026-03-17"
+    },
+    {
+      "id": 1264,
+      "field": "reviews.GA.pruefDatum",
+      "from": "17.03.2026",
+      "to": "2026-03-17"
+    },
+    {
+      "id": 1264,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "17.03.2026",
+      "to": "2026-03-17"
+    },
+    {
+      "id": 1264,
+      "field": "reviews.HFT.pruefDatum",
+      "from": "17.03.2026",
+      "to": "2026-03-17"
+    },
+    {
+      "id": 1264,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "17.03.2026",
+      "to": "2026-03-17"
+    },
+    {
+      "id": 1264,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "17.03.2026",
+      "to": "2026-03-17"
+    },
+    {
+      "id": 1264,
+      "field": "reviews.UM.pruefDatum",
+      "from": "17.03.2026",
+      "to": "2026-03-17"
+    },
+    {
+      "id": 1264,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "17.03.2026",
+      "to": "2026-03-17"
+    },
+    {
+      "id": 1264,
+      "field": "reviews.LST.pruefDatum",
+      "from": "17.03.2026",
+      "to": "2026-03-17"
+    },
+    {
+      "id": 1264,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "17.03.2026",
+      "to": "2026-03-17"
+    },
+    {
+      "id": 1264,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "17.03.2026",
+      "to": "2026-03-17"
+    },
+    {
+      "id": 1264,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "17.03.2026",
+      "to": "2026-03-17"
+    },
+    {
+      "id": 1265,
+      "field": "terminProjektvorstellung",
+      "from": "17.03.2026",
+      "to": "2026-03-17"
+    },
+    {
+      "id": 1265,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "17.03.2026",
+      "to": "2026-03-17"
+    },
+    {
+      "id": 1265,
+      "field": "reviews.BS.pruefDatum",
+      "from": "17.03.2026",
+      "to": "2026-03-17"
+    },
+    {
+      "id": 1265,
+      "field": "reviews.GA.pruefDatum",
+      "from": "17.03.2026",
+      "to": "2026-03-17"
+    },
+    {
+      "id": 1265,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "17.03.2026",
+      "to": "2026-03-17"
+    },
+    {
+      "id": 1265,
+      "field": "reviews.HFT.pruefDatum",
+      "from": "17.03.2026",
+      "to": "2026-03-17"
+    },
+    {
+      "id": 1265,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "17.03.2026",
+      "to": "2026-03-17"
+    },
+    {
+      "id": 1265,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "17.03.2026",
+      "to": "2026-03-17"
+    },
+    {
+      "id": 1265,
+      "field": "reviews.UM.pruefDatum",
+      "from": "17.03.2026",
+      "to": "2026-03-17"
+    },
+    {
+      "id": 1265,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "17.03.2026",
+      "to": "2026-03-17"
+    },
+    {
+      "id": 1265,
+      "field": "reviews.LST.pruefDatum",
+      "from": "17.03.2026",
+      "to": "2026-03-17"
+    },
+    {
+      "id": 1265,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "17.03.2026",
+      "to": "2026-03-17"
+    },
+    {
+      "id": 1265,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "17.03.2026",
+      "to": "2026-03-17"
+    },
+    {
+      "id": 1265,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "17.03.2026",
+      "to": "2026-03-17"
+    },
+    {
+      "id": 1266,
+      "field": "terminProjektvorstellung",
+      "from": "-",
+      "to": null
+    },
+    {
+      "id": 1267,
+      "field": "terminProjektvorstellung",
+      "from": "-",
+      "to": null
+    },
+    {
+      "id": 1268,
+      "field": "terminProjektvorstellung",
+      "from": "-",
+      "to": null
+    },
+    {
+      "id": 1275,
+      "field": "terminProjektvorstellung",
+      "from": "03.02.2026",
+      "to": "2026-02-03"
+    },
+    {
+      "id": 1275,
+      "field": "reviews.EEA.pruefDatum",
+      "from": "03.02.2026",
+      "to": "2026-02-03"
+    },
+    {
+      "id": 1275,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "03.02.2026",
+      "to": "2026-02-03"
+    },
+    {
+      "id": 1275,
+      "field": "reviews.BS.pruefDatum",
+      "from": "03.02.2026",
+      "to": "2026-02-03"
+    },
+    {
+      "id": 1275,
+      "field": "reviews.GA.pruefDatum",
+      "from": "03.02.2026",
+      "to": "2026-02-03"
+    },
+    {
+      "id": 1275,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "03.02.2026",
+      "to": "2026-02-03"
+    },
+    {
+      "id": 1275,
+      "field": "reviews.HFT.pruefDatum",
+      "from": "03.02.2026",
+      "to": "2026-02-03"
+    },
+    {
+      "id": 1275,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "03.02.2026",
+      "to": "2026-02-03"
+    },
+    {
+      "id": 1275,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "03.02.2026",
+      "to": "2026-02-03"
+    },
+    {
+      "id": 1275,
+      "field": "reviews.UM.pruefDatum",
+      "from": "03.02.2026",
+      "to": "2026-02-03"
+    },
+    {
+      "id": 1275,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "03.02.2026",
+      "to": "2026-02-03"
+    },
+    {
+      "id": 1275,
+      "field": "reviews.LST.pruefDatum",
+      "from": "03.02.2026",
+      "to": "2026-02-03"
+    },
+    {
+      "id": 1275,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "03.02.2026",
+      "to": "2026-02-03"
+    },
+    {
+      "id": 1275,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "03.02.2026",
+      "to": "2026-02-03"
+    },
+    {
+      "id": 1275,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "03.02.2026",
+      "to": "2026-02-03"
+    },
+    {
+      "id": 1276,
+      "field": "terminProjektvorstellung",
+      "from": "03.03.2026",
+      "to": "2026-03-03"
+    },
+    {
+      "id": 1277,
+      "field": "terminProjektvorstellung",
+      "from": "31.03.2026",
+      "to": "2026-03-31"
+    },
+    {
+      "id": 1279,
+      "field": "terminProjektvorstellung",
+      "from": "07.04.2026",
+      "to": "2026-04-07"
+    },
+    {
+      "id": 1280,
+      "field": "terminProjektvorstellung",
+      "from": "22.07.2025",
+      "to": "2025-07-22"
+    },
+    {
+      "id": 1289,
+      "field": "terminProjektvorstellung",
+      "from": "05.05.2026",
+      "to": "2026-05-05"
+    },
+    {
+      "id": 1289,
+      "field": "reviews.EEA.pruefDatum",
+      "from": "05.05.2026",
+      "to": "2026-05-05"
+    },
+    {
+      "id": 1289,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "05.05.2026",
+      "to": "2026-05-05"
+    },
+    {
+      "id": 1289,
+      "field": "reviews.BS.pruefDatum",
+      "from": "05.05.2026",
+      "to": "2026-05-05"
+    },
+    {
+      "id": 1289,
+      "field": "reviews.GA.pruefDatum",
+      "from": "05.05.2026",
+      "to": "2026-05-05"
+    },
+    {
+      "id": 1289,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "05.05.2026",
+      "to": "2026-05-05"
+    },
+    {
+      "id": 1289,
+      "field": "reviews.HFT.pruefDatum",
+      "from": "05.05.2026",
+      "to": "2026-05-05"
+    },
+    {
+      "id": 1289,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "05.05.2026",
+      "to": "2026-05-05"
+    },
+    {
+      "id": 1289,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "05.05.2026",
+      "to": "2026-05-05"
+    },
+    {
+      "id": 1289,
+      "field": "reviews.UM.pruefDatum",
+      "from": "05.05.2026",
+      "to": "2026-05-05"
+    },
+    {
+      "id": 1289,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "05.05.2026",
+      "to": "2026-05-05"
+    },
+    {
+      "id": 1289,
+      "field": "reviews.LST.pruefDatum",
+      "from": "05.05.2026",
+      "to": "2026-05-05"
+    },
+    {
+      "id": 1289,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "05.05.2026",
+      "to": "2026-05-05"
+    },
+    {
+      "id": 1289,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "05.05.2026",
+      "to": "2026-05-05"
+    },
+    {
+      "id": 1289,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "05.05.2026",
+      "to": "2026-05-05"
+    },
+    {
+      "id": 1290,
+      "field": "terminProjektvorstellung",
+      "from": "14.04.2026",
+      "to": "2026-04-14"
+    },
+    {
+      "id": 1290,
+      "field": "reviews.EEA.pruefDatum",
+      "from": "14.04.2026",
+      "to": "2026-04-14"
+    },
+    {
+      "id": 1290,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "14.04.2026",
+      "to": "2026-04-14"
+    },
+    {
+      "id": 1290,
+      "field": "reviews.BS.pruefDatum",
+      "from": "14.04.2026",
+      "to": "2026-04-14"
+    },
+    {
+      "id": 1290,
+      "field": "reviews.GA.pruefDatum",
+      "from": "14.04.2026",
+      "to": "2026-04-14"
+    },
+    {
+      "id": 1290,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "14.04.2026",
+      "to": "2026-04-14"
+    },
+    {
+      "id": 1290,
+      "field": "reviews.HFT.pruefDatum",
+      "from": "14.04.2026",
+      "to": "2026-04-14"
+    },
+    {
+      "id": 1290,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "14.04.2026",
+      "to": "2026-04-14"
+    },
+    {
+      "id": 1290,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "14.04.2026",
+      "to": "2026-04-14"
+    },
+    {
+      "id": 1290,
+      "field": "reviews.UM.pruefDatum",
+      "from": "14.04.2026",
+      "to": "2026-04-14"
+    },
+    {
+      "id": 1290,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "14.04.2026",
+      "to": "2026-04-14"
+    },
+    {
+      "id": 1290,
+      "field": "reviews.LST.pruefDatum",
+      "from": "14.04.2026",
+      "to": "2026-04-14"
+    },
+    {
+      "id": 1290,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "14.04.2026",
+      "to": "2026-04-14"
+    },
+    {
+      "id": 1290,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "14.04.2026",
+      "to": "2026-04-14"
+    },
+    {
+      "id": 1290,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "14.04.2026",
+      "to": "2026-04-14"
+    },
+    {
+      "id": 1293,
+      "field": "terminProjektvorstellung",
+      "from": "19.05.2026",
+      "to": "2026-05-19"
+    },
+    {
+      "id": 1293,
+      "field": "reviews.EEA.pruefDatum",
+      "from": "19.05.2026",
+      "to": "2026-05-19"
+    },
+    {
+      "id": 1293,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "19.05.2026",
+      "to": "2026-05-19"
+    },
+    {
+      "id": 1293,
+      "field": "reviews.BS.pruefDatum",
+      "from": "19.05.2026",
+      "to": "2026-05-19"
+    },
+    {
+      "id": 1293,
+      "field": "reviews.GA.pruefDatum",
+      "from": "19.05.2026",
+      "to": "2026-05-19"
+    },
+    {
+      "id": 1293,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "19.05.2026",
+      "to": "2026-05-19"
+    },
+    {
+      "id": 1293,
+      "field": "reviews.HFT.pruefDatum",
+      "from": "19.05.2026",
+      "to": "2026-05-19"
+    },
+    {
+      "id": 1293,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "19.05.2026",
+      "to": "2026-05-19"
+    },
+    {
+      "id": 1293,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "19.05.2026",
+      "to": "2026-05-19"
+    },
+    {
+      "id": 1293,
+      "field": "reviews.UM.pruefDatum",
+      "from": "19.05.2026",
+      "to": "2026-05-19"
+    },
+    {
+      "id": 1293,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "19.05.2026",
+      "to": "2026-05-19"
+    },
+    {
+      "id": 1293,
+      "field": "reviews.LST.pruefDatum",
+      "from": "19.05.2026",
+      "to": "2026-05-19"
+    },
+    {
+      "id": 1293,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "19.05.2026",
+      "to": "2026-05-19"
+    },
+    {
+      "id": 1293,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "19.05.2026",
+      "to": "2026-05-19"
+    },
+    {
+      "id": 1293,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "19.05.2026",
+      "to": "2026-05-19"
+    },
+    {
+      "id": 1294,
+      "field": "terminProjektvorstellung",
+      "from": "02.06.2026",
+      "to": "2026-06-02"
+    },
+    {
+      "id": 1294,
+      "field": "reviews.EEA.pruefDatum",
+      "from": "02.06.2026",
+      "to": "2026-06-02"
+    },
+    {
+      "id": 1294,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "02.06.2026",
+      "to": "2026-06-02"
+    },
+    {
+      "id": 1294,
+      "field": "reviews.BS.pruefDatum",
+      "from": "02.06.2026",
+      "to": "2026-06-02"
+    },
+    {
+      "id": 1294,
+      "field": "reviews.GA.pruefDatum",
+      "from": "02.06.2026",
+      "to": "2026-06-02"
+    },
+    {
+      "id": 1294,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "02.06.2026",
+      "to": "2026-06-02"
+    },
+    {
+      "id": 1294,
+      "field": "reviews.HFT.pruefDatum",
+      "from": "02.06.2026",
+      "to": "2026-06-02"
+    },
+    {
+      "id": 1294,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "02.06.2026",
+      "to": "2026-06-02"
+    },
+    {
+      "id": 1294,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "02.06.2026",
+      "to": "2026-06-02"
+    },
+    {
+      "id": 1294,
+      "field": "reviews.UM.pruefDatum",
+      "from": "02.06.2026",
+      "to": "2026-06-02"
+    },
+    {
+      "id": 1294,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "02.06.2026",
+      "to": "2026-06-02"
+    },
+    {
+      "id": 1294,
+      "field": "reviews.LST.pruefDatum",
+      "from": "02.06.2026",
+      "to": "2026-06-02"
+    },
+    {
+      "id": 1294,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "02.06.2026",
+      "to": "2026-06-02"
+    },
+    {
+      "id": 1294,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "02.06.2026",
+      "to": "2026-06-02"
+    },
+    {
+      "id": 1294,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "02.06.2026",
+      "to": "2026-06-02"
+    },
+    {
+      "id": 1297,
+      "field": "terminProjektvorstellung",
+      "from": "-",
+      "to": null
+    },
+    {
+      "id": 1298,
+      "field": "terminProjektvorstellung",
+      "from": "12.05.2026",
+      "to": "2026-05-12"
+    },
+    {
+      "id": 1298,
+      "field": "reviews.EEA.pruefDatum",
+      "from": "12.05.2026",
+      "to": "2026-05-12"
+    },
+    {
+      "id": 1298,
+      "field": "reviews.ITK.pruefDatum",
+      "from": "12.05.2026",
+      "to": "2026-05-12"
+    },
+    {
+      "id": 1298,
+      "field": "reviews.BS.pruefDatum",
+      "from": "12.05.2026",
+      "to": "2026-05-12"
+    },
+    {
+      "id": 1298,
+      "field": "reviews.GA.pruefDatum",
+      "from": "12.05.2026",
+      "to": "2026-05-12"
+    },
+    {
+      "id": 1298,
+      "field": "reviews.Energie.pruefDatum",
+      "from": "12.05.2026",
+      "to": "2026-05-12"
+    },
+    {
+      "id": 1298,
+      "field": "reviews.HFT.pruefDatum",
+      "from": "12.05.2026",
+      "to": "2026-05-12"
+    },
+    {
+      "id": 1298,
+      "field": "reviews.HKLS.pruefDatum",
+      "from": "12.05.2026",
+      "to": "2026-05-12"
+    },
+    {
+      "id": 1298,
+      "field": "reviews.TBQ.pruefDatum",
+      "from": "12.05.2026",
+      "to": "2026-05-12"
+    },
+    {
+      "id": 1298,
+      "field": "reviews.UM.pruefDatum",
+      "from": "12.05.2026",
+      "to": "2026-05-12"
+    },
+    {
+      "id": 1298,
+      "field": "reviews.BIM.pruefDatum",
+      "from": "12.05.2026",
+      "to": "2026-05-12"
+    },
+    {
+      "id": 1298,
+      "field": "reviews.LST.pruefDatum",
+      "from": "12.05.2026",
+      "to": "2026-05-12"
+    },
+    {
+      "id": 1298,
+      "field": "reviews.Vermessung.pruefDatum",
+      "from": "12.05.2026",
+      "to": "2026-05-12"
+    },
+    {
+      "id": 1298,
+      "field": "reviews.Baubetriebstechnologie.pruefDatum",
+      "from": "12.05.2026",
+      "to": "2026-05-12"
+    },
+    {
+      "id": 1298,
+      "field": "reviews.Baubetriebsplanung.pruefDatum",
+      "from": "12.05.2026",
+      "to": "2026-05-12"
+    }
+  ]
+}

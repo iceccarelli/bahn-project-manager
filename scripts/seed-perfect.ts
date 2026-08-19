@@ -11,6 +11,7 @@ import { eq } from "drizzle-orm";
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
+import { toDate } from "../shared/date";
 import { ProjectSchema } from "../shared/validation";
 import { SYNC_VERSION } from "../shared/const";
 
@@ -49,8 +50,11 @@ async function seedPerfect() {
       continue;
     }
 
-    // Check if exists
-    const [existing] = await db.select().from(projects).where(eq(projects.projektnummer, project.projektnummer)).limit(1);
+    // Identity is `id`, NOT `projektnummer`. projektnummer is not unique — in
+    // client/public/data.json "G.011511006" alone appears on 48 projects — and
+    // 15 rows have none at all, so matching on it collapsed distinct projects
+    // into one another.
+    const [existing] = await db.select().from(projects).where(eq(projects.id, projectId)).limit(1);
 
     if (existing) {
       // Update if syncVersion changed or data differs
@@ -79,7 +83,9 @@ async function seedPerfect() {
         projektstand: project.projektstand,
         eigvEinstufung: project.eigvEinstufung,
         projektleiter: project.projektleiter,
-        terminProjektvorstellung: project.terminProjektvorstellung ? new Date(project.terminProjektvorstellung) : null,
+        // 253 of the 1,019 dated rows are German dd.mm.yyyy; `new Date()` reads
+        // those as Invalid Date. parseStoredDate is the single decision point.
+        terminProjektvorstellung: toDate(project.terminProjektvorstellung),
         kommentar: project.kommentar,
         projektLink: project.projektLink,
         syncVersion: SYNC_VERSION,

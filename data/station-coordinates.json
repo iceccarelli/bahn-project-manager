@@ -1,0 +1,5456 @@
+{
+  "31": {
+    "lat": 50.546544,
+    "lng": 7.107071,
+    "source": "stations.json@pre-stage-1",
+    "name": "Ahrweiler"
+  },
+  "32": {
+    "lat": 50.544228,
+    "lng": 7.094229,
+    "source": "stations.json@pre-stage-1",
+    "name": "Ahrweiler Markt"
+  },
+  "42": {
+    "lat": 49.21847,
+    "lng": 8.024464,
+    "source": "stations.json@pre-stage-1",
+    "name": "Albersweiler (Pfalz)"
+  },
+  "44": {
+    "lat": 49.771375,
+    "lng": 8.116579,
+    "source": "stations.json@pre-stage-1",
+    "name": "Albig"
+  },
+  "46": {
+    "lat": 50.545716,
+    "lng": 8.434869,
+    "source": "stations.json@pre-stage-1",
+    "name": "Albshausen"
+  },
+  "59": {
+    "lat": 50.743811,
+    "lng": 8.185486,
+    "source": "stations.json@pre-stage-1",
+    "name": "Allendorf (Dillkr)"
+  },
+  "64": {
+    "lat": 49.727495,
+    "lng": 7.817189,
+    "source": "stations.json@pre-stage-1",
+    "name": "Alsenz"
+  },
+  "65": {
+    "lat": 50.750962,
+    "lng": 9.264297,
+    "source": "stations.json@pre-stage-1",
+    "name": "Alsfeld (Oberhess)"
+  },
+  "66": {
+    "lat": 49.765528,
+    "lng": 8.342462,
+    "source": "stations.json@pre-stage-1",
+    "name": "Alsheim"
+  },
+  "81": {
+    "lat": 50.515652,
+    "lng": 6.989707,
+    "source": "stations.json@pre-stage-1",
+    "name": "Altenahr"
+  },
+  "84": {
+    "lat": 49.786857,
+    "lng": 7.830745,
+    "source": "stations.json@pre-stage-1",
+    "name": "Altenbamberg"
+  },
+  "88": {
+    "lat": 51.165227,
+    "lng": 9.445462,
+    "source": "stations.json@pre-stage-1",
+    "name": "Felsberg-Altenbrunslar"
+  },
+  "95": {
+    "lat": 50.450898,
+    "lng": 9.849726,
+    "source": "stations.json@pre-stage-1",
+    "name": "Altenfeld (Rhön)"
+  },
+  "96": {
+    "lat": 49.548643,
+    "lng": 7.461841,
+    "source": "stations.json@pre-stage-1",
+    "name": "Altenglan"
+  },
+  "105": {
+    "lat": 50.684418,
+    "lng": 7.638257,
+    "source": "stations.json@pre-stage-1",
+    "name": "Altenkirchen (Westerw)"
+  },
+  "109": {
+    "lat": 50.283398,
+    "lng": 8.943977,
+    "source": "stations.json@pre-stage-1",
+    "name": "Altenstadt (Hess)"
+  },
+  "119": {
+    "lat": 49.923332,
+    "lng": 8.890906,
+    "source": "stations.json@pre-stage-1",
+    "name": "Altheim (Hess)"
+  },
+  "125": {
+    "lat": 51.067275,
+    "lng": 9.610756,
+    "source": "stations.json@pre-stage-1",
+    "name": "Morschen-Altmorschen"
+  },
+  "133": {
+    "lat": 49.7502,
+    "lng": 8.109749,
+    "source": "stations.json@pre-stage-1",
+    "name": "Alzey"
+  },
+  "144": {
+    "lat": 50.434542,
+    "lng": 7.404839,
+    "source": "stations.json@pre-stage-1",
+    "name": "Andernach"
+  },
+  "150": {
+    "lat": 50.63077,
+    "lng": 9.44726,
+    "source": "stations.json@pre-stage-1",
+    "name": "Angersbach"
+  },
+  "158": {
+    "lat": 49.205386,
+    "lng": 7.966149,
+    "source": "stations.json@pre-stage-1",
+    "name": "Annweiler am Trifels"
+  },
+  "164": {
+    "lat": 50.845731,
+    "lng": 8.85959,
+    "source": "stations.json@pre-stage-1",
+    "name": "Anzefahr"
+  },
+  "173": {
+    "lat": 50.406403,
+    "lng": 8.211079,
+    "source": "stations.json@pre-stage-1",
+    "name": "Arfurt (Lahn)"
+  },
+  "175": {
+    "lat": 49.808372,
+    "lng": 8.074113,
+    "source": "stations.json@pre-stage-1",
+    "name": "Armsheim"
+  },
+  "197": {
+    "lat": 49.57622,
+    "lng": 8.161602,
+    "source": "stations.json@pre-stage-1",
+    "name": "Asselheim"
+  },
+  "198": {
+    "lat": 50.304939,
+    "lng": 8.812462,
+    "source": "stations.json@pre-stage-1",
+    "name": "Assenheim (Oberhess)"
+  },
+  "199": {
+    "lat": 50.588657,
+    "lng": 8.462756,
+    "source": "stations.json@pre-stage-1",
+    "name": "Aßlar"
+  },
+  "201": {
+    "lat": 49.985324,
+    "lng": 7.867355,
+    "source": "stations.json@pre-stage-1",
+    "name": "Assmannshausen"
+  },
+  "213": {
+    "lat": 49.143343,
+    "lng": 7.044803,
+    "source": "stations.json@pre-stage-1",
+    "name": "Auersmacher"
+  },
+  "228": {
+    "lat": 50.400422,
+    "lng": 8.249249,
+    "source": "stations.json@pre-stage-1",
+    "name": "Aumenau"
+  },
+  "230": {
+    "lat": 50.113608,
+    "lng": 8.332093,
+    "source": "stations.json@pre-stage-1",
+    "name": "Auringen-Medenbach"
+  },
+  "232": {
+    "lat": 49.903596,
+    "lng": 6.614525,
+    "source": "stations.json@pre-stage-1",
+    "name": "Auw an der Kyll"
+  },
+  "234": {
+    "lat": 49.516578,
+    "lng": 7.983562,
+    "source": "stations.json@pre-stage-1",
+    "name": "Eiswoog"
+  },
+  "238": {
+    "lat": 49.957963,
+    "lng": 8.957182,
+    "source": "stations.json@pre-stage-1",
+    "name": "Babenhausen (Hess)"
+  },
+  "240": {
+    "lat": 50.056101,
+    "lng": 7.769523,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bacharach"
+  },
+  "257": {
+    "lat": 50.556266,
+    "lng": 7.217217,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bad Bodendorf"
+  },
+  "259": {
+    "lat": 50.504218,
+    "lng": 7.304564,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bad Breisig"
+  },
+  "261": {
+    "lat": 50.296433,
+    "lng": 8.255036,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bad Camberg"
+  },
+  "266": {
+    "lat": 49.460633,
+    "lng": 8.170701,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bad Dürkheim"
+  },
+  "267": {
+    "lat": 49.466416,
+    "lng": 8.193072,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bad Dürkheim-Trift"
+  },
+  "271": {
+    "lat": 50.327652,
+    "lng": 7.728637,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bad Ems"
+  },
+  "272": {
+    "lat": 50.330694,
+    "lng": 7.706039,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bad Ems West"
+  },
+  "282": {
+    "lat": 50.869632,
+    "lng": 9.716182,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bad Hersfeld"
+  },
+  "284": {
+    "lat": 50.219904,
+    "lng": 8.620624,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bad Homburg"
+  },
+  "286": {
+    "lat": 50.513676,
+    "lng": 7.310871,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bad Hönningen"
+  },
+  "292": {
+    "lat": 49.738577,
+    "lng": 9.001539,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bad König"
+  },
+  "296": {
+    "lat": 49.842399,
+    "lng": 7.866435,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bad Kreuznach"
+  },
+  "307": {
+    "lat": 49.813426,
+    "lng": 7.846989,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bad Münster am Stein"
+  },
+  "310": {
+    "lat": 50.367904,
+    "lng": 8.749334,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bad Nauheim"
+  },
+  "312": {
+    "lat": 50.547765,
+    "lng": 7.144304,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bad Neuenahr"
+  },
+  "329": {
+    "lat": 50.418878,
+    "lng": 8.980381,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bad Salzhausen"
+  },
+  "330": {
+    "lat": 50.205251,
+    "lng": 7.635481,
+    "source": "stations.json@pre-stage-1",
+    "name": "Boppard-Bad Salzig"
+  },
+  "331": {
+    "lat": 50.626935,
+    "lng": 9.494484,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bad Salzschlirf"
+  },
+  "346": {
+    "lat": 50.143406,
+    "lng": 8.504128,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bad Soden (Taunus)"
+  },
+  "347": {
+    "lat": 50.280742,
+    "lng": 9.372053,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bad Soden-Salmünster"
+  },
+  "348": {
+    "lat": 51.267974,
+    "lng": 9.968696,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bad Sooden-Allendorf"
+  },
+  "358": {
+    "lat": 50.188677,
+    "lng": 8.73946,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bad Vilbel"
+  },
+  "359": {
+    "lat": 50.178696,
+    "lng": 8.733477,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bad Vilbel Süd"
+  },
+  "383": {
+    "lat": 50.347388,
+    "lng": 7.967609,
+    "source": "stations.json@pre-stage-1",
+    "name": "Balduinstein"
+  },
+  "391": {
+    "lat": 49.493785,
+    "lng": 7.166538,
+    "source": "stations.json@pre-stage-1",
+    "name": "Baltersweiler"
+  },
+  "443": {
+    "lat": 50.969568,
+    "lng": 9.797788,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bebra"
+  },
+  "446": {
+    "lat": 49.386881,
+    "lng": 6.688021,
+    "source": "stations.json@pre-stage-1",
+    "name": "Beckingen (Saar)"
+  },
+  "464": {
+    "lat": 50.359131,
+    "lng": 8.821022,
+    "source": "stations.json@pre-stage-1",
+    "name": "Beienheim"
+  },
+  "469": {
+    "lat": 51.083076,
+    "lng": 9.55313,
+    "source": "stations.json@pre-stage-1",
+    "name": "Malsfeld-Beiseförth"
+  },
+  "476": {
+    "lat": 49.188303,
+    "lng": 8.29456,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bellheim"
+  },
+  "481": {
+    "lat": 50.010379,
+    "lng": 7.05803,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bengel"
+  },
+  "488": {
+    "lat": 49.681329,
+    "lng": 8.616717,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bensheim"
+  },
+  "489": {
+    "lat": 49.701557,
+    "lng": 8.613366,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bensheim-Auerbach"
+  },
+  "506": {
+    "lat": 49.295449,
+    "lng": 8.406173,
+    "source": "stations.json@pre-stage-1",
+    "name": "Berghausen (Pfalz)"
+  },
+  "585": {
+    "lat": 50.539891,
+    "lng": 8.006031,
+    "source": "stations.json@pre-stage-1",
+    "name": "Berzhahn"
+  },
+  "587": {
+    "lat": 49.504391,
+    "lng": 6.372303,
+    "source": "stations.json@pre-stage-1",
+    "name": "Besch"
+  },
+  "589": {
+    "lat": 49.475974,
+    "lng": 6.602559,
+    "source": "stations.json@pre-stage-1",
+    "name": "Besseringen"
+  },
+  "597": {
+    "lat": 50.789294,
+    "lng": 7.87005,
+    "source": "stations.json@pre-stage-1",
+    "name": "Betzdorf (Sieg)"
+  },
+  "609": {
+    "lat": 49.345698,
+    "lng": 7.254456,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bexbach"
+  },
+  "614": {
+    "lat": 49.688881,
+    "lng": 8.450413,
+    "source": "stations.json@pre-stage-1",
+    "name": "Biblis"
+  },
+  "618": {
+    "lat": 49.759632,
+    "lng": 8.603415,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bickenbach (Bergstr)"
+  },
+  "619": {
+    "lat": 49.781977,
+    "lng": 8.473978,
+    "source": "stations.json@pre-stage-1",
+    "name": "Biebesheim"
+  },
+  "627": {
+    "lat": 49.26189,
+    "lng": 7.282011,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bierbach"
+  },
+  "640": {
+    "lat": 49.337325,
+    "lng": 7.094341,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bildstock"
+  },
+  "649": {
+    "lat": 49.968729,
+    "lng": 7.884263,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bingen (Rhein) Hbf"
+  },
+  "650": {
+    "lat": 49.969746,
+    "lng": 7.902985,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bingen (Rhein) Stadt"
+  },
+  "651": {
+    "lat": 49.967073,
+    "lng": 7.950983,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bingen-Gaulsheim"
+  },
+  "654": {
+    "lat": 50.296357,
+    "lng": 7.153055,
+    "source": "stations.json@pre-stage-1",
+    "name": "Monreal"
+  },
+  "663": {
+    "lat": 50.176411,
+    "lng": 6.628884,
+    "source": "stations.json@pre-stage-1",
+    "name": "Birresborn"
+  },
+  "669": {
+    "lat": 50.140987,
+    "lng": 8.805296,
+    "source": "stations.json@pre-stage-1",
+    "name": "Maintal West"
+  },
+  "678": {
+    "lat": 49.998685,
+    "lng": 6.570958,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bitburg-Erdorf"
+  },
+  "701": {
+    "lat": 50.320334,
+    "lng": 9.051582,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bleichenbach (Oberhess)"
+  },
+  "707": {
+    "lat": 49.249192,
+    "lng": 7.258191,
+    "source": "stations.json@pre-stage-1",
+    "name": "Blieskastel-Lautzkirchen"
+  },
+  "716": {
+    "lat": 49.588139,
+    "lng": 8.35032,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bobenheim"
+  },
+  "721": {
+    "lat": 49.663251,
+    "lng": 8.451786,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bobstadt"
+  },
+  "739": {
+    "lat": 49.929585,
+    "lng": 8.312491,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bodenheim"
+  },
+  "747": {
+    "lat": 49.379831,
+    "lng": 8.303602,
+    "source": "stations.json@pre-stage-1",
+    "name": "Böhl-Iggelheim"
+  },
+  "776": {
+    "lat": 50.231413,
+    "lng": 7.586102,
+    "source": "stations.json@pre-stage-1",
+    "name": "Boppard Hbf"
+  },
+  "784": {
+    "lat": 51.050684,
+    "lng": 9.277,
+    "source": "stations.json@pre-stage-1",
+    "name": "Borken (Hess)"
+  },
+  "796": {
+    "lat": 50.42941,
+    "lng": 8.975223,
+    "source": "stations.json@pre-stage-1",
+    "name": "Borsdorf (Hess)"
+  },
+  "802": {
+    "lat": 50.945697,
+    "lng": 9.993002,
+    "source": "stations.json@pre-stage-1",
+    "name": "Wildeck-Bosserode"
+  },
+  "807": {
+    "lat": 49.275979,
+    "lng": 6.792639,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bous (Saar)"
+  },
+  "809": {
+    "lat": 50.821987,
+    "lng": 7.941492,
+    "source": "stations.json@pre-stage-1",
+    "name": "Brachbach"
+  },
+  "829": {
+    "lat": 50.27414,
+    "lng": 7.643187,
+    "source": "stations.json@pre-stage-1",
+    "name": "Braubach"
+  },
+  "831": {
+    "lat": 50.539915,
+    "lng": 8.366902,
+    "source": "stations.json@pre-stage-1",
+    "name": "Leun/Braunfels"
+  },
+  "838": {
+    "lat": 49.215859,
+    "lng": 7.029176,
+    "source": "stations.json@pre-stage-1",
+    "name": "Brebach"
+  },
+  "853": {
+    "lat": 50.748435,
+    "lng": 7.661486,
+    "source": "stations.json@pre-stage-1",
+    "name": "Breitscheidt (Kr Altenkirchen)"
+  },
+  "881": {
+    "lat": 49.874587,
+    "lng": 7.898692,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bretzenheim (Nahe)"
+  },
+  "893": {
+    "lat": 50.481429,
+    "lng": 7.332639,
+    "source": "stations.json@pre-stage-1",
+    "name": "Brohl"
+  },
+  "899": {
+    "lat": 50.301965,
+    "lng": 8.788402,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bruchenbrücken"
+  },
+  "901": {
+    "lat": 50.186189,
+    "lng": 8.919293,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bruchköbel"
+  },
+  "902": {
+    "lat": 49.385343,
+    "lng": 7.443979,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bruchmühlbach-Miesau"
+  },
+  "908": {
+    "lat": 50.489679,
+    "lng": 6.972391,
+    "source": "stations.json@pre-stage-1",
+    "name": "Ahrbrück"
+  },
+  "923": {
+    "lat": 49.411024,
+    "lng": 6.94821,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bubach"
+  },
+  "926": {
+    "lat": 49.179636,
+    "lng": 7.034846,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bübingen"
+  },
+  "937": {
+    "lat": 50.29737,
+    "lng": 9.066751,
+    "source": "stations.json@pre-stage-1",
+    "name": "Büches-Düdelsheim"
+  },
+  "940": {
+    "lat": 50.210802,
+    "lng": 7.554876,
+    "source": "stations.json@pre-stage-1",
+    "name": "Boppard-Buchholz"
+  },
+  "945": {
+    "lat": 50.022477,
+    "lng": 8.661151,
+    "source": "stations.json@pre-stage-1",
+    "name": "Dreieich-Buchschlag"
+  },
+  "954": {
+    "lat": 50.026835,
+    "lng": 8.174062,
+    "source": "stations.json@pre-stage-1",
+    "name": "Budenheim"
+  },
+  "955": {
+    "lat": 50.214951,
+    "lng": 8.8436,
+    "source": "stations.json@pre-stage-1",
+    "name": "Schöneck-Büdesheim"
+  },
+  "956": {
+    "lat": 50.624747,
+    "lng": 7.895901,
+    "source": "stations.json@pre-stage-1",
+    "name": "Büdingen"
+  },
+  "957": {
+    "lat": 50.28887,
+    "lng": 9.102598,
+    "source": "stations.json@pre-stage-1",
+    "name": "Büdingen (Oberhess)"
+  },
+  "964": {
+    "lat": 50.05446,
+    "lng": 7.134584,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bullay DB"
+  },
+  "975": {
+    "lat": 50.699884,
+    "lng": 8.307686,
+    "source": "stations.json@pre-stage-1",
+    "name": "Burg (Dillkr) Nord"
+  },
+  "978": {
+    "lat": 50.691113,
+    "lng": 9.047604,
+    "source": "stations.json@pre-stage-1",
+    "name": "Burg-und Nieder Gemünden"
+  },
+  "983": {
+    "lat": 50.85375,
+    "lng": 8.817194,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bürgeln"
+  },
+  "984": {
+    "lat": 50.70055,
+    "lng": 9.727953,
+    "source": "stations.json@pre-stage-1",
+    "name": "Burghaun (Kr Hünfeld)"
+  },
+  "987": {
+    "lat": 50.257793,
+    "lng": 8.677106,
+    "source": "stations.json@pre-stage-1",
+    "name": "Burgholzhausen v d Höhe"
+  },
+  "1002": {
+    "lat": 49.645769,
+    "lng": 8.458188,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bürstadt"
+  },
+  "1013": {
+    "lat": 50.431156,
+    "lng": 8.669517,
+    "source": "stations.json@pre-stage-1",
+    "name": "Butzbach"
+  },
+  "1061": {
+    "lat": 50.153092,
+    "lng": 7.166738,
+    "source": "stations.json@pre-stage-1",
+    "name": "Cochem (Mosel)"
+  },
+  "1063": {
+    "lat": 50.848159,
+    "lng": 8.787365,
+    "source": "stations.json@pre-stage-1",
+    "name": "Cölbe"
+  },
+  "1068": {
+    "lat": 49.24528,
+    "lng": 7.427916,
+    "source": "stations.json@pre-stage-1",
+    "name": "Contwig"
+  },
+  "1096": {
+    "lat": 49.70024,
+    "lng": 6.573757,
+    "source": "stations.json@pre-stage-1",
+    "name": "Konz Mitte"
+  },
+  "1126": {
+    "lat": 49.872503,
+    "lng": 8.629636,
+    "source": "stations.json@pre-stage-1",
+    "name": "Darmstadt Hbf"
+  },
+  "1127": {
+    "lat": 49.892136,
+    "lng": 8.654311,
+    "source": "stations.json@pre-stage-1",
+    "name": "Darmstadt Nord"
+  },
+  "1128": {
+    "lat": 49.874743,
+    "lng": 8.673867,
+    "source": "stations.json@pre-stage-1",
+    "name": "Darmstadt Ost"
+  },
+  "1129": {
+    "lat": 49.855426,
+    "lng": 8.636586,
+    "source": "stations.json@pre-stage-1",
+    "name": "Darmstadt Süd"
+  },
+  "1130": {
+    "lat": 49.913414,
+    "lng": 8.645554,
+    "source": "stations.json@pre-stage-1",
+    "name": "Darmstadt-Arheilgen"
+  },
+  "1131": {
+    "lat": 49.813922,
+    "lng": 8.62582,
+    "source": "stations.json@pre-stage-1",
+    "name": "Darmstadt-Eberstadt"
+  },
+  "1132": {
+    "lat": 49.906826,
+    "lng": 8.679359,
+    "source": "stations.json@pre-stage-1",
+    "name": "Darmstadt-Kranichstein"
+  },
+  "1138": {
+    "lat": 49.875969,
+    "lng": 6.639911,
+    "source": "stations.json@pre-stage-1",
+    "name": "Daufenbach"
+  },
+  "1140": {
+    "lat": 50.326866,
+    "lng": 7.758212,
+    "source": "stations.json@pre-stage-1",
+    "name": "Dausenau"
+  },
+  "1151": {
+    "lat": 49.408349,
+    "lng": 8.192634,
+    "source": "stations.json@pre-stage-1",
+    "name": "Deidesheim"
+  },
+  "1157": {
+    "lat": 49.227782,
+    "lng": 7.469169,
+    "source": "stations.json@pre-stage-1",
+    "name": "Dellfeld"
+  },
+  "1158": {
+    "lat": 49.238869,
+    "lng": 7.478162,
+    "source": "stations.json@pre-stage-1",
+    "name": "Dellfeld Ort"
+  },
+  "1164": {
+    "lat": 50.123918,
+    "lng": 6.600406,
+    "source": "stations.json@pre-stage-1",
+    "name": "Densborn"
+  },
+  "1170": {
+    "lat": 50.529648,
+    "lng": 7.041527,
+    "source": "stations.json@pre-stage-1",
+    "name": "Dernau"
+  },
+  "1171": {
+    "lat": 50.457225,
+    "lng": 7.783693,
+    "source": "stations.json@pre-stage-1",
+    "name": "Dernbach (Westerw)"
+  },
+  "1194": {
+    "lat": 49.90369,
+    "lng": 8.839795,
+    "source": "stations.json@pre-stage-1",
+    "name": "Dieburg"
+  },
+  "1211": {
+    "lat": 50.370127,
+    "lng": 8.01962,
+    "source": "stations.json@pre-stage-1",
+    "name": "Diez"
+  },
+  "1212": {
+    "lat": 50.376044,
+    "lng": 8.038587,
+    "source": "stations.json@pre-stage-1",
+    "name": "Diez Ost"
+  },
+  "1213": {
+    "lat": 50.801821,
+    "lng": 8.20377,
+    "source": "stations.json@pre-stage-1",
+    "name": "Dillbrecht"
+  },
+  "1214": {
+    "lat": 50.734883,
+    "lng": 8.294088,
+    "source": "stations.json@pre-stage-1",
+    "name": "Dillenburg"
+  },
+  "1216": {
+    "lat": 49.35271,
+    "lng": 6.72215,
+    "source": "stations.json@pre-stage-1",
+    "name": "Dillingen (Saar)"
+  },
+  "1226": {
+    "lat": 49.415386,
+    "lng": 7.012377,
+    "source": "stations.json@pre-stage-1",
+    "name": "Dirmingen"
+  },
+  "1273": {
+    "lat": 50.352702,
+    "lng": 8.79051,
+    "source": "stations.json@pre-stage-1",
+    "name": "Dorheim (Wetterau)"
+  },
+  "1278": {
+    "lat": 49.877507,
+    "lng": 8.493656,
+    "source": "stations.json@pre-stage-1",
+    "name": "Groß Gerau-Dornheim"
+  },
+  "1285": {
+    "lat": 50.207503,
+    "lng": 8.751145,
+    "source": "stations.json@pre-stage-1",
+    "name": "Dortelweil"
+  },
+  "1293": {
+    "lat": 49.921684,
+    "lng": 6.839254,
+    "source": "stations.json@pre-stage-1",
+    "name": "Salmtal"
+  },
+  "1338": {
+    "lat": 49.998468,
+    "lng": 8.708693,
+    "source": "stations.json@pre-stage-1",
+    "name": "Dreieich-Dreieichenhain"
+  },
+  "1372": {
+    "lat": 50.010661,
+    "lng": 8.884482,
+    "source": "stations.json@pre-stage-1",
+    "name": "Rodgau-Dudenhofen"
+  },
+  "1373": {
+    "lat": 49.277299,
+    "lng": 7.027351,
+    "source": "stations.json@pre-stage-1",
+    "name": "Dudweiler"
+  },
+  "1424": {
+    "lat": 50.56445,
+    "lng": 8.598905,
+    "source": "stations.json@pre-stage-1",
+    "name": "Dutenhofen (Kr Wetzlar)"
+  },
+  "1445": {
+    "lat": 49.564004,
+    "lng": 8.108237,
+    "source": "stations.json@pre-stage-1",
+    "name": "Ebertsheim"
+  },
+  "1452": {
+    "lat": 50.390719,
+    "lng": 8.891312,
+    "source": "stations.json@pre-stage-1",
+    "name": "Echzell"
+  },
+  "1459": {
+    "lat": 50.039492,
+    "lng": 8.456741,
+    "source": "stations.json@pre-stage-1",
+    "name": "Eddersheim"
+  },
+  "1461": {
+    "lat": 49.282053,
+    "lng": 8.14062,
+    "source": "stations.json@pre-stage-1",
+    "name": "Edenkoben"
+  },
+  "1462": {
+    "lat": 49.263736,
+    "lng": 8.139075,
+    "source": "stations.json@pre-stage-1",
+    "name": "Edesheim (Pfalz)"
+  },
+  "1463": {
+    "lat": 50.104697,
+    "lng": 7.139598,
+    "source": "stations.json@pre-stage-1",
+    "name": "Ediger-Eller"
+  },
+  "1464": {
+    "lat": 50.632166,
+    "lng": 8.322823,
+    "source": "stations.json@pre-stage-1",
+    "name": "Edingen (Kr Wetzlar)"
+  },
+  "1468": {
+    "lat": 50.338192,
+    "lng": 9.007483,
+    "source": "stations.json@pre-stage-1",
+    "name": "Effolderbach"
+  },
+  "1471": {
+    "lat": 49.969113,
+    "lng": 8.653632,
+    "source": "stations.json@pre-stage-1",
+    "name": "Egelsbach"
+  },
+  "1487": {
+    "lat": 50.17572,
+    "lng": 7.571324,
+    "source": "stations.json@pre-stage-1",
+    "name": "Ehr"
+  },
+  "1488": {
+    "lat": 49.802029,
+    "lng": 6.685808,
+    "source": "stations.json@pre-stage-1",
+    "name": "Ehrang"
+  },
+  "1492": {
+    "lat": 50.595066,
+    "lng": 8.383841,
+    "source": "stations.json@pre-stage-1",
+    "name": "Ehringshausen (Kr Wetzlar)"
+  },
+  "1493": {
+    "lat": 50.70878,
+    "lng": 9.101862,
+    "source": "stations.json@pre-stage-1",
+    "name": "Ehringshausen (Oberhess)"
+  },
+  "1497": {
+    "lat": 50.255947,
+    "lng": 8.917491,
+    "source": "stations.json@pre-stage-1",
+    "name": "Nidderau-Eichen"
+  },
+  "1500": {
+    "lat": 50.494012,
+    "lng": 9.694717,
+    "source": "stations.json@pre-stage-1",
+    "name": "Eichenzell"
+  },
+  "1514": {
+    "lat": 49.809348,
+    "lng": 6.688324,
+    "source": "stations.json@pre-stage-1",
+    "name": "Ehrang Ort"
+  },
+  "1522": {
+    "lat": 49.266663,
+    "lng": 7.321916,
+    "source": "stations.json@pre-stage-1",
+    "name": "Einöd (Saar)"
+  },
+  "1525": {
+    "lat": 49.431002,
+    "lng": 7.662227,
+    "source": "stations.json@pre-stage-1",
+    "name": "Einsiedlerhof"
+  },
+  "1532": {
+    "lat": 49.494378,
+    "lng": 7.45608,
+    "source": "stations.json@pre-stage-1",
+    "name": "Matzenbach"
+  },
+  "1533": {
+    "lat": 49.554483,
+    "lng": 8.070582,
+    "source": "stations.json@pre-stage-1",
+    "name": "Eisenberg (Pfalz)"
+  },
+  "1572": {
+    "lat": 50.027562,
+    "lng": 8.12153,
+    "source": "stations.json@pre-stage-1",
+    "name": "Eltville"
+  },
+  "1574": {
+    "lat": 50.414294,
+    "lng": 8.038458,
+    "source": "stations.json@pre-stage-1",
+    "name": "Elz (Kr Limburg/Lahn)"
+  },
+  "1575": {
+    "lat": 50.408709,
+    "lng": 8.032223,
+    "source": "stations.json@pre-stage-1",
+    "name": "Elz (Kr Limburg/Lahn) Süd"
+  },
+  "1583": {
+    "lat": 50.157673,
+    "lng": 7.560494,
+    "source": "stations.json@pre-stage-1",
+    "name": "Emmelshausen"
+  },
+  "1599": {
+    "lat": 50.42598,
+    "lng": 7.546827,
+    "source": "stations.json@pre-stage-1",
+    "name": "Engers"
+  },
+  "1602": {
+    "lat": 49.489933,
+    "lng": 7.899501,
+    "source": "stations.json@pre-stage-1",
+    "name": "Enkenbach"
+  },
+  "1604": {
+    "lat": 49.302874,
+    "lng": 6.776015,
+    "source": "stations.json@pre-stage-1",
+    "name": "Ensdorf (Saar)"
+  },
+  "1606": {
+    "lat": 50.616413,
+    "lng": 7.882353,
+    "source": "stations.json@pre-stage-1",
+    "name": "Enspel"
+  },
+  "1607": {
+    "lat": 49.333592,
+    "lng": 8.419263,
+    "source": "stations.json@pre-stage-1",
+    "name": "Speyer Nord-West"
+  },
+  "1612": {
+    "lat": 49.408657,
+    "lng": 6.967189,
+    "source": "stations.json@pre-stage-1",
+    "name": "Eppelborn"
+  },
+  "1613": {
+    "lat": 49.700063,
+    "lng": 8.162882,
+    "source": "stations.json@pre-stage-1",
+    "name": "Eppelsheim (Rheinhess)"
+  },
+  "1614": {
+    "lat": 49.945368,
+    "lng": 8.84236,
+    "source": "stations.json@pre-stage-1",
+    "name": "Eppertshausen"
+  },
+  "1616": {
+    "lat": 50.139833,
+    "lng": 8.387643,
+    "source": "stations.json@pre-stage-1",
+    "name": "Eppstein"
+  },
+  "1617": {
+    "lat": 49.656712,
+    "lng": 8.989827,
+    "source": "stations.json@pre-stage-1",
+    "name": "Erbach (Odenw)"
+  },
+  "1618": {
+    "lat": 49.669584,
+    "lng": 8.989963,
+    "source": "stations.json@pre-stage-1",
+    "name": "Erbach (Odenw) Nord"
+  },
+  "1619": {
+    "lat": 50.023269,
+    "lng": 8.094646,
+    "source": "stations.json@pre-stage-1",
+    "name": "Erbach (Rheingau)"
+  },
+  "1620": {
+    "lat": 50.632114,
+    "lng": 7.90058,
+    "source": "stations.json@pre-stage-1",
+    "name": "Nistertal-Bad Marienberg"
+  },
+  "1627": {
+    "lat": 50.571304,
+    "lng": 8.683241,
+    "source": "stations.json@pre-stage-1",
+    "name": "Gießen Erdkauter Weg"
+  },
+  "1664": {
+    "lat": 50.582064,
+    "lng": 7.241594,
+    "source": "stations.json@pre-stage-1",
+    "name": "Erpel (Rhein)"
+  },
+  "1665": {
+    "lat": 49.488326,
+    "lng": 8.210697,
+    "source": "stations.json@pre-stage-1",
+    "name": "Erpolzheim"
+  },
+  "1668": {
+    "lat": 49.950868,
+    "lng": 8.650993,
+    "source": "stations.json@pre-stage-1",
+    "name": "Erzhausen"
+  },
+  "1671": {
+    "lat": 50.143618,
+    "lng": 8.560971,
+    "source": "stations.json@pre-stage-1",
+    "name": "Eschborn"
+  },
+  "1672": {
+    "lat": 50.133563,
+    "lng": 8.578487,
+    "source": "stations.json@pre-stage-1",
+    "name": "Eschborn Süd"
+  },
+  "1678": {
+    "lat": 50.393586,
+    "lng": 8.10492,
+    "source": "stations.json@pre-stage-1",
+    "name": "Eschhofen"
+  },
+  "1726": {
+    "lat": 50.781323,
+    "lng": 7.688659,
+    "source": "stations.json@pre-stage-1",
+    "name": "Etzbach"
+  },
+  "1744": {
+    "lat": 50.361781,
+    "lng": 7.992566,
+    "source": "stations.json@pre-stage-1",
+    "name": "Fachingen (Lahn)"
+  },
+  "1763": {
+    "lat": 50.098558,
+    "lng": 8.528732,
+    "source": "stations.json@pre-stage-1",
+    "name": "Frankfurt-Höchst Farbwerke"
+  },
+  "1790": {
+    "lat": 50.238894,
+    "lng": 7.583509,
+    "source": "stations.json@pre-stage-1",
+    "name": "Filsen"
+  },
+  "1799": {
+    "lat": 49.304744,
+    "lng": 7.031132,
+    "source": "stations.json@pre-stage-1",
+    "name": "Fischbach-Camphausen"
+  },
+  "1800": {
+    "lat": 49.738901,
+    "lng": 7.404671,
+    "source": "stations.json@pre-stage-1",
+    "name": "Fischbach-Weierbach"
+  },
+  "1807": {
+    "lat": 50.197925,
+    "lng": 7.577889,
+    "source": "stations.json@pre-stage-1",
+    "name": "Boppard-Fleckertshöhe"
+  },
+  "1812": {
+    "lat": 50.421382,
+    "lng": 9.576616,
+    "source": "stations.json@pre-stage-1",
+    "name": "Flieden"
+  },
+  "1817": {
+    "lat": 49.513958,
+    "lng": 8.333801,
+    "source": "stations.json@pre-stage-1",
+    "name": "Flomersheim"
+  },
+  "1818": {
+    "lat": 50.017211,
+    "lng": 8.431013,
+    "source": "stations.json@pre-stage-1",
+    "name": "Flörsheim (Main)"
+  },
+  "1826": {
+    "lat": 49.857099,
+    "lng": 6.767531,
+    "source": "stations.json@pre-stage-1",
+    "name": "Föhren"
+  },
+  "1846": {
+    "lat": 49.438867,
+    "lng": 7.969802,
+    "source": "stations.json@pre-stage-1",
+    "name": "Frankenstein (Pfalz)"
+  },
+  "1848": {
+    "lat": 49.535567,
+    "lng": 8.349702,
+    "source": "stations.json@pre-stage-1",
+    "name": "Frankenthal Hbf"
+  },
+  "1849": {
+    "lat": 50.051219,
+    "lng": 8.571251,
+    "source": "stations.json@pre-stage-1",
+    "name": "Frankfurt (Main) Flughafen Regionalbahnhof"
+  },
+  "1850": {
+    "lat": 50.102171,
+    "lng": 8.693025,
+    "source": "stations.json@pre-stage-1",
+    "name": "Frankfurt (Main) Lokalbahnhof"
+  },
+  "1851": {
+    "lat": 50.101609,
+    "lng": 8.701504,
+    "source": "stations.json@pre-stage-1",
+    "name": "Frankfurt (Main) Mühlberg"
+  },
+  "1852": {
+    "lat": 50.112574,
+    "lng": 8.70864,
+    "source": "stations.json@pre-stage-1",
+    "name": "Frankfurt (Main) Ost"
+  },
+  "1853": {
+    "lat": 50.112562,
+    "lng": 8.696987,
+    "source": "stations.json@pre-stage-1",
+    "name": "Frankfurt (Main) Ostendstraße"
+  },
+  "1854": {
+    "lat": 50.068228,
+    "lng": 8.633247,
+    "source": "stations.json@pre-stage-1",
+    "name": "Frankfurt am Main Stadion"
+  },
+  "1855": {
+    "lat": 50.094438,
+    "lng": 8.671248,
+    "source": "stations.json@pre-stage-1",
+    "name": "Frankfurt (Main) Stresemannallee"
+  },
+  "1856": {
+    "lat": 50.099365,
+    "lng": 8.686457,
+    "source": "stations.json@pre-stage-1",
+    "name": "Frankfurt (Main) Süd"
+  },
+  "1857": {
+    "lat": 50.113565,
+    "lng": 8.668864,
+    "source": "stations.json@pre-stage-1",
+    "name": "Frankfurt (Main) Taunusanlage"
+  },
+  "1858": {
+    "lat": 50.118864,
+    "lng": 8.639335,
+    "source": "stations.json@pre-stage-1",
+    "name": "Frankfurt (Main) West"
+  },
+  "1863": {
+    "lat": 50.10403,
+    "lng": 8.64472,
+    "source": "stations.json@pre-stage-1",
+    "name": "Frankfurt (Main) Galluswarte"
+  },
+  "1864": {
+    "lat": 50.113926,
+    "lng": 8.678947,
+    "source": "stations.json@pre-stage-1",
+    "name": "Frankfurt (Main) Hauptwache"
+  },
+  "1865": {
+    "lat": 50.114623,
+    "lng": 8.687098,
+    "source": "stations.json@pre-stage-1",
+    "name": "Frankfurt (Main) Konstablerwache"
+  },
+  "1866": {
+    "lat": 50.107145,
+    "lng": 8.663789,
+    "source": "stations.json@pre-stage-1",
+    "name": "Frankfurt (Main) Hbf"
+  },
+  "1867": {
+    "lat": 50.176486,
+    "lng": 8.697827,
+    "source": "stations.json@pre-stage-1",
+    "name": "Frankfurt-Berkersheim"
+  },
+  "1868": {
+    "lat": 50.158583,
+    "lng": 8.655431,
+    "source": "stations.json@pre-stage-1",
+    "name": "Frankfurt-Eschersheim"
+  },
+  "1869": {
+    "lat": 50.170266,
+    "lng": 8.676551,
+    "source": "stations.json@pre-stage-1",
+    "name": "Frankfurt-Frankfurter Berg"
+  },
+  "1870": {
+    "lat": 50.320279,
+    "lng": 8.747646,
+    "source": "stations.json@pre-stage-1",
+    "name": "Friedberg Süd"
+  },
+  "1871": {
+    "lat": 50.094334,
+    "lng": 8.606394,
+    "source": "stations.json@pre-stage-1",
+    "name": "Frankfurt-Griesheim"
+  },
+  "1872": {
+    "lat": 50.102634,
+    "lng": 8.54237,
+    "source": "stations.json@pre-stage-1",
+    "name": "Frankfurt-Höchst"
+  },
+  "1873": {
+    "lat": 50.083956,
+    "lng": 8.670369,
+    "source": "stations.json@pre-stage-1",
+    "name": "Frankfurt-Louisa"
+  },
+  "1874": {
+    "lat": 50.134603,
+    "lng": 8.767437,
+    "source": "stations.json@pre-stage-1",
+    "name": "Frankfurt-Mainkur"
+  },
+  "1875": {
+    "lat": 50.102519,
+    "lng": 8.570734,
+    "source": "stations.json@pre-stage-1",
+    "name": "Frankfurt-Nied"
+  },
+  "1876": {
+    "lat": 50.081283,
+    "lng": 8.637075,
+    "source": "stations.json@pre-stage-1",
+    "name": "Frankfurt (Main) Niederrad"
+  },
+  "1877": {
+    "lat": 50.124615,
+    "lng": 8.607026,
+    "source": "stations.json@pre-stage-1",
+    "name": "Frankfurt-Rödelheim"
+  },
+  "1878": {
+    "lat": 50.087497,
+    "lng": 8.512259,
+    "source": "stations.json@pre-stage-1",
+    "name": "Frankfurt-Sindlingen"
+  },
+  "1879": {
+    "lat": 50.115074,
+    "lng": 8.553526,
+    "source": "stations.json@pre-stage-1",
+    "name": "Frankfurt-Sossenheim"
+  },
+  "1907": {
+    "lat": 49.501493,
+    "lng": 8.205192,
+    "source": "stations.json@pre-stage-1",
+    "name": "Freinsheim"
+  },
+  "1916": {
+    "lat": 49.410083,
+    "lng": 6.647867,
+    "source": "stations.json@pre-stage-1",
+    "name": "Fremersdorf"
+  },
+  "1923": {
+    "lat": 50.815983,
+    "lng": 7.897253,
+    "source": "stations.json@pre-stage-1",
+    "name": "Freusburg Siedlung"
+  },
+  "1926": {
+    "lat": 50.504908,
+    "lng": 8.030676,
+    "source": "stations.json@pre-stage-1",
+    "name": "Frickhofen"
+  },
+  "1930": {
+    "lat": 50.332606,
+    "lng": 8.762056,
+    "source": "stations.json@pre-stage-1",
+    "name": "Friedberg (Hess)"
+  },
+  "1931": {
+    "lat": 50.671607,
+    "lng": 8.710961,
+    "source": "stations.json@pre-stage-1",
+    "name": "Friedelhausen"
+  },
+  "1938": {
+    "lat": 50.896879,
+    "lng": 9.743325,
+    "source": "stations.json@pre-stage-1",
+    "name": "Ludwigsau-Friedlos"
+  },
+  "1942": {
+    "lat": 50.25249,
+    "lng": 8.644776,
+    "source": "stations.json@pre-stage-1",
+    "name": "Friedrichsdorf (Taunus)"
+  },
+  "1952": {
+    "lat": 50.311955,
+    "lng": 7.650733,
+    "source": "stations.json@pre-stage-1",
+    "name": "Friedrichssegen"
+  },
+  "1956": {
+    "lat": 49.320061,
+    "lng": 7.08913,
+    "source": "stations.json@pre-stage-1",
+    "name": "Friedrichsthal (Saar)"
+  },
+  "1970": {
+    "lat": 50.706333,
+    "lng": 8.698651,
+    "source": "stations.json@pre-stage-1",
+    "name": "Fronhausen (Lahn)"
+  },
+  "1973": {
+    "lat": 50.554723,
+    "lng": 9.683977,
+    "source": "stations.json@pre-stage-1",
+    "name": "Fulda"
+  },
+  "1974": {
+    "lat": 50.430492,
+    "lng": 8.253138,
+    "source": "stations.json@pre-stage-1",
+    "name": "Fürfurt"
+  },
+  "2009": {
+    "lat": 50.540288,
+    "lng": 8.745273,
+    "source": "stations.json@pre-stage-1",
+    "name": "Garbenteich"
+  },
+  "2019": {
+    "lat": 49.961432,
+    "lng": 8.016065,
+    "source": "stations.json@pre-stage-1",
+    "name": "Gau Algesheim"
+  },
+  "2020": {
+    "lat": 49.840292,
+    "lng": 8.020291,
+    "source": "stations.json@pre-stage-1",
+    "name": "Gau Bickelheim"
+  },
+  "2038": {
+    "lat": 50.77157,
+    "lng": 7.638667,
+    "source": "stations.json@pre-stage-1",
+    "name": "Geilhausen"
+  },
+  "2042": {
+    "lat": 49.985973,
+    "lng": 7.968804,
+    "source": "stations.json@pre-stage-1",
+    "name": "Geisenheim"
+  },
+  "2051": {
+    "lat": 50.196343,
+    "lng": 9.189278,
+    "source": "stations.json@pre-stage-1",
+    "name": "Gelnhausen"
+  },
+  "2064": {
+    "lat": 49.89826,
+    "lng": 7.938188,
+    "source": "stations.json@pre-stage-1",
+    "name": "Gensingen-Horrweiler"
+  },
+  "2065": {
+    "lat": 51.131122,
+    "lng": 9.43563,
+    "source": "stations.json@pre-stage-1",
+    "name": "Felsberg-Gensungen"
+  },
+  "2092": {
+    "lat": 49.225402,
+    "lng": 8.365282,
+    "source": "stations.json@pre-stage-1",
+    "name": "Germersheim"
+  },
+  "2097": {
+    "lat": 49.753598,
+    "lng": 8.4902,
+    "source": "stations.json@pre-stage-1",
+    "name": "Gernsheim"
+  },
+  "2099": {
+    "lat": 50.224006,
+    "lng": 6.660372,
+    "source": "stations.json@pre-stage-1",
+    "name": "Gerolstein"
+  },
+  "2102": {
+    "lat": 50.449413,
+    "lng": 9.914847,
+    "source": "stations.json@pre-stage-1",
+    "name": "Gersfeld (Rhön)"
+  },
+  "2111": {
+    "lat": 50.379191,
+    "lng": 8.885796,
+    "source": "stations.json@pre-stage-1",
+    "name": "Gettenau-Bingenheim"
+  },
+  "2120": {
+    "lat": 50.579059,
+    "lng": 8.661462,
+    "source": "stations.json@pre-stage-1",
+    "name": "Gießen"
+  },
+  "2121": {
+    "lat": 50.581667,
+    "lng": 8.697242,
+    "source": "stations.json@pre-stage-1",
+    "name": "Gießen Licher Straße"
+  },
+  "2128": {
+    "lat": 50.454329,
+    "lng": 7.902936,
+    "source": "stations.json@pre-stage-1",
+    "name": "Girod"
+  },
+  "2136": {
+    "lat": 49.470176,
+    "lng": 7.444848,
+    "source": "stations.json@pre-stage-1",
+    "name": "Glan-Münchweiler"
+  },
+  "2140": {
+    "lat": 50.313752,
+    "lng": 8.996016,
+    "source": "stations.json@pre-stage-1",
+    "name": "Glauburg-Glauberg"
+  },
+  "2158": {
+    "lat": 50.597631,
+    "lng": 8.921448,
+    "source": "stations.json@pre-stage-1",
+    "name": "Göbelnrod"
+  },
+  "2161": {
+    "lat": 49.83323,
+    "lng": 8.489187,
+    "source": "stations.json@pre-stage-1",
+    "name": "Riedstadt-Goddelau"
+  },
+  "2163": {
+    "lat": 49.20685,
+    "lng": 8.076028,
+    "source": "stations.json@pre-stage-1",
+    "name": "Godramstein"
+  },
+  "2174": {
+    "lat": 50.46142,
+    "lng": 7.873064,
+    "source": "stations.json@pre-stage-1",
+    "name": "Goldhausen"
+  },
+  "2221": {
+    "lat": 49.994216,
+    "lng": 8.7322,
+    "source": "stations.json@pre-stage-1",
+    "name": "Dreieich-Götzenhain"
+  },
+  "2249": {
+    "lat": 50.451905,
+    "lng": 8.250757,
+    "source": "stations.json@pre-stage-1",
+    "name": "Gräveneck"
+  },
+  "2250": {
+    "lat": 51.447238,
+    "lng": 9.420533,
+    "source": "stations.json@pre-stage-1",
+    "name": "Grebenstein"
+  },
+  "2274": {
+    "lat": 51.209958,
+    "lng": 9.448855,
+    "source": "stations.json@pre-stage-1",
+    "name": "Edermünde-Grifte"
+  },
+  "2287": {
+    "lat": 50.191529,
+    "lng": 8.783203,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bad Vilbel-Gronau"
+  },
+  "2299": {
+    "lat": 49.924934,
+    "lng": 8.486215,
+    "source": "stations.json@pre-stage-1",
+    "name": "Groß Gerau"
+  },
+  "2300": {
+    "lat": 49.912279,
+    "lng": 8.494709,
+    "source": "stations.json@pre-stage-1",
+    "name": "Groß Gerau-Dornberg"
+  },
+  "2303": {
+    "lat": 50.23184,
+    "lng": 8.753528,
+    "source": "stations.json@pre-stage-1",
+    "name": "Groß Karben"
+  },
+  "2316": {
+    "lat": 49.714066,
+    "lng": 8.476857,
+    "source": "stations.json@pre-stage-1",
+    "name": "Groß Rohrheim"
+  },
+  "2320": {
+    "lat": 49.865213,
+    "lng": 8.924171,
+    "source": "stations.json@pre-stage-1",
+    "name": "Groß Umstadt Mitte"
+  },
+  "2324": {
+    "lat": 50.107054,
+    "lng": 8.943902,
+    "source": "stations.json@pre-stage-1",
+    "name": "Großauheim (Kr Hanau)"
+  },
+  "2336": {
+    "lat": 50.60574,
+    "lng": 8.782999,
+    "source": "stations.json@pre-stage-1",
+    "name": "Großen Buseck"
+  },
+  "2337": {
+    "lat": 50.527851,
+    "lng": 8.661998,
+    "source": "stations.json@pre-stage-1",
+    "name": "Großen Linden"
+  },
+  "2342": {
+    "lat": 50.592936,
+    "lng": 9.550001,
+    "source": "stations.json@pre-stage-1",
+    "name": "Großenlüder"
+  },
+  "2352": {
+    "lat": 50.087726,
+    "lng": 8.982792,
+    "source": "stations.json@pre-stage-1",
+    "name": "Großkrotzenburg"
+  },
+  "2389": {
+    "lat": 50.596589,
+    "lng": 8.959931,
+    "source": "stations.json@pre-stage-1",
+    "name": "Grünberg (Oberhess)"
+  },
+  "2393": {
+    "lat": 50.777143,
+    "lng": 7.90235,
+    "source": "stations.json@pre-stage-1",
+    "name": "Grünebach Ort"
+  },
+  "2394": {
+    "lat": 50.781656,
+    "lng": 7.891546,
+    "source": "stations.json@pre-stage-1",
+    "name": "Grünebacher Hütte"
+  },
+  "2402": {
+    "lat": 49.564384,
+    "lng": 8.167962,
+    "source": "stations.json@pre-stage-1",
+    "name": "Grünstadt"
+  },
+  "2403": {
+    "lat": 49.573355,
+    "lng": 8.170781,
+    "source": "stations.json@pre-stage-1",
+    "name": "Grünstadt Nord"
+  },
+  "2407": {
+    "lat": 49.198242,
+    "lng": 7.030701,
+    "source": "stations.json@pre-stage-1",
+    "name": "Güdingen"
+  },
+  "2408": {
+    "lat": 50.340849,
+    "lng": 7.549005,
+    "source": "stations.json@pre-stage-1",
+    "name": "Koblenz-Güls"
+  },
+  "2417": {
+    "lat": 49.690167,
+    "lng": 8.196596,
+    "source": "stations.json@pre-stage-1",
+    "name": "Gundersheim (Rheinhess)"
+  },
+  "2419": {
+    "lat": 49.79198,
+    "lng": 8.351257,
+    "source": "stations.json@pre-stage-1",
+    "name": "Guntersblum"
+  },
+  "2420": {
+    "lat": 51.229917,
+    "lng": 9.466997,
+    "source": "stations.json@pre-stage-1",
+    "name": "Baunatal-Guntershausen"
+  },
+  "2440": {
+    "lat": 51.204322,
+    "lng": 9.482159,
+    "source": "stations.json@pre-stage-1",
+    "name": "Guxhagen"
+  },
+  "2446": {
+    "lat": 50.664001,
+    "lng": 7.822895,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hachenburg"
+  },
+  "2448": {
+    "lat": 50.447188,
+    "lng": 8.043453,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hadamar"
+  },
+  "2471": {
+    "lat": 49.73935,
+    "lng": 8.606664,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hähnlein-Alsbach"
+  },
+  "2475": {
+    "lat": 50.741352,
+    "lng": 8.220657,
+    "source": "stations.json@pre-stage-1",
+    "name": "Haiger"
+  },
+  "2476": {
+    "lat": 50.741208,
+    "lng": 8.201961,
+    "source": "stations.json@pre-stage-1",
+    "name": "Haiger Obertor"
+  },
+  "2477": {
+    "lat": 50.189671,
+    "lng": 9.150665,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hailer-Meerholz"
+  },
+  "2479": {
+    "lat": 50.04022,
+    "lng": 8.875611,
+    "source": "stations.json@pre-stage-1",
+    "name": "Rodgau-Hainhausen"
+  },
+  "2482": {
+    "lat": 50.078113,
+    "lng": 8.938135,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hainburg Hainstadt"
+  },
+  "2483": {
+    "lat": 50.208634,
+    "lng": 9.226821,
+    "source": "stations.json@pre-stage-1",
+    "name": "Haitz-Höchst"
+  },
+  "2537": {
+    "lat": 50.120953,
+    "lng": 8.929,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hanau Hbf"
+  },
+  "2538": {
+    "lat": 50.141433,
+    "lng": 8.925848,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hanau Nord"
+  },
+  "2539": {
+    "lat": 50.131949,
+    "lng": 8.908818,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hanau West"
+  },
+  "2540": {
+    "lat": 50.143872,
+    "lng": 8.88325,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hanau-Wilhelmsbad"
+  },
+  "2553": {
+    "lat": 49.118753,
+    "lng": 7.049986,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hanweiler-Bad Rilchingen"
+  },
+  "2580": {
+    "lat": 49.263323,
+    "lng": 7.171309,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hassel (Saar)"
+  },
+  "2585": {
+    "lat": 49.371956,
+    "lng": 8.253396,
+    "source": "stations.json@pre-stage-1",
+    "name": "Haßloch (Pfalz)"
+  },
+  "2588": {
+    "lat": 50.013663,
+    "lng": 8.0568,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hattenheim"
+  },
+  "2589": {
+    "lat": 50.067879,
+    "lng": 8.489638,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hattersheim (Main)"
+  },
+  "2590": {
+    "lat": 50.676034,
+    "lng": 7.776343,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hattert"
+  },
+  "2595": {
+    "lat": 50.227678,
+    "lng": 7.413508,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hatzenport"
+  },
+  "2597": {
+    "lat": 49.201394,
+    "lng": 7.830006,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hauenstein (Pfalz)"
+  },
+  "2600": {
+    "lat": 49.401974,
+    "lng": 7.490949,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hauptstuhl"
+  },
+  "2607": {
+    "lat": 50.418594,
+    "lng": 8.939159,
+    "source": "stations.json@pre-stage-1",
+    "name": "Häuserhof"
+  },
+  "2644": {
+    "lat": 49.997023,
+    "lng": 8.111318,
+    "source": "stations.json@pre-stage-1",
+    "name": "Heidesheim (Rheinhess)"
+  },
+  "2655": {
+    "lat": 49.28566,
+    "lng": 8.393726,
+    "source": "stations.json@pre-stage-1",
+    "name": "Heiligenstein (Pfalz)"
+  },
+  "2658": {
+    "lat": 49.617676,
+    "lng": 7.231047,
+    "source": "stations.json@pre-stage-1",
+    "name": "Heimbach (Nahe)"
+  },
+  "2660": {
+    "lat": 50.54745,
+    "lng": 7.174409,
+    "source": "stations.json@pre-stage-1",
+    "name": "Heimersheim"
+  },
+  "2664": {
+    "lat": 51.045739,
+    "lng": 9.664423,
+    "source": "stations.json@pre-stage-1",
+    "name": "Alheim-Heinebach"
+  },
+  "2667": {
+    "lat": 49.625596,
+    "lng": 7.607437,
+    "source": "stations.json@pre-stage-1",
+    "name": "Heinzenhausen"
+  },
+  "2670": {
+    "lat": 50.230826,
+    "lng": 8.880233,
+    "source": "stations.json@pre-stage-1",
+    "name": "Nidderau"
+  },
+  "2682": {
+    "lat": 49.353998,
+    "lng": 6.614569,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hemmersdorf (Saar)"
+  },
+  "2693": {
+    "lat": 49.641553,
+    "lng": 8.633379,
+    "source": "stations.json@pre-stage-1",
+    "name": "Heppenheim (Bergstr)"
+  },
+  "2701": {
+    "lat": 50.684405,
+    "lng": 8.30814,
+    "source": "stations.json@pre-stage-1",
+    "name": "Herborn (Dillkr)"
+  },
+  "2707": {
+    "lat": 50.778301,
+    "lng": 7.953074,
+    "source": "stations.json@pre-stage-1",
+    "name": "Herdorf"
+  },
+  "2710": {
+    "lat": 49.936802,
+    "lng": 8.916575,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hergershausen"
+  },
+  "2737": {
+    "lat": 49.509491,
+    "lng": 8.190044,
+    "source": "stations.json@pre-stage-1",
+    "name": "Herxheim am Berg"
+  },
+  "2749": {
+    "lat": 49.807596,
+    "lng": 8.983195,
+    "source": "stations.json@pre-stage-1",
+    "name": "Höchst-Hetschbach"
+  },
+  "2751": {
+    "lat": 50.448397,
+    "lng": 9.814657,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hettenhausen"
+  },
+  "2753": {
+    "lat": 49.594899,
+    "lng": 8.992856,
+    "source": "stations.json@pre-stage-1",
+    "name": "Beerfelden-Hetzbach"
+  },
+  "2755": {
+    "lat": 49.878134,
+    "lng": 6.798385,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hetzerath"
+  },
+  "2779": {
+    "lat": 49.201538,
+    "lng": 7.747673,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hinterweidenthal"
+  },
+  "2780": {
+    "lat": 49.203132,
+    "lng": 7.773047,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hinterweidenthal Ost"
+  },
+  "2792": {
+    "lat": 49.515588,
+    "lng": 7.681008,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hirschhorn (Pfalz)"
+  },
+  "2794": {
+    "lat": 50.175075,
+    "lng": 7.648436,
+    "source": "stations.json@pre-stage-1",
+    "name": "Boppard-Hirzenach"
+  },
+  "2802": {
+    "lat": 50.004253,
+    "lng": 8.350398,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hochheim (Main)"
+  },
+  "2805": {
+    "lat": 49.443993,
+    "lng": 7.904244,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hochspeyer"
+  },
+  "2806": {
+    "lat": 50.269767,
+    "lng": 8.923418,
+    "source": "stations.json@pre-stage-1",
+    "name": "Altenstadt-Höchst"
+  },
+  "2807": {
+    "lat": 49.794499,
+    "lng": 8.988549,
+    "source": "stations.json@pre-stage-1",
+    "name": "Höchst (Odenw)"
+  },
+  "2809": {
+    "lat": 50.14234,
+    "lng": 8.836714,
+    "source": "stations.json@pre-stage-1",
+    "name": "Maintal Ost"
+  },
+  "2811": {
+    "lat": 49.763342,
+    "lng": 7.829096,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hochstätten (Pfalz)"
+  },
+  "2812": {
+    "lat": 49.798662,
+    "lng": 7.510962,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hochstetten (Nahe)"
+  },
+  "2820": {
+    "lat": 49.511922,
+    "lng": 7.159755,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hofeld"
+  },
+  "2825": {
+    "lat": 51.499186,
+    "lng": 9.395461,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hofgeismar"
+  },
+  "2826": {
+    "lat": 49.659467,
+    "lng": 8.40897,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hofheim (Ried)"
+  },
+  "2827": {
+    "lat": 50.084471,
+    "lng": 8.443842,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hofheim (Taunus)"
+  },
+  "2830": {
+    "lat": 50.76484,
+    "lng": 7.642228,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hohegrete"
+  },
+  "2868": {
+    "lat": 49.243893,
+    "lng": 7.526028,
+    "source": "stations.json@pre-stage-1",
+    "name": "Höhmühlbach"
+  },
+  "2892": {
+    "lat": 49.328082,
+    "lng": 7.337035,
+    "source": "stations.json@pre-stage-1",
+    "name": "Homburg (Saar) Hbf"
+  },
+  "2893": {
+    "lat": 50.935432,
+    "lng": 9.944241,
+    "source": "stations.json@pre-stage-1",
+    "name": "Wildeck-Hönebach"
+  },
+  "2905": {
+    "lat": 49.615527,
+    "lng": 7.195011,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hoppstädten (Nahe)"
+  },
+  "2945": {
+    "lat": 51.542923,
+    "lng": 9.401965,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hofgeismar-Hümme"
+  },
+  "2949": {
+    "lat": 50.673271,
+    "lng": 9.762453,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hünfeld"
+  },
+  "2950": {
+    "lat": 50.478055,
+    "lng": 8.89279,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hungen"
+  },
+  "2958": {
+    "lat": 49.967418,
+    "lng": 6.585008,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hüttingen"
+  },
+  "2964": {
+    "lat": 49.699368,
+    "lng": 7.32123,
+    "source": "stations.json@pre-stage-1",
+    "name": "Idar-Oberstein"
+  },
+  "2965": {
+    "lat": 50.21599,
+    "lng": 8.257264,
+    "source": "stations.json@pre-stage-1",
+    "name": "Idstein (Taunus)"
+  },
+  "2966": {
+    "lat": 49.70737,
+    "lng": 6.550679,
+    "source": "stations.json@pre-stage-1",
+    "name": "Igel"
+  },
+  "2970": {
+    "lat": 51.348591,
+    "lng": 9.52607,
+    "source": "stations.json@pre-stage-1",
+    "name": "Fuldatal-Ihringshausen"
+  },
+  "2974": {
+    "lat": 49.376422,
+    "lng": 7.048966,
+    "source": "stations.json@pre-stage-1",
+    "name": "Illingen (Saar)"
+  },
+  "2983": {
+    "lat": 51.426902,
+    "lng": 9.464397,
+    "source": "stations.json@pre-stage-1",
+    "name": "Immenhausen (Hess)"
+  },
+  "2987": {
+    "lat": 49.597656,
+    "lng": 7.807976,
+    "source": "stations.json@pre-stage-1",
+    "name": "Imsweiler"
+  },
+  "2991": {
+    "lat": 50.688903,
+    "lng": 7.726214,
+    "source": "stations.json@pre-stage-1",
+    "name": "Ingelbach"
+  },
+  "2992": {
+    "lat": 49.976277,
+    "lng": 8.053716,
+    "source": "stations.json@pre-stage-1",
+    "name": "Ingelheim"
+  },
+  "2999": {
+    "lat": 49.157166,
+    "lng": 8.152134,
+    "source": "stations.json@pre-stage-1",
+    "name": "Insheim"
+  },
+  "3024": {
+    "lat": 49.265758,
+    "lng": 7.00497,
+    "source": "stations.json@pre-stage-1",
+    "name": "Jägersfreude"
+  },
+  "3057": {
+    "lat": 49.092289,
+    "lng": 8.272272,
+    "source": "stations.json@pre-stage-1",
+    "name": "Jockgrim"
+  },
+  "3066": {
+    "lat": 50.025984,
+    "lng": 8.878957,
+    "source": "stations.json@pre-stage-1",
+    "name": "Rodgau-Jügesheim"
+  },
+  "3069": {
+    "lat": 50.344769,
+    "lng": 6.580939,
+    "source": "stations.json@pre-stage-1",
+    "name": "Jünkerath"
+  },
+  "3081": {
+    "lat": 49.539338,
+    "lng": 9.077482,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hesseneck-Kailbach"
+  },
+  "3082": {
+    "lat": 49.436137,
+    "lng": 7.768716,
+    "source": "stations.json@pre-stage-1",
+    "name": "Kaiserslautern Hbf"
+  },
+  "3083": {
+    "lat": 49.434714,
+    "lng": 7.751248,
+    "source": "stations.json@pre-stage-1",
+    "name": "Kaiserslautern Pfaffwerk"
+  },
+  "3084": {
+    "lat": 49.447535,
+    "lng": 7.749812,
+    "source": "stations.json@pre-stage-1",
+    "name": "Kaiserslautern West"
+  },
+  "3099": {
+    "lat": 50.227988,
+    "lng": 7.618251,
+    "source": "stations.json@pre-stage-1",
+    "name": "Kamp-Bornhofen"
+  },
+  "3100": {
+    "lat": 49.07914,
+    "lng": 8.198025,
+    "source": "stations.json@pre-stage-1",
+    "name": "Kandel"
+  },
+  "3101": {
+    "lat": 49.669359,
+    "lng": 6.573666,
+    "source": "stations.json@pre-stage-1",
+    "name": "Kanzem"
+  },
+  "3119": {
+    "lat": 49.71034,
+    "lng": 6.596854,
+    "source": "stations.json@pre-stage-1",
+    "name": "Karthaus"
+  },
+  "3124": {
+    "lat": 51.31826,
+    "lng": 9.489501,
+    "source": "stations.json@pre-stage-1",
+    "name": "Kassel Hbf"
+  },
+  "3125": {
+    "lat": 51.332178,
+    "lng": 9.45225,
+    "source": "stations.json@pre-stage-1",
+    "name": "Kassel-Harleshausen"
+  },
+  "3126": {
+    "lat": 51.276348,
+    "lng": 9.454028,
+    "source": "stations.json@pre-stage-1",
+    "name": "Kassel-Oberzwehren"
+  },
+  "3127": {
+    "lat": 51.313114,
+    "lng": 9.446898,
+    "source": "stations.json@pre-stage-1",
+    "name": "Kassel-Wilhelmshöhe"
+  },
+  "3134": {
+    "lat": 50.254549,
+    "lng": 7.439219,
+    "source": "stations.json@pre-stage-1",
+    "name": "Kattenes"
+  },
+  "3136": {
+    "lat": 50.615947,
+    "lng": 8.343189,
+    "source": "stations.json@pre-stage-1",
+    "name": "Katzenfurt"
+  },
+  "3139": {
+    "lat": 49.500082,
+    "lng": 7.700935,
+    "source": "stations.json@pre-stage-1",
+    "name": "Katzweiler"
+  },
+  "3140": {
+    "lat": 50.083196,
+    "lng": 7.76875,
+    "source": "stations.json@pre-stage-1",
+    "name": "Kaub"
+  },
+  "3152": {
+    "lat": 50.06249,
+    "lng": 8.529479,
+    "source": "stations.json@pre-stage-1",
+    "name": "Kelsterbach"
+  },
+  "3158": {
+    "lat": 49.440998,
+    "lng": 7.733013,
+    "source": "stations.json@pre-stage-1",
+    "name": "Kennelgarten"
+  },
+  "3161": {
+    "lat": 50.401962,
+    "lng": 8.135882,
+    "source": "stations.json@pre-stage-1",
+    "name": "Kerkerbach"
+  },
+  "3165": {
+    "lat": 50.187065,
+    "lng": 7.648978,
+    "source": "stations.json@pre-stage-1",
+    "name": "Kestert"
+  },
+  "3178": {
+    "lat": 50.201787,
+    "lng": 8.84042,
+    "source": "stations.json@pre-stage-1",
+    "name": "Schöneck-Kilianstädten"
+  },
+  "3179": {
+    "lat": 49.419371,
+    "lng": 7.612836,
+    "source": "stations.json@pre-stage-1",
+    "name": "Kindsbach"
+  },
+  "3180": {
+    "lat": 50.473373,
+    "lng": 8.666869,
+    "source": "stations.json@pre-stage-1",
+    "name": "Kirch Göns"
+  },
+  "3186": {
+    "lat": 50.806576,
+    "lng": 7.880509,
+    "source": "stations.json@pre-stage-1",
+    "name": "Kirchen"
+  },
+  "3191": {
+    "lat": 50.823779,
+    "lng": 8.921399,
+    "source": "stations.json@pre-stage-1",
+    "name": "Kirchhain (Bz Kassel)"
+  },
+  "3198": {
+    "lat": 49.537163,
+    "lng": 8.181452,
+    "source": "stations.json@pre-stage-1",
+    "name": "Kirchheim (Weinstr)"
+  },
+  "3207": {
+    "lat": 49.286182,
+    "lng": 7.22645,
+    "source": "stations.json@pre-stage-1",
+    "name": "Kirkel"
+  },
+  "3208": {
+    "lat": 49.785769,
+    "lng": 7.464589,
+    "source": "stations.json@pre-stage-1",
+    "name": "Kirn"
+  },
+  "3209": {
+    "lat": 49.762324,
+    "lng": 7.435477,
+    "source": "stations.json@pre-stage-1",
+    "name": "Kirnsulzbach"
+  },
+  "3226": {
+    "lat": 50.100734,
+    "lng": 8.934288,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hanau Klein Auheim"
+  },
+  "3230": {
+    "lat": 49.919849,
+    "lng": 8.51674,
+    "source": "stations.json@pre-stage-1",
+    "name": "Klein Gerau"
+  },
+  "3237": {
+    "lat": 49.894367,
+    "lng": 8.938635,
+    "source": "stations.json@pre-stage-1",
+    "name": "Groß Umstadt-Klein Umstadt"
+  },
+  "3240": {
+    "lat": 49.939711,
+    "lng": 8.206986,
+    "source": "stations.json@pre-stage-1",
+    "name": "Klein Winternheim-Ober Olm"
+  },
+  "3243": {
+    "lat": 49.157289,
+    "lng": 7.033459,
+    "source": "stations.json@pre-stage-1",
+    "name": "Kleinblittersdorf"
+  },
+  "3280": {
+    "lat": 50.738647,
+    "lng": 7.668528,
+    "source": "stations.json@pre-stage-1",
+    "name": "Kloster Marienthal"
+  },
+  "3287": {
+    "lat": 50.165328,
+    "lng": 7.203262,
+    "source": "stations.json@pre-stage-1",
+    "name": "Klotten"
+  },
+  "3296": {
+    "lat": 49.237489,
+    "lng": 8.148229,
+    "source": "stations.json@pre-stage-1",
+    "name": "Knöringen-Essingen"
+  },
+  "3297": {
+    "lat": 50.300718,
+    "lng": 7.46075,
+    "source": "stations.json@pre-stage-1",
+    "name": "Kobern-Gondorf"
+  },
+  "3299": {
+    "lat": 50.350929,
+    "lng": 7.588345,
+    "source": "stations.json@pre-stage-1",
+    "name": "Koblenz Hbf"
+  },
+  "3300": {
+    "lat": 50.361746,
+    "lng": 7.610202,
+    "source": "stations.json@pre-stage-1",
+    "name": "Koblenz-Ehrenbreitstein"
+  },
+  "3301": {
+    "lat": 50.367487,
+    "lng": 7.591607,
+    "source": "stations.json@pre-stage-1",
+    "name": "Koblenz-Lützel"
+  },
+  "3302": {
+    "lat": 50.349463,
+    "lng": 7.560646,
+    "source": "stations.json@pre-stage-1",
+    "name": "Koblenz-Moselweiß"
+  },
+  "3341": {
+    "lat": 50.141396,
+    "lng": 8.364079,
+    "source": "stations.json@pre-stage-1",
+    "name": "Eppstein-Bremthal"
+  },
+  "3355": {
+    "lat": 50.776456,
+    "lng": 7.934575,
+    "source": "stations.json@pre-stage-1",
+    "name": "Königsstollen"
+  },
+  "3367": {
+    "lat": 49.695979,
+    "lng": 6.574309,
+    "source": "stations.json@pre-stage-1",
+    "name": "Konz"
+  },
+  "3373": {
+    "lat": 49.836367,
+    "lng": 6.634933,
+    "source": "stations.json@pre-stage-1",
+    "name": "Kordel"
+  },
+  "3375": {
+    "lat": 51.171588,
+    "lng": 9.513137,
+    "source": "stations.json@pre-stage-1",
+    "name": "Körle"
+  },
+  "3386": {
+    "lat": 50.348974,
+    "lng": 7.248906,
+    "source": "stations.json@pre-stage-1",
+    "name": "Kottenheim"
+  },
+  "3391": {
+    "lat": 49.981206,
+    "lng": 7.119488,
+    "source": "stations.json@pre-stage-1",
+    "name": "Kövenig"
+  },
+  "3408": {
+    "lat": 49.55149,
+    "lng": 7.631296,
+    "source": "stations.json@pre-stage-1",
+    "name": "Kreimbach-Kaulbach"
+  },
+  "3415": {
+    "lat": 49.703798,
+    "lng": 6.576866,
+    "source": "stations.json@pre-stage-1",
+    "name": "Kreuz Konz"
+  },
+  "3423": {
+    "lat": 50.08228,
+    "lng": 8.475448,
+    "source": "stations.json@pre-stage-1",
+    "name": "Kriftel"
+  },
+  "3428": {
+    "lat": 50.179919,
+    "lng": 8.516874,
+    "source": "stations.json@pre-stage-1",
+    "name": "Kronberg (Taunus)"
+  },
+  "3430": {
+    "lat": 49.655588,
+    "lng": 7.262416,
+    "source": "stations.json@pre-stage-1",
+    "name": "Kronweiler"
+  },
+  "3435": {
+    "lat": 50.390541,
+    "lng": 7.338598,
+    "source": "stations.json@pre-stage-1",
+    "name": "Kruft"
+  },
+  "3476": {
+    "lat": 49.538282,
+    "lng": 7.410329,
+    "source": "stations.json@pre-stage-1",
+    "name": "Kusel"
+  },
+  "3482": {
+    "lat": 50.04193,
+    "lng": 6.597027,
+    "source": "stations.json@pre-stage-1",
+    "name": "Kyllburg"
+  },
+  "3497": {
+    "lat": 49.373336,
+    "lng": 8.074391,
+    "source": "stations.json@pre-stage-1",
+    "name": "Lambrecht (Pfalz)"
+  },
+  "3498": {
+    "lat": 49.511863,
+    "lng": 8.283476,
+    "source": "stations.json@pre-stage-1",
+    "name": "Lambsheim"
+  },
+  "3500": {
+    "lat": 49.598215,
+    "lng": 8.478489,
+    "source": "stations.json@pre-stage-1",
+    "name": "Lampertheim"
+  },
+  "3501": {
+    "lat": 49.483662,
+    "lng": 7.729408,
+    "source": "stations.json@pre-stage-1",
+    "name": "Lampertsmühle-Otterbach"
+  },
+  "3505": {
+    "lat": 49.197741,
+    "lng": 8.126204,
+    "source": "stations.json@pre-stage-1",
+    "name": "Landau (Pfalz) Hbf"
+  },
+  "3506": {
+    "lat": 49.195748,
+    "lng": 8.107052,
+    "source": "stations.json@pre-stage-1",
+    "name": "Landau (Pfalz) West"
+  },
+  "3515": {
+    "lat": 49.416287,
+    "lng": 7.565931,
+    "source": "stations.json@pre-stage-1",
+    "name": "Landstuhl"
+  },
+  "3516": {
+    "lat": 49.352246,
+    "lng": 7.119316,
+    "source": "stations.json@pre-stage-1",
+    "name": "Landsweiler-Reden"
+  },
+  "3519": {
+    "lat": 50.497939,
+    "lng": 8.667091,
+    "source": "stations.json@pre-stage-1",
+    "name": "Lang Göns"
+  },
+  "3524": {
+    "lat": 49.993612,
+    "lng": 8.656787,
+    "source": "stations.json@pre-stage-1",
+    "name": "Langen (Hess)"
+  },
+  "3540": {
+    "lat": 50.587535,
+    "lng": 7.914633,
+    "source": "stations.json@pre-stage-1",
+    "name": "Langenhahn"
+  },
+  "3545": {
+    "lat": 49.901372,
+    "lng": 7.899887,
+    "source": "stations.json@pre-stage-1",
+    "name": "Langenlonsheim"
+  },
+  "3550": {
+    "lat": 50.162068,
+    "lng": 9.057682,
+    "source": "stations.json@pre-stage-1",
+    "name": "Langenselbold"
+  },
+  "3563": {
+    "lat": 50.494954,
+    "lng": 8.85699,
+    "source": "stations.json@pre-stage-1",
+    "name": "Langsdorf (Oberhess)"
+  },
+  "3564": {
+    "lat": 49.922274,
+    "lng": 8.945733,
+    "source": "stations.json@pre-stage-1",
+    "name": "Babenhausen Langstadt"
+  },
+  "3570": {
+    "lat": 49.918799,
+    "lng": 7.897215,
+    "source": "stations.json@pre-stage-1",
+    "name": "Laubenheim (Nahe)"
+  },
+  "3594": {
+    "lat": 50.329552,
+    "lng": 7.905766,
+    "source": "stations.json@pre-stage-1",
+    "name": "Laurenburg (Lahn)"
+  },
+  "3602": {
+    "lat": 50.643606,
+    "lng": 9.408055,
+    "source": "stations.json@pre-stage-1",
+    "name": "Lauterbach (Hess) Nord"
+  },
+  "3605": {
+    "lat": 49.653709,
+    "lng": 7.59071,
+    "source": "stations.json@pre-stage-1",
+    "name": "Lauterecken-Grumbach"
+  },
+  "3606": {
+    "lat": 49.408332,
+    "lng": 6.907231,
+    "source": "stations.json@pre-stage-1",
+    "name": "Lebach"
+  },
+  "3608": {
+    "lat": 49.853937,
+    "lng": 8.493098,
+    "source": "stations.json@pre-stage-1",
+    "name": "Riedstadt-Wolfskehlen"
+  },
+  "3614": {
+    "lat": 50.284746,
+    "lng": 7.45523,
+    "source": "stations.json@pre-stage-1",
+    "name": "Lehmen"
+  },
+  "3616": {
+    "lat": 50.606769,
+    "lng": 8.992094,
+    "source": "stations.json@pre-stage-1",
+    "name": "Lehnheim"
+  },
+  "3663": {
+    "lat": 49.839453,
+    "lng": 8.902737,
+    "source": "stations.json@pre-stage-1",
+    "name": "Otzberg-Lengfeld"
+  },
+  "3677": {
+    "lat": 50.547039,
+    "lng": 7.28635,
+    "source": "stations.json@pre-stage-1",
+    "name": "Leubsdorf (Rhein)"
+  },
+  "3687": {
+    "lat": 50.447682,
+    "lng": 7.392067,
+    "source": "stations.json@pre-stage-1",
+    "name": "Leutesdorf (Rhein)"
+  },
+  "3696": {
+    "lat": 50.514578,
+    "lng": 8.821959,
+    "source": "stations.json@pre-stage-1",
+    "name": "Lich (Oberhess)"
+  },
+  "3712": {
+    "lat": 50.207104,
+    "lng": 9.14402,
+    "source": "stations.json@pre-stage-1",
+    "name": "Lieblos"
+  },
+  "3717": {
+    "lat": 49.312148,
+    "lng": 7.279127,
+    "source": "stations.json@pre-stage-1",
+    "name": "Limbach (b Homburg,Saar)"
+  },
+  "3720": {
+    "lat": 50.384119,
+    "lng": 8.062342,
+    "source": "stations.json@pre-stage-1",
+    "name": "Limburg (Lahn)"
+  },
+  "3721": {
+    "lat": 49.424273,
+    "lng": 8.390747,
+    "source": "stations.json@pre-stage-1",
+    "name": "Limburgerhof"
+  },
+  "3723": {
+    "lat": 50.382498,
+    "lng": 8.096112,
+    "source": "stations.json@pre-stage-1",
+    "name": "Limburg Süd"
+  },
+  "3733": {
+    "lat": 50.377565,
+    "lng": 8.133372,
+    "source": "stations.json@pre-stage-1",
+    "name": "Lindenholzhausen"
+  },
+  "3735": {
+    "lat": 50.291334,
+    "lng": 8.978775,
+    "source": "stations.json@pre-stage-1",
+    "name": "Altenstadt-Lindheim"
+  },
+  "3742": {
+    "lat": 49.252584,
+    "lng": 8.349523,
+    "source": "stations.json@pre-stage-1",
+    "name": "Lingenfeld"
+  },
+  "3744": {
+    "lat": 50.569335,
+    "lng": 7.276032,
+    "source": "stations.json@pre-stage-1",
+    "name": "Linz (Rhein)"
+  },
+  "3747": {
+    "lat": 50.990247,
+    "lng": 9.766787,
+    "source": "stations.json@pre-stage-1",
+    "name": "Rotenburg an der Fulda-Lispenhausen"
+  },
+  "3748": {
+    "lat": 50.318489,
+    "lng": 6.615158,
+    "source": "stations.json@pre-stage-1",
+    "name": "Lissendorf"
+  },
+  "3761": {
+    "lat": 50.230569,
+    "lng": 7.443512,
+    "source": "stations.json@pre-stage-1",
+    "name": "Löf"
+  },
+  "3766": {
+    "lat": 50.509347,
+    "lng": 8.274307,
+    "source": "stations.json@pre-stage-1",
+    "name": "Löhnberg"
+  },
+  "3769": {
+    "lat": 49.635682,
+    "lng": 7.599712,
+    "source": "stations.json@pre-stage-1",
+    "name": "Lohnweiler"
+  },
+  "3776": {
+    "lat": 50.647936,
+    "lng": 8.70174,
+    "source": "stations.json@pre-stage-1",
+    "name": "Lollar"
+  },
+  "3780": {
+    "lat": 50.0403,
+    "lng": 7.812843,
+    "source": "stations.json@pre-stage-1",
+    "name": "Lorch (Rhein)"
+  },
+  "3782": {
+    "lat": 50.053835,
+    "lng": 7.781403,
+    "source": "stations.json@pre-stage-1",
+    "name": "Lorchhausen"
+  },
+  "3785": {
+    "lat": 50.11489,
+    "lng": 8.422853,
+    "source": "stations.json@pre-stage-1",
+    "name": "Lorsbach"
+  },
+  "3786": {
+    "lat": 49.659093,
+    "lng": 8.566262,
+    "source": "stations.json@pre-stage-1",
+    "name": "Lorsch"
+  },
+  "3837": {
+    "lat": 49.477987,
+    "lng": 8.433402,
+    "source": "stations.json@pre-stage-1",
+    "name": "Ludwigshafen (Rhein) Hbf"
+  },
+  "3838": {
+    "lat": 49.461572,
+    "lng": 8.421092,
+    "source": "stations.json@pre-stage-1",
+    "name": "Ludwigshafen-Mundenheim"
+  },
+  "3839": {
+    "lat": 49.493188,
+    "lng": 8.381523,
+    "source": "stations.json@pre-stage-1",
+    "name": "Ludwigshafen-Oggersheim"
+  },
+  "3840": {
+    "lat": 49.447471,
+    "lng": 8.409493,
+    "source": "stations.json@pre-stage-1",
+    "name": "Ludwigshafen-Rheingönheim"
+  },
+  "3850": {
+    "lat": 49.249595,
+    "lng": 6.904214,
+    "source": "stations.json@pre-stage-1",
+    "name": "Luisenthal (Saar)"
+  },
+  "3870": {
+    "lat": 50.4809,
+    "lng": 9.765536,
+    "source": "stations.json@pre-stage-1",
+    "name": "Lütter"
+  },
+  "3893": {
+    "lat": 49.30558,
+    "lng": 8.147177,
+    "source": "stations.json@pre-stage-1",
+    "name": "Maikammer-Kirrweiler"
+  },
+  "3898": {
+    "lat": 50.001117,
+    "lng": 8.25872,
+    "source": "stations.json@pre-stage-1",
+    "name": "Mainz Hbf"
+  },
+  "3899": {
+    "lat": 50.020066,
+    "lng": 8.246852,
+    "source": "stations.json@pre-stage-1",
+    "name": "Mainz Nord"
+  },
+  "3900": {
+    "lat": 49.993465,
+    "lng": 8.277565,
+    "source": "stations.json@pre-stage-1",
+    "name": "Mainz Römisches Theater"
+  },
+  "3901": {
+    "lat": 49.993226,
+    "lng": 8.3575,
+    "source": "stations.json@pre-stage-1",
+    "name": "Mainz-Bischofsheim"
+  },
+  "3902": {
+    "lat": 49.997756,
+    "lng": 8.214478,
+    "source": "stations.json@pre-stage-1",
+    "name": "Mainz-Gonsenheim"
+  },
+  "3903": {
+    "lat": 49.994319,
+    "lng": 8.314197,
+    "source": "stations.json@pre-stage-1",
+    "name": "Mainz-Gustavsburg"
+  },
+  "3904": {
+    "lat": 50.00658,
+    "lng": 8.283174,
+    "source": "stations.json@pre-stage-1",
+    "name": "Mainz-Kastel"
+  },
+  "3905": {
+    "lat": 49.961233,
+    "lng": 8.314183,
+    "source": "stations.json@pre-stage-1",
+    "name": "Mainz-Laubenheim"
+  },
+  "3906": {
+    "lat": 49.960165,
+    "lng": 8.222902,
+    "source": "stations.json@pre-stage-1",
+    "name": "Mainz-Marienborn"
+  },
+  "3907": {
+    "lat": 50.022775,
+    "lng": 8.22937,
+    "source": "stations.json@pre-stage-1",
+    "name": "Mainz-Mombach"
+  },
+  "3918": {
+    "lat": 51.097605,
+    "lng": 9.534833,
+    "source": "stations.json@pre-stage-1",
+    "name": "Malsfeld"
+  },
+  "3943": {
+    "lat": 50.819272,
+    "lng": 8.775014,
+    "source": "stations.json@pre-stage-1",
+    "name": "Marburg (Lahn)"
+  },
+  "3944": {
+    "lat": 50.794467,
+    "lng": 8.762431,
+    "source": "stations.json@pre-stage-1",
+    "name": "Marburg Süd"
+  },
+  "3992": {
+    "lat": 49.803978,
+    "lng": 7.536625,
+    "source": "stations.json@pre-stage-1",
+    "name": "Martinstein"
+  },
+  "4008": {
+    "lat": 50.329594,
+    "lng": 7.238939,
+    "source": "stations.json@pre-stage-1",
+    "name": "Mayen Ost"
+  },
+  "4009": {
+    "lat": 50.328373,
+    "lng": 7.213894,
+    "source": "stations.json@pre-stage-1",
+    "name": "Mayen West"
+  },
+  "4010": {
+    "lat": 50.517233,
+    "lng": 7.020463,
+    "source": "stations.json@pre-stage-1",
+    "name": "Mayschoß"
+  },
+  "4040": {
+    "lat": 50.379148,
+    "lng": 8.811423,
+    "source": "stations.json@pre-stage-1",
+    "name": "Melbach"
+  },
+  "4050": {
+    "lat": 51.126002,
+    "lng": 9.546079,
+    "source": "stations.json@pre-stage-1",
+    "name": "Melsungen"
+  },
+  "4063": {
+    "lat": 49.356029,
+    "lng": 7.065547,
+    "source": "stations.json@pre-stage-1",
+    "name": "Merchweiler"
+  },
+  "4072": {
+    "lat": 49.569195,
+    "lng": 8.133923,
+    "source": "stations.json@pre-stage-1",
+    "name": "Mertesheim"
+  },
+  "4075": {
+    "lat": 49.436419,
+    "lng": 6.634192,
+    "source": "stations.json@pre-stage-1",
+    "name": "Merzig (Saar)"
+  },
+  "4078": {
+    "lat": 49.921718,
+    "lng": 8.745969,
+    "source": "stations.json@pre-stage-1",
+    "name": "Messel"
+  },
+  "4082": {
+    "lat": 49.739906,
+    "lng": 8.334166,
+    "source": "stations.json@pre-stage-1",
+    "name": "Mettenheim"
+  },
+  "4083": {
+    "lat": 49.495476,
+    "lng": 6.598315,
+    "source": "stations.json@pre-stage-1",
+    "name": "Mettlach"
+  },
+  "4098": {
+    "lat": 49.684858,
+    "lng": 9.001453,
+    "source": "stations.json@pre-stage-1",
+    "name": "Michelstadt"
+  },
+  "4103": {
+    "lat": 50.404043,
+    "lng": 7.407598,
+    "source": "stations.json@pre-stage-1",
+    "name": "Miesenheim"
+  },
+  "4125": {
+    "lat": 50.230798,
+    "lng": 9.119818,
+    "source": "stations.json@pre-stage-1",
+    "name": "Mittel Gründau"
+  },
+  "4161": {
+    "lat": 51.390674,
+    "lng": 9.455955,
+    "source": "stations.json@pre-stage-1",
+    "name": "Espenau-Mönchehof"
+  },
+  "4168": {
+    "lat": 49.633666,
+    "lng": 8.208162,
+    "source": "stations.json@pre-stage-1",
+    "name": "Monsheim"
+  },
+  "4169": {
+    "lat": 50.444834,
+    "lng": 7.825333,
+    "source": "stations.json@pre-stage-1",
+    "name": "Montabaur"
+  },
+  "4170": {
+    "lat": 49.793466,
+    "lng": 7.588673,
+    "source": "stations.json@pre-stage-1",
+    "name": "Monzingen"
+  },
+  "4174": {
+    "lat": 49.979,
+    "lng": 8.565384,
+    "source": "stations.json@pre-stage-1",
+    "name": "Mörfelden"
+  },
+  "4182": {
+    "lat": 49.443478,
+    "lng": 6.635226,
+    "source": "stations.json@pre-stage-1",
+    "name": "Merzig Stadtmitte"
+  },
+  "4186": {
+    "lat": 50.195483,
+    "lng": 7.371357,
+    "source": "stations.json@pre-stage-1",
+    "name": "Moselkern"
+  },
+  "4193": {
+    "lat": 50.6171,
+    "lng": 9.029035,
+    "source": "stations.json@pre-stage-1",
+    "name": "Mücke (Hessen)"
+  },
+  "4194": {
+    "lat": 50.18486,
+    "lng": 7.339393,
+    "source": "stations.json@pre-stage-1",
+    "name": "Müden (Mosel)"
+  },
+  "4195": {
+    "lat": 50.827476,
+    "lng": 7.951651,
+    "source": "stations.json@pre-stage-1",
+    "name": "Mudersbach"
+  },
+  "4210": {
+    "lat": 50.119277,
+    "lng": 8.837646,
+    "source": "stations.json@pre-stage-1",
+    "name": "Mühlheim (Main)"
+  },
+  "4225": {
+    "lat": 50.232102,
+    "lng": 7.129573,
+    "source": "stations.json@pre-stage-1",
+    "name": "Kaisersesch"
+  },
+  "4226": {
+    "lat": 49.771669,
+    "lng": 8.985638,
+    "source": "stations.json@pre-stage-1",
+    "name": "Höchst Mümling-Grumbach"
+  },
+  "4274": {
+    "lat": 49.221355,
+    "lng": 7.700417,
+    "source": "stations.json@pre-stage-1",
+    "name": "Münchweiler (Rodalb)"
+  },
+  "4278": {
+    "lat": 49.923678,
+    "lng": 8.853885,
+    "source": "stations.json@pre-stage-1",
+    "name": "Münster (b Dieburg)"
+  },
+  "4281": {
+    "lat": 49.947388,
+    "lng": 7.898033,
+    "source": "stations.json@pre-stage-1",
+    "name": "Münster-Sarmsheim"
+  },
+  "4283": {
+    "lat": 50.148782,
+    "lng": 6.601548,
+    "source": "stations.json@pre-stage-1",
+    "name": "Mürlenbach"
+  },
+  "4288": {
+    "lat": 49.37196,
+    "lng": 8.168529,
+    "source": "stations.json@pre-stage-1",
+    "name": "Mußbach"
+  },
+  "4293": {
+    "lat": 49.919106,
+    "lng": 8.341885,
+    "source": "stations.json@pre-stage-1",
+    "name": "Nackenheim"
+  },
+  "4297": {
+    "lat": 49.523922,
+    "lng": 7.146277,
+    "source": "stations.json@pre-stage-1",
+    "name": "Namborn"
+  },
+  "4298": {
+    "lat": 50.457146,
+    "lng": 7.361768,
+    "source": "stations.json@pre-stage-1",
+    "name": "Namedy"
+  },
+  "4302": {
+    "lat": 50.31148,
+    "lng": 7.800691,
+    "source": "stations.json@pre-stage-1",
+    "name": "Nassau (Lahn)"
+  },
+  "4308": {
+    "lat": 49.942137,
+    "lng": 8.449929,
+    "source": "stations.json@pre-stage-1",
+    "name": "Nauheim (b Groß Gerau)"
+  },
+  "4326": {
+    "lat": 50.091053,
+    "lng": 7.139418,
+    "source": "stations.json@pre-stage-1",
+    "name": "Neef"
+  },
+  "4338": {
+    "lat": 49.538738,
+    "lng": 6.375851,
+    "source": "stations.json@pre-stage-1",
+    "name": "Nennig"
+  },
+  "4342": {
+    "lat": 49.120844,
+    "lng": 8.130696,
+    "source": "stations.json@pre-stage-1",
+    "name": "Steinweiler"
+  },
+  "4351": {
+    "lat": 50.053052,
+    "lng": 8.665609,
+    "source": "stations.json@pre-stage-1",
+    "name": "Neu Isenburg"
+  },
+  "4364": {
+    "lat": 49.606066,
+    "lng": 7.172701,
+    "source": "stations.json@pre-stage-1",
+    "name": "Neubrücke (Nahe)"
+  },
+  "4400": {
+    "lat": 50.454818,
+    "lng": 9.620224,
+    "source": "stations.json@pre-stage-1",
+    "name": "Neuhof (Kr Fulda)"
+  },
+  "4408": {
+    "lat": 50.770838,
+    "lng": 9.692546,
+    "source": "stations.json@pre-stage-1",
+    "name": "Haunetal-Neukirchen"
+  },
+  "4426": {
+    "lat": 49.353291,
+    "lng": 7.176655,
+    "source": "stations.json@pre-stage-1",
+    "name": "Neunkirchen (Saar) Hbf"
+  },
+  "4427": {
+    "lat": 49.34956,
+    "lng": 7.226787,
+    "source": "stations.json@pre-stage-1",
+    "name": "Neunkirchen (Saar)-Wellesweiler"
+  },
+  "4448": {
+    "lat": 50.850447,
+    "lng": 9.120643,
+    "source": "stations.json@pre-stage-1",
+    "name": "Neustadt (Kr Marburg)"
+  },
+  "4453": {
+    "lat": 49.354245,
+    "lng": 8.158313,
+    "source": "stations.json@pre-stage-1",
+    "name": "Neustadt (Weinstr) Böbig"
+  },
+  "4454": {
+    "lat": 49.349553,
+    "lng": 8.140757,
+    "source": "stations.json@pre-stage-1",
+    "name": "Neustadt (Weinstr) Hbf"
+  },
+  "4464": {
+    "lat": 50.431466,
+    "lng": 7.473132,
+    "source": "stations.json@pre-stage-1",
+    "name": "Neuwied"
+  },
+  "4471": {
+    "lat": 50.411449,
+    "lng": 8.998881,
+    "source": "stations.json@pre-stage-1",
+    "name": "Nidda"
+  },
+  "4473": {
+    "lat": 49.343539,
+    "lng": 6.594053,
+    "source": "stations.json@pre-stage-1",
+    "name": "Niedaltdorf"
+  },
+  "4474": {
+    "lat": 49.656901,
+    "lng": 8.204274,
+    "source": "stations.json@pre-stage-1",
+    "name": "Nieder Flörsheim-Dalsheim"
+  },
+  "4475": {
+    "lat": 50.645055,
+    "lng": 9.034019,
+    "source": "stations.json@pre-stage-1",
+    "name": "Nieder Ohmen"
+  },
+  "4476": {
+    "lat": 49.905529,
+    "lng": 8.20496,
+    "source": "stations.json@pre-stage-1",
+    "name": "Nieder Olm"
+  },
+  "4477": {
+    "lat": 49.832203,
+    "lng": 8.703318,
+    "source": "stations.json@pre-stage-1",
+    "name": "Mühltal"
+  },
+  "4478": {
+    "lat": 49.997442,
+    "lng": 8.871215,
+    "source": "stations.json@pre-stage-1",
+    "name": "Rodgau-Nieder Roden"
+  },
+  "4479": {
+    "lat": 50.280291,
+    "lng": 8.767357,
+    "source": "stations.json@pre-stage-1",
+    "name": "Nieder Wöllstadt"
+  },
+  "4485": {
+    "lat": 50.359598,
+    "lng": 8.159856,
+    "source": "stations.json@pre-stage-1",
+    "name": "Niederbrechen"
+  },
+  "4490": {
+    "lat": 50.193166,
+    "lng": 8.809034,
+    "source": "stations.json@pre-stage-1",
+    "name": "Niederdorfelden"
+  },
+  "4493": {
+    "lat": 50.425075,
+    "lng": 7.97687,
+    "source": "stations.json@pre-stage-1",
+    "name": "Niedererbach"
+  },
+  "4497": {
+    "lat": 50.43276,
+    "lng": 8.037069,
+    "source": "stations.json@pre-stage-1",
+    "name": "Niederhadamar"
+  },
+  "4499": {
+    "lat": 50.036013,
+    "lng": 7.805505,
+    "source": "stations.json@pre-stage-1",
+    "name": "Niederheimbach"
+  },
+  "4500": {
+    "lat": 50.154198,
+    "lng": 8.547237,
+    "source": "stations.json@pre-stage-1",
+    "name": "Niederhöchstadt"
+  },
+  "4501": {
+    "lat": 50.786291,
+    "lng": 7.788525,
+    "source": "stations.json@pre-stage-1",
+    "name": "Niederhövels"
+  },
+  "4502": {
+    "lat": 50.149807,
+    "lng": 8.351017,
+    "source": "stations.json@pre-stage-1",
+    "name": "Niederjosbach"
+  },
+  "4503": {
+    "lat": 50.31639,
+    "lng": 7.599503,
+    "source": "stations.json@pre-stage-1",
+    "name": "Niederlahnstein"
+  },
+  "4508": {
+    "lat": 49.432201,
+    "lng": 7.160695,
+    "source": "stations.json@pre-stage-1",
+    "name": "Niederlinxweiler"
+  },
+  "4509": {
+    "lat": 50.369658,
+    "lng": 7.291007,
+    "source": "stations.json@pre-stage-1",
+    "name": "Mendig"
+  },
+  "4510": {
+    "lat": 50.178609,
+    "lng": 9.109264,
+    "source": "stations.json@pre-stage-1",
+    "name": "Niedermittlau"
+  },
+  "4511": {
+    "lat": 49.458429,
+    "lng": 7.471588,
+    "source": "stations.json@pre-stage-1",
+    "name": "Niedermohr"
+  },
+  "4513": {
+    "lat": 50.159697,
+    "lng": 8.312879,
+    "source": "stations.json@pre-stage-1",
+    "name": "Niedernhausen (Taunus)"
+  },
+  "4520": {
+    "lat": 50.717731,
+    "lng": 8.3033,
+    "source": "stations.json@pre-stage-1",
+    "name": "Niederscheld (Dillkr) Süd"
+  },
+  "4521": {
+    "lat": 50.839248,
+    "lng": 7.965509,
+    "source": "stations.json@pre-stage-1",
+    "name": "Niederschelden"
+  },
+  "4527": {
+    "lat": 50.332676,
+    "lng": 8.230084,
+    "source": "stations.json@pre-stage-1",
+    "name": "Niederselters"
+  },
+  "4534": {
+    "lat": 51.351851,
+    "lng": 9.478438,
+    "source": "stations.json@pre-stage-1",
+    "name": "Vellmar-Niedervellmar"
+  },
+  "4535": {
+    "lat": 50.736598,
+    "lng": 8.708379,
+    "source": "stations.json@pre-stage-1",
+    "name": "Niederwalgern"
+  },
+  "4536": {
+    "lat": 50.03665,
+    "lng": 8.159158,
+    "source": "stations.json@pre-stage-1",
+    "name": "Niederwalluf"
+  },
+  "4538": {
+    "lat": 50.756771,
+    "lng": 8.733665,
+    "source": "stations.json@pre-stage-1",
+    "name": "Niederweimar"
+  },
+  "4543": {
+    "lat": 50.468225,
+    "lng": 8.039687,
+    "source": "stations.json@pre-stage-1",
+    "name": "Niederzeuzheim"
+  },
+  "4551": {
+    "lat": 49.872002,
+    "lng": 8.34281,
+    "source": "stations.json@pre-stage-1",
+    "name": "Nierstein"
+  },
+  "4555": {
+    "lat": 50.337385,
+    "lng": 7.681876,
+    "source": "stations.json@pre-stage-1",
+    "name": "Nievern"
+  },
+  "4559": {
+    "lat": 49.654264,
+    "lng": 6.440942,
+    "source": "stations.json@pre-stage-1",
+    "name": "Nittel"
+  },
+  "4563": {
+    "lat": 49.639648,
+    "lng": 7.242085,
+    "source": "stations.json@pre-stage-1",
+    "name": "Nohen"
+  },
+  "4584": {
+    "lat": 49.808807,
+    "lng": 7.812291,
+    "source": "stations.json@pre-stage-1",
+    "name": "Norheim"
+  },
+  "4614": {
+    "lat": 49.832029,
+    "lng": 8.74337,
+    "source": "stations.json@pre-stage-1",
+    "name": "Ober Ramstadt"
+  },
+  "4615": {
+    "lat": 49.973622,
+    "lng": 8.828961,
+    "source": "stations.json@pre-stage-1",
+    "name": "Rödermark-Ober Roden"
+  },
+  "4616": {
+    "lat": 50.429511,
+    "lng": 8.933836,
+    "source": "stations.json@pre-stage-1",
+    "name": "Ober Widdersheim"
+  },
+  "4623": {
+    "lat": 50.282929,
+    "lng": 6.638337,
+    "source": "stations.json@pre-stage-1",
+    "name": "Oberbettingen-Hillesheim"
+  },
+  "4624": {
+    "lat": 49.710162,
+    "lng": 6.511634,
+    "source": "stations.json@pre-stage-1",
+    "name": "Oberbillig"
+  },
+  "4625": {
+    "lat": 50.577129,
+    "lng": 9.564221,
+    "source": "stations.json@pre-stage-1",
+    "name": "Oberbimbach"
+  },
+  "4627": {
+    "lat": 50.354498,
+    "lng": 8.187801,
+    "source": "stations.json@pre-stage-1",
+    "name": "Oberbrechen"
+  },
+  "4633": {
+    "lat": 50.196149,
+    "lng": 8.823385,
+    "source": "stations.json@pre-stage-1",
+    "name": "Schöneck-Oberdorfelden"
+  },
+  "4637": {
+    "lat": 50.719911,
+    "lng": 7.659393,
+    "source": "stations.json@pre-stage-1",
+    "name": "Obererbach"
+  },
+  "4647": {
+    "lat": 50.449865,
+    "lng": 7.958384,
+    "source": "stations.json@pre-stage-1",
+    "name": "Dreikirchen"
+  },
+  "4659": {
+    "lat": 50.299926,
+    "lng": 7.603964,
+    "source": "stations.json@pre-stage-1",
+    "name": "Oberlahnstein"
+  },
+  "4664": {
+    "lat": 49.450707,
+    "lng": 7.151116,
+    "source": "stations.json@pre-stage-1",
+    "name": "Oberlinxweiler"
+  },
+  "4665": {
+    "lat": 49.456253,
+    "lng": 7.501412,
+    "source": "stations.json@pre-stage-1",
+    "name": "Obermohr"
+  },
+  "4673": {
+    "lat": 50.315888,
+    "lng": 7.853001,
+    "source": "stations.json@pre-stage-1",
+    "name": "Obernhof (Lahn)"
+  },
+  "4697": {
+    "lat": 50.950619,
+    "lng": 10.026229,
+    "source": "stations.json@pre-stage-1",
+    "name": "Wildeck-Obersuhl"
+  },
+  "4700": {
+    "lat": 50.072226,
+    "lng": 8.853417,
+    "source": "stations.json@pre-stage-1",
+    "name": "Obertshausen (Kr Offenbach)"
+  },
+  "4702": {
+    "lat": 50.199423,
+    "lng": 8.589409,
+    "source": "stations.json@pre-stage-1",
+    "name": "Oberursel (Taunus)"
+  },
+  "4703": {
+    "lat": 51.359679,
+    "lng": 9.452475,
+    "source": "stations.json@pre-stage-1",
+    "name": "Vellmar-Obervellmar"
+  },
+  "4711": {
+    "lat": 50.10446,
+    "lng": 7.731542,
+    "source": "stations.json@pre-stage-1",
+    "name": "Oberwesel"
+  },
+  "4713": {
+    "lat": 50.611356,
+    "lng": 7.207696,
+    "source": "stations.json@pre-stage-1",
+    "name": "Oberwinter"
+  },
+  "4738": {
+    "lat": 50.002659,
+    "lng": 8.0189,
+    "source": "stations.json@pre-stage-1",
+    "name": "Oestrich-Winkel"
+  },
+  "4742": {
+    "lat": 50.099264,
+    "lng": 8.760743,
+    "source": "stations.json@pre-stage-1",
+    "name": "Offenbach (Main) Hbf"
+  },
+  "4743": {
+    "lat": 50.102765,
+    "lng": 8.784375,
+    "source": "stations.json@pre-stage-1",
+    "name": "Offenbach (Main) Ost"
+  },
+  "4744": {
+    "lat": 50.090547,
+    "lng": 8.808367,
+    "source": "stations.json@pre-stage-1",
+    "name": "Offenbach-Bieber"
+  },
+  "4747": {
+    "lat": 49.981851,
+    "lng": 8.74964,
+    "source": "stations.json@pre-stage-1",
+    "name": "Dreieich-Offenthal"
+  },
+  "4755": {
+    "lat": 50.252664,
+    "lng": 8.75335,
+    "source": "stations.json@pre-stage-1",
+    "name": "Okarben"
+  },
+  "4769": {
+    "lat": 49.538071,
+    "lng": 7.652759,
+    "source": "stations.json@pre-stage-1",
+    "name": "Olsbrücken"
+  },
+  "4772": {
+    "lat": 49.85756,
+    "lng": 8.358078,
+    "source": "stations.json@pre-stage-1",
+    "name": "Oppenheim"
+  },
+  "4800": {
+    "lat": 50.245071,
+    "lng": 7.615074,
+    "source": "stations.json@pre-stage-1",
+    "name": "Osterspai"
+  },
+  "4806": {
+    "lat": 50.406598,
+    "lng": 8.675319,
+    "source": "stations.json@pre-stage-1",
+    "name": "Ostheim (b Butzbach)"
+  },
+  "4807": {
+    "lat": 50.2191,
+    "lng": 8.903381,
+    "source": "stations.json@pre-stage-1",
+    "name": "Ostheim (Kr Hanau)"
+  },
+  "4808": {
+    "lat": 49.705423,
+    "lng": 8.325988,
+    "source": "stations.json@pre-stage-1",
+    "name": "Osthofen"
+  },
+  "4831": {
+    "lat": 50.081691,
+    "lng": 8.828938,
+    "source": "stations.json@pre-stage-1",
+    "name": "Offenbach-Waldhof"
+  },
+  "4837": {
+    "lat": 49.402337,
+    "lng": 7.166133,
+    "source": "stations.json@pre-stage-1",
+    "name": "Ottweiler (Saar)"
+  },
+  "4852": {
+    "lat": 49.565064,
+    "lng": 6.371926,
+    "source": "stations.json@pre-stage-1",
+    "name": "Palzem"
+  },
+  "4898": {
+    "lat": 49.473163,
+    "lng": 6.369321,
+    "source": "stations.json@pre-stage-1",
+    "name": "Perl"
+  },
+  "4916": {
+    "lat": 49.780319,
+    "lng": 6.68302,
+    "source": "stations.json@pre-stage-1",
+    "name": "Pfalzel"
+  },
+  "4918": {
+    "lat": 49.634634,
+    "lng": 8.279654,
+    "source": "stations.json@pre-stage-1",
+    "name": "Pfeddersheim"
+  },
+  "4932": {
+    "lat": 49.953435,
+    "lng": 6.625693,
+    "source": "stations.json@pre-stage-1",
+    "name": "Philippsheim"
+  },
+  "4941": {
+    "lat": 49.205645,
+    "lng": 7.598432,
+    "source": "stations.json@pre-stage-1",
+    "name": "Pirmasens Hbf"
+  },
+  "4942": {
+    "lat": 49.259218,
+    "lng": 7.604401,
+    "source": "stations.json@pre-stage-1",
+    "name": "Pirmasens Nord"
+  },
+  "4948": {
+    "lat": 50.395204,
+    "lng": 7.393638,
+    "source": "stations.json@pre-stage-1",
+    "name": "Plaidt"
+  },
+  "4987": {
+    "lat": 50.169298,
+    "lng": 7.269836,
+    "source": "stations.json@pre-stage-1",
+    "name": "Pommern (Mosel)"
+  },
+  "5073": {
+    "lat": 49.324855,
+    "lng": 7.059386,
+    "source": "stations.json@pre-stage-1",
+    "name": "Quierschied"
+  },
+  "5074": {
+    "lat": 49.825988,
+    "lng": 6.704697,
+    "source": "stations.json@pre-stage-1",
+    "name": "Quint"
+  },
+  "5110": {
+    "lat": 49.542131,
+    "lng": 7.444075,
+    "source": "stations.json@pre-stage-1",
+    "name": "Rammelsbach"
+  },
+  "5116": {
+    "lat": 49.448755,
+    "lng": 7.556715,
+    "source": "stations.json@pre-stage-1",
+    "name": "Ramstein"
+  },
+  "5121": {
+    "lat": 50.35673,
+    "lng": 8.983134,
+    "source": "stations.json@pre-stage-1",
+    "name": "Ranstadt"
+  },
+  "5137": {
+    "lat": 50.255912,
+    "lng": 7.13185,
+    "source": "stations.json@pre-stage-1",
+    "name": "Urmersbach"
+  },
+  "5147": {
+    "lat": 50.009688,
+    "lng": 8.454498,
+    "source": "stations.json@pre-stage-1",
+    "name": "Raunheim"
+  },
+  "5153": {
+    "lat": 50.515427,
+    "lng": 7.036514,
+    "source": "stations.json@pre-stage-1",
+    "name": "Rech"
+  },
+  "5162": {
+    "lat": 49.606914,
+    "lng": 7.609127,
+    "source": "stations.json@pre-stage-1",
+    "name": "Reckweilerhof"
+  },
+  "5181": {
+    "lat": 49.48516,
+    "lng": 7.440581,
+    "source": "stations.json@pre-stage-1",
+    "name": "Rehweiler"
+  },
+  "5183": {
+    "lat": 50.360145,
+    "lng": 8.874578,
+    "source": "stations.json@pre-stage-1",
+    "name": "Reichelsheim (Wetterau)"
+  },
+  "5188": {
+    "lat": 51.154096,
+    "lng": 9.985977,
+    "source": "stations.json@pre-stage-1",
+    "name": "Wehretal-Reichensachsen"
+  },
+  "5198": {
+    "lat": 50.025169,
+    "lng": 7.112949,
+    "source": "stations.json@pre-stage-1",
+    "name": "Reil DB"
+  },
+  "5203": {
+    "lat": 49.829806,
+    "lng": 8.835689,
+    "source": "stations.json@pre-stage-1",
+    "name": "Reinheim (Odenw)"
+  },
+  "5209": {
+    "lat": 50.597832,
+    "lng": 8.83093,
+    "source": "stations.json@pre-stage-1",
+    "name": "Reiskirchen (Kr Gießen)"
+  },
+  "5214": {
+    "lat": 50.577215,
+    "lng": 7.229779,
+    "source": "stations.json@pre-stage-1",
+    "name": "Remagen"
+  },
+  "5224": {
+    "lat": 51.254922,
+    "lng": 9.468667,
+    "source": "stations.json@pre-stage-1",
+    "name": "Baunatal-Rengershausen"
+  },
+  "5228": {
+    "lat": 49.25977,
+    "lng": 7.079065,
+    "source": "stations.json@pre-stage-1",
+    "name": "Rentrisch"
+  },
+  "5250": {
+    "lat": 50.489493,
+    "lng": 7.333427,
+    "source": "stations.json@pre-stage-1",
+    "name": "Rheinbrohl"
+  },
+  "5258": {
+    "lat": 49.119537,
+    "lng": 8.274166,
+    "source": "stations.json@pre-stage-1",
+    "name": "Rheinzabern"
+  },
+  "5259": {
+    "lat": 50.281519,
+    "lng": 7.620484,
+    "source": "stations.json@pre-stage-1",
+    "name": "Rhens"
+  },
+  "5268": {
+    "lat": 50.459238,
+    "lng": 9.769765,
+    "source": "stations.json@pre-stage-1",
+    "name": "Ried"
+  },
+  "5272": {
+    "lat": 49.647488,
+    "lng": 8.49595,
+    "source": "stations.json@pre-stage-1",
+    "name": "Riedrode"
+  },
+  "5277": {
+    "lat": 49.244994,
+    "lng": 7.50761,
+    "source": "stations.json@pre-stage-1",
+    "name": "Rieschweiler"
+  },
+  "5288": {
+    "lat": 49.217075,
+    "lng": 7.927918,
+    "source": "stations.json@pre-stage-1",
+    "name": "Rinnthal"
+  },
+  "5301": {
+    "lat": 49.628385,
+    "lng": 7.81727,
+    "source": "stations.json@pre-stage-1",
+    "name": "Rockenhausen"
+  },
+  "5303": {
+    "lat": 49.238949,
+    "lng": 7.632768,
+    "source": "stations.json@pre-stage-1",
+    "name": "Rodalben"
+  },
+  "5304": {
+    "lat": 50.773991,
+    "lng": 8.205263,
+    "source": "stations.json@pre-stage-1",
+    "name": "Rodenbach (Dillkr)"
+  },
+  "5305": {
+    "lat": 50.147267,
+    "lng": 9.01256,
+    "source": "stations.json@pre-stage-1",
+    "name": "Rodenbach bei Hanau"
+  },
+  "5311": {
+    "lat": 50.267604,
+    "lng": 8.695803,
+    "source": "stations.json@pre-stage-1",
+    "name": "Rodheim v d Höhe"
+  },
+  "5319": {
+    "lat": 49.276737,
+    "lng": 7.157395,
+    "source": "stations.json@pre-stage-1",
+    "name": "Rohrbach (Saar)"
+  },
+  "5320": {
+    "lat": 49.138017,
+    "lng": 8.14152,
+    "source": "stations.json@pre-stage-1",
+    "name": "Rohrbach (Pfalz)"
+  },
+  "5322": {
+    "lat": 51.154377,
+    "lng": 9.548372,
+    "source": "stations.json@pre-stage-1",
+    "name": "Melsungen-Röhrenfurth"
+  },
+  "5328": {
+    "lat": 50.63138,
+    "lng": 7.206835,
+    "source": "stations.json@pre-stage-1",
+    "name": "Rolandseck"
+  },
+  "5330": {
+    "lat": 49.987985,
+    "lng": 8.846545,
+    "source": "stations.json@pre-stage-1",
+    "name": "Rodgau-Rollwald"
+  },
+  "5338": {
+    "lat": 50.946016,
+    "lng": 9.854425,
+    "source": "stations.json@pre-stage-1",
+    "name": "Ronshausen"
+  },
+  "5339": {
+    "lat": 50.478451,
+    "lng": 9.74373,
+    "source": "stations.json@pre-stage-1",
+    "name": "Rönshausen"
+  },
+  "5342": {
+    "lat": 50.298669,
+    "lng": 8.7008,
+    "source": "stations.json@pre-stage-1",
+    "name": "Rosbach v d Höhe"
+  },
+  "5355": {
+    "lat": 49.572112,
+    "lng": 7.623254,
+    "source": "stations.json@pre-stage-1",
+    "name": "Roßbach (Pfalz)"
+  },
+  "5379": {
+    "lat": 50.997855,
+    "lng": 9.733344,
+    "source": "stations.json@pre-stage-1",
+    "name": "Rotenburg an der Fulda"
+  },
+  "5381": {
+    "lat": 50.601621,
+    "lng": 7.893375,
+    "source": "stations.json@pre-stage-1",
+    "name": "Rotenhain"
+  },
+  "5416": {
+    "lat": 49.97689,
+    "lng": 7.915418,
+    "source": "stations.json@pre-stage-1",
+    "name": "Rüdesheim (Rhein)"
+  },
+  "5429": {
+    "lat": 49.160871,
+    "lng": 8.290446,
+    "source": "stations.json@pre-stage-1",
+    "name": "Rülzheim"
+  },
+  "5434": {
+    "lat": 50.405284,
+    "lng": 8.15937,
+    "source": "stations.json@pre-stage-1",
+    "name": "Runkel"
+  },
+  "5440": {
+    "lat": 49.991639,
+    "lng": 8.413583,
+    "source": "stations.json@pre-stage-1",
+    "name": "Rüsselsheim"
+  },
+  "5441": {
+    "lat": 49.988,
+    "lng": 8.400373,
+    "source": "stations.json@pre-stage-1",
+    "name": "Rüsselsheim Opelwerk"
+  },
+  "5451": {
+    "lat": 49.241065,
+    "lng": 6.991021,
+    "source": "stations.json@pre-stage-1",
+    "name": "Saarbrücken Hbf"
+  },
+  "5453": {
+    "lat": 49.230425,
+    "lng": 7.018788,
+    "source": "stations.json@pre-stage-1",
+    "name": "Saarbrücken Ost"
+  },
+  "5454": {
+    "lat": 49.242003,
+    "lng": 6.956526,
+    "source": "stations.json@pre-stage-1",
+    "name": "Saarbrücken-Burbach"
+  },
+  "5456": {
+    "lat": 49.606455,
+    "lng": 6.557034,
+    "source": "stations.json@pre-stage-1",
+    "name": "Saarburg (Bz Trier)"
+  },
+  "5457": {
+    "lat": 49.516441,
+    "lng": 6.6075,
+    "source": "stations.json@pre-stage-1",
+    "name": "Saarhölzbach"
+  },
+  "5458": {
+    "lat": 49.32783,
+    "lng": 6.750169,
+    "source": "stations.json@pre-stage-1",
+    "name": "Saarlouis Hbf"
+  },
+  "5460": {
+    "lat": 50.59408,
+    "lng": 8.881774,
+    "source": "stations.json@pre-stage-1",
+    "name": "Saasen"
+  },
+  "5511": {
+    "lat": 50.771569,
+    "lng": 7.915248,
+    "source": "stations.json@pre-stage-1",
+    "name": "Sassenroth"
+  },
+  "5522": {
+    "lat": 49.873807,
+    "lng": 8.154249,
+    "source": "stations.json@pre-stage-1",
+    "name": "Saulheim"
+  },
+  "5529": {
+    "lat": 49.22794,
+    "lng": 7.049237,
+    "source": "stations.json@pre-stage-1",
+    "name": "Schafbrücke"
+  },
+  "5554": {
+    "lat": 49.244018,
+    "lng": 7.057083,
+    "source": "stations.json@pre-stage-1",
+    "name": "Scheidt (Saar)"
+  },
+  "5561": {
+    "lat": 50.791863,
+    "lng": 7.836636,
+    "source": "stations.json@pre-stage-1",
+    "name": "Scheuerfeld (Sieg)"
+  },
+  "5567": {
+    "lat": 49.39291,
+    "lng": 8.364945,
+    "source": "stations.json@pre-stage-1",
+    "name": "Schifferstadt"
+  },
+  "5568": {
+    "lat": 49.374089,
+    "lng": 8.377314,
+    "source": "stations.json@pre-stage-1",
+    "name": "Schifferstadt Süd"
+  },
+  "5569": {
+    "lat": 49.363371,
+    "lng": 7.12934,
+    "source": "stations.json@pre-stage-1",
+    "name": "Schiffweiler"
+  },
+  "5595": {
+    "lat": 50.968783,
+    "lng": 9.201445,
+    "source": "stations.json@pre-stage-1",
+    "name": "Schlierbach (Kr Schwalm-Eder)"
+  },
+  "5601": {
+    "lat": 50.341177,
+    "lng": 9.510039,
+    "source": "stations.json@pre-stage-1",
+    "name": "Schlüchtern"
+  },
+  "5606": {
+    "lat": 50.456013,
+    "lng": 9.787847,
+    "source": "stations.json@pre-stage-1",
+    "name": "Schmalnau"
+  },
+  "5631": {
+    "lat": 49.636377,
+    "lng": 6.58097,
+    "source": "stations.json@pre-stage-1",
+    "name": "Schoden-Ockfen"
+  },
+  "5632": {
+    "lat": 49.565924,
+    "lng": 9.067457,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hesseneck-Schöllenbach"
+  },
+  "5680": {
+    "lat": 49.358867,
+    "lng": 7.687317,
+    "source": "stations.json@pre-stage-1",
+    "name": "Schopp"
+  },
+  "5708": {
+    "lat": 50.154354,
+    "lng": 8.52797,
+    "source": "stations.json@pre-stage-1",
+    "name": "Schwalbach a Ts (Limes)"
+  },
+  "5739": {
+    "lat": 49.831062,
+    "lng": 6.740335,
+    "source": "stations.json@pre-stage-1",
+    "name": "Schweich DB"
+  },
+  "5772": {
+    "lat": 50.748892,
+    "lng": 8.252661,
+    "source": "stations.json@pre-stage-1",
+    "name": "Sechshelden"
+  },
+  "5800": {
+    "lat": 49.906959,
+    "lng": 6.823421,
+    "source": "stations.json@pre-stage-1",
+    "name": "Sehlem (Kr Wittlich)"
+  },
+  "5815": {
+    "lat": 50.04146,
+    "lng": 8.967472,
+    "source": "stations.json@pre-stage-1",
+    "name": "Seligenstadt (Hess)"
+  },
+  "5829": {
+    "lat": 49.577132,
+    "lng": 6.569981,
+    "source": "stations.json@pre-stage-1",
+    "name": "Serrig"
+  },
+  "5832": {
+    "lat": 50.241906,
+    "lng": 8.646005,
+    "source": "stations.json@pre-stage-1",
+    "name": "Seulberg"
+  },
+  "5836": {
+    "lat": 49.20927,
+    "lng": 8.042565,
+    "source": "stations.json@pre-stage-1",
+    "name": "Siebeldingen-Birkweiler"
+  },
+  "5847": {
+    "lat": 49.361696,
+    "lng": 6.665362,
+    "source": "stations.json@pre-stage-1",
+    "name": "Siersburg"
+  },
+  "5848": {
+    "lat": 50.485857,
+    "lng": 7.77138,
+    "source": "stations.json@pre-stage-1",
+    "name": "Siershahn"
+  },
+  "5867": {
+    "lat": 51.058605,
+    "lng": 9.323773,
+    "source": "stations.json@pre-stage-1",
+    "name": "Singlis"
+  },
+  "5869": {
+    "lat": 50.649827,
+    "lng": 8.324932,
+    "source": "stations.json@pre-stage-1",
+    "name": "Sinn"
+  },
+  "5871": {
+    "lat": 50.546982,
+    "lng": 7.258279,
+    "source": "stations.json@pre-stage-1",
+    "name": "Sinzig (Rhein)"
+  },
+  "5875": {
+    "lat": 49.78285,
+    "lng": 7.649816,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bad Sobernheim"
+  },
+  "5889": {
+    "lat": 50.545585,
+    "lng": 8.406693,
+    "source": "stations.json@pre-stage-1",
+    "name": "Solms"
+  },
+  "5897": {
+    "lat": 49.194981,
+    "lng": 8.360272,
+    "source": "stations.json@pre-stage-1",
+    "name": "Sondernheim"
+  },
+  "5908": {
+    "lat": 51.072153,
+    "lng": 9.930934,
+    "source": "stations.json@pre-stage-1",
+    "name": "Sontra"
+  },
+  "5917": {
+    "lat": 50.255544,
+    "lng": 7.645473,
+    "source": "stations.json@pre-stage-1",
+    "name": "Spay"
+  },
+  "5919": {
+    "lat": 51.377458,
+    "lng": 9.563559,
+    "source": "stations.json@pre-stage-1",
+    "name": "Staufenberg-Speele"
+  },
+  "5920": {
+    "lat": 49.929184,
+    "lng": 6.615911,
+    "source": "stations.json@pre-stage-1",
+    "name": "Speicher"
+  },
+  "5923": {
+    "lat": 49.324119,
+    "lng": 8.427949,
+    "source": "stations.json@pre-stage-1",
+    "name": "Speyer Hbf"
+  },
+  "5931": {
+    "lat": 50.015201,
+    "lng": 8.68874,
+    "source": "stations.json@pre-stage-1",
+    "name": "Dreieich-Sprendlingen"
+  },
+  "5932": {
+    "lat": 49.858947,
+    "lng": 7.981795,
+    "source": "stations.json@pre-stage-1",
+    "name": "Sprendlingen (Rheinhess)"
+  },
+  "5939": {
+    "lat": 50.150155,
+    "lng": 7.714587,
+    "source": "stations.json@pre-stage-1",
+    "name": "St. Goar"
+  },
+  "5940": {
+    "lat": 50.156035,
+    "lng": 7.714246,
+    "source": "stations.json@pre-stage-1",
+    "name": "St. Goarshausen"
+  },
+  "5942": {
+    "lat": 49.274763,
+    "lng": 7.110814,
+    "source": "stations.json@pre-stage-1",
+    "name": "St. Ingbert"
+  },
+  "5947": {
+    "lat": 50.069788,
+    "lng": 6.601076,
+    "source": "stations.json@pre-stage-1",
+    "name": "St. Thomas"
+  },
+  "5948": {
+    "lat": 49.466952,
+    "lng": 7.165293,
+    "source": "stations.json@pre-stage-1",
+    "name": "St. Wendel"
+  },
+  "5953": {
+    "lat": 50.825432,
+    "lng": 9.015278,
+    "source": "stations.json@pre-stage-1",
+    "name": "Stadtallendorf"
+  },
+  "5962": {
+    "lat": 50.39953,
+    "lng": 8.04595,
+    "source": "stations.json@pre-stage-1",
+    "name": "Staffel"
+  },
+  "5973": {
+    "lat": 49.780582,
+    "lng": 7.693103,
+    "source": "stations.json@pre-stage-1",
+    "name": "Staudernheim"
+  },
+  "5984": {
+    "lat": 49.31624,
+    "lng": 7.651613,
+    "source": "stations.json@pre-stage-1",
+    "name": "Steinalben"
+  },
+  "5986": {
+    "lat": 50.314349,
+    "lng": 9.443162,
+    "source": "stations.json@pre-stage-1",
+    "name": "Steinau (Straße)"
+  },
+  "5992": {
+    "lat": 50.44842,
+    "lng": 7.938888,
+    "source": "stations.json@pre-stage-1",
+    "name": "Steinefrenz"
+  },
+  "5998": {
+    "lat": 50.121369,
+    "lng": 8.906852,
+    "source": "stations.json@pre-stage-1",
+    "name": "Steinheim/Main"
+  },
+  "6007": {
+    "lat": 49.454122,
+    "lng": 7.524197,
+    "source": "stations.json@pre-stage-1",
+    "name": "Steinwenden"
+  },
+  "6017": {
+    "lat": 50.312868,
+    "lng": 9.625417,
+    "source": "stations.json@pre-stage-1",
+    "name": "Sterbfritz"
+  },
+  "6031": {
+    "lat": 50.540536,
+    "lng": 8.325365,
+    "source": "stations.json@pre-stage-1",
+    "name": "Stockhausen (Lahn)"
+  },
+  "6033": {
+    "lat": 50.327056,
+    "lng": 9.010123,
+    "source": "stations.json@pre-stage-1",
+    "name": "Glauburg-Stockheim"
+  },
+  "6035": {
+    "lat": 49.809433,
+    "lng": 8.47244,
+    "source": "stations.json@pre-stage-1",
+    "name": "Stockstadt (Rhein)"
+  },
+  "6112": {
+    "lat": 49.299561,
+    "lng": 7.055062,
+    "source": "stations.json@pre-stage-1",
+    "name": "Sulzbach (Saar)"
+  },
+  "6113": {
+    "lat": 49.312078,
+    "lng": 7.078876,
+    "source": "stations.json@pre-stage-1",
+    "name": "Sulzbach (Saar) Altenwald"
+  },
+  "6114": {
+    "lat": 50.129833,
+    "lng": 8.527989,
+    "source": "stations.json@pre-stage-1",
+    "name": "Sulzbach (Taunus)"
+  },
+  "6115": {
+    "lat": 50.139399,
+    "lng": 8.518195,
+    "source": "stations.json@pre-stage-1",
+    "name": "Sulzbach (Taunus) Nord"
+  },
+  "6132": {
+    "lat": 49.552661,
+    "lng": 6.60082,
+    "source": "stations.json@pre-stage-1",
+    "name": "Taben"
+  },
+  "6166": {
+    "lat": 49.688479,
+    "lng": 6.462523,
+    "source": "stations.json@pre-stage-1",
+    "name": "Temmels"
+  },
+  "6185": {
+    "lat": 49.261262,
+    "lng": 7.578673,
+    "source": "stations.json@pre-stage-1",
+    "name": "Thaleischweiler-Fröschen"
+  },
+  "6193": {
+    "lat": 49.518978,
+    "lng": 7.448373,
+    "source": "stations.json@pre-stage-1",
+    "name": "Theisbergstegen"
+  },
+  "6204": {
+    "lat": 50.358808,
+    "lng": 7.27708,
+    "source": "stations.json@pre-stage-1",
+    "name": "Thür"
+  },
+  "6226": {
+    "lat": 49.03488,
+    "lng": 8.279421,
+    "source": "stations.json@pre-stage-1",
+    "name": "Maximiliansau im Rüsten"
+  },
+  "6232": {
+    "lat": 49.951565,
+    "lng": 7.120722,
+    "source": "stations.json@pre-stage-1",
+    "name": "Traben-Trarbach DB"
+  },
+  "6234": {
+    "lat": 50.45059,
+    "lng": 8.910969,
+    "source": "stations.json@pre-stage-1",
+    "name": "Trais-Horloff"
+  },
+  "6249": {
+    "lat": 50.009042,
+    "lng": 7.852359,
+    "source": "stations.json@pre-stage-1",
+    "name": "Trechtingshausen"
+  },
+  "6250": {
+    "lat": 50.179836,
+    "lng": 7.299635,
+    "source": "stations.json@pre-stage-1",
+    "name": "Treis-Karden"
+  },
+  "6256": {
+    "lat": 50.910661,
+    "lng": 9.185673,
+    "source": "stations.json@pre-stage-1",
+    "name": "Treysa"
+  },
+  "6264": {
+    "lat": 49.756846,
+    "lng": 6.652453,
+    "source": "stations.json@pre-stage-1",
+    "name": "Trier Hbf"
+  },
+  "6265": {
+    "lat": 49.74463,
+    "lng": 6.636686,
+    "source": "stations.json@pre-stage-1",
+    "name": "Trier Süd"
+  },
+  "6288": {
+    "lat": 49.580358,
+    "lng": 7.114615,
+    "source": "stations.json@pre-stage-1",
+    "name": "Türkismühle"
+  },
+  "6316": {
+    "lat": 50.010673,
+    "lng": 8.142584,
+    "source": "stations.json@pre-stage-1",
+    "name": "Uhlerborn"
+  },
+  "6334": {
+    "lat": 50.602992,
+    "lng": 7.219678,
+    "source": "stations.json@pre-stage-1",
+    "name": "Unkel"
+  },
+  "6338": {
+    "lat": 50.654168,
+    "lng": 7.888829,
+    "source": "stations.json@pre-stage-1",
+    "name": "Unnau-Korb"
+  },
+  "6353": {
+    "lat": 48.980676,
+    "lng": 8.212761,
+    "source": "stations.json@pre-stage-1",
+    "name": "Berg (Pfalz)"
+  },
+  "6367": {
+    "lat": 49.522537,
+    "lng": 7.663654,
+    "source": "stations.json@pre-stage-1",
+    "name": "Sulzbachtal"
+  },
+  "6372": {
+    "lat": 49.975137,
+    "lng": 8.798159,
+    "source": "stations.json@pre-stage-1",
+    "name": "Rödermark-Urberach"
+  },
+  "6374": {
+    "lat": 50.402613,
+    "lng": 7.509072,
+    "source": "stations.json@pre-stage-1",
+    "name": "Urmitz"
+  },
+  "6378": {
+    "lat": 49.995933,
+    "lng": 7.004806,
+    "source": "stations.json@pre-stage-1",
+    "name": "Ürzig DB"
+  },
+  "6379": {
+    "lat": 50.102659,
+    "lng": 6.602947,
+    "source": "stations.json@pre-stage-1",
+    "name": "Usch-Zendscheid"
+  },
+  "6392": {
+    "lat": 50.399645,
+    "lng": 7.609821,
+    "source": "stations.json@pre-stage-1",
+    "name": "Vallendar"
+  },
+  "6419": {
+    "lat": 50.39562,
+    "lng": 8.186885,
+    "source": "stations.json@pre-stage-1",
+    "name": "Villmar"
+  },
+  "6435": {
+    "lat": 49.438535,
+    "lng": 7.706011,
+    "source": "stations.json@pre-stage-1",
+    "name": "Vogelweh"
+  },
+  "6445": {
+    "lat": 49.249091,
+    "lng": 6.848156,
+    "source": "stations.json@pre-stage-1",
+    "name": "Völklingen"
+  },
+  "6457": {
+    "lat": 51.103134,
+    "lng": 9.35804,
+    "source": "stations.json@pre-stage-1",
+    "name": "Wabern (Bz Kassel)"
+  },
+  "6458": {
+    "lat": 49.4393,
+    "lng": 8.191152,
+    "source": "stations.json@pre-stage-1",
+    "name": "Wachenheim (Pfalz)"
+  },
+  "6460": {
+    "lat": 50.253958,
+    "lng": 9.295828,
+    "source": "stations.json@pre-stage-1",
+    "name": "Wächtersbach"
+  },
+  "6463": {
+    "lat": 50.014915,
+    "lng": 8.235108,
+    "source": "stations.json@pre-stage-1",
+    "name": "Waggonfabrik"
+  },
+  "6484": {
+    "lat": 49.288337,
+    "lng": 7.651516,
+    "source": "stations.json@pre-stage-1",
+    "name": "Waldfischbach"
+  },
+  "6497": {
+    "lat": 49.5588,
+    "lng": 7.129374,
+    "source": "stations.json@pre-stage-1",
+    "name": "Walhausen (Saar)"
+  },
+  "6503": {
+    "lat": 50.001339,
+    "lng": 8.580811,
+    "source": "stations.json@pre-stage-1",
+    "name": "Walldorf (Hess)"
+  },
+  "6509": {
+    "lat": 49.832648,
+    "lng": 8.049458,
+    "source": "stations.json@pre-stage-1",
+    "name": "Wallertheim"
+  },
+  "6517": {
+    "lat": 50.532512,
+    "lng": 7.078478,
+    "source": "stations.json@pre-stage-1",
+    "name": "Walporzheim"
+  },
+  "6562": {
+    "lat": 49.708467,
+    "lng": 6.537216,
+    "source": "stations.json@pre-stage-1",
+    "name": "Wasserliesch"
+  },
+  "6570": {
+    "lat": 50.5455,
+    "lng": 8.723435,
+    "source": "stations.json@pre-stage-1",
+    "name": "Watzenborn-Steinberg"
+  },
+  "6573": {
+    "lat": 50.359559,
+    "lng": 8.843673,
+    "source": "stations.json@pre-stage-1",
+    "name": "Weckesheim"
+  },
+  "6587": {
+    "lat": 49.586464,
+    "lng": 6.376822,
+    "source": "stations.json@pre-stage-1",
+    "name": "Wehr (Mosel)"
+  },
+  "6612": {
+    "lat": 50.486368,
+    "lng": 8.267949,
+    "source": "stations.json@pre-stage-1",
+    "name": "Weilburg"
+  },
+  "6627": {
+    "lat": 49.513931,
+    "lng": 8.249874,
+    "source": "stations.json@pre-stage-1",
+    "name": "Weisenheim (Sand)"
+  },
+  "6628": {
+    "lat": 50.052573,
+    "lng": 8.877828,
+    "source": "stations.json@pre-stage-1",
+    "name": "Rodgau-Weiskirchen"
+  },
+  "6638": {
+    "lat": 50.421177,
+    "lng": 7.450988,
+    "source": "stations.json@pre-stage-1",
+    "name": "Weißenthurm"
+  },
+  "6641": {
+    "lat": 50.173246,
+    "lng": 8.586918,
+    "source": "stations.json@pre-stage-1",
+    "name": "Oberursel-Weißkirchen/Steinbach"
+  },
+  "6647": {
+    "lat": 49.909706,
+    "lng": 8.579385,
+    "source": "stations.json@pre-stage-1",
+    "name": "Weiterstadt"
+  },
+  "6652": {
+    "lat": 49.878575,
+    "lng": 7.956653,
+    "source": "stations.json@pre-stage-1",
+    "name": "Welgesheim-Zotzenheim"
+  },
+  "6653": {
+    "lat": 50.480996,
+    "lng": 9.722538,
+    "source": "stations.json@pre-stage-1",
+    "name": "Welkers"
+  },
+  "6655": {
+    "lat": 49.67266,
+    "lng": 6.441322,
+    "source": "stations.json@pre-stage-1",
+    "name": "Wellen (Mosel)"
+  },
+  "6666": {
+    "lat": 49.369521,
+    "lng": 7.085936,
+    "source": "stations.json@pre-stage-1",
+    "name": "Wemmetsweiler Rathaus"
+  },
+  "6684": {
+    "lat": 50.59289,
+    "lng": 8.417191,
+    "source": "stations.json@pre-stage-1",
+    "name": "Werdorf"
+  },
+  "6710": {
+    "lat": 50.557642,
+    "lng": 7.966978,
+    "source": "stations.json@pre-stage-1",
+    "name": "Westerburg"
+  },
+  "6730": {
+    "lat": 50.565631,
+    "lng": 8.503819,
+    "source": "stations.json@pre-stage-1",
+    "name": "Wetzlar"
+  },
+  "6734": {
+    "lat": 49.833425,
+    "lng": 8.940854,
+    "source": "stations.json@pre-stage-1",
+    "name": "Groß Umstadt-Wiebelsbach"
+  },
+  "6735": {
+    "lat": 49.371135,
+    "lng": 7.175665,
+    "source": "stations.json@pre-stage-1",
+    "name": "Wiebelskirchen"
+  },
+  "6740": {
+    "lat": 50.881937,
+    "lng": 9.136421,
+    "source": "stations.json@pre-stage-1",
+    "name": "Schwalmstadt-Wiera"
+  },
+  "6744": {
+    "lat": 50.070791,
+    "lng": 8.243731,
+    "source": "stations.json@pre-stage-1",
+    "name": "Wiesbaden Hbf"
+  },
+  "6745": {
+    "lat": 50.041412,
+    "lng": 8.256293,
+    "source": "stations.json@pre-stage-1",
+    "name": "Wiesbaden Ost"
+  },
+  "6746": {
+    "lat": 50.048829,
+    "lng": 8.236423,
+    "source": "stations.json@pre-stage-1",
+    "name": "Wiesbaden-Biebrich"
+  },
+  "6747": {
+    "lat": 50.054411,
+    "lng": 8.295044,
+    "source": "stations.json@pre-stage-1",
+    "name": "Wiesbaden-Erbenheim"
+  },
+  "6748": {
+    "lat": 50.08258,
+    "lng": 8.325635,
+    "source": "stations.json@pre-stage-1",
+    "name": "Wiesbaden-Igstadt"
+  },
+  "6749": {
+    "lat": 50.04759,
+    "lng": 8.194603,
+    "source": "stations.json@pre-stage-1",
+    "name": "Wiesbaden-Schierstein"
+  },
+  "6770": {
+    "lat": 49.209434,
+    "lng": 7.883823,
+    "source": "stations.json@pre-stage-1",
+    "name": "Wilgartswiesen"
+  },
+  "6779": {
+    "lat": 50.539329,
+    "lng": 7.985758,
+    "source": "stations.json@pre-stage-1",
+    "name": "Willmenrod"
+  },
+  "6785": {
+    "lat": 50.531112,
+    "lng": 8.032791,
+    "source": "stations.json@pre-stage-1",
+    "name": "Wilsenroth"
+  },
+  "6788": {
+    "lat": 49.662641,
+    "lng": 6.590462,
+    "source": "stations.json@pre-stage-1",
+    "name": "Wiltingen (Saar)"
+  },
+  "6790": {
+    "lat": 49.608742,
+    "lng": 6.406842,
+    "source": "stations.json@pre-stage-1",
+    "name": "Wincheringen"
+  },
+  "6791": {
+    "lat": 50.225056,
+    "lng": 8.876069,
+    "source": "stations.json@pre-stage-1",
+    "name": "Nidderau-Windecken"
+  },
+  "6793": {
+    "lat": 49.095452,
+    "lng": 8.122479,
+    "source": "stations.json@pre-stage-1",
+    "name": "Winden (Pfalz)"
+  },
+  "6802": {
+    "lat": 50.315424,
+    "lng": 7.523208,
+    "source": "stations.json@pre-stage-1",
+    "name": "Winningen (Mosel)"
+  },
+  "6804": {
+    "lat": 49.570548,
+    "lng": 7.855955,
+    "source": "stations.json@pre-stage-1",
+    "name": "Winnweiler"
+  },
+  "6816": {
+    "lat": 50.468396,
+    "lng": 7.78521,
+    "source": "stations.json@pre-stage-1",
+    "name": "Wirges"
+  },
+  "6817": {
+    "lat": 50.225784,
+    "lng": 9.258929,
+    "source": "stations.json@pre-stage-1",
+    "name": "Wirtheim"
+  },
+  "6819": {
+    "lat": 50.782871,
+    "lng": 7.739814,
+    "source": "stations.json@pre-stage-1",
+    "name": "Wissen (Sieg)"
+  },
+  "6834": {
+    "lat": 49.973121,
+    "lng": 6.943557,
+    "source": "stations.json@pre-stage-1",
+    "name": "Wittlich Hbf"
+  },
+  "6843": {
+    "lat": 49.930866,
+    "lng": 8.648051,
+    "source": "stations.json@pre-stage-1",
+    "name": "Darmstadt-Wixhausen"
+  },
+  "6853": {
+    "lat": 51.186552,
+    "lng": 9.45006,
+    "source": "stations.json@pre-stage-1",
+    "name": "Felsberg-Wolfershausen"
+  },
+  "6855": {
+    "lat": 50.397335,
+    "lng": 8.81622,
+    "source": "stations.json@pre-stage-1",
+    "name": "Wölfersheim-Södel"
+  },
+  "6856": {
+    "lat": 50.123107,
+    "lng": 8.957469,
+    "source": "stations.json@pre-stage-1",
+    "name": "Wolfgang (Kr Hanau)"
+  },
+  "6864": {
+    "lat": 49.58428,
+    "lng": 7.610287,
+    "source": "stations.json@pre-stage-1",
+    "name": "Wolfstein"
+  },
+  "6887": {
+    "lat": 49.63494,
+    "lng": 8.356448,
+    "source": "stations.json@pre-stage-1",
+    "name": "Worms Hbf"
+  },
+  "6889": {
+    "lat": 49.846251,
+    "lng": 8.114712,
+    "source": "stations.json@pre-stage-1",
+    "name": "Wörrstadt"
+  },
+  "6890": {
+    "lat": 50.244752,
+    "lng": 8.249323,
+    "source": "stations.json@pre-stage-1",
+    "name": "Wörsdorf"
+  },
+  "6893": {
+    "lat": 49.045678,
+    "lng": 8.273146,
+    "source": "stations.json@pre-stage-1",
+    "name": "Wörth (Rhein)"
+  },
+  "6943": {
+    "lat": 49.244182,
+    "lng": 7.193441,
+    "source": "stations.json@pre-stage-1",
+    "name": "Würzbach (Saar)"
+  },
+  "6962": {
+    "lat": 49.398897,
+    "lng": 7.034824,
+    "source": "stations.json@pre-stage-1",
+    "name": "Wustweiler"
+  },
+  "6989": {
+    "lat": 49.720326,
+    "lng": 8.994116,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bad König-Zell"
+  },
+  "6990": {
+    "lat": 50.727164,
+    "lng": 9.199797,
+    "source": "stations.json@pre-stage-1",
+    "name": "Zell-Romrod"
+  },
+  "6995": {
+    "lat": 50.016157,
+    "lng": 8.969946,
+    "source": "stations.json@pre-stage-1",
+    "name": "Mainhausen Zellhausen"
+  },
+  "6999": {
+    "lat": 50.036516,
+    "lng": 8.605153,
+    "source": "stations.json@pre-stage-1",
+    "name": "Zeppelinheim"
+  },
+  "7026": {
+    "lat": 51.008144,
+    "lng": 9.225195,
+    "source": "stations.json@pre-stage-1",
+    "name": "Zimmersrode"
+  },
+  "7066": {
+    "lat": 49.246805,
+    "lng": 7.356643,
+    "source": "stations.json@pre-stage-1",
+    "name": "Zweibrücken Hbf"
+  },
+  "7075": {
+    "lat": 49.725902,
+    "lng": 8.609119,
+    "source": "stations.json@pre-stage-1",
+    "name": "Zwingenberg (Bergstr)"
+  },
+  "7083": {
+    "lat": 49.417494,
+    "lng": 7.994912,
+    "source": "stations.json@pre-stage-1",
+    "name": "Weidenthal"
+  },
+  "7157": {
+    "lat": 49.32716,
+    "lng": 7.093916,
+    "source": "stations.json@pre-stage-1",
+    "name": "Friedrichsthal Mitte"
+  },
+  "7158": {
+    "lat": 49.369979,
+    "lng": 7.049984,
+    "source": "stations.json@pre-stage-1",
+    "name": "Gennweiler"
+  },
+  "7161": {
+    "lat": 49.861045,
+    "lng": 8.687527,
+    "source": "stations.json@pre-stage-1",
+    "name": "Darmstadt-Lichtwiese"
+  },
+  "7166": {
+    "lat": 50.008064,
+    "lng": 8.785541,
+    "source": "stations.json@pre-stage-1",
+    "name": "Dietzenbach Bahnhof"
+  },
+  "7167": {
+    "lat": 50.060069,
+    "lng": 8.802202,
+    "source": "stations.json@pre-stage-1",
+    "name": "Heusenstamm"
+  },
+  "7168": {
+    "lat": 50.120519,
+    "lng": 8.857998,
+    "source": "stations.json@pre-stage-1",
+    "name": "Mühlheim-Dietesheim"
+  },
+  "7169": {
+    "lat": 50.105332,
+    "lng": 8.738377,
+    "source": "stations.json@pre-stage-1",
+    "name": "Offenbach-Kaiserlei"
+  },
+  "7170": {
+    "lat": 50.105989,
+    "lng": 8.750485,
+    "source": "stations.json@pre-stage-1",
+    "name": "Offenbach Ledermuseum"
+  },
+  "7171": {
+    "lat": 50.105855,
+    "lng": 8.763633,
+    "source": "stations.json@pre-stage-1",
+    "name": "Offenbach Marktplatz"
+  },
+  "7177": {
+    "lat": 49.64509,
+    "lng": 8.45925,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bürstadt (Ried)"
+  },
+  "7184": {
+    "lat": 49.103209,
+    "lng": 8.002787,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bad Bergzabern"
+  },
+  "7185": {
+    "lat": 49.104118,
+    "lng": 8.070307,
+    "source": "stations.json@pre-stage-1",
+    "name": "Barbelroth"
+  },
+  "7187": {
+    "lat": 49.105621,
+    "lng": 8.030754,
+    "source": "stations.json@pre-stage-1",
+    "name": "Kapellen-Drusweiler"
+  },
+  "7189": {
+    "lat": 48.992129,
+    "lng": 8.238217,
+    "source": "stations.json@pre-stage-1",
+    "name": "Neuburg (Rhein)"
+  },
+  "7196": {
+    "lat": 49.038878,
+    "lng": 8.022177,
+    "source": "stations.json@pre-stage-1",
+    "name": "Kapsweyer"
+  },
+  "7200": {
+    "lat": 49.061238,
+    "lng": 8.079776,
+    "source": "stations.json@pre-stage-1",
+    "name": "Schaidt (Pf)"
+  },
+  "7201": {
+    "lat": 49.580748,
+    "lng": 8.179166,
+    "source": "stations.json@pre-stage-1",
+    "name": "Albsheim (Eis)"
+  },
+  "7202": {
+    "lat": 49.606952,
+    "lng": 8.188033,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bockenheim-Kindenheim"
+  },
+  "7203": {
+    "lat": 49.535187,
+    "lng": 8.022562,
+    "source": "stations.json@pre-stage-1",
+    "name": "Ramsen"
+  },
+  "7213": {
+    "lat": 50.017246,
+    "lng": 8.78899,
+    "source": "stations.json@pre-stage-1",
+    "name": "Dietzenbach-Mitte"
+  },
+  "7216": {
+    "lat": 50.02524,
+    "lng": 8.792627,
+    "source": "stations.json@pre-stage-1",
+    "name": "Dietzenbach-Steinberg"
+  },
+  "7385": {
+    "lat": 49.479005,
+    "lng": 8.452152,
+    "source": "stations.json@pre-stage-1",
+    "name": "Ludwigshafen (Rhein) Mitte"
+  },
+  "7461": {
+    "lat": 49.044675,
+    "lng": 8.039369,
+    "source": "stations.json@pre-stage-1",
+    "name": "Steinfeld (Pfalz)"
+  },
+  "7531": {
+    "lat": 49.738134,
+    "lng": 8.118732,
+    "source": "stations.json@pre-stage-1",
+    "name": "Alzey Süd"
+  },
+  "7715": {
+    "lat": 49.621788,
+    "lng": 8.214173,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hohensülzen"
+  },
+  "7854": {
+    "lat": 49.032686,
+    "lng": 7.999224,
+    "source": "stations.json@pre-stage-1",
+    "name": "Schweighofen"
+  },
+  "7862": {
+    "lat": 49.43549,
+    "lng": 7.744124,
+    "source": "stations.json@pre-stage-1",
+    "name": "Galgenschanze"
+  },
+  "7871": {
+    "lat": 49.950552,
+    "lng": 7.965441,
+    "source": "stations.json@pre-stage-1",
+    "name": "Ockenheim"
+  },
+  "7872": {
+    "lat": 49.585688,
+    "lng": 7.139443,
+    "source": "stations.json@pre-stage-1",
+    "name": "Nohfelden"
+  },
+  "7875": {
+    "lat": 49.386201,
+    "lng": 8.045236,
+    "source": "stations.json@pre-stage-1",
+    "name": "Neidenfels"
+  },
+  "7956": {
+    "lat": 49.01628,
+    "lng": 8.253223,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hagenbach"
+  },
+  "7957": {
+    "lat": 50.007084,
+    "lng": 8.700922,
+    "source": "stations.json@pre-stage-1",
+    "name": "Dreieich-Weibelfeld"
+  },
+  "7963": {
+    "lat": 49.550606,
+    "lng": 7.887939,
+    "source": "stations.json@pre-stage-1",
+    "name": "Münchweiler (Alsenz)"
+  },
+  "7964": {
+    "lat": 49.407169,
+    "lng": 6.891561,
+    "source": "stations.json@pre-stage-1",
+    "name": "Lebach-Jabach"
+  },
+  "7968": {
+    "lat": 50.588355,
+    "lng": 8.669138,
+    "source": "stations.json@pre-stage-1",
+    "name": "Gießen Oswaldsgarten"
+  },
+  "7969": {
+    "lat": 50.185688,
+    "lng": 8.584694,
+    "source": "stations.json@pre-stage-1",
+    "name": "Oberursel-Stierstadt"
+  },
+  "7980": {
+    "lat": 50.112004,
+    "lng": 8.643374,
+    "source": "stations.json@pre-stage-1",
+    "name": "Frankfurt am Main Messe"
+  },
+  "7981": {
+    "lat": 50.230197,
+    "lng": 7.595521,
+    "source": "stations.json@pre-stage-1",
+    "name": "Boppard Süd"
+  },
+  "7982": {
+    "lat": 50.053167,
+    "lng": 8.570185,
+    "source": "stations.json@pre-stage-1",
+    "name": "Frankfurt am Main Flughafen Fernbahnhof"
+  },
+  "7986": {
+    "lat": 50.173304,
+    "lng": 8.529183,
+    "source": "stations.json@pre-stage-1",
+    "name": "Kronberg (Taunus) Süd"
+  },
+  "8023": {
+    "lat": 50.005707,
+    "lng": 8.658565,
+    "source": "stations.json@pre-stage-1",
+    "name": "Langen-Flugsicherung"
+  },
+  "8058": {
+    "lat": 50.090124,
+    "lng": 8.506011,
+    "source": "stations.json@pre-stage-1",
+    "name": "Frankfurt-Zeilsheim"
+  },
+  "8130": {
+    "lat": 49.456368,
+    "lng": 7.548373,
+    "source": "stations.json@pre-stage-1",
+    "name": "Miesenbach"
+  },
+  "8133": {
+    "lat": 51.132177,
+    "lng": 9.548839,
+    "source": "stations.json@pre-stage-1",
+    "name": "Melsungen-Bartenwetzerbrücke"
+  },
+  "8134": {
+    "lat": 51.35426,
+    "lng": 9.460796,
+    "source": "stations.json@pre-stage-1",
+    "name": "Vellmar-Osterberg/EKZ"
+  },
+  "8135": {
+    "lat": 51.324561,
+    "lng": 9.452204,
+    "source": "stations.json@pre-stage-1",
+    "name": "Kassel-Kirchditmold"
+  },
+  "8136": {
+    "lat": 51.338918,
+    "lng": 9.462869,
+    "source": "stations.json@pre-stage-1",
+    "name": "Kassel-Jungfernkopf"
+  },
+  "8137": {
+    "lat": 50.418417,
+    "lng": 7.527995,
+    "source": "stations.json@pre-stage-1",
+    "name": "Urmitz Rheinbrücke"
+  },
+  "8171": {
+    "lat": 49.055109,
+    "lng": 8.251944,
+    "source": "stations.json@pre-stage-1",
+    "name": "Wörth (Rhein)-Mozartstraße"
+  },
+  "8197": {
+    "lat": 50.15986,
+    "lng": 8.534777,
+    "source": "stations.json@pre-stage-1",
+    "name": "Schwalbach Nord"
+  },
+  "8198": {
+    "lat": 49.239171,
+    "lng": 7.456623,
+    "source": "stations.json@pre-stage-1",
+    "name": "Stambach"
+  },
+  "8199": {
+    "lat": 49.341553,
+    "lng": 8.157061,
+    "source": "stations.json@pre-stage-1",
+    "name": "Neustadt Süd"
+  },
+  "8200": {
+    "lat": 49.199169,
+    "lng": 7.849564,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hauenstein Mitte"
+  },
+  "8201": {
+    "lat": 49.192639,
+    "lng": 8.297626,
+    "source": "stations.json@pre-stage-1",
+    "name": "Bellheim Am Mühlbuckel"
+  },
+  "8202": {
+    "lat": 49.15159,
+    "lng": 8.279365,
+    "source": "stations.json@pre-stage-1",
+    "name": "Rülzheim Freizeitzentrum"
+  },
+  "8203": {
+    "lat": 49.114836,
+    "lng": 8.273291,
+    "source": "stations.json@pre-stage-1",
+    "name": "Rheinzabern Rappengasse"
+  },
+  "8204": {
+    "lat": 49.109366,
+    "lng": 8.273057,
+    "source": "stations.json@pre-stage-1",
+    "name": "Rheinzabern Alte Römerstraße"
+  },
+  "8205": {
+    "lat": 49.052992,
+    "lng": 8.262363,
+    "source": "stations.json@pre-stage-1",
+    "name": "Wörth Zügelstraße"
+  },
+  "8206": {
+    "lat": 49.208341,
+    "lng": 8.373755,
+    "source": "stations.json@pre-stage-1",
+    "name": "Germersheim Süd/Nolte"
+  },
+  "8210": {
+    "lat": 49.522649,
+    "lng": 8.349558,
+    "source": "stations.json@pre-stage-1",
+    "name": "Frankenthal Süd"
+  },
+  "8215": {
+    "lat": 49.41579,
+    "lng": 7.699292,
+    "source": "stations.json@pre-stage-1",
+    "name": "Hohenecken"
+  },
+  "8242": {
+    "lat": 49.208725,
+    "lng": 7.937192,
+    "source": "stations.json@pre-stage-1",
+    "name": "Annweiler-Sarnstall"
+  },
+  "8244": {
+    "lat": 49.219876,
+    "lng": 8.379305,
+    "source": "stations.json@pre-stage-1",
+    "name": "Germersheim Mitte/Rhein"
+  },
+  "8252": {
+    "lat": 49.841354,
+    "lng": 8.35714,
+    "source": "stations.json@pre-stage-1",
+    "name": "Dienheim"
+  },
+  "8258": {
+    "lat": 50.357714,
+    "lng": 7.589985,
+    "source": "stations.json@pre-stage-1",
+    "name": "Koblenz Stadtmitte"
+  },
+  "8264": {
+    "lat": 49.806223,
+    "lng": 8.607033,
+    "source": "stations.json@pre-stage-1",
+    "name": "Pfungstadt"
+  },
+  "8268": {
+    "lat": 50.056574,
+    "lng": 8.594495,
+    "source": "stations.json@pre-stage-1",
+    "name": "Frankfurt am Main Gateway Gardens"
+  },
+  "8279": {
+    "lat": 49.243611,
+    "lng": 6.944932,
+    "source": "stations.json@pre-stage-1",
+    "name": "Burbach Mitte"
+  },
+  "8283": {
+    "lat": 49.189165,
+    "lng": 8.114176,
+    "source": "stations.json@pre-stage-1",
+    "name": "Landau (Pfalz) Süd"
+  }
+}

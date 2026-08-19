@@ -12,8 +12,29 @@ import {
 
 export type {
   Review, Project, DepartmentReview, BvbEea, PsvItk, AuditLog,
-  ProjectInput, BulkImport, Stats, Filters
+  ProjectInput, BulkImport, Stats, Filters,
+  ChecklistAnswerInput, ProjectChecklist, ChecklistSubmit
 } from "./validation";
+
+// Projektanmeldung checklist — the 22-question form
+export {
+  CHECKLIST_QUESTIONS, CHECKLIST_BY_KEY, DEPARTMENT_QUESTIONS, CHECKLIST_MODES,
+  JA_NEIN, FREISCHALTUNG_OPTIONS, TERMIN_STATUS, UNTERSCHRIFTENBLATT,
+  buildDepartmentReviews, defaultAnswers, isDepartmentRequired, notifiedRoles,
+  visibleQuestions,
+} from "./checklist";
+export type {
+  ChecklistQuestion, ChecklistMode, ChecklistAnswer, ChecklistAnswers,
+  DepartmentQuestion, GeneratedReview, JaNein, FreischaltungOption, TerminStatus,
+  SignatureBlock,
+} from "./checklist";
+
+// Canonical vocabularies
+export { PROJEKTSTAENDE, normalizeProjektstand, toCanonicalProjektstand } from "./projektstand";
+export type { Projektstand as CanonicalProjektstand } from "./projektstand";
+export { normalizeReviewStatus, isOpen, isApproved, isBlocking } from "./review-status";
+export { parseStoredDate, toDate, formatGerman } from "./date";
+export type { ParsedDate } from "./date";
 
 // Re-export enums
 export { DEPARTMENTS, REVIEW_STATUSES, PROJECT_STANDS, REGIONS, DEPARTMENT_LIST } from "./validation";

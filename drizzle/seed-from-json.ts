@@ -23,6 +23,7 @@ import path from "node:path";
 import { ProjectSchema as ProjectUISchema, type Review, DEPARTMENTS } from "../shared/validation";
 import { projects, departmentReviews, auditLog } from "./schema";
 import { eq } from "drizzle-orm";
+import { toDate } from "../shared/date";
 import { SYNC_VERSION, DATA_JSON_PATH } from "../shared/const";
 
 const DRY_RUN = process.argv.includes("--dry-run");
@@ -66,7 +67,7 @@ async function main() {
       const normalized = {
         id: projectId,
         originalRowIndex: rawProject.originalRowIndex ?? null,
-        projektnummer: rawProject.projektnummer ?? "",
+        projektnummer: rawProject.projektnummer ?? null,
         bahnhofsmanagement: rawProject.bahnhofsmanagement ?? null,
         station: rawProject.station ?? null,
         bahnhofsnummer: rawProject.bahnhofsnummer ?? null,
@@ -110,7 +111,7 @@ async function main() {
         projektstand: validated.projektstand,
         eigvEinstufung: validated.eigvEinstufung,
         projektleiter: validated.projektleiter,
-        terminProjektvorstellung: validated.terminProjektvorstellung ? new Date(validated.terminProjektvorstellung) : null,
+        terminProjektvorstellung: toDate(validated.terminProjektvorstellung),
         kommentar: validated.kommentar,
         projektLink: validated.projektLink,
         syncVersion: SYNC_VERSION,
@@ -143,7 +144,7 @@ async function main() {
           projectId: projectId,
           department: r.department,
           prueferName: r.prueferName,
-          datum: r.pruefDatum ? new Date(r.pruefDatum) : null,
+          datum: toDate(r.pruefDatum),
           status: r.status,
         }));
         await db.insert(departmentReviews).values(reviewInserts);

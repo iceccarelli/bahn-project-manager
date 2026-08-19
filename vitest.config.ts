@@ -17,6 +17,9 @@ export default defineConfig({
     include: [
       "server/**/*.test.ts", 
       "server/**/*.spec.ts",
+      // Pure-logic tests for the shared vocabularies and the checklist. These
+      // need no DATABASE_URL, so unlike the server suite they actually run.
+      "shared/**/*.test.ts",
       // NEW: End-to-end sync tests for perfect JSON ↔ DB round-trip
       "server/**/*.sync.test.ts",
       "tests/e2e/**/*.test.ts"

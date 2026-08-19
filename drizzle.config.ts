@@ -7,7 +7,10 @@ if (!connectionString) {
 
 export default defineConfig({
   schema: "./drizzle/schema.ts",
-  out: "./drizzle/migrations",
+  // The committed migrations and meta/_journal.json live in ./drizzle, not in
+  // ./drizzle/migrations (which held only a .gitkeep). With the old value
+  // `drizzle-kit generate` produced a fresh baseline and never saw them.
+  out: "./drizzle",
   dialect: "mysql", // TODO: Migrate to 'pg' for full-text search + better performance (Neon/Vercel Postgres recommended)
   dbCredentials: {
     url: connectionString,
@@ -15,7 +18,8 @@ export default defineConfig({
   // Perfect consistency: migrations folder + strict mode
   migrations: {
     table: "__drizzle_migrations",
-    schema: "public",
+    // NOTE: no `schema` key — that is a Postgres concept and this project is
+    // MySQL. Setting it here was silently ignored at best.
   },
   // Enhanced for perfect seeding & relations
   strict: true,
