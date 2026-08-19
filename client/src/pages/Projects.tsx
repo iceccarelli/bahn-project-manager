@@ -4,7 +4,7 @@ import {
   TableBody,
 } from "@/components/ui/table";
 import { useProjects, useFilters, useAllData, useSearchSuggestions, type Project, type Review } from "@/hooks/useDataQuery";
-import { useStations, PROJEKTSTAND_OPTIONS } from "@/hooks/useStations";
+import { useStations, PROJEKTSTAND_OPTIONS, stationKey } from "@/hooks/useStations";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -155,7 +155,10 @@ export default function Projects() {
   const { data: allData } = useAllData();
 
   // BM -> Station -> Bf. Nr. cascade for the "Neues Projekt" dialog dropdowns.
-  const { regions: stationRegions, stationsByRegion, bfNrByStation } = useStations();
+  // bfNrByRegionStation is keyed by (BM, Station): station names are NOT unique
+  // across regions, so a name-only lookup could hand back another region's
+  // Bahnhofsnummer.
+  const { regions: stationRegions, stationsByRegion, bfNrByRegionStation } = useStations();
 
   // Fully dynamic KPIs
   const totalProjects = allData?.projects?.length || 0;
@@ -858,7 +861,10 @@ export default function Projects() {
                   setNewProj({
                     ...newProj,
                     station: v,
-                    bahnhofsnummer: bfNrByStation[v] != null ? String(bfNrByStation[v]) : "",
+                    bahnhofsnummer: (() => {
+                      const nr = bfNrByRegionStation[stationKey(newProj.bahnhofsmanagement, v)];
+                      return nr != null ? String(nr) : "";
+                    })(),
                   })
                 }
               >

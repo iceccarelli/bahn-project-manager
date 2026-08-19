@@ -19,6 +19,11 @@
     "incremental": true,
     "tsBuildInfoFile": "./node_modules/typescript/tsbuildinfo",
     "noEmit": true,
+    // Explicit target. Without it tsc defaults to ES5, which rejects every
+    // `[...map]` / `for (const x of set)` in type-checking even though Vite and
+    // tsx transpile to modern output anyway. noEmit is true, so this changes
+    // nothing that ships - only what tsc is willing to accept.
+    "target": "ES2022",
     "module": "ESNext",
     "strict": true,
     "noUncheckedIndexedAccess": true,

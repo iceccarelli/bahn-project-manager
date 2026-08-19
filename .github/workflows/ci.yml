@@ -19,6 +19,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
       - run: pnpm lint
+      # Data integrity: canonical Bahnhofsmanagement, station master invariants,
+      # derived blocks in sync, and no regression in map coverage.
+      - run: pnpm verify:data
 
   test:
     runs-on: ubuntu-latest

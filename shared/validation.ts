@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { BAHNHOFSMANAGEMENT } from './bahnhofsmanagement';
 
 // ============================================
 // SINGLE SOURCE OF TRUTH — ALL ZOD SCHEMAS (v2.0 — PERFECT INTEGRATION)
@@ -25,10 +26,13 @@ export const PROJECT_STANDS = [
   "doppelt siehe Zeile 197", "FA - Stand Spalte AJ"
 ] as const;
 
-export const REGIONS = [
-  "Frankfurt", "Darmstadt", "Kassel", "Koblenz", "Saarbrücken",
-  "Kaiserslautern", "Mainz", "Gießen"
-] as const;
+/**
+ * Bahnhofsmanagement / region vocabulary.
+ * Single source of truth is shared/bahnhofsmanagement.ts, which is derived from
+ * `Hilfsdatei!N17:N25` of the live Projektanmeldung form. Re-exported here under
+ * the historical name so existing imports keep working.
+ */
+export const REGIONS = BAHNHOFSMANAGEMENT;
 
 export const USER_ROLES = ["admin", "user", "viewer"] as const;
 

@@ -7,6 +7,7 @@
  * Project fields match Excel Übersichtsliste column structure exactly.
  */
 
+import { normalizeBahnhofsmanagement } from "@shared/bahnhofsmanagement";
 import type { Project, Review, Stats, AuditLogEntry } from "@/hooks/useDataQuery";
 
 export interface ProjectUpdateInput {
@@ -36,8 +37,28 @@ export interface ProjectCreateInput {
   projektLink?: string;
 }
 
-const STORAGE_KEY_PROJECTS = "bahn_projects";
+/**
+ * Bump SCHEMA_VERSION whenever the shape or the vocabulary of data.json changes.
+ * The suffix makes every browser drop its stale cached copy and re-seed from the
+ * new file, instead of keeping pre-normalisation values forever (a project
+ * edited once used to freeze the whole dataset in localStorage).
+ *
+ * v2: Stage 1 — canonical Bahnhofsmanagement, string bahnhofsnummer /
+ *     streckennummer, whitespace-normalised text fields.
+ */
+const SCHEMA_VERSION = 2;
+const STORAGE_KEY_PROJECTS = `bahn_projects_v${SCHEMA_VERSION}`;
 const STORAGE_KEY_AUDIT = "bahn_audit_log";
+
+/** Remove caches written by earlier schema versions so they cannot be resurrected. */
+function purgeLegacyCaches() {
+  try {
+    localStorage.removeItem("bahn_projects");
+    for (let v = 1; v < SCHEMA_VERSION; v++) localStorage.removeItem(`bahn_projects_v${v}`);
+  } catch {
+    // private mode / quota — nothing to clean up, and nothing that should break boot
+  }
+}
 
 // Local-first data source (served automatically by Vercel from public/data.json)
 const LOCAL_DATA_JSON_URL = "/data.json";
@@ -60,7 +81,11 @@ function normalizeProjects(projects: any[]): Project[] {
   if (!Array.isArray(projects)) return [];
   return projects.map((p) => ({
     ...p,
-    bahnhofsmanagement: cleanStr(p?.bahnhofsmanagement),
+    // Canonical BM, so `===` region filters, the station cascade and the map all
+    // agree. scripts/normalize-existing-data.ts already cleans data.json; this
+    // is the second line of defence for rows created before Stage 1 or edited
+    // by hand. Never guesses — an unknown value becomes null.
+    bahnhofsmanagement: normalizeBahnhofsmanagement(p?.bahnhofsmanagement).value,
     station: cleanStr(p?.station),
     projektleiter: cleanStr(p?.projektleiter),
     projektstand: cleanStr(p?.projektstand),
@@ -76,6 +101,7 @@ function normalizeProjects(projects: any[]): Project[] {
 }
 
 async function initializeStorage() {
+  purgeLegacyCaches();
   const stored = localStorage.getItem(STORAGE_KEY_PROJECTS);
   if (stored) {
     try {

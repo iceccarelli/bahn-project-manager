@@ -1,0 +1,92 @@
+{
+  "generatedFrom": {
+    "source": "data/stations-source.json",
+    "sourceSha256": "3ee8691e80a05b26cb2078f00686e65c84339f7a662446f417f79d869fbadd60",
+    "originalWorkbook": "Bahnhoefe-2026-06-16.xlsx",
+    "originalWorkbookSha256": "a081b847d9a1d766fa4ad086d4c3f53831da7bc63b5d9716f227622b8274e454",
+    "ledger": "data/station-coordinates.json",
+    "ledgerEntries": 909
+  },
+  "national": {
+    "skipped": "data/stations-source-national.json not present"
+  },
+  "rbMitte": {
+    "rows": 919,
+    "fromNationalMaster": 918,
+    "retainedRetired": 1,
+    "withCoordinates": 909,
+    "withoutCoordinates": 10,
+    "sha256": "719717979f758f8b1bb2d06da52003a11b7d60c9b5759a9e6c1f44fb9ae570d2"
+  },
+  "bahnhofsmanagement": {
+    "Darmstadt": 94,
+    "Frankfurt": 110,
+    "Gießen": 111,
+    "Kaiserslautern": 155,
+    "Kassel": 101,
+    "Koblenz": 152,
+    "Mainz": 72,
+    "Saarbrücken": 124
+  },
+  "stationsWithoutCoordinates": [
+    {
+      "nr": 1733,
+      "station": "Trier-Euren",
+      "bm": "Saarbrücken"
+    },
+    {
+      "nr": 3416,
+      "station": "Kreuzberg (Ahr)",
+      "bm": "Koblenz"
+    },
+    {
+      "nr": 6266,
+      "station": "Trier West",
+      "bm": "Saarbrücken"
+    },
+    {
+      "nr": 7012,
+      "station": "Trier-Zewen",
+      "bm": "Saarbrücken"
+    },
+    {
+      "nr": 8211,
+      "station": "Zweibrücken-Rosengarten",
+      "bm": "Kaiserslautern"
+    },
+    {
+      "nr": 8299,
+      "station": "Trier Hafenstraße",
+      "bm": "Saarbrücken"
+    },
+    {
+      "nr": 8307,
+      "station": "Trier-Pallien",
+      "bm": "Saarbrücken"
+    },
+    {
+      "nr": 8320,
+      "station": "Frankfurt (Main) Ginnheim",
+      "bm": "Frankfurt"
+    },
+    {
+      "nr": 8322,
+      "station": "Melsungen-Schwarzenberg",
+      "bm": "Kassel"
+    },
+    {
+      "nr": 8498,
+      "station": "Heimersheim / Lohrsdorf",
+      "bm": "Koblenz"
+    }
+  ],
+  "retiredStations": [
+    {
+      "nr": 2660,
+      "station": "Heimersheim",
+      "bm": "Koblenz"
+    }
+  ],
+  "duplicateStationNames": [],
+  "warnings": []
+}

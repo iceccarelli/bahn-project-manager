@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import { apiClient } from "@/_core/api/client";
+import { BAHNHOFSMANAGEMENT } from "@shared/bahnhofsmanagement";
 import type {
   ProjectUpdateInput,
   ReviewUpdateInput,
@@ -378,10 +379,22 @@ export function useFilters() {
       });
     });
 
+    // Region order follows the canonical Bahnhofsmanagement list rather than
+    // raw lexical order, so the dropdown is identical to the Projektanmeldung
+    // form and to the station cascade. Anything outside the canonical list
+    // cannot reach here (client.ts normalises on read), but is appended rather
+    // than dropped so a future vocabulary change stays visible instead of
+    // silently hiding projects.
+    const canonical = BAHNHOFSMANAGEMENT.filter((bm) => regions.has(bm));
+    const extra = Array.from(regions).filter(
+      (r) => !(BAHNHOFSMANAGEMENT as readonly string[]).includes(r),
+    );
+    const collator = new Intl.Collator("de");
+
     return {
-      regions: Array.from(regions).sort(),
-      projektleiter: Array.from(projektleiter).sort(),
-      pruefer: Array.from(pruefer).sort(),
+      regions: [...canonical, ...extra.sort(collator.compare)],
+      projektleiter: Array.from(projektleiter).sort(collator.compare),
+      pruefer: Array.from(pruefer).sort(collator.compare),
     };
   }, [allProjectsData]);
 

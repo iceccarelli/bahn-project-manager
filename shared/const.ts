@@ -10,13 +10,24 @@ export const UNAUTHED_ERR_MSG = 'Please login (10001)';
 export const NOT_ADMIN_ERR_MSG = 'You do not have required permission (10002)';
 
 export const SYNC_VERSION = 2;
-export const DATA_JSON_PATH = "public/data.json";
+/**
+ * Repo-relative path to the canonical dataset. It is `client/public/data.json`,
+ * not `public/data.json` — the old value made every seed/sync entry point
+ * (scripts/seed-perfect.ts, scripts/sync-json-db.ts, server/sync-db.ts,
+ * drizzle/seed-from-json.ts) fail with "data.json not found".
+ */
+export const DATA_JSON_PATH = "client/public/data.json";
+export const STATIONS_JSON_PATH = "client/public/stations.json";
+export const STATIONS_NATIONAL_JSON_PATH = "client/public/stations-national.json";
 export const ODATA_BASE_PATH = "/odata";
 export const MAX_PROJECTS_PER_PAGE = 1000;
 export const DEFAULT_SORT = "id";
 export const AUDIT_RETENTION_DAYS = 365;
 
 // Re-export from validation for single source
+export { BAHNHOFSMANAGEMENT, STATION_BAHNHOFSMANAGEMENT, normalizeBahnhofsmanagement, toCanonicalBm } from "./bahnhofsmanagement";
+export type { Bahnhofsmanagement } from "./bahnhofsmanagement";
+
 export {
   DEPARTMENTS,
   REVIEW_STATUSES,

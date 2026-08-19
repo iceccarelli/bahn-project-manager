@@ -19,6 +19,11 @@
     "test:cov": "vitest run --coverage --reporter=verbose",
     "db:push": "drizzle-kit generate && drizzle-kit migrate",
     "seed:perfect": "tsx scripts/seed-perfect.ts",
+    "stations:extract": "tsx scripts/extract-bahnhoefe-xlsx.ts",
+    "stations:generate": "tsx scripts/generate-stations-master.ts",
+    "stations:check": "tsx scripts/generate-stations-master.ts --check",
+    "data:normalize": "tsx scripts/normalize-existing-data.ts",
+    "verify:data": "tsx scripts/verify-stations.ts",
     "sync:json-db": "tsx scripts/sync-json-db.ts --checksum",
     "dev:sync": "concurrently -n \"APP,SEED,SYNC\" -c \"blue,green,yellow\" \"pnpm dev\" \"pnpm seed:perfect --watch\" \"pnpm sync:json-db --watch\""
   },
