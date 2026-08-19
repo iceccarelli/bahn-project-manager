@@ -1,10 +1,10 @@
 import React, { useState, useMemo, useCallback, useEffect } from "react";
+import { useLocation } from "wouter";
 
 import {
   TableBody,
 } from "@/components/ui/table";
 import { useProjects, useFilters, useAllData, useSearchSuggestions, type Project, type Review } from "@/hooks/useDataQuery";
-import { useStations, PROJEKTSTAND_OPTIONS, stationKey } from "@/hooks/useStations";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -122,23 +122,10 @@ export default function Projects() {
   const [expandedDepts, setExpandedDepts] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState("id");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [, setLocation] = useLocation();
   const [viewMode, setViewMode] = useState<"table" | "cards" | "map">("table");
-  const [showNewDialog, setShowNewDialog] = useState(false);
-  const [newProj, setNewProj] = useState({
-    projektnummer: "",
-    station: "",
-    bahnhofsmanagement: "",
-    bahnhofsnummer: "",
-    streckennummer: "",
-    projektbeschreibung: "",
-    projektstand: "",
-    projektleiter: "",
-    terminProjektvorstellung: "",
-    kommentar: "",
-    projektLink: "",
-  });
 
-  const { data, isLoading, applyEdit, applyReviewEdit, addProject } = useProjects({
+  const { data, isLoading, applyEdit, applyReviewEdit } = useProjects({
     search: search || undefined,
     region: region || undefined,
     projektleiter: projektleiter || undefined,
@@ -154,11 +141,6 @@ export default function Projects() {
   const { data: filterOptions } = useFilters();
   const { data: allData } = useAllData();
 
-  // BM -> Station -> Bf. Nr. cascade for the "Neues Projekt" dialog dropdowns.
-  // bfNrByRegionStation is keyed by (BM, Station): station names are NOT unique
-  // across regions, so a name-only lookup could hand back another region's
-  // Bahnhofsnummer.
-  const { regions: stationRegions, stationsByRegion, bfNrByRegionStation } = useStations();
 
   // Fully dynamic KPIs
   const totalProjects = allData?.projects?.length || 0;
@@ -196,47 +178,6 @@ export default function Projects() {
     );
   };
 
-  const handleCreateProject = () => {
-    if (!newProj.station?.trim() && !newProj.projektnummer?.trim()) {
-      toast.error("Bitte mindestens Station oder Projektnummer angeben");
-      return;
-    }
-    if (!addProject) {
-      toast.error("Projekt-Erstellung nicht verfügbar");
-      return;
-    }
-
-    addProject({
-      projektnummer: newProj.projektnummer.trim() || null,
-      station: newProj.station.trim() || null,
-      bahnhofsmanagement: newProj.bahnhofsmanagement.trim() || null,
-      bahnhofsnummer: newProj.bahnhofsnummer.trim() || null,
-      streckennummer: newProj.streckennummer.trim() || null,
-      projektbeschreibung: newProj.projektbeschreibung.trim() || null,
-      projektstand: newProj.projektstand.trim() || null,
-      projektleiter: newProj.projektleiter.trim() || null,
-      terminProjektvorstellung: newProj.terminProjektvorstellung || null,
-      kommentar: newProj.kommentar.trim() || null,
-      projektLink: newProj.projektLink.trim() || null,
-      reviews: [],
-    });
-
-    toast.success(`Projekt erfolgreich angelegt! (Wird als neuester Eintrag oben mit Nr. ${totalProjects + 1} angezeigt)`);
-    setShowNewDialog(false);
-    setNewProj({
-      projektnummer: "",
-      station: "",
-      bahnhofsmanagement: "",
-      bahnhofsnummer: "",
-      streckennummer: "",
-      projektbeschreibung: "",
-      projektstand: "",
-      projektleiter: "",
-      terminProjektvorstellung: "",
-      kommentar: "",
-      projektLink: "",
-    });
-  };
 
   const handleExport = useCallback(() => {
     if (!data?.projects || data.projects.length === 0) {
@@ -402,7 +343,7 @@ export default function Projects() {
               <MapPin className="h-4 w-4" />
             </Button>
           </div>
-          <Button onClick={() => setShowNewDialog(true)} className="aws-button bg-[#FF0000] hover:bg-[#CC0000] text-white gap-2 h-10">
+          <Button onClick={() => setLocation("/anmeldung")} className="aws-button bg-[#FF0000] hover:bg-[#CC0000] text-white gap-2 h-10">
             <Plus className="h-4 w-4" />
             Neues Projekt
           </Button>
@@ -810,188 +751,6 @@ export default function Projects() {
       </div>
 
       {/* New Project Dialog */}
-      <Dialog open={showNewDialog} onOpenChange={setShowNewDialog}>
-        <DialogContent className="sm:max-w-[600px] bg-card max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-bold">Neues Projekt anlegen</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="projektnummer" className="text-right text-sm font-medium">
-                Projektnummer
-              </label>
-              <Input
-                id="projektnummer"
-                value={newProj.projektnummer}
-                onChange={(e) => setNewProj({ ...newProj, projektnummer: e.target.value })}
-                className="col-span-3"
-                placeholder="z.B. PRJ-2026-001"
-              />
-            </div>
-            {/* Region (BM) — drives the Station list below */}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="bahnhofsmanagement" className="text-right text-sm font-medium">
-                Region
-              </label>
-              <Select
-                value={newProj.bahnhofsmanagement || undefined}
-                onValueChange={(v) =>
-                  setNewProj({ ...newProj, bahnhofsmanagement: v, station: "", bahnhofsnummer: "" })
-                }
-              >
-                <SelectTrigger id="bahnhofsmanagement" className="col-span-3">
-                  <SelectValue placeholder="Region wählen (BM)" />
-                </SelectTrigger>
-                <SelectContent>
-                  {stationRegions.map((r) => (
-                    <SelectItem key={r} value={r}>{r}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {/* Station — filtered by the selected Region; selecting it auto-fills Bahnhofsnr. */}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="station" className="text-right text-sm font-medium">
-                Station
-              </label>
-              <Select
-                value={newProj.station || undefined}
-                disabled={!newProj.bahnhofsmanagement}
-                onValueChange={(v) =>
-                  setNewProj({
-                    ...newProj,
-                    station: v,
-                    bahnhofsnummer: (() => {
-                      const nr = bfNrByRegionStation[stationKey(newProj.bahnhofsmanagement, v)];
-                      return nr != null ? String(nr) : "";
-                    })(),
-                  })
-                }
-              >
-                <SelectTrigger id="station" className="col-span-3">
-                  <SelectValue
-                    placeholder={newProj.bahnhofsmanagement ? "Station wählen" : "Zuerst Region wählen"}
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {(stationsByRegion[newProj.bahnhofsmanagement] ?? []).map((s) => (
-                    <SelectItem key={s} value={s}>{s}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {/* Bahnhofsnr. — hard-derived from the selected Station (read-only) */}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="bahnhofsnummer" className="text-right text-sm font-medium">
-                Bahnhofsnr.
-              </label>
-              <Input
-                id="bahnhofsnummer"
-                value={newProj.bahnhofsnummer}
-                readOnly
-                tabIndex={-1}
-                aria-readonly="true"
-                className="col-span-3 bg-muted text-muted-foreground cursor-not-allowed"
-                placeholder="– automatisch aus Station –"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="streckennummer" className="text-right text-sm font-medium">
-                Streckennr.
-              </label>
-              <Input
-                id="streckennummer"
-                value={newProj.streckennummer}
-                onChange={(e) => setNewProj({ ...newProj, streckennummer: e.target.value })}
-                className="col-span-3"
-                placeholder="z.B. 3600"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="projektbeschreibung" className="text-right text-sm font-medium">
-                Beschreibung
-              </label>
-              <Input
-                id="projektbeschreibung"
-                value={newProj.projektbeschreibung}
-                onChange={(e) => setNewProj({ ...newProj, projektbeschreibung: e.target.value })}
-                className="col-span-3"
-                placeholder="Projektbeschreibung eingeben..."
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="projektstand" className="text-right text-sm font-medium">
-                Projektstand
-              </label>
-              <Select
-                value={newProj.projektstand || undefined}
-                onValueChange={(v) => setNewProj({ ...newProj, projektstand: v })}
-              >
-                <SelectTrigger id="projektstand" className="col-span-3">
-                  <SelectValue placeholder="Projektstand wählen" />
-                </SelectTrigger>
-                <SelectContent>
-                  {PROJEKTSTAND_OPTIONS.map((p) => (
-                    <SelectItem key={p} value={p}>{p}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="projektleiter" className="text-right text-sm font-medium">
-                Projektleiter
-              </label>
-              <Input
-                id="projektleiter"
-                value={newProj.projektleiter}
-                onChange={(e) => setNewProj({ ...newProj, projektleiter: e.target.value })}
-                className="col-span-3"
-                placeholder="Name des Projektleiters"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="terminProjektvorstellung" className="text-right text-sm font-medium">
-                Termin PV
-              </label>
-              <Input
-                id="terminProjektvorstellung"
-                type="date"
-                value={newProj.terminProjektvorstellung}
-                onChange={(e) => setNewProj({ ...newProj, terminProjektvorstellung: e.target.value })}
-                className="col-span-3"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="kommentar" className="text-right text-sm font-medium">
-                Kommentar
-              </label>
-              <Input
-                id="kommentar"
-                value={newProj.kommentar}
-                onChange={(e) => setNewProj({ ...newProj, kommentar: e.target.value })}
-                className="col-span-3"
-                placeholder="Optionaler Kommentar"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="projektLink" className="text-right text-sm font-medium">
-                Projektlink
-              </label>
-              <Input
-                id="projektLink"
-                value={newProj.projektLink}
-                onChange={(e) => setNewProj({ ...newProj, projektLink: e.target.value })}
-                className="col-span-3"
-                placeholder="https://..."
-              />
-            </div>
-          </div>
-          <div className="flex justify-end gap-3 pt-4 border-t">
-            <Button variant="outline" onClick={() => setShowNewDialog(false)}>Abbrechen</Button>
-            <Button onClick={handleCreateProject} className="aws-button bg-[#FF0000] hover:bg-[#CC0000] text-white">Projekt anlegen</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

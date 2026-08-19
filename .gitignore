@@ -131,3 +131,7 @@ drizzle/migrations/*.sql.bak
 .vercel/
 .vercel/output/
 probe.mjs
+
+# The Projektanmeldung workbook is a live operational document; add it locally
+# to regenerate client/public/schedule.json, but it is not tracked.
+data/*.xlsm

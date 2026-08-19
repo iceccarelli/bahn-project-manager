@@ -8,6 +8,8 @@ emits. Nothing here is served to the browser; the browser-facing artifacts are
 
 | File | Tracked | Produced by | Purpose |
 |---|---|---|---|
+| `Projektanmeldung-Fachspezialistenpruefung.xlsm` | no — add it yourself | Baumanagement RB Mitte | The live Projektanmeldung workbook. Only needed to regenerate `client/public/schedule.json` and to re-check the checklist transcription; the app reads the generated JSON. |
+| `schedule.report.json` | yes | `pnpm schedule:extract` | Slot counts, date range, status distribution and the constraint notes found in column F. |
 | `Bahnhoefe-2026-06-16.xlsx` | yes (binary) | DB InfraGO | Official national station master: 5,426 stations, 8 columns, **no coordinates**. Replace this file when DB publishes a new edition, then re-run the generator. |
 | `station-coordinates.json` | yes | `generate-stations-master.ts`, once | Coordinate ledger, `Bhf-Nr -> {lat, lng, source, name}`. Bootstrapped from the pre-Stage-1 `stations.json` (909 pairs) and tracked from then on, so the generator stays a pure function of its inputs and can be re-run after it has overwritten its own output. |
 | `stations-master.report.json` | yes | `pnpm stations:generate` | Row counts, checksums, BM distribution, and the explicit list of stations without coordinates and of retired stations. |
@@ -16,6 +18,7 @@ emits. Nothing here is served to the browser; the browser-facing artifacts are
 ## Regenerating
 
 ```bash
+pnpm schedule:extract      # xlsm -> client/public/schedule.json (647 slots)
 pnpm stations:generate     # xlsx + ledger -> client/public/stations{,-national}.json
 pnpm data:normalize        # canonicalise client/public/data.json against the master
 pnpm verify:data           # integrity gate (also runs in CI)

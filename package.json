@@ -20,6 +20,7 @@
     "db:push": "drizzle-kit generate && drizzle-kit migrate",
     "seed:perfect": "tsx scripts/seed-perfect.ts",
     "stations:extract": "tsx scripts/extract-bahnhoefe-xlsx.ts",
+    "schedule:extract": "tsx scripts/extract-schedule-xlsm.ts",
     "stations:generate": "tsx scripts/generate-stations-master.ts",
     "stations:check": "tsx scripts/generate-stations-master.ts --check",
     "data:normalize": "tsx scripts/normalize-existing-data.ts",

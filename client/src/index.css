@@ -170,3 +170,37 @@
 ::-webkit-scrollbar-thumb:hover {
   background-color: hsla(var(--muted-foreground), 0.5);
 }
+
+/* ---------------------------------------------------------------------------
+   Print: the Unterschriftenblatt is a real document that gets signed, so
+   Ctrl-P (or the "Drucken / als PDF sichern" button) must produce the sheet on
+   its own — no sidebar, no header, no wizard chrome. Proper PDF generation
+   arrives in Stage 4; this makes the browser's own export usable today.
+   --------------------------------------------------------------------------- */
+@media print {
+  body:has(#unterschriftenblatt-print) [data-sidebar],
+  body:has(#unterschriftenblatt-print) header,
+  body:has(#unterschriftenblatt-print) nav,
+  body:has(#unterschriftenblatt-print) footer {
+    display: none !important;
+  }
+
+  body:has(#unterschriftenblatt-print) main {
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+
+  #unterschriftenblatt-print {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    background: #fff;
+    color: #000;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 14mm;
+  }
+}

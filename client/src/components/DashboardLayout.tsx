@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/sidebar";
 import { useIsMobile } from "@/hooks/useMobile";
 import {
+  ClipboardCheck,
   LayoutDashboard,
   PanelLeft,
   Table2,
@@ -29,6 +30,7 @@ import Footer from "./Footer";
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
+  { icon: ClipboardCheck, label: "Projektanmeldung", path: "/anmeldung" },
   { icon: Table2, label: "Projekte", path: "/projects" },
   { icon: FileCheck, label: "BVB-EEA", path: "/bvb-eea" },
   { icon: Network, label: "PSV-ITK", path: "/psv-itk" },
