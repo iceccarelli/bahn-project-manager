@@ -10,6 +10,7 @@ import DashboardLayout from "@/components/DashboardLayout";
 import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
 import Projects from "@/pages/Projects";
+import Anmeldung from "@/pages/Anmeldung";
 import BvbEea from "@/pages/BvbEea";
 import PsvItk from "@/pages/PsvItk";
 import AuditLogPage from "@/pages/AuditLog";
@@ -28,7 +29,8 @@ function App() {
                   <DashboardLayout>
                     <Switch>
                       <Route path="/" component={Dashboard} />
-                      <Route path="/projects" component={Projects} />
+                      <Route path="/anmeldung" component={Anmeldung} />
+            <Route path="/projects" component={Projects} />
                       <Route path="/bvb-eea" component={BvbEea} />
                       <Route path="/psv-itk" component={PsvItk} />
                       <Route path="/audit" component={AuditLogPage} />

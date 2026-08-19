@@ -8,6 +8,8 @@
  */
 
 import { normalizeBahnhofsmanagement } from "@shared/bahnhofsmanagement";
+import { DEPARTMENTS } from "@shared/validation";
+import type { ProjectChecklist } from "@shared/validation";
 import type { Project, Review, Stats, AuditLogEntry } from "@/hooks/useDataQuery";
 
 export interface ProjectUpdateInput {
@@ -35,6 +37,8 @@ export interface ProjectCreateInput {
   terminProjektvorstellung?: string;
   kommentar?: string;
   projektLink?: string;
+  /** set by the Projektanmeldung wizard — the 14 reviews its checklist decided */
+  reviews?: Review[];
 }
 
 /**
@@ -51,6 +55,7 @@ export interface ProjectCreateInput {
 const SCHEMA_VERSION = 3;
 const STORAGE_KEY_PROJECTS = `bahn_projects_v${SCHEMA_VERSION}`;
 const STORAGE_KEY_AUDIT = "bahn_audit_log";
+const STORAGE_KEY_CHECKLISTS = `bahn_checklists_v${SCHEMA_VERSION}`;
 
 /** Remove caches written by earlier schema versions so they cannot be resurrected. */
 function purgeLegacyCaches() {
@@ -170,11 +175,6 @@ export const apiClient = {
       const projects = await this.list();
       const maxId = projects.length > 0 ? Math.max(...projects.map((p) => p.id)) : 0;
 
-      const ALL_DEPARTMENTS = [
-        "EEA", "ITK", "BS", "GA", "Energie", "HFT", "HKLS", "TBQ",
-        "UM", "BIM", "LST", "Vermessung", "Baubetriebstechnologie", "Baubetriebsplanung",
-      ];
-
       const newProject: Project = {
         id: maxId + 1,
         projektnummer: input.projektnummer || null,
@@ -188,12 +188,17 @@ export const apiClient = {
         terminProjektvorstellung: input.terminProjektvorstellung || null,
         kommentar: input.kommentar || null,
         projektLink: input.projektLink || null,
-        reviews: ALL_DEPARTMENTS.map((dept) => ({
-          department: dept,
-          status: null,
-          prueferName: null,
-          pruefDatum: null,
-        })),
+        // Reviews come from the caller when a checklist decided them; otherwise
+        // all 14 are created empty. DEPARTMENTS is the shared list — this used
+        // to be a fourth hard-coded copy of the same 14 strings.
+        reviews:
+          input.reviews ??
+          DEPARTMENTS.map((dept) => ({
+            department: dept,
+            status: null,
+            prueferName: null,
+            pruefDatum: null,
+          })),
       };
 
       projects.push(newProject);
@@ -304,6 +309,62 @@ export const apiClient = {
         prueferWorkload: Object.entries(prueferWorkload).map(([name, count]) => ({ name, count })),
         departmentStats,
       };
+    },
+  },
+
+  /**
+   * Projektanmeldung checklists. Same local-first storage as everything else:
+   * drafts and submissions live in localStorage until the backend is deployed.
+   */
+  checklists: {
+    async list(): Promise<ProjectChecklist[]> {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY_CHECKLISTS);
+        const parsed = raw ? JSON.parse(raw) : [];
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        console.warn("Corrupted checklist storage — starting empty");
+        return [];
+      }
+    },
+
+    async get(id: number): Promise<ProjectChecklist | null> {
+      return (await this.list()).find((c) => c.id === id) ?? null;
+    },
+
+    /** Create or update a draft. Returns the stored checklist, with its id. */
+    async save(input: ProjectChecklist): Promise<ProjectChecklist> {
+      const all = await this.list();
+      const now = new Date().toISOString();
+      let saved: ProjectChecklist;
+
+      if (input.id != null) {
+        const index = all.findIndex((c) => c.id === input.id);
+        if (index === -1) throw new Error(`Checklist ${input.id} not found`);
+        const existing = all[index];
+        if (!existing) throw new Error(`Checklist ${input.id} not found`);
+        // Optimistic locking: refuse to overwrite a newer version rather than
+        // silently clobbering it.
+        if (input.syncVersion != null && existing.syncVersion !== input.syncVersion) {
+          throw new Error(
+            `Checkliste wurde zwischenzeitlich geändert (v${existing.syncVersion} statt v${input.syncVersion}). Bitte neu laden.`,
+          );
+        }
+        saved = { ...existing, ...input, syncVersion: (existing.syncVersion ?? 1) + 1, updatedAt: now };
+        all[index] = saved;
+      } else {
+        const maxId = all.reduce((n, c) => Math.max(n, c.id ?? 0), 0);
+        saved = { ...input, id: maxId + 1, syncVersion: 1, createdAt: now, updatedAt: now };
+        all.push(saved);
+      }
+
+      localStorage.setItem(STORAGE_KEY_CHECKLISTS, JSON.stringify(all));
+      return saved;
+    },
+
+    async remove(id: number): Promise<void> {
+      const all = (await this.list()).filter((c) => c.id !== id);
+      localStorage.setItem(STORAGE_KEY_CHECKLISTS, JSON.stringify(all));
     },
   },
 
