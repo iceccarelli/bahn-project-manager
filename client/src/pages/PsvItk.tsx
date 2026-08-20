@@ -1,6 +1,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 import { useAllData } from "@/hooks/useDataQuery";
+import { statusBadgeClass } from "@shared/status-appearance";
 
 export default function PsvItk() {
   const { data, isLoading } = useAllData();
@@ -9,7 +10,7 @@ export default function PsvItk() {
     return (
       <div className="flex items-center justify-center h-screen bg-background">
         <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-12 w-12 animate-spin text-[#FF0000]" />
+          <Loader2 className="h-12 w-12 animate-spin text-primary-strong" />
           <p className="text-lg font-medium text-muted-foreground">Lade PSV-ITK Daten...</p>
         </div>
       </div>
@@ -78,12 +79,11 @@ export default function PsvItk() {
                         {itkReview?.pruefDatum ? new Date(itkReview.pruefDatum).toLocaleDateString('de-DE') : '-'}
                       </td>
                       <td className="py-3 px-4 text-xs whitespace-nowrap">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-2xs font-medium ${
-                          itkReview?.status === 'Zustimmung erteilt' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300' :
-                          itkReview?.status === 'offen' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300' :
-                          itkReview?.status === 'in Bearbeitung' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' :
-                          'bg-muted text-muted-foreground'
-                        }`}>
+                        {/* Was a 3-branch ternary; the other 9 canonical
+                            statuses fell through to an unstyled default. */}
+                        <span
+                          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-2xs font-medium ${statusBadgeClass(itkReview?.status)}`}
+                        >
                           {itkReview?.status || '-'}
                         </span>
                       </td>

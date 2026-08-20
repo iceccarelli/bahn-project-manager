@@ -49,12 +49,12 @@ function JaNein({
             />
             <label
               htmlFor={id}
-              className={`inline-flex h-7 w-12 cursor-pointer items-center justify-center rounded-md border text-2xs font-bold transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-[#FF0000] peer-focus-visible:ring-offset-1 ${
+              className={`inline-flex h-7 w-12 cursor-pointer items-center justify-center rounded-md border text-2xs font-bold transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-focus-visible:ring-offset-1 ${
                 checked
                   ? option === "Ja"
-                    ? "border-[#FF0000] bg-[#FF0000] text-white"
+                    ? "border-primary bg-primary text-white"
                     : "border-border bg-muted text-foreground"
-                  : `${YELLOW} text-muted-foreground hover:border-[#FF0000]/50`
+                  : `${YELLOW} text-muted-foreground hover:border-primary/50`
               }`}
             >
               {option}
@@ -135,7 +135,7 @@ export function Step2Checkliste({ draft }: { draft: ChecklistDraft }) {
           {triggersReview && (
             <div
               className={`mt-0.5 inline-block rounded px-1.5 py-0.5 text-2xs font-black uppercase tracking-wider ${
-                isOpen ? "bg-[#FF0000]/10 text-[#FF0000]" : "bg-muted text-muted-foreground"
+                isOpen ? "bg-primary/10 text-primary-strong" : "bg-muted text-muted-foreground"
               }`}
             >
               {q.department} · {isOpen ? "Prüfung offen" : "nicht erforderlich"}
@@ -167,7 +167,7 @@ export function Step2Checkliste({ draft }: { draft: ChecklistDraft }) {
               />
             </div>
           )}
-          <p className="min-h-[14px] text-2xs font-bold leading-[14px] text-[#FF0000]">
+          <p className="min-h-[14px] text-2xs font-bold leading-[14px] text-primary-strong">
             {error ?? ""}
           </p>
         </td>

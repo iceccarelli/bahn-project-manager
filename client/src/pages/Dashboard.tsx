@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { deriveProjectMetrics, percent } from '@shared/project-metrics';
+import { statusBadgeClass, statusHex } from '@shared/status-appearance';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -18,12 +19,6 @@ import { useAllData, useAuditLog, useRecordAudit } from '@/hooks/useDataQuery';
 import { toast } from 'sonner';
 
 // DB Corporate Status Colors (perfect harmony with Projects.tsx)
-const STATUS_COLORS: Record<string, string> = {
-  "nicht erforderlich": "#64748b", "offen": "#f59e0b", "in Bearbeitung": "#3b82f6",
-  "prüffähig": "#06b6d4", "Zustimmung erteilt": "#10b981", "Niederschrift erstellt": "#10b981",
-  "abgelehnt": "#ef4444", "zurückgestellt": "#eab308", "gestoppt": "#f97316",
-  "Nachforderung": "#f97316", "Projektkonfig.": "#8b5cf6",
-};
 
 // Exact department order from Übersichtsliste_Dashboard_1.xlsm (perfect consistency)
 const GEWERKE = [
@@ -140,7 +135,7 @@ export default function Dashboard() {
 
   const selectedPieData = selectedGewerkeData 
     ? Object.entries(selectedGewerkeData.breakdown).map(([status, value]) => ({
-        name: status, value, color: STATUS_COLORS[status] || "#64748b"
+        name: status, value, color: statusHex(status)
       }))
     : [];
 
@@ -264,7 +259,7 @@ export default function Dashboard() {
         <div className="flex items-center gap-3">
           <Button 
             onClick={handleMicrosoftConnect} 
-            className="gap-2 bg-[#FF0000] hover:bg-[#CC0000]"
+            className="gap-2 bg-primary hover:bg-primary/90"
           >
             <LogIn className="h-4 w-4" /> Mit Microsoft 365 verbinden (Optional)
           </Button>
@@ -277,14 +272,14 @@ export default function Dashboard() {
 
       {/* KPI CARDS */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <Card className="border-l-4 border-l-[#FF0000]">
+        <Card className="border-l-4 border-l-primary">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <Users className="h-4 w-4" /> Gesamtprojekte
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-5xl font-bold text-[#FF0000]">{totalProjects.toLocaleString('de-DE')}</div>
+            <div className="text-5xl font-bold text-primary-strong">{totalProjects.toLocaleString('de-DE')}</div>
             <p className="text-xs text-muted-foreground mt-1">+23 seit letzter Woche</p>
           </CardContent>
         </Card>
@@ -351,7 +346,7 @@ export default function Dashboard() {
                     ))}
                   </Pie>
                   <Tooltip />
-                  <Legend />
+                  <Legend formatter={(value) => <span className="text-foreground">{value}</span>} />
                 </PieChart>
               </ResponsiveContainer>
             </CardContent>
@@ -368,7 +363,7 @@ export default function Dashboard() {
                   <button
                     type="button"
                     key={gew.name}
-                    className="w-full border rounded-xl p-4 text-left hover:shadow-md transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF0000]"
+                    className="w-full border rounded-xl p-4 text-left hover:shadow-md transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     onClick={() => setSelectedGewerke(gew.name)}
                   >
                     <div className="font-semibold text-lg mb-2">{gew.name}</div>
@@ -388,7 +383,7 @@ export default function Dashboard() {
           </Card>
 
           {/* Detailed Gewerke View */}
-          <Card className="border-2 border-[#FF0000]/20">
+          <Card className="border-2 border-primary/20">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>
@@ -435,7 +430,7 @@ export default function Dashboard() {
                           ))}
                         </Pie>
                         <Tooltip />
-                        <Legend />
+                        <Legend formatter={(value) => <span className="text-foreground">{value}</span>} />
                       </PieChart>
                     </ResponsiveContainer>
                   </div>
@@ -486,12 +481,12 @@ export default function Dashboard() {
                   <button
                     type="button"
                     aria-expanded={expandedFach === fach.name}
-                    className="flex w-full items-center justify-between p-4 text-left cursor-pointer hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF0000]"
+                    className="flex w-full items-center justify-between p-4 text-left cursor-pointer hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     onClick={() => setExpandedFach(expandedFach === fach.name ? null : fach.name)}
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-full bg-[#FF0000]/10 flex items-center justify-center">
-                        <span className="font-mono text-sm text-[#FF0000]">{fach.name.slice(0, 2)}</span>
+                      <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center">
+                        <span className="font-mono text-sm text-primary-strong">{fach.name.slice(0, 2)}</span>
                       </div>
                       <div>
                         <div className="font-semibold">{fach.name}</div>
@@ -534,7 +529,7 @@ export default function Dashboard() {
                           <div className="text-xs font-medium mb-2 text-muted-foreground">AKTUELLE AKTIVITÄT</div>
                           <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
                             {fach.timeline.length > 0 ? fach.timeline.map((item) => (
-                              <div key={`${item.date}-${item.project}-${item.action}`} className="flex items-start gap-3 text-sm border-l-2 border-[#FF0000] pl-3 py-1">
+                              <div key={`${item.date}-${item.project}-${item.action}`} className="flex items-start gap-3 text-sm border-l-2 border-primary pl-3 py-1">
                                 <div className="font-mono text-xs text-muted-foreground w-20 shrink-0">{item.date}</div>
                                 <div>
                                   <span className="font-medium">{item.action}</span> — {item.project}
@@ -591,7 +586,7 @@ export default function Dashboard() {
                       onClick={() =>
                         setSelectedProject(projects.find((pr) => pr.id === p.id) || null)
                       }
-                      className="w-full truncate text-left text-sm font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF0000]"
+                      className="w-full truncate text-left text-sm font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     >
                       {p.station}
                     </button>
@@ -623,8 +618,8 @@ export default function Dashboard() {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-base">
-                <Bell className="h-5 w-5 text-[#FF0000]" /> Benachrichtigungen
-                <Badge className="ml-auto bg-[#FF0000]">{notifications.length}</Badge>
+                <Bell className="h-5 w-5 text-primary-strong" /> Benachrichtigungen
+                <Badge className="ml-auto bg-primary">{notifications.length}</Badge>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 max-h-[280px] overflow-auto pr-1">
@@ -670,10 +665,10 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          <Card className="border-l-4 border-l-[#FF0000]">
+          <Card className="border-l-4 border-l-primary">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-base">
-                <Zap className="h-5 w-5 text-[#FF0000]" /> Schnellaktionen
+                <Zap className="h-5 w-5 text-primary-strong" /> Schnellaktionen
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -692,7 +687,7 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-to-br from-[#FF0000]/5 to-transparent border-[#FF0000]/30">
+          <Card className="bg-gradient-to-br from-primary/5 to-transparent border-primary/30">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-base">
                 <div className="flex items-center gap-1.5">
@@ -719,7 +714,7 @@ export default function Dashboard() {
               </div>
 
               <div className="pt-2 border-t space-y-2">
-                <Button size="sm" className="w-full bg-[#FF0000] hover:bg-[#CC0000] text-white" onClick={handleMicrosoftConnect}>
+                <Button size="sm" className="w-full bg-primary hover:bg-primary/90 text-white" onClick={handleMicrosoftConnect}>
                   In Teams posten
                 </Button>
                 <Button size="sm" variant="outline" className="w-full" onClick={handleMicrosoftConnect}>
@@ -872,10 +867,12 @@ export default function Dashboard() {
                     <div key={review.department} className="border rounded-xl p-3">
                       <div className="font-mono text-xs text-muted-foreground">{review.department}</div>
                       <div className="flex items-center gap-2 mt-1">
-                        <Badge 
-                          style={{ backgroundColor: STATUS_COLORS[review.status || ""] || "#64748b" }}
-                          className="text-white"
-                        >
+                        {/* Was white text on statusHex(). Those hexes are tuned
+                            as chart *fills*; as a text background they measured
+                            2.15:1 for "offen" and 2.54:1 for "Zustimmung
+                            erteilt", against a 4.5:1 floor. The badge variant of
+                            the same tone is built for text and passes. */}
+                        <Badge variant="outline" className={statusBadgeClass(review.status)}>
                           {review.status || "—"}
                         </Badge>
                       </div>

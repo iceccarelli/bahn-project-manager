@@ -59,12 +59,12 @@ export default function Header() {
           >
             <Menu className="h-5 w-5" />
           </Button>
-          <div className="w-9 h-9 bg-[#FF0000] rounded flex items-center justify-center text-white font-bold text-3xl leading-none pt-0.5 shadow-inner ring-1 ring-white/20">
+          <div className="w-9 h-9 bg-primary rounded flex items-center justify-center text-white font-bold text-3xl leading-none pt-0.5 shadow-inner ring-1 ring-white/20">
             DB
           </div>
           <div className="items-baseline hidden md:flex">
             <span className="font-bold tracking-[-0.5px] text-2xl">Bahn</span>
-            <span className="text-[#FF0000] font-bold tracking-[-0.5px] text-2xl ml-1">
+            <span className="text-primary-strong font-bold tracking-[-0.5px] text-2xl ml-1">
               Project Manager
             </span>
           </div>
@@ -75,7 +75,7 @@ export default function Header() {
           takes over. */}
         <div className="relative mx-2 hidden min-w-0 flex-1 sm:mx-4 sm:block sm:max-w-3xl">
           <div className="relative group">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-[#FF0000]" />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-primary-strong" />
             <Input
               value={searchTerm}
               onChange={e => {
@@ -86,7 +86,7 @@ export default function Header() {
               onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
               aria-label="Projekte, Stationen und Prüfer durchsuchen"
             placeholder="Projekte, Stationen, Prüfer durchsuchen…"
-              className="pl-11 h-9 bg-muted/50 border-border focus:bg-background focus:border-[#FF0000] w-full text-sm rounded-lg transition-all"
+              className="pl-11 h-9 bg-muted/50 border-border focus:bg-background focus:border-primary w-full text-sm rounded-lg transition-all"
             />
             {searchTerm && (
               <button
@@ -145,7 +145,7 @@ export default function Header() {
               >
                 <Bell className="h-5 w-5" aria-hidden="true" />
                 {notifications.length > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#FF0000] px-1.5 text-2xs font-bold leading-none text-white">
+                  <span className="absolute -top-0.5 -right-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary px-1.5 text-2xs font-bold leading-none text-white">
                     {notifications.length > 9 ? "9+" : notifications.length}
                   </span>
                 )}
@@ -176,8 +176,8 @@ export default function Header() {
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <Avatar className="h-8 w-8 cursor-pointer ring-2 ring-offset-2 ring-[#FF0000]/30 hover:ring-[#FF0000] transition-all">
-            <AvatarFallback className="bg-[#FF0000] text-white text-xs font-bold">
+          <Avatar className="h-8 w-8 cursor-pointer ring-2 ring-offset-2 ring-primary/30 hover:ring-primary transition-all">
+            <AvatarFallback className="bg-primary text-white text-xs font-bold">
               {userInitials}
             </AvatarFallback>
           </Avatar>
