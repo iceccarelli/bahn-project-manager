@@ -171,17 +171,19 @@ export const MapView: React.FC<MapViewProps> = ({
   groupsRef.current = groups;
 
   // ---- create the map exactly once per mount, and tear it down cleanly ----
-  // biome-ignore lint/correctness/useExhaustiveDependencies: initialCenter and
-  // initialZoom are *initial* values by contract. Adding them would tear down
-  // and rebuild the whole Leaflet instance whenever the parent re-rendered with
-  // a new object literal, losing the user's pan and zoom on every filter change.
+  //
+  // initialCenter and initialZoom are *initial* values by contract. Listing
+  // them as dependencies would tear down and rebuild the whole Leaflet
+  // instance whenever the parent re-rendered with a new object literal, which
+  // means losing the user's pan and zoom on every filter change.
+  //
+  // biome-ignore lint/correctness/useExhaustiveDependencies: initialCenter/initialZoom are initial values by contract — see above
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-    // guard against a container Leaflet already initialised (StrictMode/HMR)
     // Leaflet stamps this private field on a container it has already
-    // initialised; there is no public API to ask, so the cast is narrowed to
-    // the one field rather than widened to `any`.
+    // initialised (StrictMode double-invoke, HMR). There is no public API to
+    // ask, so the cast is narrowed to the one field rather than widened to any.
     if ((el as HTMLElement & { _leaflet_id?: number })._leaflet_id) return;
 
     const map = L.map(el, {
@@ -265,10 +267,11 @@ export const MapView: React.FC<MapViewProps> = ({
     }
   }, [groups]);
 
-  // keep Leaflet sized when toggling fullscreen
-  // biome-ignore lint/correctness/useExhaustiveDependencies: isFullscreen is
-  // the trigger, not a value the body reads — Leaflet needs invalidateSize()
-  // after the container's box changes, which is exactly this toggle.
+  // Keep Leaflet sized when toggling fullscreen. isFullscreen is the trigger,
+  // not a value the body reads: Leaflet needs invalidateSize() after the
+  // container's box changes, and this toggle is exactly when that happens.
+  //
+  // biome-ignore lint/correctness/useExhaustiveDependencies: isFullscreen is the trigger, not a read value — see above
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
