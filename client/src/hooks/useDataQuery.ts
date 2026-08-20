@@ -167,6 +167,11 @@ export function useUpdateProject() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.stats.dashboard() });
+      // Every one of these mutations calls recordAudit(). Without this the
+      // Änderungshistorie served a cached list and an edit only appeared after
+      // a hard reload — which nobody noticed, because the page that reads it
+      // was a placeholder that rendered nothing at all.
+      queryClient.invalidateQueries({ queryKey: queryKeys.audit.all });
     },
   });
 }
@@ -205,6 +210,11 @@ export function useUpdateReview() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.stats.dashboard() });
+      // Every one of these mutations calls recordAudit(). Without this the
+      // Änderungshistorie served a cached list and an edit only appeared after
+      // a hard reload — which nobody noticed, because the page that reads it
+      // was a placeholder that rendered nothing at all.
+      queryClient.invalidateQueries({ queryKey: queryKeys.audit.all });
     },
   });
 }
@@ -217,6 +227,11 @@ export function useDeleteProject() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.stats.dashboard() });
+      // Every one of these mutations calls recordAudit(). Without this the
+      // Änderungshistorie served a cached list and an edit only appeared after
+      // a hard reload — which nobody noticed, because the page that reads it
+      // was a placeholder that rendered nothing at all.
+      queryClient.invalidateQueries({ queryKey: queryKeys.audit.all });
     },
   });
 }

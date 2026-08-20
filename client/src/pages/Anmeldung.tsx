@@ -11,7 +11,7 @@ import { Step5Bestaetigung } from "@/components/anmeldung/Step5Bestaetigung";
 import { useChecklistDraft } from "@/hooks/useChecklistDraft";
 import { bookSlot } from "@/hooks/useSchedule";
 import { CHECKLIST_MODES } from "@shared/checklist";
-import { Check, ChevronLeft, ChevronRight, Save } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, FileDown, Save } from "lucide-react";
 
 const STEPS = [
   { n: 1, title: "Projekt", subtitle: "Kopfdaten & Station" },
@@ -26,6 +26,7 @@ export default function Anmeldung() {
   const draft = useChecklistDraft();
   const [step, setStep] = useState(1);
   const [submitted, setSubmitted] = useState<{ projectId: number } | null>(null);
+  const [pdfState, setPdfState] = useState<"idle" | "working">("idle");
 
   const issuesForStep = draft.stepIssues[step] ?? [];
   const stepIsComplete = (n: number) => (draft.stepIssues[n]?.length ?? 0) === 0;
@@ -38,6 +39,35 @@ export default function Anmeldung() {
       toast.success(`Entwurf gespeichert (Nr. ${saved.id})`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Entwurf konnte nicht gespeichert werden");
+    }
+  };
+
+  const handleDownloadPdf = async () => {
+    setPdfState("working");
+    try {
+      const { downloadChecklistPdf } = await import("@/pdf/downloadChecklistPdf");
+      const filename = await downloadChecklistPdf({
+        projektnummer: draft.header.projektnummer,
+        projektbezeichnung: draft.header.projektbezeichnung,
+        stationsname: draft.header.stationsname,
+        bahnhofsnummer: draft.header.bahnhofsnummer,
+        bahnhofsmanagement: draft.header.bahnhofsmanagement,
+        projektstand: draft.header.projektstand,
+        projektleitung: draft.header.projektleitung,
+        mode: draft.mode,
+        termin: draft.termin
+          ? { datum: draft.termin.datum, von: draft.termin.von, bis: draft.termin.bis }
+          : null,
+        answers: draft.answers,
+        reviews: draft.reviews,
+        generatedAt: new Date().toISOString(),
+        complete: draft.canSubmit,
+      });
+      toast.success(`${filename} heruntergeladen`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "PDF konnte nicht erzeugt werden");
+    } finally {
+      setPdfState("idle");
     }
   };
 
@@ -202,6 +232,19 @@ export default function Anmeldung() {
           >
             <Save className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
             Als Entwurf speichern
+          </Button>
+          {/* Always available, never gated on completeness: an incomplete
+              checklist still exports, watermarked ENTWURF. A tool that refuses
+              to hand over the document until every field is perfect is a tool
+              people work around with screenshots. */}
+          <Button
+            variant="outline"
+            onClick={handleDownloadPdf}
+            disabled={pdfState === "working"}
+            className="text-xs"
+          >
+            <FileDown className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+            {pdfState === "working" ? "PDF wird erzeugt …" : "Checkliste als PDF"}
           </Button>
           {step < 5 ? (
             <Button
