@@ -7,111 +7,21 @@ import { defineConfig, type Plugin, type ViteDevServer } from "vite";
 import { vitePluginManusRuntime } from "vite-plugin-manus-runtime";
 
 // =============================================================================
-// Manus Debug Collector - Vite Plugin (DEV ONLY - fully stripped in production)
+// Build-time constants
+//
+// The footer used to hardcode `appVersion = "1.0.0"` while package.json said
+// 2.0.0, and rendered `new Date()` as "last updated", which meant the app
+// claimed to have been updated today on every single page load. Both now come
+// from here, so neither can drift.
 // =============================================================================
 
 const PROJECT_ROOT = import.meta.dirname;
-const LOG_DIR = path.join(PROJECT_ROOT, ".manus-logs");
-const MAX_LOG_SIZE_BYTES = 1 * 1024 * 1024;
-const TRIM_TARGET_BYTES = Math.floor(MAX_LOG_SIZE_BYTES * 0.6);
 
-type LogSource = "browserConsole" | "networkRequests" | "sessionReplay";
+const pkg = JSON.parse(
+  fs.readFileSync(path.join(PROJECT_ROOT, "package.json"), "utf-8"),
+) as { version: string };
 
-function ensureLogDir() {
-  if (!fs.existsSync(LOG_DIR)) {
-    fs.mkdirSync(LOG_DIR, { recursive: true });
-  }
-}
-
-function trimLogFile(logPath: string, maxSize: number) {
-  try {
-    if (!fs.existsSync(logPath) || fs.statSync(logPath).size <= maxSize) {
-      return;
-    }
-    const lines = fs.readFileSync(logPath, "utf-8").split("\n");
-    const keptLines: string[] = [];
-    let keptBytes = 0;
-    const targetSize = TRIM_TARGET_BYTES;
-    for (let i = lines.length - 1; i >= 0; i--) {
-      const line = lines[i] ?? "";
-      const lineBytes = Buffer.byteLength(`${line}\n`, "utf-8");
-      if (keptBytes + lineBytes > targetSize) break;
-      keptLines.unshift(line);
-      keptBytes += lineBytes;
-    }
-    fs.writeFileSync(logPath, keptLines.join("\n"), "utf-8");
-  } catch {
-    /* ignore trim errors */
-  }
-}
-
-function writeToLogFile(source: LogSource, entries: unknown[]) {
-  if (entries.length === 0) return;
-  ensureLogDir();
-  const logPath = path.join(LOG_DIR, `${source}.log`);
-  const lines = entries.map((entry) => {
-    const ts = new Date().toISOString();
-    return `[${ts}] ${JSON.stringify(entry)}`;
-  });
-  fs.appendFileSync(logPath, `${lines.join("\n")}\n`, "utf-8");
-  trimLogFile(logPath, MAX_LOG_SIZE_BYTES);
-}
-
-function vitePluginManusDebugCollector(): Plugin {
-  return {
-    name: "manus-debug-collector",
-    transformIndexHtml(html) {
-      if (process.env.NODE_ENV === "production") {
-        return html; // Completely stripped in production builds
-      }
-      return {
-        html,
-        tags: [
-          {
-            tag: "script",
-            attrs: {
-              src: "/__manus__/debug-collector.js",
-              defer: true,
-            },
-            injectTo: "head",
-          },
-        ],
-      };
-    },
-    configureServer(server: ViteDevServer) {
-      if (process.env.NODE_ENV === "production") return;
-      server.middlewares.use("/__manus__/logs", (req, res, next) => {
-        if (req.method !== "POST") return next();
-        const handlePayload = (payload: any) => {
-          if (payload.consoleLogs?.length > 0) writeToLogFile("browserConsole", payload.consoleLogs);
-          if (payload.networkRequests?.length > 0) writeToLogFile("networkRequests", payload.networkRequests);
-          if (payload.sessionEvents?.length > 0) writeToLogFile("sessionReplay", payload.sessionEvents);
-          res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ success: true }));
-        };
-        const reqBody = (req as { body?: unknown }).body;
-        if (reqBody && typeof reqBody === "object") {
-          try { handlePayload(reqBody); } catch (e) {
-            res.writeHead(400, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ success: false, error: String(e) }));
-          }
-          return;
-        }
-        let body = "";
-        req.on("data", (chunk) => { body += chunk.toString(); });
-        req.on("end", () => {
-          try {
-            const payload = JSON.parse(body);
-            handlePayload(payload);
-          } catch (e) {
-            res.writeHead(400, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ success: false, error: String(e) }));
-          }
-        });
-      });
-    },
-  };
-}
+const BUILD_DATE = new Date().toISOString().slice(0, 10);
 
 // =============================================================================
 // Build-time Data Validation Plugin + Caching Enhancer
@@ -170,13 +80,17 @@ const plugins = [
   // source-location/CSS map into index.html (~360 kB) and must never ship
   // to production. Excluded from production builds below.
   ...(!isProduction
-    ? [jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector()]
+    ? [jsxLocPlugin(), vitePluginManusRuntime()]
     : []),
   vitePluginDataValidationAndCache(),
 ];
 
 export default defineConfig({
   plugins,
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+    __BUILD_DATE__: JSON.stringify(BUILD_DATE),
+  },
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "client", "src"),
@@ -196,11 +110,32 @@ export default defineConfig({
     chunkSizeWarningLimit: 900,
     rollupOptions: {
       output: {
-        manualChunks: {
-          "vendor-react": ["react", "react-dom"],
-          "vendor-charts": ["recharts"],
-          "vendor-leaflet": ["leaflet", "react-leaflet"],
+        // Function form, not the object form. The object form matches on the
+        // bare specifier, so `"vendor-react": ["react", "react-dom"]` only
+        // captured react-dom's 12 kB shim — the actual 525 kB of
+        // react-dom/cjs/react-dom-client.production.js resolves under a
+        // different id and stayed in the entry chunk. Matching on the resolved
+        // path fixes that and gives the browser vendor bundles that only
+        // change when the dependency does.
+        manualChunks(id: string) {
+          if (!id.includes("node_modules")) return undefined;
+          const p = id.replace(/\\/g, "/");
+          if (/\/(recharts|d3-[a-z]+|victory-vendor|decimal\.js-light)\//.test(p))
+            return "vendor-charts";
+          if (/\/(leaflet|react-leaflet|@react-leaflet)\//.test(p)) return "vendor-leaflet";
+          if (/\/(framer-motion|motion-dom|motion-utils)\//.test(p)) return "vendor-motion";
+          if (/\/(zod|@tanstack)\//.test(p)) return "vendor-data";
+          // React is deliberately NOT force-chunked. Pulling react / react-dom
+          // into their own chunk produced a circular chunk dependency and a
+          // hard "ReferenceError: Cannot access 'React' before initialization"
+          // from vendor-charts on every authenticated route — verified by
+          // bisecting this function one group at a time against a headless
+          // load of all six routes. Rollup's own placement is correct; the
+          // groups above only exist to keep genuinely optional, route-specific
+          // libraries out of the first paint.
+          return undefined;
         },
+
       },
     },
 },

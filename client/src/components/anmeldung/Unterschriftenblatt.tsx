@@ -39,12 +39,12 @@ export function Unterschriftenblatt({
       className={
         variant === "print"
           ? "bg-white text-black p-8"
-          : "bg-card border-2 border-border rounded-xl p-6 text-[11px] print:border-0 print:p-0"
+          : "bg-card border-2 border-border rounded-xl p-6 text-2xs print:border-0 print:p-0"
       }
     >
       <div className="flex items-baseline justify-between border-b-2 border-[#FF0000] pb-2">
         <span className="font-black tracking-tight">{UNTERSCHRIFTENBLATT_ISSUER}</span>
-        <span className="text-[9px] uppercase tracking-widest text-muted-foreground print:text-black">
+        <span className="text-2xs uppercase tracking-widest text-muted-foreground print:text-black">
           Vorschau
         </span>
       </div>
@@ -64,7 +64,7 @@ export function Unterschriftenblatt({
           Unterschriftenblatt — Prüfung, Zustimmung und Unterschrift je Fachbereich
         </caption>
         <thead>
-          <tr className="border-y border-border text-[9px] uppercase tracking-wider">
+          <tr className="border-y border-border text-2xs uppercase tracking-wider">
             <th scope="col" className="py-1 text-left font-black">
               Name / Funktion
             </th>
@@ -87,14 +87,14 @@ export function Unterschriftenblatt({
               <tr key={`${block.ou}-${block.role}`} className="border-b border-border/60">
                 <td className="py-1.5 align-top">
                   <div className="font-bold">{block.role}</div>
-                  <div className="text-[9px] text-muted-foreground print:text-black">
+                  <div className="text-2xs text-muted-foreground print:text-black">
                     {block.ou}
                     {block.name ? ` · ${block.name}` : ""}
                   </div>
                 </td>
                 <td className="py-1.5 text-center align-top">
                   {block.acknowledgeOnly ? (
-                    <span className="text-[9px] uppercase tracking-wider text-muted-foreground print:text-black">
+                    <span className="text-2xs uppercase tracking-wider text-muted-foreground print:text-black">
                       zur Kenntnis
                     </span>
                   ) : block.department ? (
@@ -123,7 +123,7 @@ export function Unterschriftenblatt({
         </tbody>
       </table>
 
-      <p className="mt-3 text-[9px] leading-relaxed text-muted-foreground print:text-black">
+      <p className="mt-3 text-2xs leading-relaxed text-muted-foreground print:text-black">
         Hinweis: {DEPARTMENTS_WITHOUT_SIGNATURE_BLOCK.join(" und ")} haben auf dem
         Unterschriftenblatt der Vorlage keinen eigenen Block. Ihre Prüfungen werden in der
         Projektübersicht geführt.

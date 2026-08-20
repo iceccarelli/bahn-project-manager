@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import type React from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { Project } from "@/hooks/useDataQuery";
+import type { Project } from "@/hooks/useDataQuery";
 import { useStations } from "@/hooks/useStations";
 import { buildStationGeo, type MatchPrecision, type ResolvedStation } from "@/lib/stationGeo";
 import { Card } from "@/components/ui/card";
@@ -62,12 +63,7 @@ const createDotIcon = (count: number, precision: MatchPrecision) => {
   return L.divIcon({
     className: "db-dot-marker",
     html:
-      `<div style="width:${size}px;height:${size}px;background:${bg};` +
-      `border:2.5px solid #fff;border-radius:50%;` +
-      `box-shadow:0 2px 8px ${ring},0 0 0 3px ${ring};` +
-      `display:flex;align-items:center;justify-content:center;color:#fff;` +
-      `font-weight:800;font-size:${(size / 2.2).toFixed(0)}px;` +
-      `font-family:'DB Sans',system-ui,sans-serif;">${count > 1 ? count : ""}</div>`,
+      `<div style="width:${size}px;height:${size}px;background:${bg};border:2.5px solid #fff;border-radius:50%;box-shadow:0 2px 8px ${ring},0 0 0 3px ${ring};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:${(size / 2.2).toFixed(0)}px;font-family:'DB Sans',system-ui,sans-serif;">${count > 1 ? count : ""}</div>`,
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2], // dot sits exactly ON the station coordinate
     popupAnchor: [0, -(size / 2) - 2],
@@ -82,14 +78,7 @@ function popupHtml(group: StationGroup): string {
     .slice(0, 12)
     .map(
       (p) =>
-        `<button data-pid="${p.id}" style="display:block;width:100%;text-align:left;border:0;` +
-        `background:transparent;padding:8px;border-radius:10px;cursor:pointer;margin:0 0 4px;">` +
-        `<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">` +
-        `<span style="font:700 10px ui-monospace,monospace;color:#FF0000;background:rgba(255,0,0,.06);padding:1px 6px;border-radius:4px;">${esc(p.projektnummer || "—")}</span>` +
-        `<span style="font-size:9px;color:#555;border:1px solid #ddd;border-radius:6px;padding:1px 6px;">${esc(p.bahnhofsmanagement || "")}</span></div>` +
-        `<div style="font:700 12px system-ui;margin-top:4px;line-height:1.3;">${esc(p.projektbeschreibung || p.station || "")}</div>` +
-        `<div style="font-size:10px;color:#666;margin-top:3px;">${esc(p.projektleiter || "Unbekannt")}${p.projektstand ? " · " + esc(p.projektstand) : ""}</div>` +
-        `</button>`
+        `<button data-pid="${p.id}" style="display:block;width:100%;text-align:left;border:0;background:transparent;padding:8px;border-radius:10px;cursor:pointer;margin:0 0 4px;"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center;"><span style="font:700 10px ui-monospace,monospace;color:#FF0000;background:rgba(255,0,0,.06);padding:1px 6px;border-radius:4px;">${esc(p.projektnummer || "—")}</span><span style="font-size:9px;color:#555;border:1px solid #ddd;border-radius:6px;padding:1px 6px;">${esc(p.bahnhofsmanagement || "")}</span></div><div style="font:700 12px system-ui;margin-top:4px;line-height:1.3;">${esc(p.projektbeschreibung || p.station || "")}</div><div style="font-size:10px;color:#666;margin-top:3px;">${esc(p.projektleiter || "Unbekannt")}${p.projektstand ? ` · ${esc(p.projektstand)}` : ""}</div></button>`
     )
     .join("");
   const style = PRECISION_STYLE[group.precision];
@@ -101,17 +90,9 @@ function popupHtml(group: StationGroup): string {
       ? `<div style="text-align:center;font-size:10px;color:#888;font-style:italic;padding:4px;">+ ${group.projects.length - 12} weitere Projekte an dieser Station</div>`
       : "";
   return (
-    `<div style="min-width:240px;max-width:300px;">` +
-    `<div style="font:800 14px system-ui;line-height:1.2;">${esc(group.name)}</div>` +
-    `<div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;font-weight:800;color:${group.isPrecise ? "#888" : "#b45309"};margin-top:2px;">` +
-    `${group.projects.length} ${group.projects.length === 1 ? "Projekt" : "Projekte"}` +
-    `${group.isPrecise ? "" : ` · ${esc(style.label)}`}${group.ambiguous ? " · mehrdeutig" : ""}</div>` +
-    (group.bm ? `<div style="font-size:9px;color:#888;margin-top:1px;">BM ${esc(group.bm)}</div>` : "") +
-    (mix.length > 1
+    `<div style="min-width:240px;max-width:300px;"><div style="font:800 14px system-ui;line-height:1.2;">${esc(group.name)}</div><div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;font-weight:800;color:${group.isPrecise ? "#888" : "#b45309"};margin-top:2px;">${group.projects.length} ${group.projects.length === 1 ? "Projekt" : "Projekte"}${group.isPrecise ? "" : ` · ${esc(style.label)}`}${group.ambiguous ? " · mehrdeutig" : ""}</div>${group.bm ? `<div style="font-size:9px;color:#888;margin-top:1px;">BM ${esc(group.bm)}</div>` : ""}${mix.length > 1
       ? `<div style="font-size:9px;color:#888;margin-top:1px;">${mix.join(" · ")}</div>`
-      : "") +
-    `<div style="max-height:240px;overflow-y:auto;margin-top:8px;border-top:1px solid #eee;padding-top:6px;">${rows}${more}</div>` +
-    `</div>`
+      : ""}<div style="max-height:240px;overflow-y:auto;margin-top:8px;border-top:1px solid #eee;padding-top:6px;">${rows}${more}</div></div>`
   );
 }
 
@@ -190,11 +171,18 @@ export const MapView: React.FC<MapViewProps> = ({
   groupsRef.current = groups;
 
   // ---- create the map exactly once per mount, and tear it down cleanly ----
+  // biome-ignore lint/correctness/useExhaustiveDependencies: initialCenter and
+  // initialZoom are *initial* values by contract. Adding them would tear down
+  // and rebuild the whole Leaflet instance whenever the parent re-rendered with
+  // a new object literal, losing the user's pan and zoom on every filter change.
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     // guard against a container Leaflet already initialised (StrictMode/HMR)
-    if ((el as any)._leaflet_id) return;
+    // Leaflet stamps this private field on a container it has already
+    // initialised; there is no public API to ask, so the cast is narrowed to
+    // the one field rather than widened to `any`.
+    if ((el as HTMLElement & { _leaflet_id?: number })._leaflet_id) return;
 
     const map = L.map(el, {
       center: [initialCenter.lat, initialCenter.lng],
@@ -227,7 +215,8 @@ export const MapView: React.FC<MapViewProps> = ({
 
     // delegate clicks inside popups to onProjectSelect
     map.on("popupopen", (e: L.PopupEvent) => {
-      const root = (e.popup as any).getElement?.() as HTMLElement | undefined;
+      const root = (e.popup as L.Popup & { getElement?: () => HTMLElement | undefined })
+        .getElement?.();
       if (!root) return;
       root.querySelectorAll<HTMLElement>("[data-pid]").forEach((btn) => {
         btn.onclick = () => {
@@ -277,6 +266,9 @@ export const MapView: React.FC<MapViewProps> = ({
   }, [groups]);
 
   // keep Leaflet sized when toggling fullscreen
+  // biome-ignore lint/correctness/useExhaustiveDependencies: isFullscreen is
+  // the trigger, not a value the body reads — Leaflet needs invalidateSize()
+  // after the container's box changes, which is exactly this toggle.
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -309,13 +301,13 @@ export const MapView: React.FC<MapViewProps> = ({
             </div>
             <div>
               <h4 className="text-base font-black leading-none tracking-tight">Netz-Explorer</h4>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-black mt-1.5">
+              <p className="text-2xs text-muted-foreground uppercase tracking-widest font-black mt-1.5">
                 {stationGroups.length.toLocaleString("de-DE")} Stationen ·{" "}
                 {exactCount.toLocaleString("de-DE")} exakt · {placedCount.toLocaleString("de-DE")}/
                 {projects.length.toLocaleString("de-DE")} verortet
               </p>
               {unplacedCount > 0 && (
-                <p className="text-[10px] text-amber-600 dark:text-amber-500 font-black mt-0.5">
+                <p className="text-2xs text-amber-600 dark:text-amber-500 font-black mt-0.5">
                   {unplacedCount.toLocaleString("de-DE")} ohne Station &amp; ohne BM – nicht darstellbar
                 </p>
               )}
@@ -325,13 +317,13 @@ export const MapView: React.FC<MapViewProps> = ({
       </div>
 
       <div className="absolute bottom-6 left-6 z-[1000] pointer-events-none">
-        <div className="flex flex-col gap-3 bg-background/90 backdrop-blur-lg p-4 rounded-2xl border-2 border-border/50 text-[11px] font-bold pointer-events-auto shadow-xl">
+        <div className="flex flex-col gap-3 bg-background/90 backdrop-blur-lg p-4 rounded-2xl border-2 border-border/50 text-2xs font-bold pointer-events-auto shadow-xl">
           <div className="flex items-center gap-3">
             <div className="w-4 h-4 rounded-full bg-[#FF0000] border-2 border-white shadow-md" />
             <span className="text-foreground/80">Station (exakt)</span>
           </div>
           <div className="flex items-center gap-3">
-            <div className="w-6 h-6 rounded-full bg-[#FF0000] border-2 border-white flex items-center justify-center text-[9px] text-white font-black shadow-md">
+            <div className="w-6 h-6 rounded-full bg-[#FF0000] border-2 border-white flex items-center justify-center text-2xs text-white font-black shadow-md">
               12
             </div>
             <span className="text-foreground/80">Projekte je Station</span>

@@ -8,9 +8,9 @@
 import { getDb } from "../server/db";
 import { projects } from "../drizzle/schema";
 import { eq } from "drizzle-orm";
-import fs from "fs";
-import path from "path";
-import crypto from "crypto";
+import fs from "node:fs";
+import path from "node:path";
+import crypto from "node:crypto";
 import { toDate } from "../shared/date";
 import { ProjectSchema } from "../shared/validation";
 import { SYNC_VERSION } from "../shared/const";

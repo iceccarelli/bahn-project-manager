@@ -144,7 +144,7 @@ export default function Anmeldung() {
                 >
                   <div className="flex items-center gap-2">
                     <span
-                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-black ${
+                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-2xs font-black ${
                         done
                           ? "bg-emerald-600 text-white"
                           : active
@@ -156,7 +156,7 @@ export default function Anmeldung() {
                     </span>
                     <span className="text-xs font-black leading-none">{s.title}</span>
                   </div>
-                  <div className="mt-1 pl-7 text-[10px] leading-none text-muted-foreground">
+                  <div className="mt-1 pl-7 text-2xs leading-none text-muted-foreground">
                     {s.subtitle}
                   </div>
                 </button>
@@ -189,7 +189,7 @@ export default function Anmeldung() {
 
         <div className="flex flex-wrap items-center gap-2">
           {/* reserved height so the row does not jump when the hint appears */}
-          <span className="min-h-[16px] text-[11px] font-bold text-[#FF0000]">
+          <span className="min-h-[16px] text-2xs font-bold text-[#FF0000]">
             {step < 5 && issuesForStep.length > 0
               ? `${issuesForStep.length} ${issuesForStep.length === 1 ? "Angabe fehlt" : "Angaben fehlen"}`
               : ""}

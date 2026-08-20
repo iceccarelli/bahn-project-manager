@@ -19,7 +19,7 @@ export default function PsvItk() {
   // Filter projects that have ITK reviews with a status
   const itkProjects = data.projects.filter((p: any) => {
     const itkReview = p.reviews?.find((r: any) => r.department === 'ITK');
-    return itkReview && itkReview.status && itkReview.status !== 'nicht erforderlich';
+    return itkReview?.status && itkReview.status !== 'nicht erforderlich';
   });
 
   return (
@@ -78,7 +78,7 @@ export default function PsvItk() {
                         {itkReview?.pruefDatum ? new Date(itkReview.pruefDatum).toLocaleDateString('de-DE') : '-'}
                       </td>
                       <td className="py-3 px-4 text-xs whitespace-nowrap">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-medium ${
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-2xs font-medium ${
                           itkReview?.status === 'Zustimmung erteilt' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300' :
                           itkReview?.status === 'offen' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300' :
                           itkReview?.status === 'in Bearbeitung' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' :

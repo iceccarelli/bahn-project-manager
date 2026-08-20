@@ -8,8 +8,8 @@ import { Printer } from "lucide-react";
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <>
-      <dt className="text-[11px] font-bold text-muted-foreground">{label}</dt>
-      <dd className="text-[11px]">{value || <span className="text-muted-foreground">—</span>}</dd>
+      <dt className="text-2xs font-bold text-muted-foreground">{label}</dt>
+      <dd className="text-2xs">{value || <span className="text-muted-foreground">—</span>}</dd>
     </>
   );
 }
@@ -29,7 +29,7 @@ export function Step5Bestaetigung({ draft }: { draft: ChecklistDraft }) {
             Noch nicht vollständig — {blocking.length}{" "}
             {blocking.length === 1 ? "offener Punkt" : "offene Punkte"}
           </div>
-          <ul className="mt-1.5 space-y-0.5 text-[11px]">
+          <ul className="mt-1.5 space-y-0.5 text-2xs">
             {blocking.map((b) => (
               <li key={`${b.step}-${b.field}`}>
                 <span className="font-bold">Schritt {b.step}:</span> {b.message}
@@ -73,7 +73,7 @@ export function Step5Bestaetigung({ draft }: { draft: ChecklistDraft }) {
               {reviews.map((r) => (
                 <span
                   key={r.department}
-                  className={`rounded px-2 py-0.5 text-[10px] font-bold ${
+                  className={`rounded px-2 py-0.5 text-2xs font-bold ${
                     r.status === "offen"
                       ? "bg-[#FF0000]/10 text-[#FF0000]"
                       : "bg-muted text-muted-foreground"
@@ -84,7 +84,7 @@ export function Step5Bestaetigung({ draft }: { draft: ChecklistDraft }) {
               ))}
             </div>
             {notified.length > 0 && (
-              <p className="mt-2 text-[11px] text-muted-foreground">
+              <p className="mt-2 text-2xs text-muted-foreground">
                 Zusätzlich benachrichtigt:{" "}
                 {notified.map((k) => CHECKLIST_BY_KEY[k]?.gewerk).join(" · ")}
               </p>
@@ -93,13 +93,13 @@ export function Step5Bestaetigung({ draft }: { draft: ChecklistDraft }) {
 
           <section className="rounded-lg border border-border bg-muted/40 px-4 py-3">
             <h3 className="text-xs font-black">Was beim Anmelden passiert</h3>
-            <ol className="mt-1.5 list-decimal space-y-0.5 pl-4 text-[11px] text-muted-foreground">
+            <ol className="mt-1.5 list-decimal space-y-0.5 pl-4 text-2xs text-muted-foreground">
               <li>Die Checkliste wird als „submitted" gespeichert.</li>
               <li>Ein Projekt mit allen 14 Prüfzeilen wird angelegt.</li>
               {termin && <li>Der gewählte Termin wird auf „Gebucht" gesetzt.</li>}
               <li>Ein Eintrag in der Änderungshistorie wird geschrieben.</li>
             </ol>
-            <p className="mt-2 text-[10px] text-muted-foreground">
+            <p className="mt-2 text-2xs text-muted-foreground">
               PDF-Export und der Versand an FAA / TBQ / BM folgen in Stufe 4. Bis dahin lässt sich
               das Unterschriftenblatt über „Drucken" als PDF ausgeben.
             </p>

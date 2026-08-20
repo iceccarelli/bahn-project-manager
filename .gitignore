@@ -135,3 +135,10 @@ probe.mjs
 # The Projektanmeldung workbook is a live operational document; add it locally
 # to regenerate client/public/schedule.json, but it is not tracked.
 data/*.xlsm
+
+# local diagnostic probes
+_probe*.mjs
+_dbg.mjs
+_one.mjs
+_audit.mjs
+_diag*.mjs

@@ -1,68 +1,161 @@
-import { Globe, ArrowUp, Package } from "lucide-react";
+import { ArrowUp, Package } from "lucide-react";
+import { useAllProjects } from "@/hooks/useDataQuery";
+
+/**
+ * Global footer.
+ *
+ * Three things were wrong here and all three were the same class of defect —
+ * the footer stating something it had no way of knowing:
+ *
+ *   1. `appVersion = "1.0.0"` was a string literal while package.json said
+ *      2.0.0. It is now injected from package.json at build time (see
+ *      `__APP_VERSION__` in vite.config.ts), so it cannot drift again.
+ *   2. `Last updated: {new Date().toLocaleDateString()}` rendered *today's*
+ *      date on every single page load, so the app always claimed to have been
+ *      updated today. Replaced with the real build timestamp.
+ *   3. "Alle Systeme betriebsbereit" was hardcoded green. It now reflects
+ *      whether the project query actually resolved.
+ *
+ * Layout: the inner wrapper uses `app-shell`, the same utility the header and
+ * the page content use, so all three share one left edge and one right edge.
+ * It previously used `max-w-screen-2xl` (1536px) against the header's
+ * unconstrained width, which put the footer 38px inside the header on a 1920px
+ * display and 20px outside the page content on a phone.
+ *
+ * Colours: the surface is a hardcoded #1A1A1A in both themes, so it cannot use
+ * `text-muted-foreground` — that token resolves against the *page* theme and
+ * rendered near-black-on-black in light mode. Fixed opacities on a known
+ * background instead.
+ */
+
+/** Frozen at build time rather than recomputed on every render. */
+const BUILD_YEAR = new Date(__BUILD_DATE__).getFullYear();
+
+const LEGAL_LINKS = [
+  { label: "Impressum", href: "https://www.deutschebahn.com/de/impressum-1187944" },
+  { label: "Datenschutz", href: "https://www.deutschebahn.com/de/konzern/datenschutz-6890700" },
+  {
+    label: "Barrierefreiheit",
+    href: "https://www.deutschebahn.com/de/konzern/barrierefreiheit-12227918",
+  },
+] as const;
+
+const SUPPORT_LINKS = [
+  {
+    label: "GitHub Repository",
+    href: "https://github.com/iceccarelli/bahn-project-manager",
+  },
+  {
+    label: "Issue melden",
+    href: "https://github.com/iceccarelli/bahn-project-manager/issues/new",
+  },
+] as const;
 
 export default function Footer() {
-  const currentYear = new Date().getFullYear();
-  const appVersion = "1.0.0";
+  const { data, isError, isLoading } = useAllProjects();
 
   const scrollToTop = () => {
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    document
+      .querySelector("main")
+      ?.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  const status = isError
+    ? { dot: "bg-amber-400", text: "Daten nicht erreichbar" }
+    : isLoading
+      ? { dot: "bg-white/40", text: "Daten werden geladen" }
+      : {
+          dot: "bg-emerald-400",
+          text: `${(data?.projects?.length ?? 0).toLocaleString("de-DE")} Projekte geladen`,
+        };
+
   return (
-    <footer className="aws-footer border-t border-[#FF0000] py-6 px-4 md:px-6 text-sm bg-[#1A1A1A] text-[#eaeded] shrink-0">
-      <div className="max-w-screen-2xl mx-auto">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8 mb-6">
+    <footer className="shrink-0 border-t border-[#FF0000] bg-[#1A1A1A] py-6 text-[#eaeded]">
+      <div className="app-shell">
+        <div className="mb-6 grid grid-cols-2 gap-6 md:grid-cols-4 md:gap-8">
           <div>
-            <div className="flex items-center gap-x-2 mb-3">
-              <Globe className="h-4 w-4" />
-              <span className="font-medium text-xs md:text-sm">Deutsch (DE)</span>
+            <div className="mb-3 flex items-center gap-x-2">
+              <span className="flex h-5 w-5 items-center justify-center rounded bg-[#FF0000] text-2xs font-bold leading-none text-white">
+                DB
+              </span>
+              <span className="text-xs font-bold md:text-sm">Bahn Project Manager</span>
             </div>
-            <p className="text-xs opacity-70">
-              © {currentYear} Deutsche Bahn AG • Alle Rechte vorbehalten
+            <p className="text-xs text-white/70">
+              © {BUILD_YEAR} Deutsche Bahn AG · Alle Rechte vorbehalten
             </p>
-            <p className="text-xs opacity-70 mt-1">Bahn Project Manager – Internes Tool</p>
+            <p className="mt-1 text-xs text-white/70">
+              Internes Werkzeug — Regionalbereich Mitte
+            </p>
           </div>
 
-          <div className="space-y-2">
-            <h4 className="text-xs font-semibold text-[#eaeded] mb-2">Rechtliches</h4>
-            <a href="#" className="block text-xs hover:text-[#FF0000] hover:underline transition-colors">Impressum</a>
-            <a href="#" className="block text-xs hover:text-[#FF0000] hover:underline transition-colors">Datenschutz</a>
-            <a href="#" className="block text-xs hover:text-[#FF0000] hover:underline transition-colors">AGB</a>
-            <a href="#" className="block text-xs hover:text-[#FF0000] hover:underline transition-colors">Barrierefreiheit</a>
-          </div>
+          <nav aria-labelledby="footer-legal" className="space-y-2">
+            <h2 id="footer-legal" className="mb-2 text-xs font-bold text-[#eaeded]">
+              Rechtliches
+            </h2>
+            {LEGAL_LINKS.map((l) => (
+              <a
+                key={l.href}
+                href={l.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block text-xs text-white/80 transition-colors hover:text-[#FF0000] hover:underline"
+              >
+                {l.label}
+              </a>
+            ))}
+          </nav>
 
-          <div className="space-y-2">
-            <h4 className="text-xs font-semibold text-[#eaeded] mb-2">Support</h4>
-            <a href="#" className="block text-xs hover:text-[#FF0000] hover:underline transition-colors">Dokumentation</a>
-            <a href="#" className="block text-xs hover:text-[#FF0000] hover:underline transition-colors">Hilfe & Support</a>
-            <a href="https://github.com/iceccarelli/bahn-project-manager" target="_blank" rel="noopener noreferrer" className="block text-xs hover:text-[#FF0000] hover:underline transition-colors">GitHub Repository</a>
-          </div>
+          <nav aria-labelledby="footer-support" className="space-y-2">
+            <h2 id="footer-support" className="mb-2 text-xs font-bold text-[#eaeded]">
+              Support
+            </h2>
+            {SUPPORT_LINKS.map((l) => (
+              <a
+                key={l.href}
+                href={l.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block text-xs text-white/80 transition-colors hover:text-[#FF0000] hover:underline"
+              >
+                {l.label}
+              </a>
+            ))}
+          </nav>
 
           <div className="flex flex-col gap-y-3">
-            <div className="flex items-center gap-x-2">
-              <div className="flex items-center text-emerald-400 text-xs font-medium gap-1">
-                <span className="inline-block w-2 h-2 rounded-full bg-emerald-400" />
-                Alle Systeme betriebsbereit
-              </div>
-            </div>
-            <div className="flex items-center gap-x-2 text-xs text-muted-foreground">
-              <Package className="h-3 w-3" />
-              <span>v{appVersion}</span>
-            </div>
+            {/* <output> is the semantic element for a live result; it carries an
+                implicit role="status" so screen readers announce the change
+                when the query resolves, without an explicit ARIA role. */}
+            <output className="flex items-center gap-1.5 text-xs font-medium text-white/90">
+              <span
+                className={`inline-block h-2 w-2 shrink-0 rounded-full ${status.dot}`}
+                aria-hidden="true"
+              />
+              {status.text}
+            </output>
+            <p className="flex items-center gap-x-2 text-xs text-white/70">
+              <Package className="h-3 w-3 shrink-0" aria-hidden="true" />
+              <span>
+                v{__APP_VERSION__}
+                <span className="sr-only">, </span>
+                <span className="ml-1 font-mono text-2xs opacity-70">
+                  {__BUILD_DATE__}
+                </span>
+              </span>
+            </p>
             <button
+              type="button"
               onClick={scrollToTop}
-              className="text-xs flex items-center gap-1 underline hover:text-[#FF0000] transition-colors mt-auto"
-              aria-label="Nach oben scrollen"
+              className="mt-auto flex items-center gap-1 text-xs text-white/80 underline transition-colors hover:text-[#FF0000]"
             >
-              <ArrowUp className="h-3 w-3" />
+              <ArrowUp className="h-3 w-3" aria-hidden="true" />
               Nach oben
             </button>
           </div>
         </div>
 
-        <div className="border-t border-border/30 pt-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 text-xs text-muted-foreground">
-          <p>Bahn Project Manager – Collaborative Project Review Platform</p>
-          <p className="text-xs opacity-60">Last updated: {new Date( ).toLocaleDateString('de-DE')}</p>
+        <div className="border-t border-white/15 pt-4 text-xs text-white/60">
+          <p>Bahn Project Manager — Fachspezialistenprüfung RB Mitte</p>
         </div>
       </div>
     </footer>

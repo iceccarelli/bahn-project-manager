@@ -130,9 +130,9 @@ describe.skip("dashboard.stats", () => {
     expect(stats).toHaveProperty("departmentStats");
     expect(stats).toHaveProperty("regionStats");
     expect(stats).toHaveProperty("prueferWorkload");
-    expect(stats!.totalProjects).toBeGreaterThan(0);
-    expect(Array.isArray(stats!.statusDistribution)).toBe(true);
-    expect(Array.isArray(stats!.regionStats)).toBe(true);
+    expect(stats?.totalProjects).toBeGreaterThan(0);
+    expect(Array.isArray(stats?.statusDistribution)).toBe(true);
+    expect(Array.isArray(stats?.regionStats)).toBe(true);
   });
 });
 

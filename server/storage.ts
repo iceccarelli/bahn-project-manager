@@ -4,7 +4,7 @@
 // Upgraded for perfect stack consistency: added shared types, sync export helper, better error messages.
 
 import { ENV } from "./_core/env";
-import { ProjectUI } from "@shared/types";
+import type { ProjectUI } from "@shared/types";
 
 function getForgeConfig() {
   const forgeUrl = ENV.forgeApiUrl;
@@ -38,7 +38,7 @@ export async function storagePut(
   const { forgeUrl, forgeKey } = getForgeConfig();
   const key = appendHashSuffix(normalizeKey(relKey));
 
-  const presignUrl = new URL("v1/storage/presign/put", forgeUrl + "/");
+  const presignUrl = new URL("v1/storage/presign/put", `${forgeUrl}/`);
   presignUrl.searchParams.set("path", key);
 
   const presignResp = await fetch(presignUrl, {
@@ -80,7 +80,7 @@ export async function storageGetSignedUrl(relKey: string): Promise<string> {
   const { forgeUrl, forgeKey } = getForgeConfig();
   const key = normalizeKey(relKey);
 
-  const getUrl = new URL("v1/storage/presign/get", forgeUrl + "/");
+  const getUrl = new URL("v1/storage/presign/get", `${forgeUrl}/`);
   getUrl.searchParams.set("path", key);
 
   const resp = await fetch(getUrl, {
