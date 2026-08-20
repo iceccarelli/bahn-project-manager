@@ -32,6 +32,12 @@ import { CHECKLIST_QUESTIONS, DEPARTMENT_QUESTIONS } from "../shared/checklist";
 import { parseStoredDate } from "../shared/date";
 import { normalizeProjektstand } from "../shared/projektstand";
 import { normalizeReviewStatus } from "../shared/review-status";
+import {
+  CONTACTS,
+  DEPARTMENT_RECIPIENT_ROWS,
+  departmentsWithoutRecipients,
+} from "../shared/contacts";
+import { DEPARTMENTS } from "../shared/types";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const STATIONS = path.join(ROOT, "client", "public", "stations.json");
@@ -215,6 +221,27 @@ function main() {
     for (const f of failures) console.error(`   - ${f}`);
     process.exit(1);
   }
+  // ---- contacts ---------------------------------------------------------
+  // The Excel macro reported a successful send even when the recipient rows
+  // held no address, so a department could go years without anyone being
+  // told. Surfacing it here makes it a standing gate rather than a
+  // discovery.
+  {
+    const unreachable = departmentsWithoutRecipients();
+    const reachable = DEPARTMENTS.length - unreachable.length;
+    console.log(
+      `      contacts: ${CONTACTS.length} Adressen | ${reachable}/${DEPARTMENTS.length} Gewerke erreichbar${
+        unreachable.length ? ` | ohne Adresse: ${unreachable.join(", ")}` : ""
+      }`,
+    );
+    const itk = DEPARTMENT_RECIPIENT_ROWS.ITK;
+    if (itk[0] !== 10) {
+      throw new Error(
+        `ITK recipients start at Hilfsdatei row ${itk[0]}, expected 10 — the off-by-two has come back`,
+      );
+    }
+  }
+
   console.log("      all checks passed.");
 }
 

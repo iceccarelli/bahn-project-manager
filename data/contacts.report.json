@@ -1,0 +1,283 @@
+{
+ "generated": "run pnpm contacts:extract",
+ "findings": [
+  {
+   "formularRow": 17,
+   "recipientRows": [
+    8,
+    9,
+    10,
+    11,
+    12
+   ],
+   "groups": [
+    "Brandschutz",
+    "Informations- und Telekommunikationstechnologien (ITK)"
+   ],
+   "emptyRows": [
+    9
+   ],
+   "spansMultipleGroups": true,
+   "reachesNobody": false
+  },
+  {
+   "formularRow": 18,
+   "recipientRows": [
+    18,
+    19,
+    20,
+    21
+   ],
+   "groups": [
+    "Elektrotechnik"
+   ],
+   "emptyRows": [],
+   "spansMultipleGroups": false,
+   "reachesNobody": false
+  },
+  {
+   "formularRow": 19,
+   "recipientRows": [
+    5,
+    6,
+    7,
+    8,
+    9
+   ],
+   "groups": [
+    "Brandschutz"
+   ],
+   "emptyRows": [
+    9
+   ],
+   "spansMultipleGroups": false,
+   "reachesNobody": false
+  },
+  {
+   "formularRow": 20,
+   "recipientRows": [
+    22
+   ],
+   "groups": [
+    "Fördertechnik"
+   ],
+   "emptyRows": [],
+   "spansMultipleGroups": false,
+   "reachesNobody": false
+  },
+  {
+   "formularRow": 21,
+   "recipientRows": [
+    16,
+    25,
+    69
+   ],
+   "groups": [
+    "Fachspezialist Heizung-, Lüftung-, Sanitärtechnik",
+    "Fachkoordinator Heizung-, Lüftung-, Sanitärtechnik",
+    "HKLS"
+   ],
+   "emptyRows": [
+    69
+   ],
+   "spansMultipleGroups": true,
+   "reachesNobody": false
+  },
+  {
+   "formularRow": 22,
+   "recipientRows": [
+    17,
+    26
+   ],
+   "groups": [
+    "Fachkoordinator Gebäudeautomation",
+    "Fachspezialist Gebäudeautomation"
+   ],
+   "emptyRows": [],
+   "spansMultipleGroups": true,
+   "reachesNobody": false
+  },
+  {
+   "formularRow": 23,
+   "recipientRows": [
+    15
+   ],
+   "groups": [
+    "Fachkoordinator Energie"
+   ],
+   "emptyRows": [],
+   "spansMultipleGroups": false,
+   "reachesNobody": false
+  },
+  {
+   "formularRow": 24,
+   "recipientRows": [
+    40,
+    41,
+    42,
+    43,
+    44,
+    45
+   ],
+   "groups": [
+    "TBQ"
+   ],
+   "emptyRows": [],
+   "spansMultipleGroups": false,
+   "reachesNobody": false
+  },
+  {
+   "formularRow": 25,
+   "recipientRows": [
+    23,
+    24,
+    47
+   ],
+   "groups": [
+    "Umweltmanagement"
+   ],
+   "emptyRows": [],
+   "spansMultipleGroups": false,
+   "reachesNobody": false
+  },
+  {
+   "formularRow": 26,
+   "recipientRows": [
+    50,
+    51,
+    52,
+    53,
+    54,
+    55,
+    56,
+    57
+   ],
+   "groups": [
+    "Darmstadt",
+    "Frankfurt",
+    "Gießen",
+    "Kaiserslautern",
+    "Kassel",
+    "Koblenz",
+    "Mainz",
+    "Saarbrücken"
+   ],
+   "emptyRows": [],
+   "spansMultipleGroups": true,
+   "reachesNobody": false
+  },
+  {
+   "formularRow": 27,
+   "recipientRows": [
+    60
+   ],
+   "groups": [
+    "HuBs"
+   ],
+   "emptyRows": [],
+   "spansMultipleGroups": false,
+   "reachesNobody": false
+  },
+  {
+   "formularRow": 28,
+   "recipientRows": [
+    38,
+    39,
+    61,
+    62
+   ],
+   "groups": [
+    "FAA-Mail in",
+    "FAA kaufm. PM",
+    "ITK"
+   ],
+   "emptyRows": [],
+   "spansMultipleGroups": true,
+   "reachesNobody": false
+  },
+  {
+   "formularRow": 29,
+   "recipientRows": [
+    63,
+    64,
+    65,
+    66,
+    67
+   ],
+   "groups": [
+    "BIM"
+   ],
+   "emptyRows": [
+    67
+   ],
+   "spansMultipleGroups": false,
+   "reachesNobody": false
+  },
+  {
+   "formularRow": 30,
+   "recipientRows": [
+    74,
+    75
+   ],
+   "groups": [
+    "LST"
+   ],
+   "emptyRows": [
+    74,
+    75
+   ],
+   "spansMultipleGroups": false,
+   "reachesNobody": true
+  },
+  {
+   "formularRow": 31,
+   "recipientRows": [
+    71,
+    72
+   ],
+   "groups": [
+    "Vermessung"
+   ],
+   "emptyRows": [
+    72
+   ],
+   "spansMultipleGroups": false,
+   "reachesNobody": false
+  },
+  {
+   "formularRow": 32,
+   "recipientRows": [
+    82,
+    83,
+    84,
+    85
+   ],
+   "groups": [
+    "Baubetriebstechnologe"
+   ],
+   "emptyRows": [
+    82,
+    85
+   ],
+   "spansMultipleGroups": false,
+   "reachesNobody": false
+  },
+  {
+   "formularRow": 33,
+   "recipientRows": [
+    77,
+    78,
+    79,
+    80
+   ],
+   "groups": [
+    "Baubetriebsplanung"
+   ],
+   "emptyRows": [
+    80
+   ],
+   "spansMultipleGroups": false,
+   "reachesNobody": false
+  }
+ ]
+}
