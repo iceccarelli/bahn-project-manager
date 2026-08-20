@@ -11,6 +11,7 @@ import { DEPARTMENTS } from "@shared/validation";
 import type { ProjectChecklist } from "@shared/validation";
 import type { Project, Review, Stats, AuditLogEntry } from "@/hooks/useDataQuery";
 import { describeIngest, ingestProjects } from "@shared/ingest";
+import { ProjectSchema, ReviewSchema } from "@shared/validation";
 
 export interface ProjectUpdateInput {
   id: number;
@@ -107,13 +108,20 @@ async function initializeStorage() {
       // longer understands. Serving it forever is how a single browser ends up
       // quietly disagreeing with every other one, so a cache that does not
       // validate cleanly is discarded and refetched rather than trusted.
-      if (cached.clean && cached.projects.length > 0) {
+      if (cached.projects.length > 0) {
+        if (!cached.clean) {
+          // Keep the rows that validated rather than discarding the cache.
+          // Refetching would replace every local edit with the shipped
+          // snapshot to punish one bad row, which is a far larger loss than
+          // the row itself. Writes are validated now, so a bad row here means
+          // the cache was corrupted from outside the app.
+          console.warn(`[data] ${describeIngest(cached)} — keeping the valid rows`);
+          localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(cached.projects));
+        }
         return cached.projects;
       }
-      if (!cached.clean) {
-        console.warn(`[data] cache rejected — ${describeIngest(cached)}; reloading from /data.json`);
-        localStorage.removeItem(STORAGE_KEY_PROJECTS);
-      }
+      console.warn("[data] cache held no usable rows; reloading from /data.json");
+      localStorage.removeItem(STORAGE_KEY_PROJECTS);
     } catch (_e) {
       console.warn("[data] cache is not valid JSON; reloading from /data.json");
       localStorage.removeItem(STORAGE_KEY_PROJECTS);
@@ -222,8 +230,23 @@ export const apiClient = {
     if (index === -1) throw new Error("Project not found");
     const project = projects[index];
     if (!project) throw new Error("Project not found");
-    const oldVal = (project as any)[input.field];
-    (project as any)[input.field] = input.value;
+    const oldVal = project[input.field];
+    const candidate = { ...project, [input.field]: input.value };
+
+    // Validate BEFORE persisting. Without this the write path accepted values
+    // the read path rejects — a comment over ProjectSchema's 5,000-character
+    // limit saved happily, and then on the next load ingestProjects rejected
+    // that row, the cache was judged untrustworthy, and *every* local edit went
+    // with it. One over-long comment silently discarded the lot.
+    const check = ProjectSchema.safeParse(candidate);
+    if (!check.success) {
+      const issue = check.error.issues[0];
+      throw new Error(
+        `${input.field} ist ungültig: ${issue?.message ?? "Wert nicht zulässig"}`,
+      );
+    }
+
+    Object.assign(project, { [input.field]: input.value });
     localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
     recordAudit("Projekt aktualisiert", `Feld ${input.field} von ${oldVal} auf ${input.value} geändert.`);
     window.dispatchEvent(new StorageEvent("storage", { key: STORAGE_KEY_PROJECTS, newValue: JSON.stringify(projects) }));
@@ -276,11 +299,20 @@ export const apiClient = {
     if (reviewIndex === -1) throw new Error("Review not found");
     const existingReview = project.reviews[reviewIndex];
     if (!existingReview) throw new Error("Review not found");
-    const oldVal = (existingReview as any)[input.field];
-    project.reviews[reviewIndex] = {
-      ...existingReview,
-      [input.field]: input.value,
-    };
+    const oldVal = existingReview[input.field];
+    const candidateReview = { ...existingReview, [input.field]: input.value };
+
+    // Same gate as the project path: the review is validated before it is
+    // persisted, so the write can never produce a row the read will reject.
+    const reviewCheck = ReviewSchema.safeParse(candidateReview);
+    if (!reviewCheck.success) {
+      const issue = reviewCheck.error.issues[0];
+      throw new Error(
+        `${input.field} ist ungültig: ${issue?.message ?? "Wert nicht zulässig"}`,
+      );
+    }
+
+    project.reviews[reviewIndex] = candidateReview;
     localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
     recordAudit("Prüfung aktualisiert", `${input.department}: ${input.field} von ${oldVal} auf ${input.value} gesetzt.`);
     window.dispatchEvent(new StorageEvent("storage", { key: STORAGE_KEY_PROJECTS, newValue: JSON.stringify(projects) }));

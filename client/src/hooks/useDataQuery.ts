@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
+import { toast } from "sonner";
 import { apiClient } from "@/_core/api/client";
 import { BAHNHOFSMANAGEMENT } from "@shared/bahnhofsmanagement";
 import type {
@@ -159,10 +160,14 @@ export function useUpdateProject() {
 
       return { previousProjectsData };
     },
-    onError: (_err, _input, context) => {
+    onError: (err, _input, context) => {
       if (context?.previousProjectsData?.projects) {
         queryClient.setQueryData(queryKeys.projects.list({ showAll: true }), context.previousProjectsData);
       }
+      // Without this the rollback was silent: the cell reverted to its old
+      // value and the user was never told the write had been refused, which
+      // reads as the app losing their typing.
+      toast.error(err instanceof Error ? err.message : "Änderung wurde abgelehnt");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
@@ -202,10 +207,14 @@ export function useUpdateReview() {
 
       return { previousProjectsData };
     },
-    onError: (_err, _input, context) => {
+    onError: (err, _input, context) => {
       if (context?.previousProjectsData?.projects) {
         queryClient.setQueryData(queryKeys.projects.list({ showAll: true }), context.previousProjectsData);
       }
+      // Without this the rollback was silent: the cell reverted to its old
+      // value and the user was never told the write had been refused, which
+      // reads as the app losing their typing.
+      toast.error(err instanceof Error ? err.message : "Änderung wurde abgelehnt");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
@@ -341,16 +350,24 @@ export function useProjects(params: {
     return { projects: filtered, total: filtered.length };
   }, [allProjectsData, search, region, projektleiter, pruefer, status, department, sortBy, sortDir]);
 
+  // `field as any` used to sit here, which threw away the one guarantee the
+  // input type provided: a mistyped field name compiled cleanly and only
+  // surfaced as a silently-wrong write at runtime.
   const applyEdit = useCallback(
-    (projectId: number, field: string, value: string) => {
-      updateProjectMutation.mutate({ id: projectId, field: field as any, value });
+    (projectId: number, field: ProjectUpdateInput["field"], value: string) => {
+      updateProjectMutation.mutate({ id: projectId, field, value });
     },
     [updateProjectMutation]
   );
 
   const applyReviewEdit = useCallback(
-    (projectId: number, departmentName: string, field: string, value: string) => {
-      updateReviewMutation.mutate({ projectId, department: departmentName, field: field as any, value });
+    (
+      projectId: number,
+      departmentName: string,
+      field: ReviewUpdateInput["field"],
+      value: string,
+    ) => {
+      updateReviewMutation.mutate({ projectId, department: departmentName, field, value });
     },
     [updateReviewMutation]
   );
