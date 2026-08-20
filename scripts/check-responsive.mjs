@@ -58,7 +58,7 @@ try {
       log(m.s <= m.c + 2, `${vp.label}px  ${route.name.padEnd(18)} main ${m.s}/${m.c}px`);
     }
     if (vp.width < 768) {
-      await page.goto(base + "/", { waitUntil: "networkidle" });
+      await page.goto(`${base}/`, { waitUntil: "networkidle" });
       await page.waitForSelector("header");
       const btn = page.getByRole("button", { name: "Navigation öffnen" });
       const visible = await btn.isVisible().catch(() => false);
@@ -69,7 +69,7 @@ try {
         log(navOk, `${vp.label}px  nav sheet opens with all tabs`);
       }
     } else {
-      await page.goto(base + "/", { waitUntil: "networkidle" });
+      await page.goto(`${base}/`, { waitUntil: "networkidle" });
       await page.getByText("Projekte", { exact: true }).first().click();
       await page.waitForTimeout(300);
       log(/\/projects$/.test(page.url()), `${vp.label}px  sidebar nav -> /projects`);

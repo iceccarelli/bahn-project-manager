@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
+import { deriveProjectMetrics, percent } from '@shared/project-metrics';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -80,20 +81,23 @@ export default function Dashboard() {
 
   const projects: Project[] = allData?.projects || [];
 
-  const totalProjects = projects.length;
-  const openReviews = projects.reduce((sum, p) => 
-    sum + p.reviews.filter(r => r.status === "offen" || r.status === "in Bearbeitung").length, 0);
-  const criticalProjects = projects.filter(p => 
-    p.reviews.some(r => r.status === "abgelehnt" || r.status === "Nachforderung")).length;
-
-  // --- Real, data-derived KPIs (replacing hardcoded literals) ---------------
-  const allReviews = projects.flatMap(p => p.reviews || []);
-  const totalReviews = allReviews.length;
-  const relevantReviews = allReviews.filter(r => r.status && r.status !== "nicht erforderlich");
-  const approvedReviews = allReviews.filter(r =>
-    r.status === "Zustimmung erteilt" || r.status === "Niederschrift erstellt");
-  const successRate = relevantReviews.length > 0
-    ? (approvedReviews.length / relevantReviews.length) * 100 : 0;
+  // Every figure below comes from shared/project-metrics.ts, the same
+  // derivation Projects.tsx uses. Two reasons it moved out of this file:
+  //
+  //  1. "Abgeschlossen" was Math.round(totalProjects * 0.68) — a multiplier,
+  //     not a measurement. It read 883; the real figure is 573.
+  //  2. The remaining counters compared `r.status` to string literals, so
+  //     "Niederschrift erstellt (LP05-05-01-F31)" and the 3,306 other
+  //     annotated rows fell through every branch. normalizeReviewStatus maps
+  //     them onto the canonical 12 first.
+  const metrics = useMemo(() => deriveProjectMetrics(projects), [projects]);
+  const totalProjects = metrics.total;
+  const openReviews = metrics.openReviews;
+  const criticalProjects = metrics.blocked;
+  const completedProjects = metrics.completed;
+  const totalReviews = metrics.totalReviews;
+  const decidedReviews = metrics.approvedReviews + metrics.blockedReviews;
+  const successRate = decidedReviews > 0 ? (metrics.approvedReviews / decidedReviews) * 100 : 0;
   const avgReviewsPerProject = totalProjects > 0 ? totalReviews / totalProjects : 0;
 
   // "Delayed" = presentation date is in the past but at least one review is still open.
@@ -141,8 +145,9 @@ export default function Dashboard() {
     : [];
 
   const fachWorkload: WorkloadItem[] = FACHSPEZIALISTEN.map(name => {
-    let incoming = 0, completed = 0;
-    let timeline: Array<{date: string, action: string, project: string}> = [];
+    let incoming = 0;
+    let completed = 0;
+    const timeline: Array<{date: string, action: string, project: string}> = [];
 
     projects.forEach(p => {
       p.reviews.forEach(r => {
@@ -304,9 +309,11 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-5xl font-bold text-emerald-600">
-              {Math.round(totalProjects * 0.68)}
+              {completedProjects.toLocaleString("de-DE")}
             </div>
-            <p className="text-xs text-emerald-600 mt-1">68% im Zeitplan</p>
+            <p className="text-xs text-emerald-600 mt-1">
+              {percent(completedProjects, totalProjects)}% aller Projekte
+            </p>
           </CardContent>
         </Card>
 
@@ -339,8 +346,8 @@ export default function Dashboard() {
                     data={overallStatusData.filter(d => d.value > 0)}
                     cx="50%" cy="50%" innerRadius={90} outerRadius={160} paddingAngle={2} dataKey="value"
                   >
-                    {overallStatusData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    {overallStatusData.map((entry) => (
+                      <Cell key={entry.name} fill={entry.color} />
                     ))}
                   </Pie>
                   <Tooltip />
@@ -357,10 +364,11 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {gewerkeStatusData.slice(0, 8).map((gew, idx) => (
-                  <div 
-                    key={idx} 
-                    className="border rounded-xl p-4 hover:shadow-md transition-all cursor-pointer"
+                {gewerkeStatusData.slice(0, 8).map((gew) => (
+                  <button
+                    type="button"
+                    key={gew.name}
+                    className="w-full border rounded-xl p-4 text-left hover:shadow-md transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF0000]"
                     onClick={() => setSelectedGewerke(gew.name)}
                   >
                     <div className="font-semibold text-lg mb-2">{gew.name}</div>
@@ -373,7 +381,7 @@ export default function Dashboard() {
                         </div>
                       ))}
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
             </CardContent>
@@ -422,8 +430,8 @@ export default function Dashboard() {
                           data={selectedPieData}
                           cx="50%" cy="50%" innerRadius={80} outerRadius={140} paddingAngle={3} dataKey="value"
                         >
-                          {selectedPieData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          {selectedPieData.map((entry) => (
+                            <Cell key={entry.name} fill={entry.color} />
                           ))}
                         </Pie>
                         <Tooltip />
@@ -437,8 +445,8 @@ export default function Dashboard() {
                       <div className="text-4xl font-bold">{selectedGewerkeData?.value}</div>
                     </div>
                     <div className="space-y-2 pt-4 border-t">
-                      {selectedPieData.map((item, idx) => (
-                        <div key={idx} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                      {selectedPieData.map((item) => (
+                        <div key={item.name} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
                           <div className="flex items-center gap-2">
                             <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
                             <span>{item.name}</span>
@@ -468,15 +476,17 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent className="space-y-3 max-h-[720px] overflow-auto pr-2">
               {fachWorkload.map((fach, index) => (
-                <motion.div 
-                  key={index}
+                <motion.div
+                  key={fach.name}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.03 }}
                   className="border rounded-2xl overflow-hidden"
                 >
-                  <div 
-                    className="flex items-center justify-between p-4 cursor-pointer hover:bg-muted/50"
+                  <button
+                    type="button"
+                    aria-expanded={expandedFach === fach.name}
+                    className="flex w-full items-center justify-between p-4 text-left cursor-pointer hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF0000]"
                     onClick={() => setExpandedFach(expandedFach === fach.name ? null : fach.name)}
                   >
                     <div className="flex items-center gap-3">
@@ -496,7 +506,7 @@ export default function Dashboard() {
                       </Badge>
                       {expandedFach === fach.name ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                     </div>
-                  </div>
+                  </button>
 
                   <AnimatePresence>
                     {expandedFach === fach.name && (
@@ -523,8 +533,8 @@ export default function Dashboard() {
                         <div>
                           <div className="text-xs font-medium mb-2 text-muted-foreground">AKTUELLE AKTIVITÄT</div>
                           <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
-                            {fach.timeline.length > 0 ? fach.timeline.map((item, i) => (
-                              <div key={i} className="flex items-start gap-3 text-sm border-l-2 border-[#FF0000] pl-3 py-1">
+                            {fach.timeline.length > 0 ? fach.timeline.map((item) => (
+                              <div key={`${item.date}-${item.project}-${item.action}`} className="flex items-start gap-3 text-sm border-l-2 border-[#FF0000] pl-3 py-1">
                                 <div className="font-mono text-xs text-muted-foreground w-20 shrink-0">{item.date}</div>
                                 <div>
                                   <span className="font-medium">{item.action}</span> — {item.project}
@@ -561,20 +571,47 @@ export default function Dashboard() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 max-h-[280px] overflow-auto pr-1">
-              {upcomingDeadlines.length > 0 ? upcomingDeadlines.map((p, idx) => (
-                <div key={idx} onClick={() => setSelectedProject(projects.find(pr => pr.id === p.id) || null)} className="flex items-start gap-3 p-3 rounded-xl border bg-card hover:bg-muted/50 transition-colors cursor-pointer">
+              {upcomingDeadlines.length > 0 ? upcomingDeadlines.map((p) => (
+                // Not a <button>: this row already contains the "Erinnerung"
+                // button, and a button inside a button is invalid HTML that
+                // browsers silently un-nest. The title below carries the click
+                // target instead.
+                <div
+                  key={p.id}
+                  className="flex w-full items-start gap-3 rounded-xl border bg-card p-3 transition-colors hover:bg-muted/50"
+                >
                   <div className="mt-1">
                     {p.status === "Nachforderung" || p.status === "abgelehnt" ? 
                       <AlertTriangle className="h-4 w-4 text-rose-500" /> : 
                       <Clock className="h-4 w-4 text-amber-500" />}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium text-sm truncate">{p.station}</div>
-                    <div className="text-xs text-muted-foreground">{p.reviewer} • {p.deadline}</div>
-                    <Badge variant="outline" className="mt-1 text-[10px]">{p.status}</Badge>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSelectedProject(projects.find((pr) => pr.id === p.id) || null)
+                      }
+                      className="w-full truncate text-left text-sm font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF0000]"
+                    >
+                      {p.station}
+                    </button>
+                    <div className="text-xs text-muted-foreground">
+                      {p.reviewer} • {p.deadline}
+                    </div>
+                    <Badge variant="outline" className="mt-1 text-2xs">
+                      {p.status}
+                    </Badge>
                   </div>
-                  <Button size="sm" variant="ghost" className="h-7 px-2" onClick={(e) => { e.stopPropagation(); toast.success(`Erinnerung für ${p.station} wurde vorbereitet`); }}>
-                    <Send className="h-3 w-3" />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    aria-label={`Erinnerung für ${p.station} vorbereiten`}
+                    className="h-7 px-2"
+                    onClick={() =>
+                      toast.success(`Erinnerung für ${p.station} wurde vorbereitet`)
+                    }
+                  >
+                    <Send className="h-3 w-3" aria-hidden="true" />
                   </Button>
                 </div>
               )) : (
@@ -591,9 +628,9 @@ export default function Dashboard() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 max-h-[280px] overflow-auto pr-1">
-              {notifications.map((n, idx) => (
-                <motion.div 
-                  key={idx}
+              {notifications.map((n) => (
+                <motion.div
+                  key={`${n.type}-${n.message}`}
                   initial={{ opacity: 0, x: -10 }}
                   animate={{ opacity: 1, x: 0 }}
                   className="flex gap-3 p-3 rounded-xl border-l-4 bg-muted/30"
@@ -601,7 +638,7 @@ export default function Dashboard() {
                 >
                   <div className="flex-1">
                     <div className="text-sm font-medium leading-tight">{n.message}</div>
-                    <div className="text-[10px] text-muted-foreground mt-1">{n.time}</div>
+                    <div className="text-2xs text-muted-foreground mt-1">{n.time}</div>
                   </div>
                   <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { recordAudit.mutate({ action: "Benachrichtigung gesendet", details: "Benachrichtigung an Team versendet" }); toast.success("Benachrichtigung gesendet"); }}>
                     Senden
@@ -618,15 +655,15 @@ export default function Dashboard() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 max-h-[280px] overflow-auto pr-1 text-sm">
-              {activityFeed.map((activity, idx) => (
-                <div key={idx} className="flex gap-3">
+              {activityFeed.map((activity) => (
+                <div key={`${activity.user}-${activity.project}-${activity.time}`} className="flex gap-3">
                   <div className="mt-1">
                     <activity.icon className="h-4 w-4 text-emerald-500" />
                   </div>
                   <div className="flex-1">
                     <span className="font-semibold">{activity.user}</span> {activity.action}
                     {activity.project && <span className="text-muted-foreground"> • {activity.project}</span>}
-                    <div className="text-[10px] text-muted-foreground mt-0.5">{activity.time}</div>
+                    <div className="text-2xs text-muted-foreground mt-0.5">{activity.time}</div>
                   </div>
                 </div>
               ))}
@@ -669,15 +706,15 @@ export default function Dashboard() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-center">
                 <div>
                   <div className="text-emerald-500 text-xs">OUTLOOK</div>
-                  <div className="font-mono text-[10px]">Verfügbar</div>
+                  <div className="font-mono text-2xs">Verfügbar</div>
                 </div>
                 <div>
                   <div className="text-emerald-500 text-xs">TEAMS</div>
-                  <div className="font-mono text-[10px]">Verfügbar</div>
+                  <div className="font-mono text-2xs">Verfügbar</div>
                 </div>
                 <div>
                   <div className="text-emerald-500 text-xs">SHAREPOINT</div>
-                  <div className="font-mono text-[10px]">Verfügbar</div>
+                  <div className="font-mono text-2xs">Verfügbar</div>
                 </div>
               </div>
 
@@ -733,8 +770,8 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {regionDistribution.map((r, idx) => (
-                  <div key={idx} className="flex items-center gap-3">
+                {regionDistribution.map((r) => (
+                  <div key={r.region} className="flex items-center gap-3">
                     <div className="w-3 h-3 rounded-full" style={{ backgroundColor: r.color }} />
                     <div className="flex-1">{r.region}</div>
                     <div className="font-mono font-bold">{r.count}</div>
@@ -752,8 +789,8 @@ export default function Dashboard() {
               <CardTitle>Top Performer (Fachspezialisten)</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {fachWorkload.slice(0, 6).map((f, idx) => (
-                <div key={idx} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+              {fachWorkload.slice(0, 6).map((f) => (
+                <div key={f.name} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center">
                       <span className="font-mono text-xs text-emerald-600">{f.name.slice(0, 2)}</span>
@@ -762,7 +799,7 @@ export default function Dashboard() {
                   </div>
                   <div className="text-right">
                     <div className="font-bold text-emerald-600">{f.completed}</div>
-                    <div className="text-[10px] text-muted-foreground">erledigt</div>
+                    <div className="text-2xs text-muted-foreground">erledigt</div>
                   </div>
                 </div>
               ))}
@@ -831,8 +868,8 @@ export default function Dashboard() {
               <div>
                 <div className="font-semibold mb-3">Status pro Gewerke</div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  {selectedProject.reviews.map((review, idx) => (
-                    <div key={idx} className="border rounded-xl p-3">
+                  {selectedProject.reviews.map((review) => (
+                    <div key={review.department} className="border rounded-xl p-3">
                       <div className="font-mono text-xs text-muted-foreground">{review.department}</div>
                       <div className="flex items-center gap-2 mt-1">
                         <Badge 

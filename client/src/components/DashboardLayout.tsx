@@ -22,9 +22,10 @@ import {
   History,
   LogOut,
 } from "lucide-react";
-import { CSSProperties, useEffect, useRef, useState, useMemo } from "react";
+import { type CSSProperties, useEffect, useRef, useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { useAllProjects } from "@/hooks/useDataQuery";
 import Header from "./Header";
 import Footer from "./Footer";
 
@@ -50,7 +51,7 @@ export default function DashboardLayout({
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     try {
       const saved = localStorage.getItem(SIDEBAR_WIDTH_KEY);
-      return saved ? parseInt(saved, 10) : DEFAULT_WIDTH;
+      return saved ? Number.parseInt(saved, 10) : DEFAULT_WIDTH;
     } catch {
       return DEFAULT_WIDTH;
     }
@@ -78,6 +79,11 @@ export default function DashboardLayout({
 function SidebarFooterContent() {
   const { user, logout } = useAuth();
   const [, navigate] = useLocation();
+  // The count used to be the literal string "1.299 Projekte", which was wrong
+  // the moment the Projektanmeldung wizard created project 1299 (making 1,299
+  // the *id*, not the total) and wrong again on every import after that.
+  const { data } = useAllProjects();
+  const projectCount = data?.projects.length ?? null;
 
   const handleLogout = () => {
     logout();
@@ -102,11 +108,12 @@ function SidebarFooterContent() {
             {user?.name || "Bahn Prüfer"}
           </p>
           <p className="text-xs text-muted-foreground truncate mt-1.5">
-            {user?.role === "admin" ? "Admin" : "Prüfer"} • 1.299 Projekte
+            {user?.role === "admin" ? "Admin" : "Prüfer"}
+            {projectCount !== null ? ` • ${projectCount.toLocaleString("de-DE")} Projekte` : ""}
           </p>
         </div>
       </div>
-      <button
+      <button type="button"
         onClick={handleLogout}
         className="w-full px-3 py-2 text-sm text-left text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors flex items-center gap-2"
       >
@@ -161,7 +168,11 @@ function DashboardLayoutContent({
 
   return (
     <div className="flex min-h-screen w-full bg-background overflow-hidden">
-      <div className="relative flex flex-1">
+      {/* min-w-0 is load-bearing: a flex item defaults to min-width:auto, which
+          refuses to shrink below its content's intrinsic width. With a 14-column
+          project table inside, this row measured 1632px wide on a 375px phone
+          and the parent's overflow-hidden simply clipped it. */}
+      <div className="relative flex flex-1 min-w-0">
         <div className="relative" ref={sidebarRef}>
           <Sidebar
             collapsible="icon"
@@ -171,10 +182,13 @@ function DashboardLayoutContent({
             <SidebarHeader className="h-16 justify-center border-b border-border/60">
               <div className="flex items-center gap-3 px-2 transition-all w-full">
                 <button
+                  type="button"
                   onClick={toggleSidebar}
+                  aria-label={isCollapsed ? "Navigation ausklappen" : "Navigation einklappen"}
+                  aria-expanded={!isCollapsed}
                   className="h-8 w-8 flex items-center justify-center hover:bg-accent rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring shrink-0"
                 >
-                  <PanelLeft className="h-4 w-4 text-muted-foreground" />
+                  <PanelLeft className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                 </button>
                 {!isCollapsed && (
                   <div className="flex items-center gap-2 min-w-0">
@@ -227,10 +241,15 @@ function DashboardLayoutContent({
 
         <SidebarInset className="flex flex-col flex-1 min-w-0 bg-background overflow-hidden">
           <Header />
-          <main className="flex-1 mt-[60px] p-4 lg:p-6 overflow-auto w-full">
-            <div className="main-content-container">
-              {children}
-            </div>
+          {/* No mt-[60px] any more: the header is sticky inside this column
+              rather than fixed to the viewport, so it occupies real space. */}
+          {/* Vertical padding here, horizontal padding on `app-shell` only.
+              It used to be `p-4 lg:p-6` *plus* an inner container that added
+              another 1-2rem, so the page content sat 32-56px from the column
+              edge while the header sat at 12-24px. One gutter now, shared with
+              the header and the footer. */}
+          <main className="flex-1 min-w-0 w-full overflow-auto py-4 lg:py-6">
+            <div className="app-shell">{children}</div>
           </main>
           <Footer />
         </SidebarInset>

@@ -1,0 +1,22 @@
+# Build context hygiene. Without this the 3.6 MB data.json, node_modules, the
+# .git history and every coverage report get uploaded to the daemon on each
+# build.
+.git
+.gitignore
+node_modules
+dist
+build
+coverage
+.manus-logs
+*.log
+.env
+.env.*
+!.env.example
+.vscode
+.idea
+.DS_Store
+_probe*.mjs
+_audit.mjs
+_diag*.mjs
+attached_assets
+data/*.json

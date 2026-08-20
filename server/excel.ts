@@ -38,7 +38,7 @@
  * Col 51: Kommentar
  * Col 52: Link zum Projekt
  */
-import { Express, Request, Response } from 'express';
+import type { Express, Request, Response } from 'express';
 import * as XLSX from 'xlsx';
 import { getDb } from './db';
 import { projects, departmentReviews } from '../drizzle/schema';
@@ -79,7 +79,7 @@ export function registerExcelRoutes(app: Express) {
       const reviewsByProject: Record<number, typeof allReviews> = {};
       for (const review of allReviews) {
         if (!reviewsByProject[review.projectId]) reviewsByProject[review.projectId] = [];
-        reviewsByProject[review.projectId]!.push(review);
+        reviewsByProject[review.projectId]?.push(review);
       }
 
       const rows: any[] = [];
@@ -106,8 +106,8 @@ export function registerExcelRoutes(app: Express) {
           row[`${dept} - Datum`] = review?.datum ? new Date(review.datum).toLocaleDateString('de-DE') : '';
         }
 
-        row['Kommentar'] = project.kommentar || '';
-        row['Projektlink'] = project.projektLink || '';
+        row.Kommentar = project.kommentar || '';
+        row.Projektlink = project.projektLink || '';
         rows.push(row);
       }
 
@@ -128,12 +128,12 @@ export function registerExcelRoutes(app: Express) {
 
       const legendData = [
         { Info: 'This file was exported from Bahn Project Manager' },
-        { Info: 'Departments (Fachbereiche) in exact Excel column order: ' + DEPARTMENTS.join(', ') },
-        { Info: 'Valid Status values: ' + [
+        { Info: `Departments (Fachbereiche) in exact Excel column order: ${DEPARTMENTS.join(', ')}` },
+        { Info: `Valid Status values: ${[
           "nicht erforderlich", "offen", "Projektkonfig.", "in Bearbeitung",
           "Nachforderung", "prüffähig", "Prüfung erfolgt", "Zustimmung erteilt",
           "Niederschrift erstellt", "abgelehnt", "zurückgestellt", "gestoppt"
-        ].join(', ') },
+        ].join(', ')}` },
         { Info: 'Date format: DD.MM.YYYY (German)' },
         { Info: 'To re-import: Use POST /api/import/excel with this file or the original Übersichtsliste.xlsm (legacy format supported)' },
       ];
@@ -214,7 +214,7 @@ export function registerExcelRoutes(app: Express) {
                     const month = (parts[2] ?? '01').padStart(2, '0');
                     const year = parts[3] ?? '2025';
                     const parsed = new Date(`${year}-${month}-${day}`);
-                    if (!isNaN(parsed.getTime())) terminPV = parsed;
+                    if (!Number.isNaN(parsed.getTime())) terminPV = parsed;
                   }
                 }
               }
@@ -299,7 +299,7 @@ export function registerExcelRoutes(app: Express) {
                         const month = (parts[2] ?? '01').padStart(2, '0');
                         const year = parts[3] ?? '2025';
                         const parsed = new Date(`${year}-${month}-${day}`);
-                        if (!isNaN(parsed.getTime())) datum = parsed;
+                        if (!Number.isNaN(parsed.getTime())) datum = parsed;
                       }
                     }
                   }

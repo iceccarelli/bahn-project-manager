@@ -74,11 +74,11 @@ export function parseODataFilter(filter?: string): Record<string, unknown> {
   const andParts = filter.split(" and ");
   for (const part of andParts) {
     const eqMatch = part.match(/(\w+)\s+eq\s+'?([^']+)'?/);
-    if (eqMatch && eqMatch[1] && eqMatch[2]) {
+    if (eqMatch?.[1] && eqMatch[2]) {
       result[eqMatch[1]] = eqMatch[2];
     }
     const containsMatch = part.match(/contains\((\w+),\s*'([^']+)'\)/);
-    if (containsMatch && containsMatch[1] && containsMatch[2]) {
+    if (containsMatch?.[1] && containsMatch[2]) {
       result[`${containsMatch[1]}_contains`] = containsMatch[2];
     }
   }

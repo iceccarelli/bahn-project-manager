@@ -1,4 +1,4 @@
-import { Router, Request, Response, NextFunction } from "express";
+import { Router, type Request, type Response, type NextFunction } from "express";
 import { getDb } from "../db";
 import { projects, departmentReviews } from "../../drizzle/schema";
 import { eq, like, desc, asc, sql } from "drizzle-orm";
@@ -105,8 +105,8 @@ odataRouter.get("/projects", async (req: Request, res: Response, next: NextFunct
 
     if (query.$filter) {
       const parsed = parseODataFilter(query.$filter);
-      const station = parsed["station"] ?? parsed["station_contains"];
-      const projektstand = parsed["projektstand"];
+      const station = parsed.station ?? parsed.station_contains;
+      const projektstand = parsed.projektstand;
       if (station) q = q.where(like(projects.station, `%${String(station)}%`));
       if (projektstand) q = q.where(eq(projects.projektstand, String(projektstand)));
     }
@@ -157,15 +157,15 @@ odataRouter.get("/projects\\(:id\\)", async (req: Request, res: Response, next: 
       return;
     }
 
-    const rawId = req.params["id"] ?? "";
-    const id = parseInt(rawId.replace(/[()]/g, ""));
+    const rawId = req.params.id ?? "";
+    const id = Number.parseInt(rawId.replace(/[()]/g, ""));
     const [row] = await db.select().from(projects).where(eq(projects.id, id));
     if (!row) {
       res.status(404).json({ error: "Project not found" });
       return;
     }
 
-    const includeReviews = (req.query["$expand"] as string)?.includes("reviews") ?? false;
+    const includeReviews = (req.query.$expand as string)?.includes("reviews") ?? false;
     const project = await mapProjectToOData(row, includeReviews);
     res.json(project);
   } catch (err) {

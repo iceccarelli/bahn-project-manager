@@ -3,8 +3,8 @@
  * Single entry point for all types. Inferred from validation.ts + Drizzle schema.
  */
 
-import { z } from "zod";
-import {
+import type { z } from "zod";
+import type {
   DEPARTMENTS, REVIEW_STATUSES, PROJECT_STANDS, REGIONS,
   ReviewSchema, ProjectSchema,
   StatsSchema, FiltersSchema

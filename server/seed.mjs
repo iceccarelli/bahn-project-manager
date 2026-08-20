@@ -5,7 +5,7 @@
  * For the uploaded Übersichtsliste_Dashboard_1.xlsm use the /api/import/excel endpoint instead (recommended).
  * This seed supports the pre-processed JSON for initial bootstrap.
  */
-import { readFileSync } from 'fs';
+import { readFileSync } from 'node:fs';
 import mysql from 'mysql2/promise';
 import dotenv from 'dotenv';
 
@@ -67,7 +67,7 @@ async function main() {
     const projektLink = row.col_53 || null;
 
     const [result] = await connection.execute(
-      `INSERT INTO projects (projektnummer, bahnhofsmanagement, station, bahnhofsnummer, streckennummer, projektbeschreibung, eigvEinstufung, projektleiter, kommentar, projektLink, originalRowIndex) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      "INSERT INTO projects (projektnummer, bahnhofsmanagement, station, bahnhofsnummer, streckennummer, projektbeschreibung, eigvEinstufung, projektleiter, kommentar, projektLink, originalRowIndex) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       [projektnummer, bahnhofsmanagement, station, bahnhofsnummer, streckennummer, projektbeschreibung, eigvEinstufung, projektleiter, kommentar, projektLink, null]
     );
     const projectId = result.insertId;
@@ -94,7 +94,7 @@ async function main() {
         }
 
         await connection.execute(
-          `INSERT INTO department_reviews (projectId, department, prueferName, datum, status) VALUES (?, ?, ?, ?, ?)`,
+          "INSERT INTO department_reviews (projectId, department, prueferName, datum, status) VALUES (?, ?, ?, ?, ?)",
           [projectId, mapping.dept, name, datum, status]
         );
         insertedReviews++;
@@ -123,7 +123,7 @@ async function main() {
 
   for (const item of bvbEeaData) {
     await connection.execute(
-      `INSERT INTO bvb_eea (projektnummer, bahnhofsmanagement, station, bahnhofsnummer, streckennummer, projektbeschreibung, projektleiter, eigvAnzeige, kommentar, freigabeNummer, kosteneinsparung) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      "INSERT INTO bvb_eea (projektnummer, bahnhofsmanagement, station, bahnhofsnummer, streckennummer, projektbeschreibung, projektleiter, eigvAnzeige, kommentar, freigabeNummer, kosteneinsparung) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       [item.projektnummer || null, item.bahnhofsmanagement || null, item.station || null, item.bahnhofsnummer || null, item.streckennummer || null, item.projektbeschreibung || null, item.projektleiter || null, item.eigvAnzeige || null, item.kommentar || null, item.freigabeNummer || null, item.kosteneinsparung || null]
     );
   }

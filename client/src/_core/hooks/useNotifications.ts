@@ -374,7 +374,7 @@ export function useNotifications() {
 /**
  * Get recent notifications
  */
-export function useRecentNotifications(limit: number = 10): Notification[] {
+export function useRecentNotifications(limit = 10): Notification[] {
   const notifications = getStoredNotifications();
   return notifications.slice(-limit).reverse();
 }
@@ -382,7 +382,7 @@ export function useRecentNotifications(limit: number = 10): Notification[] {
 /**
  * Get recent changes
  */
-export function useRecentChanges(limit: number = 20): ChangeEvent[] {
+export function useRecentChanges(limit = 20): ChangeEvent[] {
   const changes = getStoredChanges();
   return changes.slice(-limit).reverse();
 }

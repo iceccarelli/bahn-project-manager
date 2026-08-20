@@ -7,9 +7,17 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Bahn Project Manager</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <meta name="theme-color" content="#FF0000" />
+    <meta name="description" content="Projektmanagement für Infrastruktur- und Stationsentwicklung, RB Mitte." />
+    <!--
+      Inter is self-hosted via @fontsource-variable/inter (imported in main.tsx).
+      It used to be pulled from fonts.googleapis.com, which was wrong twice over:
+        1. nothing applied font-family: Inter, so the request delivered a font the
+           app never rendered — document.fonts was empty;
+        2. embedding Google Fonts transmits the visitor's IP to Google, which
+           LG München I (20.01.2022, Az. 3 O 17493/20) held to breach the GDPR.
+           Not a defensible dependency for a Deutsche Bahn internal tool.
+    -->
   </head>
 
   <body>

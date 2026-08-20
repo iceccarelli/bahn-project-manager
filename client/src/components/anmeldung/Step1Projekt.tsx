@@ -36,7 +36,7 @@ function Field({
       {children}
       {/* reserved line: keeps the row height constant so validation causes no layout shift */}
       <p
-        className={`min-h-[16px] text-[10px] leading-4 ${error ? "font-bold text-[#FF0000]" : "text-muted-foreground"}`}
+        className={`min-h-[16px] text-2xs leading-4 ${error ? "font-bold text-[#FF0000]" : "text-muted-foreground"}`}
         id={`${id}-hint`}
       >
         {error ?? hint ?? ""}

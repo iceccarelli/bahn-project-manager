@@ -1,7 +1,7 @@
 import "dotenv/config";
 import express from "express";
-import { createServer } from "http";
-import net from "net";
+import { createServer } from "node:http";
+import net from "node:net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { registerStorageProxy } from "./storageProxy";
@@ -20,7 +20,7 @@ function isPortAvailable(port: number): Promise<boolean> {
   });
 }
 
-async function findAvailablePort(startPort: number = 3000): Promise<number> {
+async function findAvailablePort(startPort = 3000): Promise<number> {
   for (let port = startPort; port < startPort + 20; port++) {
     if (await isPortAvailable(port)) {
       return port;
@@ -35,6 +35,17 @@ async function startServer() {
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
+  // Liveness/readiness probe. Plain HTTP rather than the tRPC `system.health`
+  // procedure, because Docker HEALTHCHECK, Kubernetes probes and load-balancer
+  // checks all speak GET-and-look-at-the-status-code, not tRPC.
+  app.get("/api/health", (_req, res) => {
+    res.status(200).json({
+      status: "ok",
+      version: process.env.npm_package_version ?? "unknown",
+      uptime: Math.round(process.uptime()),
+    });
+  });
+
   registerStorageProxy(app);
   registerOAuthRoutes(app);
   registerExcelRoutes(app);
@@ -53,16 +64,52 @@ async function startServer() {
     serveStatic(app);
   }
 
-  const preferredPort = parseInt(process.env.PORT || "3000");
-  const port = await findAvailablePort(preferredPort);
+  const preferredPort = Number.parseInt(process.env.PORT || "3000", 10);
+  const isDev = process.env.NODE_ENV === "development";
 
-  if (port !== preferredPort) {
+  // Port hunting is a development convenience and a production hazard: inside a
+  // container the orchestrator publishes and health-checks exactly $PORT, so
+  // silently binding 3001 instead produces a container that is up, serving, and
+  // permanently unreachable. In production we bind what we were told to bind
+  // and fail loudly if we cannot.
+  const port = isDev ? await findAvailablePort(preferredPort) : preferredPort;
+
+  if (isDev && port !== preferredPort) {
     console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
   }
 
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
   });
+
+  // Graceful shutdown. Without this, `docker stop` / a rolling deploy severs
+  // in-flight requests at the TCP level and the orchestrator waits out the full
+  // kill timeout on every single stop.
+  let shuttingDown = false;
+  const shutdown = (signal: NodeJS.Signals) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`${signal} received — draining connections`);
+    server.close((err) => {
+      if (err) {
+        console.error("Error during shutdown:", err);
+        process.exit(1);
+      }
+      process.exit(0);
+    });
+    // Backstop: a wedged keep-alive connection must not hold the process open
+    // past the orchestrator's grace period.
+    setTimeout(() => {
+      console.error("Shutdown timed out — forcing exit");
+      process.exit(1);
+    }, 10_000).unref();
+  };
+
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
 }
 
-startServer().catch(console.error);
+startServer().catch((err) => {
+  console.error("Server failed to start:", err);
+  process.exit(1);
+});

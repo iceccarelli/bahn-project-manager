@@ -19,7 +19,7 @@ export default function BvbEea() {
   // Filter projects that have EEA reviews with a status
   const eaaProjects = data.projects.filter((p: any) => {
     const eaaReview = p.reviews?.find((r: any) => r.department === 'EEA');
-    return eaaReview && eaaReview.status && eaaReview.status !== 'nicht erforderlich';
+    return eaaReview?.status && eaaReview.status !== 'nicht erforderlich';
   });
 
   return (
@@ -78,7 +78,7 @@ export default function BvbEea() {
                         {eaaReview?.pruefDatum ? new Date(eaaReview.pruefDatum).toLocaleDateString('de-DE') : '-'}
                       </td>
                       <td className="py-3 px-4 text-xs whitespace-nowrap">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-medium ${
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-2xs font-medium ${
                           eaaReview?.status === 'Zustimmung erteilt' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300' :
                           eaaReview?.status === 'offen' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300' :
                           eaaReview?.status === 'in Bearbeitung' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' :

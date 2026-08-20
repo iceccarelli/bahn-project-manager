@@ -7,9 +7,9 @@
 
 import { getDb } from "../server/db";
 import { projects } from "../drizzle/schema";
-import fs from "fs";
-import path from "path";
-import crypto from "crypto";
+import fs from "node:fs";
+import path from "node:path";
+import crypto from "node:crypto";
 
 const DATA_JSON_PATH = path.resolve("public/data.json");
 

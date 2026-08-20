@@ -1,0 +1,64 @@
+# =============================================================================
+# Local / staging stack: the app plus the MySQL instance Drizzle expects.
+#
+#   docker compose up --build        start
+#   docker compose exec app sh       shell into the running app
+#   docker compose down -v           stop and drop the database volume
+# =============================================================================
+
+services:
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-bahn}
+      MYSQL_USER: ${MYSQL_USER:-bahn}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-bahn}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-bahn-root}
+    # utf8mb4 is not optional here: station and department names carry ü, ö, ä
+    # and ß, and latin1 would silently mangle "Prüfung" and "Bahnhofsmanagement
+    # Frankfurt".
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-p${MYSQL_ROOT_PASSWORD:-bahn-root}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  app:
+    build:
+      context: .
+      target: runtime
+    restart: unless-stopped
+    # The app starts only once MySQL answers, so the first request never hits a
+    # connection error that looks like an application bug.
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: mysql://${MYSQL_USER:-bahn}:${MYSQL_PASSWORD:-bahn}@db:3306/${MYSQL_DATABASE:-bahn}
+      # SMTP is optional by design — the app degrades to "no mail sent" rather
+      # than failing the request (see Stage 4).
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    # No bind mounts: the image is the artifact. Mounting the source over it
+    # would mean the thing you tested is not the thing you ship.
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  db-data:

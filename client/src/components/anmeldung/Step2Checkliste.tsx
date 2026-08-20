@@ -49,7 +49,7 @@ function JaNein({
             />
             <label
               htmlFor={id}
-              className={`inline-flex h-7 w-12 cursor-pointer items-center justify-center rounded-md border text-[11px] font-bold transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-[#FF0000] peer-focus-visible:ring-offset-1 ${
+              className={`inline-flex h-7 w-12 cursor-pointer items-center justify-center rounded-md border text-2xs font-bold transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-[#FF0000] peer-focus-visible:ring-offset-1 ${
                 checked
                   ? option === "Ja"
                     ? "border-[#FF0000] bg-[#FF0000] text-white"
@@ -98,7 +98,7 @@ export function Step2Checkliste({ draft }: { draft: ChecklistDraft }) {
           }
           onValueChange={(v) => setAnswer(q.key, { answer: v })}
         >
-          <SelectTrigger className={`h-7 w-[190px] text-[11px] ${YELLOW}`} aria-label={q.gewerk}>
+          <SelectTrigger className={`h-7 w-[190px] text-2xs ${YELLOW}`} aria-label={q.gewerk}>
             <SelectValue placeholder="Bitte auswählen" />
           </SelectTrigger>
           <SelectContent>
@@ -113,7 +113,7 @@ export function Step2Checkliste({ draft }: { draft: ChecklistDraft }) {
     }
     return (
       <Input
-        className={`h-7 w-[260px] text-[11px] ${YELLOW}`}
+        className={`h-7 w-[260px] text-2xs ${YELLOW}`}
         aria-label={q.question ?? q.gewerk}
         placeholder={q.key === "pkpLink" ? "https://…" : ""}
         value={a?.answer && a.answer !== "Bitte ausfüllen" ? a.answer : ""}
@@ -129,12 +129,12 @@ export function Step2Checkliste({ draft }: { draft: ChecklistDraft }) {
     const isOpen = reviews.find((r) => r.department === q.department)?.status === "offen";
     return (
       <tr className="border-b border-border/60 align-top hover:bg-muted/30">
-        <td className="w-10 py-2 pr-2 text-[10px] font-black text-muted-foreground">{q.nr}</td>
+        <td className="w-10 py-2 pr-2 text-2xs font-black text-muted-foreground">{q.nr}</td>
         <td className="w-56 py-2 pr-3">
-          <div className="text-[11px] font-bold leading-tight">{q.gewerk}</div>
+          <div className="text-2xs font-bold leading-tight">{q.gewerk}</div>
           {triggersReview && (
             <div
-              className={`mt-0.5 inline-block rounded px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider ${
+              className={`mt-0.5 inline-block rounded px-1.5 py-0.5 text-2xs font-black uppercase tracking-wider ${
                 isOpen ? "bg-[#FF0000]/10 text-[#FF0000]" : "bg-muted text-muted-foreground"
               }`}
             >
@@ -142,21 +142,21 @@ export function Step2Checkliste({ draft }: { draft: ChecklistDraft }) {
             </div>
           )}
         </td>
-        <td className="py-2 pr-3 text-[11px] leading-snug text-muted-foreground">
+        <td className="py-2 pr-3 text-2xs leading-snug text-muted-foreground">
           {q.question ? (
             q.question.split("\n").map((line) => <div key={line}>{line}</div>)
           ) : (
             <span className="italic">Keine Fragestellung im Formular hinterlegt</span>
           )}
           {q.hint && !q.secondary && (
-            <div className="mt-1 text-[10px] italic opacity-80">{q.hint}</div>
+            <div className="mt-1 text-2xs italic opacity-80">{q.hint}</div>
           )}
         </td>
         <td className="w-[200px] py-2 pr-3">
           {renderAnswer(q)}
           {q.secondary && (
             <div className="mt-2">
-              <div className="mb-1 text-[10px] font-bold leading-tight text-muted-foreground">
+              <div className="mb-1 text-2xs font-bold leading-tight text-muted-foreground">
                 {q.secondary.label.split("\n").join(" ")}
               </div>
               <JaNein
@@ -167,13 +167,13 @@ export function Step2Checkliste({ draft }: { draft: ChecklistDraft }) {
               />
             </div>
           )}
-          <p className="min-h-[14px] text-[10px] font-bold leading-[14px] text-[#FF0000]">
+          <p className="min-h-[14px] text-2xs font-bold leading-[14px] text-[#FF0000]">
             {error ?? ""}
           </p>
         </td>
         <td className="w-[220px] py-2">
           <Input
-            className="h-7 text-[11px]"
+            className="h-7 text-2xs"
             aria-label={`Kommentar zu Nr. ${q.nr}`}
             placeholder={
               q.key === "mitProjektvorstellung" ? "Datum der Übergabe (bei Nein)" : "Kommentar"
@@ -206,7 +206,7 @@ export function Step2Checkliste({ draft }: { draft: ChecklistDraft }) {
             Checkliste zur Projektanmeldung — 22 Fragen aus dem Formular
           </caption>
           <thead>
-            <tr className="border-y border-border text-[9px] uppercase tracking-wider text-muted-foreground">
+            <tr className="border-y border-border text-2xs uppercase tracking-wider text-muted-foreground">
               <th scope="col" className="py-1.5 text-left font-black">
                 Nr.
               </th>
@@ -227,7 +227,7 @@ export function Step2Checkliste({ draft }: { draft: ChecklistDraft }) {
           <tbody>
             {admin.length > 0 && (
               <tr>
-                <td colSpan={5} className="pt-3 pb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                <td colSpan={5} className="pt-3 pb-1 text-2xs font-black uppercase tracking-widest text-muted-foreground">
                   Allgemein
                 </td>
               </tr>
@@ -236,7 +236,7 @@ export function Step2Checkliste({ draft }: { draft: ChecklistDraft }) {
               <Row key={q.key} q={q} />
             ))}
             <tr>
-              <td colSpan={5} className="pt-4 pb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+              <td colSpan={5} className="pt-4 pb-1 text-2xs font-black uppercase tracking-widest text-muted-foreground">
                 Gewerke
               </td>
             </tr>

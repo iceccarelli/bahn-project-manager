@@ -20,7 +20,7 @@ import {
 import { useIsMobile } from "@/hooks/useMobile";
 import { cn } from "@/lib/utils";
 import { Slot } from "@radix-ui/react-slot";
-import { cva, VariantProps } from "class-variance-authority";
+import { cva, type VariantProps } from "class-variance-authority";
 import { PanelLeftIcon } from "lucide-react";
 import * as React from "react";
 
@@ -311,9 +311,20 @@ function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
   );
 }
 
-function SidebarInset({ className, ...props }: React.ComponentProps<"main">) {
+/**
+ * Renders a <div>, not shadcn's stock <main>.
+ *
+ * This component wraps the whole content column — the app header, the page
+ * content and the app footer. Upstream it is a <main>, and DashboardLayout
+ * puts the real content <main> inside it, so every page shipped two <main>
+ * landmarks. HTML allows exactly one, and a screen reader offered two
+ * "main content" jump targets, the outer one containing the site header and
+ * footer that <main> is specifically defined to exclude.
+ *
+ */
+function SidebarInset({ className, ...props }: React.ComponentProps<"div">) {
   return (
-    <main
+    <div
       data-slot="sidebar-inset"
       className={cn(
         "bg-background relative flex w-full flex-1 flex-col",

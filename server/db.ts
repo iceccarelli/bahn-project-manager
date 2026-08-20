@@ -1,6 +1,6 @@
 import { eq, like, and, or, sql, desc, asc, inArray, count } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, projects, departmentReviews, bvbEea, psvItk, auditLog } from "../drizzle/schema";
+import { type InsertUser, users, projects, departmentReviews, bvbEea, psvItk, auditLog } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -149,7 +149,7 @@ export async function getProjects(params: {
   const sortColumn = (projects as any)[sortBy] || projects.id;
   const orderFn = sortDir === 'desc' ? desc : asc;
 
-  let query = db
+  const query = db
     .select()
     .from(projects)
     .where(whereClause)

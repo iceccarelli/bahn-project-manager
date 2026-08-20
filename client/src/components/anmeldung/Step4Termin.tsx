@@ -15,7 +15,7 @@ const STATUS_STYLE: Record<string, string> = {
 
 function Legend() {
   return (
-    <div className="flex flex-wrap gap-4 text-[10px] font-bold">
+    <div className="flex flex-wrap gap-4 text-2xs font-bold">
       {(["Frei", "Gebucht", "Vorgebucht für IM", "Vorgebucht für IT"] as const).map((s) => (
         <span key={s} className="flex items-center gap-1.5">
           <span className={`h-3 w-3 rounded border ${STATUS_STYLE[s]?.split(" ").slice(0, 2).join(" ")}`} />
@@ -77,14 +77,14 @@ export function Step4Termin({ draft }: { draft: ChecklistDraft }) {
           selected ? "ring-2 ring-[#FF0000] ring-offset-1" : ""
         }`}
       >
-        <span className="text-[11px] font-black tabular-nums">
+        <span className="text-2xs font-black tabular-nums">
           {s.von}–{s.bis}
         </span>
-        <span className="text-[9px] font-bold uppercase tracking-wide opacity-80">
+        <span className="text-2xs font-bold uppercase tracking-wide opacity-80">
           {s.effectiveStatus}
         </span>
         {s.unavailable.length > 0 && (
-          <span className="text-[9px] leading-tight opacity-80">
+          <span className="text-2xs leading-tight opacity-80">
             ohne {s.unavailable.join(", ")}
           </span>
         )}
@@ -115,11 +115,11 @@ export function Step4Termin({ draft }: { draft: ChecklistDraft }) {
             <div key={day.datum} className="rounded-lg border border-border p-3">
               <div className="mb-2 flex items-baseline gap-3">
                 <span className="text-xs font-black tabular-nums">{formatGerman(day.datum)}</span>
-                <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                <span className="text-2xs uppercase tracking-wider text-muted-foreground">
                   {day.datum === todayIso ? "heute" : "Dienstag"}
                 </span>
                 {!hasFree && (
-                  <span className="text-[10px] font-bold text-muted-foreground">
+                  <span className="text-2xs font-bold text-muted-foreground">
                     keine freien Termine
                   </span>
                 )}

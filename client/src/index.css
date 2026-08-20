@@ -3,6 +3,23 @@
 /* `inline` is required so the var() references resolve against the runtime
    :root / .dark values at use-time (light + dark both work correctly). */
 @theme inline {
+  /* ---------------------------------------------------------------------
+     Typography. Inter is self-hosted (see client/src/main.tsx); "Inter
+     Variable" is the family name @fontsource-variable/inter registers, and it
+     carries every weight from 100 to 900, so font-black renders as a real 900
+     instead of a synthesised faux-bold.
+     --------------------------------------------------------------------- */
+  --font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  /* One token for dense micro-labels. It replaces 77 ad-hoc sizes that were
+     spread over text-[9px] (17x), text-[10px] (41x) and text-[11px] (19x) —
+     three sizes doing one job, none of them tunable. 9px and 10px are also
+     below any sane legibility floor; this lifts them to 11px, and the media
+     query at the bottom of this file lifts them again on touch screens. */
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+
   /* DB Red Primary */
   --color-primary: hsl(var(--primary));
   --color-primary-foreground: hsl(var(--primary-foreground));
@@ -36,10 +53,28 @@
   --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
   --color-sidebar-border: hsl(var(--sidebar-border));
   --color-sidebar-ring: hsl(var(--sidebar-ring));
+
 }
 
 @layer base {
   :root {
+    /* ---------------------------------------------------------------------
+       Layout rhythm. Before this there were four competing width systems and
+       no two agreed, so the header, the page content and the footer each
+       started at a different x:
+
+         landmark                       375px  768px  1280px  1920px
+         header  (px-3 sm:px-6)            12     24      24      24
+         main    (p-4 lg:p-6)              16     16      24      24
+         .main-content-container (nested)  32     40      56      56
+         footer  (px-4 md:px-6 + 1536cap)  16     24      24     216
+
+       One token set now drives all three via the `app-shell` utility below,
+       so every landmark shares the same content edges at every width.
+       --------------------------------------------------------------------- */
+    --app-gutter: 1rem;
+    --app-content-max: 1600px;
+
     --background: 0 0% 100%;
     --foreground: 240 10% 3.9%;
     --card: 0 0% 100%;
@@ -108,6 +143,9 @@
   body {
     background-color: hsl(var(--background));
     color: hsl(var(--foreground));
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     font-feature-settings: "rlig" 1, "calt" 1;
     overflow-x: hidden;
   }
@@ -116,29 +154,46 @@
   }
 }
 
-/* Professional Layout Utilities */
-.main-content-container {
-  margin-left: auto;
-  margin-right: auto;
+/* ---------------------------------------------------------------------------
+   app-shell — the single content column.
+
+   `@utility` (Tailwind v4) rather than a plain class so it participates in the
+   cascade layer ordering and can still be overridden by utilities on the same
+   element. Applied to the header's inner row, the page content wrapper and the
+   footer's inner grid; all three therefore share one left edge and one right
+   edge at every viewport width. Verified by measuring getBoundingClientRect()
+   on all three landmarks at 375 / 768 / 1280 / 1920.
+   --------------------------------------------------------------------------- */
+@utility app-shell {
   width: 100%;
   min-width: 0;
-  max-width: 1600px;
-  padding-left: 1rem;
-  padding-right: 1rem;
+  max-width: var(--app-content-max);
+  margin-inline: auto;
+  padding-inline: var(--app-gutter);
 }
 
-@media (min-width: 768px) {
-  .main-content-container {
-    padding-left: 1.5rem;
-    padding-right: 1.5rem;
+/* The gutter widens with the viewport; because it is a custom property the
+   three landmarks widen together rather than each on its own breakpoint. */
+@media (min-width: 640px) {
+  :root {
+    --app-gutter: 1.5rem;
   }
 }
 
 @media (min-width: 1024px) {
-  .main-content-container {
-    padding-left: 2rem;
-    padding-right: 2rem;
+  :root {
+    --app-gutter: 2rem;
   }
+}
+
+/* Kept as an alias so nothing that still references the old class name breaks;
+   it is the same column. */
+.main-content-container {
+  width: 100%;
+  min-width: 0;
+  max-width: var(--app-content-max);
+  margin-inline: auto;
+  padding-inline: var(--app-gutter);
 }
 
 .table-scroll-container {
@@ -202,5 +257,40 @@
   @page {
     size: A4 portrait;
     margin: 14mm;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Touch screens: lift the dense label size and give every control a 44px
+   target. 34 controls measured 36x36 at 375px wide, below both the WCAG 2.5.8
+   minimum and Apple's HIG.
+   --------------------------------------------------------------------------- */
+@media (max-width: 767px) {
+  :root {
+    --text-2xs: 0.75rem;
+  }
+}
+
+@media (pointer: coarse) {
+  button,
+  [role="button"],
+  a[href],
+  [role="combobox"],
+  summary {
+    min-height: 44px;
+  }
+
+  /* icon-only controls are square, so widen them too */
+  button:has(> svg:only-child),
+  [role="button"]:has(> svg:only-child) {
+    min-width: 44px;
+  }
+
+  /* table cells stay dense — the 44px floor is for things you tap, and a
+     tap-through row would otherwise double the height of a 1,298-row table */
+  td button,
+  td [role="button"],
+  th button {
+    min-height: 32px;
   }
 }

@@ -111,7 +111,7 @@ export const appRouter = router({
           if (!reviewsByProject[review.projectId]) {
             reviewsByProject[review.projectId] = [];
           }
-          reviewsByProject[review.projectId]!.push(review);
+          reviewsByProject[review.projectId]?.push(review);
         }
 
         const projectsWithReviews = result.projects.map(p => ({
@@ -402,12 +402,12 @@ export const appRouter = router({
 
         if ($filter) {
           const parsed = parseODataFilter($filter) as Record<string, string | undefined>;
-          if (parsed["station"]) {
-            const stationFilter = parsed["station"].toLowerCase();
+          if (parsed.station) {
+            const stationFilter = parsed.station.toLowerCase();
             filtered = filtered.filter(p => p.station?.toLowerCase().includes(stationFilter));
           }
-          if (parsed["projektstand"]) {
-            filtered = filtered.filter(p => p.projektstand === parsed["projektstand"]);
+          if (parsed.projektstand) {
+            filtered = filtered.filter(p => p.projektstand === parsed.projektstand);
           }
         }
 

@@ -113,7 +113,7 @@ async function initializeStorage() {
   if (stored) {
     try {
       return JSON.parse(stored);
-    } catch (e) {
+    } catch (_e) {
       console.warn("Corrupted localStorage, reloading from data.json");
     }
   }
@@ -128,7 +128,7 @@ async function initializeStorage() {
       console.log(`✅ Loaded ${projects.length} projects from local /data.json`);
       return projects;
     }
-  } catch (err) {
+  } catch (_err) {
     console.warn("Local /data.json not available, trying remote fallback...");
   }
 
