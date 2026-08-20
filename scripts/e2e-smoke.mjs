@@ -35,7 +35,28 @@ const server = http.createServer((req, res) => {
 });
 await new Promise((r) => server.listen(PORT, r));
 
-const browser = await chromium.launch({ headless: true, executablePath: "/opt/pw-browsers/chromium" });
+/**
+ * Let Playwright resolve its own browser. An earlier version hardcoded
+ * /opt/pw-browsers/chromium — the path inside the machine this was written on —
+ * which meant the suite could not run anywhere else. PLAYWRIGHT_CHROMIUM_PATH
+ * is honoured for environments that ship a browser outside Playwright's cache.
+ */
+let browser;
+try {
+  browser = await chromium.launch({
+    headless: true,
+    ...(process.env.PLAYWRIGHT_CHROMIUM_PATH
+      ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH }
+      : {}),
+  });
+} catch (err) {
+  console.error("!! could not launch Chromium.");
+  console.error("   Install it once with:  npx playwright install chromium");
+  console.error("   Or point at an existing binary:  PLAYWRIGHT_CHROMIUM_PATH=/path/to/chromium pnpm e2e");
+  console.error(`   (${err instanceof Error ? err.message.split("\n")[0] : err})`);
+  server.close();
+  process.exit(1);
+}
 const page = await (await browser.newContext({ viewport: { width: 1440, height: 1000 } })).newPage();
 
 let consoleErrors = [];

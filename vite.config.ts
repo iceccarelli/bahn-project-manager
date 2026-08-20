@@ -107,7 +107,11 @@ export default defineConfig({
     // Do NOT ship a 5.6 MB sourcemap to production. "hidden" keeps maps for
     // error tooling without referencing them from shipped assets.
     sourcemap: isProduction ? "hidden" : true,
-    chunkSizeWarningLimit: 900,
+    // 1400, not 900: @react-pdf/renderer is 1.29 MB and is deliberately behind
+    // a dynamic import, so it never touches the entry chunk. Warning about it on
+    // every build trains people to ignore the warning, which is worse than not
+    // having one. Anything above this really would be worth investigating.
+    chunkSizeWarningLimit: 1400,
     rollupOptions: {
       output: {
         // Function form, not the object form. The object form matches on the

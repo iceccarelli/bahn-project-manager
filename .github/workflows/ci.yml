@@ -105,6 +105,30 @@ jobs:
           vercel-args: '--prod'
 
   # ---------------------------------------------------------------------------
+  # End-to-end smoke suite. Runs the production bundle in headless Chromium and
+  # asserts the flows that carry data: navigation, an edit surviving a reload
+  # and reaching the audit trail, filtering, sorting, and the wizard producing a
+  # real PDF with the corrected ITK recipients.
+  # ---------------------------------------------------------------------------
+  e2e:
+    runs-on: ubuntu-latest
+    needs: [lint-typecheck]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      # Only Chromium, and only its own deps — the full `playwright install`
+      # pulls three browsers this suite never opens.
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: NODE_ENV=production pnpm build:client
+      - run: pnpm e2e
+
+  # ---------------------------------------------------------------------------
   # Containerisation gate. Builds the production image and proves the container
   # actually comes up and answers its own health route — a Dockerfile that
   # builds but produces a container that never becomes healthy is a deploy
