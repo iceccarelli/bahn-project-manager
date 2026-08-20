@@ -23,6 +23,8 @@
   /* DB Red Primary */
   --color-primary: hsl(var(--primary));
   --color-primary-foreground: hsl(var(--primary-foreground));
+  /* text-primary-strong — accessible brand red for small text; see --primary-text */
+  --color-primary-strong: hsl(var(--primary-text));
 
   /* Semantic Colors — every token wrapped in hsl() so utilities like
      bg-background / text-foreground / border-border emit VALID colors. */
@@ -72,6 +74,21 @@
        One token set now drives all three via the `app-shell` utility below,
        so every landmark shares the same content edges at every width.
        --------------------------------------------------------------------- */
+    /* Brand red — DB Red 500, #EC0016.
+       Not #FF0000. Deutsche Bahn publish their corporate palette as open
+       source (github.com/db-ui/core, $db-color-red-500) and the brand colour
+       is #EC0016; pure #FF0000 is a common approximation that DB does not
+       actually use. It is also the accessible one: white on #FF0000 measures
+       4.00:1 and fails WCAG AA for text under 18.66px, while white on
+       #EC0016 measures 4.59:1 and passes. */
+    --primary: 354.4 100% 46.3%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Brand red for TEXT. Even an accessible fill is not automatically an
+       accessible *text* colour on the same background, so small brand-red
+       text uses DB Red 600 (#C50014, 6.21:1 on white). Fills never use this. */
+    --primary-text: 353.9 100% 38.6%;
+
     --app-gutter: 1rem;
     --app-content-max: 1600px;
 
@@ -81,15 +98,16 @@
     --card-foreground: 240 10% 3.9%;
     --popover: 0 0% 100%;
     --popover-foreground: 240 10% 3.9%;
-    --primary: 0 100% 50%;
-    --primary-foreground: 0 0% 98%;
     --secondary: 240 4.8% 95.9%;
     --secondary-foreground: 240 5.9% 10%;
     --muted: 240 4.8% 95.9%;
     --muted-foreground: 240 3.8% 46.1%;
     --accent: 240 4.8% 95.9%;
     --accent-foreground: 240 5.9% 10%;
-    --destructive: 0 84.2% 60.2%;
+    /* Darkened from 60.2% lightness. shadcn's default carries white text at
+       3.76:1, below the 4.5:1 AA floor — measured on the "N Tasks" badges in
+       the dashboard workload list. 48% gives 4.88:1 and reads the same. */
+    --destructive: 0 84.2% 48%;
     --destructive-foreground: 0 0% 98%;
     --border: 240 5.9% 90%;
     --input: 240 5.9% 90%;
@@ -97,7 +115,7 @@
     --radius: 0.5rem;
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 0 100% 50%;
+    --sidebar-primary: 354.4 100% 46.3%;
     --sidebar-primary-foreground: 0 0% 98%;
     --sidebar-accent: 240 4.8% 95.9%;
     --sidebar-accent-foreground: 240 5.9% 10%;
@@ -112,8 +130,11 @@
     --card-foreground: 0 0% 98%;
     --popover: 240 10% 3.9%;
     --popover-foreground: 0 0% 98%;
-    --primary: 0 100% 50%;
-    --primary-foreground: 0 0% 98%;
+    --primary: 354.4 100% 46.3%;
+    /* DB Red 400 (#F75056). On the near-black dark surface DB Red 600 drops to
+       3.19:1; 400 measures 5.88:1 and stays recognisably DB red. */
+    --primary-text: 357.8 91.3% 64.1%;
+    --primary-foreground: 0 0% 100%;
     --secondary: 240 3.7% 15.9%;
     --secondary-foreground: 0 0% 98%;
     --muted: 240 3.7% 15.9%;
@@ -127,7 +148,7 @@
     --ring: 0 100% 50%;
     --sidebar-background: 240 5.9% 10%;
     --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 0 100% 50%;
+    --sidebar-primary: 354.4 100% 46.3%;
     --sidebar-primary-foreground: 0 0% 98%;
     --sidebar-accent: 240 3.7% 15.9%;
     --sidebar-accent-foreground: 240 4.8% 95.9%;

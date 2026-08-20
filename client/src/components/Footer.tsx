@@ -70,12 +70,12 @@ export default function Footer() {
         };
 
   return (
-    <footer className="shrink-0 border-t border-[#FF0000] bg-[#1A1A1A] py-6 text-[#eaeded]">
+    <footer className="shrink-0 border-t border-primary bg-[#1A1A1A] py-6 text-[#eaeded]">
       <div className="app-shell">
         <div className="mb-6 grid grid-cols-2 gap-6 md:grid-cols-4 md:gap-8">
           <div>
             <div className="mb-3 flex items-center gap-x-2">
-              <span className="flex h-5 w-5 items-center justify-center rounded bg-[#FF0000] text-2xs font-bold leading-none text-white">
+              <span className="flex h-5 w-5 items-center justify-center rounded bg-primary text-2xs font-bold leading-none text-white">
                 DB
               </span>
               <span className="text-xs font-bold md:text-sm">Bahn Project Manager</span>
@@ -98,7 +98,7 @@ export default function Footer() {
                 href={l.href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="block text-xs text-white/80 transition-colors hover:text-[#FF0000] hover:underline"
+                className="block text-xs text-white/80 transition-colors hover:text-primary-strong hover:underline"
               >
                 {l.label}
               </a>
@@ -115,7 +115,7 @@ export default function Footer() {
                 href={l.href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="block text-xs text-white/80 transition-colors hover:text-[#FF0000] hover:underline"
+                className="block text-xs text-white/80 transition-colors hover:text-primary-strong hover:underline"
               >
                 {l.label}
               </a>
@@ -146,7 +146,7 @@ export default function Footer() {
             <button
               type="button"
               onClick={scrollToTop}
-              className="mt-auto flex items-center gap-1 text-xs text-white/80 underline transition-colors hover:text-[#FF0000]"
+              className="mt-auto flex items-center gap-1 text-xs text-white/80 underline transition-colors hover:text-primary-strong"
             >
               <ArrowUp className="h-3 w-3" aria-hidden="true" />
               Nach oben

@@ -99,7 +99,7 @@ function SidebarFooterContent() {
     <div className="p-3 space-y-3 border-t border-border/50">
       <div className="flex items-center gap-3 rounded-lg px-1 py-1 w-full group-data-[collapsible=icon]:justify-center">
         <Avatar className="h-9 w-9 border shrink-0">
-          <AvatarFallback className="text-xs font-medium bg-[#FF0000] text-white">
+          <AvatarFallback className="text-xs font-medium bg-primary text-white">
             {userInitials}
           </AvatarFallback>
         </Avatar>
@@ -192,7 +192,7 @@ function DashboardLayoutContent({
                 </button>
                 {!isCollapsed && (
                   <div className="flex items-center gap-2 min-w-0">
-                    <div className="w-6 h-6 bg-[#FF0000] rounded flex items-center justify-center text-white font-bold text-xl leading-none pt-px">
+                    <div className="w-6 h-6 bg-primary rounded flex items-center justify-center text-white font-bold text-xl leading-none pt-px">
                       DB
                     </div>
                     <span className="font-semibold tracking-tight truncate text-sm">
@@ -214,10 +214,10 @@ function DashboardLayoutContent({
                         onClick={() => setLocation(item.path)}
                         tooltip={item.label}
                         className={`h-10 transition-all font-normal ${
-                          isActive ? "text-[#FF0000] border-l-4 border-[#FF0000] pl-3" : ""
+                          isActive ? "text-primary-strong border-l-4 border-primary pl-3" : ""
                         }`}
                       >
-                        <item.icon className={`h-4 w-4 ${isActive ? "text-[#FF0000]" : ""}`} />
+                        <item.icon className={`h-4 w-4 ${isActive ? "text-primary-strong" : ""}`} />
                         <span>{item.label}</span>
                       </SidebarMenuButton>
                     </SidebarMenuItem>

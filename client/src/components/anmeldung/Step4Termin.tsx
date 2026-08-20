@@ -73,8 +73,8 @@ export function Step4Termin({ draft }: { draft: ChecklistDraft }) {
           )
         }
         title={s.info ?? s.hinweis ?? undefined}
-        className={`flex min-w-[104px] flex-col items-start gap-0.5 rounded-md border px-2.5 py-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF0000] focus-visible:ring-offset-1 ${style} ${
-          selected ? "ring-2 ring-[#FF0000] ring-offset-1" : ""
+        className={`flex min-w-[104px] flex-col items-start gap-0.5 rounded-md border px-2.5 py-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 ${style} ${
+          selected ? "ring-2 ring-primary ring-offset-1" : ""
         }`}
       >
         <span className="text-2xs font-black tabular-nums">
@@ -103,7 +103,7 @@ export function Step4Termin({ draft }: { draft: ChecklistDraft }) {
       </div>
 
       {error && (
-        <p className="rounded-md border border-[#FF0000]/40 bg-[#FF0000]/5 px-3 py-2 text-xs font-bold text-[#FF0000]">
+        <p className="rounded-md border border-primary/40 bg-primary/5 px-3 py-2 text-xs font-bold text-primary-strong">
           {error}
         </p>
       )}
@@ -137,7 +137,7 @@ export function Step4Termin({ draft }: { draft: ChecklistDraft }) {
       )}
 
       {termin && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border-2 border-[#FF0000] bg-[#FF0000]/5 px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border-2 border-primary bg-primary/5 px-4 py-3">
           <div className="text-xs">
             <div className="font-black">
               Gewählt: {formatGerman(termin.datum)} · {termin.von}–{termin.bis}

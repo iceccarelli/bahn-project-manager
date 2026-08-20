@@ -8,6 +8,7 @@ import { buildStationGeo, type MatchPrecision, type ResolvedStation } from "@/li
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { MapPin, Info, Maximize, Minimize, LocateFixed } from "lucide-react";
+import { DB_RED, DB_RED_RING, DB_RED_SUBTLE } from "@shared/brand";
 
 interface StationGroup {
   key: string;
@@ -42,7 +43,7 @@ const PRECISION_RANK: Record<MatchPrecision, number> = {
 };
 
 const PRECISION_STYLE: Record<MatchPrecision, { bg: string; ring: string; label: string }> = {
-  exact: { bg: "#FF0000", ring: "rgba(255,0,0,0.30)", label: "exakt" },
+  exact: { bg: DB_RED, ring: DB_RED_RING, label: "exakt" },
   tokens: { bg: "#F59E0B", ring: "rgba(245,158,11,0.28)", label: "zugeordnet" },
   fuzzy: { bg: "#F59E0B", ring: "rgba(245,158,11,0.28)", label: "zugeordnet" },
   region: { bg: "#9ca3af", ring: "rgba(0,0,0,0.18)", label: "ungenau verortet (Region)" },
@@ -78,7 +79,7 @@ function popupHtml(group: StationGroup): string {
     .slice(0, 12)
     .map(
       (p) =>
-        `<button data-pid="${p.id}" style="display:block;width:100%;text-align:left;border:0;background:transparent;padding:8px;border-radius:10px;cursor:pointer;margin:0 0 4px;"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center;"><span style="font:700 10px ui-monospace,monospace;color:#FF0000;background:rgba(255,0,0,.06);padding:1px 6px;border-radius:4px;">${esc(p.projektnummer || "—")}</span><span style="font-size:9px;color:#555;border:1px solid #ddd;border-radius:6px;padding:1px 6px;">${esc(p.bahnhofsmanagement || "")}</span></div><div style="font:700 12px system-ui;margin-top:4px;line-height:1.3;">${esc(p.projektbeschreibung || p.station || "")}</div><div style="font-size:10px;color:#666;margin-top:3px;">${esc(p.projektleiter || "Unbekannt")}${p.projektstand ? ` · ${esc(p.projektstand)}` : ""}</div></button>`
+        `<button data-pid="${p.id}" style="display:block;width:100%;text-align:left;border:0;background:transparent;padding:8px;border-radius:10px;cursor:pointer;margin:0 0 4px;"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center;"><span style="font:700 10px ui-monospace,monospace;color:${DB_RED};background:${DB_RED_SUBTLE};padding:1px 6px;border-radius:4px;">${esc(p.projektnummer || "—")}</span><span style="font-size:9px;color:#555;border:1px solid #ddd;border-radius:6px;padding:1px 6px;">${esc(p.bahnhofsmanagement || "")}</span></div><div style="font:700 12px system-ui;margin-top:4px;line-height:1.3;">${esc(p.projektbeschreibung || p.station || "")}</div><div style="font-size:10px;color:#666;margin-top:3px;">${esc(p.projektleiter || "Unbekannt")}${p.projektstand ? ` · ${esc(p.projektstand)}` : ""}</div></button>`
     )
     .join("");
   const style = PRECISION_STYLE[group.precision];
@@ -297,9 +298,9 @@ export const MapView: React.FC<MapViewProps> = ({
       <div ref={containerRef} className="h-full w-full z-0" />
 
       <div className="absolute top-6 left-6 z-[1000] pointer-events-none">
-        <Card className="p-4 bg-background/95 backdrop-blur-xl shadow-2xl border-[#FF0000]/30 pointer-events-auto rounded-2xl">
+        <Card className="p-4 bg-background/95 backdrop-blur-xl shadow-2xl border-primary/30 pointer-events-auto rounded-2xl">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-[#FF0000] rounded-2xl flex items-center justify-center shadow-xl shadow-[#FF0000]/30">
+            <div className="w-12 h-12 bg-primary rounded-2xl flex items-center justify-center shadow-xl shadow-primary/30">
               <MapPin className="text-white h-7 w-7" />
             </div>
             <div>
@@ -322,11 +323,11 @@ export const MapView: React.FC<MapViewProps> = ({
       <div className="absolute bottom-6 left-6 z-[1000] pointer-events-none">
         <div className="flex flex-col gap-3 bg-background/90 backdrop-blur-lg p-4 rounded-2xl border-2 border-border/50 text-2xs font-bold pointer-events-auto shadow-xl">
           <div className="flex items-center gap-3">
-            <div className="w-4 h-4 rounded-full bg-[#FF0000] border-2 border-white shadow-md" />
+            <div className="w-4 h-4 rounded-full bg-primary border-2 border-white shadow-md" />
             <span className="text-foreground/80">Station (exakt)</span>
           </div>
           <div className="flex items-center gap-3">
-            <div className="w-6 h-6 rounded-full bg-[#FF0000] border-2 border-white flex items-center justify-center text-2xs text-white font-black shadow-md">
+            <div className="w-6 h-6 rounded-full bg-primary border-2 border-white flex items-center justify-center text-2xs text-white font-black shadow-md">
               12
             </div>
             <span className="text-foreground/80">Projekte je Station</span>

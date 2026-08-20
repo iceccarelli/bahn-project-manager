@@ -14,27 +14,14 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Download, Table, LayoutGrid, MapPin, Filter, X, ArrowUpDown, ExternalLink, MessageSquare, Search, Loader2 } from "lucide-react";
 import { DEPARTMENTS, REVIEW_STATUSES } from "@shared/types";
 import { deriveProjectMetrics, percent } from "@shared/project-metrics";
+import { statusBadgeClass } from "@shared/status-appearance";
 import { toast } from "sonner";
 import { MapView } from "@/components/Map";
 // DB Corporate Status Colors (perfect harmony with Dashboard.tsx)
-const STATUS_COLORS: Record<string, string> = {
-  "nicht erforderlich": "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
-  "offen": "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
-  "Projektkonfig.": "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
-  "in Bearbeitung": "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
-  "Nachforderung": "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300",
-  "prüffähig": "bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300",
-  "Prüfung erfolgt": "bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-300",
-  "Zustimmung erteilt": "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300",
-  "Niederschrift erstellt": "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300",
-  "abgelehnt": "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
-  "zurückgestellt": "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300",
-  "gestoppt": "bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-300",
-};
 
 function StatusBadge({ status }: { status: string | null }) {
   if (!status) return <span className="text-xs text-muted-foreground">-</span>;
-  const colorClass = STATUS_COLORS[status] || "bg-muted text-muted-foreground";
+  const colorClass = statusBadgeClass(status);
   return (
     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-2xs font-medium whitespace-nowrap ${colorClass}`}>
       {status}
@@ -73,7 +60,7 @@ function InlineEditCell({
           }
           if (e.key === "Escape") setEditing(false);
         }}
-        className={`bg-transparent border-b border-[#FF0000]/50 outline-none text-xs w-full focus:border-[#FF0000] ${className}`}
+        className={`bg-transparent border-b border-primary/50 outline-none text-xs w-full focus:border-primary ${className}`}
       />
     );
   }
@@ -88,7 +75,7 @@ function InlineEditCell({
         setEditing(true);
       }}
       aria-label={`${label} bearbeiten${value ? `, aktuell ${value}` : ", derzeit leer"}`}
-      className={`-mx-1 w-full cursor-pointer rounded px-1 py-0.5 text-left transition-colors hover:bg-[#FF0000]/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF0000] ${className}`}
+      className={`-mx-1 w-full cursor-pointer rounded px-1 py-0.5 text-left transition-colors hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${className}`}
     >
       {value || "-"}
     </button>
@@ -117,11 +104,11 @@ function SortHeader({ column, label, sortBy, sortDir, onSort }: SortHeaderProps)
       <button
         type="button"
         onClick={() => onSort(column)}
-        className="inline-flex items-center gap-1 rounded transition-colors select-none hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF0000]"
+        className="inline-flex items-center gap-1 rounded transition-colors select-none hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
       >
         {label}
         <ArrowUpDown
-          className={`h-3 w-3 transition-opacity ${isActive ? "text-[#FF0000] opacity-100" : "opacity-0"}`}
+          className={`h-3 w-3 transition-opacity ${isActive ? "text-primary-strong opacity-100" : "opacity-0"}`}
           aria-hidden="true"
         />
       </button>
@@ -253,12 +240,12 @@ export default function Projects() {
     <div className="space-y-8 p-6 bg-background min-h-screen">
       {/* KPI cards — every figure derived in shared/project-metrics.ts */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-        <Card className="border-l-4 border-l-[#FF0000] shadow-sm">
+        <Card className="border-l-4 border-l-primary shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Gesamtprojekte</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-4xl font-bold text-[#FF0000]">{totalProjects.toLocaleString("de-DE")}</div>
+            <div className="text-4xl font-bold text-primary-strong">{totalProjects.toLocaleString("de-DE")}</div>
             <p className="text-xs text-muted-foreground mt-1">
               {metrics.totalReviews.toLocaleString("de-DE")} Fachprüfungen
             </p>
@@ -334,7 +321,7 @@ export default function Projects() {
               )}
             </div>
           </div>
-          <Button onClick={handleSearch} className="h-10 bg-[#FF0000] hover:bg-[#CC0000] text-white">Suchen</Button>
+          <Button onClick={handleSearch} className="h-10 bg-primary hover:bg-primary/90 text-white">Suchen</Button>
           <Button
             variant={showFilters ? "default" : "outline"}
             size="sm"
@@ -383,7 +370,7 @@ export default function Projects() {
               <MapPin className="h-4 w-4" aria-hidden="true" />
             </Button>
           </div>
-          <Button onClick={() => setLocation("/anmeldung")} className="bg-[#FF0000] hover:bg-[#CC0000] text-white gap-2 h-10">
+          <Button onClick={() => setLocation("/anmeldung")} className="bg-primary hover:bg-primary/90 text-white gap-2 h-10">
             <Plus className="h-4 w-4" />
             Neues Projekt
           </Button>
@@ -396,7 +383,7 @@ export default function Projects() {
 
       {/* Filter Panel */}
       {showFilters && (
-        <Card className="border-[#FF0000]/20 shadow-md animate-in fade-in slide-in-from-top-4 duration-300">
+        <Card className="border-primary/20 shadow-md animate-in fade-in slide-in-from-top-4 duration-300">
           <CardContent className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
               <div className="space-y-2">
@@ -478,13 +465,13 @@ export default function Projects() {
                     variant={expandedDepts.includes(dept) ? "default" : "outline"}
                     size="sm"
                     onClick={() => toggleDept(dept)}
-                    className={`text-2xs h-7 px-3 ${expandedDepts.includes(dept) ? "bg-[#FF0000] hover:bg-[#CC0000] text-white" : ""}`}
+                    className={`text-2xs h-7 px-3 ${expandedDepts.includes(dept) ? "bg-primary hover:bg-primary/90 text-white" : ""}`}
                   >
                     {dept} Details
                   </Button>
                 ))}
               </div>
-              <Button variant="ghost" size="sm" className="text-[#FF0000] hover:bg-[#FF0000]/10" onClick={() => {
+              <Button variant="ghost" size="sm" className="text-primary-strong hover:bg-primary/10" onClick={() => {
                 setRegion("");
                 setProjektleiter("");
                 setPruefer("");
@@ -517,7 +504,7 @@ export default function Projects() {
       <div className="bg-card rounded-xl border shadow-sm relative min-h-[600px]">
         {isLoading ? (
           <div className="absolute inset-0 flex items-center justify-center bg-card/80 backdrop-blur-sm z-10 rounded-xl">
-            <Loader2 className="h-10 w-10 animate-spin text-[#FF0000]" />
+            <Loader2 className="h-10 w-10 animate-spin text-primary-strong" />
             <p className="text-muted-foreground animate-pulse font-medium ml-3">Lade Projektdaten...</p>
           </div>
         ) : (
@@ -631,7 +618,7 @@ export default function Projects() {
                                 <button
                                   type="button"
                                   aria-label={`Kommentar und Link zu Projekt ${project.projektnummer ?? project.id}`}
-                                  className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-[#FF0000]/10 hover:text-[#FF0000] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF0000]"
+                                  className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                                 >
                                   <MessageSquare className="h-4 w-4" aria-hidden="true" />
                                 </button>
@@ -652,7 +639,7 @@ export default function Projects() {
                                       id={`kommentar-${project.id}`}
                                       defaultValue={project.kommentar || ""}
                                       onBlur={(e) => applyEdit(project.id, "kommentar", e.target.value)}
-                                      className="w-full border rounded-xl px-4 py-3 text-sm bg-background min-h-[120px] resize-y focus:ring-2 focus:ring-[#FF0000]/20 outline-none"
+                                      className="w-full border rounded-xl px-4 py-3 text-sm bg-background min-h-[120px] resize-y focus:ring-2 focus:ring-primary/20 outline-none"
                                       placeholder="Kommentar eingeben …"
                                     />
                                   </div>
@@ -674,7 +661,7 @@ export default function Projects() {
                                       {project.projektLink && (
                                         <Button variant="outline" size="icon" asChild>
                                           <a href={project.projektLink} target="_blank" rel="noopener noreferrer">
-                                            <ExternalLink className="h-4 w-4 text-[#FF0000]" />
+                                            <ExternalLink className="h-4 w-4 text-primary-strong" />
                                           </a>
                                         </Button>
                                       )}
@@ -707,7 +694,7 @@ export default function Projects() {
                                       <select
                                         value={review.status || ""}
                                         onChange={(e) => applyReviewEdit(project.id, dept, "status", e.target.value)}
-                                        className="text-2xs bg-transparent border rounded-md px-2 py-1 w-full focus:ring-1 focus:ring-[#FF0000] outline-none"
+                                        className="text-2xs bg-transparent border rounded-md px-2 py-1 w-full focus:ring-1 focus:ring-primary outline-none"
                                       >
                                         <option value="">-</option>
                                         {REVIEW_STATUSES.map((s) => (
@@ -743,13 +730,13 @@ export default function Projects() {
                 {data?.projects.map((project: Project) => {
                   const mainReview = project.reviews?.find((r: Review) => r.status && r.status !== "nicht erforderlich") || project.reviews?.[0];
                   return (
-                    <Card key={project.id} className="hover:shadow-xl transition-all group border-2 hover:border-[#FF0000]/20">
+                    <Card key={project.id} className="hover:shadow-xl transition-all group border-2 hover:border-primary/20">
                       <CardHeader className="pb-3 space-y-3">
                         <div className="flex justify-between items-start">
                           <StatusBadge status={mainReview?.status || null} />
                           <Badge variant="secondary" className="font-mono text-2xs">{project.projektnummer || "N/A"}</Badge>
                         </div>
-                        <CardTitle className="text-lg leading-tight group-hover:text-[#FF0000] transition-colors line-clamp-2">
+                        <CardTitle className="text-lg leading-tight group-hover:text-primary-strong transition-colors line-clamp-2">
                           {project.station}
                         </CardTitle>
                       </CardHeader>
@@ -774,7 +761,7 @@ export default function Projects() {
                         <Button 
                           variant="outline" 
                           size="sm" 
-                          className="w-full text-[#FF0000] hover:bg-[#FF0000] hover:text-white transition-all"
+                          className="w-full text-primary-strong hover:bg-primary hover:text-white transition-all"
                           onClick={() => setViewMode("table")}
                         >
                           Details anzeigen
@@ -797,9 +784,9 @@ export default function Projects() {
                   onBoundsChange={setMapBounds}
                   onProjectSelect={handleMapProjectSelect}
                 />
-                <div className="absolute bottom-6 left-6 bg-background/95 backdrop-blur p-4 rounded-xl border shadow-2xl z-[1000] max-w-xs border-[#FF0000]/20">
+                <div className="absolute bottom-6 left-6 bg-background/95 backdrop-blur p-4 rounded-xl border shadow-2xl z-[1000] max-w-xs border-primary/20">
                   <div className="flex items-center gap-2 mb-2">
-                    <MapPin className="h-5 w-5 text-[#FF0000]" />
+                    <MapPin className="h-5 w-5 text-primary-strong" />
                     <h4 className="text-sm font-bold">Interaktive Projektkarte</h4>
                   </div>
                   <p className="text-2xs text-muted-foreground leading-relaxed">

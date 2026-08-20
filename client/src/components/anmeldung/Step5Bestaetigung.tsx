@@ -24,8 +24,8 @@ export function Step5Bestaetigung({ draft }: { draft: ChecklistDraft }) {
   return (
     <div className="space-y-6">
       {!canSubmit && (
-        <div className="rounded-lg border border-[#FF0000]/40 bg-[#FF0000]/5 px-4 py-3">
-          <div className="text-xs font-black text-[#FF0000]">
+        <div className="rounded-lg border border-primary/40 bg-primary/5 px-4 py-3">
+          <div className="text-xs font-black text-primary-strong">
             Noch nicht vollständig — {blocking.length}{" "}
             {blocking.length === 1 ? "offener Punkt" : "offene Punkte"}
           </div>
@@ -75,7 +75,7 @@ export function Step5Bestaetigung({ draft }: { draft: ChecklistDraft }) {
                   key={r.department}
                   className={`rounded px-2 py-0.5 text-2xs font-bold ${
                     r.status === "offen"
-                      ? "bg-[#FF0000]/10 text-[#FF0000]"
+                      ? "bg-primary/10 text-primary-strong"
                       : "bg-muted text-muted-foreground"
                   }`}
                 >

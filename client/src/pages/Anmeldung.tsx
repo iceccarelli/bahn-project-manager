@@ -66,7 +66,7 @@ export default function Anmeldung() {
       <div className="space-y-6 p-6">
         <Card className="mx-auto max-w-xl">
           <CardContent className="space-y-4 p-8 text-center">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#FF0000]">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary">
               <Check className="h-8 w-8 text-white" aria-hidden="true" />
             </div>
             <h1 className="text-xl font-black tracking-tight">Anmeldung abgeschlossen</h1>
@@ -78,7 +78,7 @@ export default function Anmeldung() {
             <div className="flex justify-center gap-2 pt-2">
               <Button
                 onClick={() => setLocation("/projects")}
-                className="bg-[#FF0000] text-white hover:bg-[#CC0000]"
+                className="bg-primary text-white hover:bg-primary/90"
               >
                 Zur Projektübersicht
               </Button>
@@ -109,9 +109,9 @@ export default function Anmeldung() {
               type="button"
               aria-pressed={draft.mode === m}
               onClick={() => draft.setMode(m)}
-              className={`rounded-md px-3 py-1.5 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF0000] ${
+              className={`rounded-md px-3 py-1.5 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                 draft.mode === m
-                  ? "bg-[#FF0000] text-white"
+                  ? "bg-primary text-white"
                   : "text-muted-foreground hover:bg-muted"
               }`}
             >
@@ -134,11 +134,11 @@ export default function Anmeldung() {
                   type="button"
                   onClick={() => goTo(s.n)}
                   aria-current={active ? "step" : undefined}
-                  className={`w-full rounded-lg border-2 px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF0000] focus-visible:ring-offset-1 ${
+                  className={`w-full rounded-lg border-2 px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 ${
                     active
-                      ? "border-[#FF0000] bg-[#FF0000]/5"
+                      ? "border-primary bg-primary/5"
                       : invalid
-                        ? "border-[#FF0000]/40 bg-background hover:bg-muted/50"
+                        ? "border-primary/40 bg-background hover:bg-muted/50"
                         : "border-border bg-background hover:bg-muted/50"
                   }`}
                 >
@@ -148,7 +148,7 @@ export default function Anmeldung() {
                         done
                           ? "bg-emerald-600 text-white"
                           : active
-                            ? "bg-[#FF0000] text-white"
+                            ? "bg-primary text-white"
                             : "bg-muted text-muted-foreground"
                       }`}
                     >
@@ -189,7 +189,7 @@ export default function Anmeldung() {
 
         <div className="flex flex-wrap items-center gap-2">
           {/* reserved height so the row does not jump when the hint appears */}
-          <span className="min-h-[16px] text-2xs font-bold text-[#FF0000]">
+          <span className="min-h-[16px] text-2xs font-bold text-primary-strong">
             {step < 5 && issuesForStep.length > 0
               ? `${issuesForStep.length} ${issuesForStep.length === 1 ? "Angabe fehlt" : "Angaben fehlen"}`
               : ""}
@@ -206,7 +206,7 @@ export default function Anmeldung() {
           {step < 5 ? (
             <Button
               onClick={() => goTo(step + 1)}
-              className="bg-[#FF0000] text-xs text-white hover:bg-[#CC0000]"
+              className="bg-primary text-xs text-white hover:bg-primary/90"
             >
               Weiter
               <ChevronRight className="ml-1 h-4 w-4" aria-hidden="true" />
@@ -215,7 +215,7 @@ export default function Anmeldung() {
             <Button
               onClick={handleSubmit}
               disabled={!draft.canSubmit || draft.saving}
-              className="bg-[#FF0000] text-xs text-white hover:bg-[#CC0000] disabled:opacity-50"
+              className="bg-primary text-xs text-white hover:bg-primary/90 disabled:opacity-50"
             >
               <Check className="mr-1.5 h-4 w-4" aria-hidden="true" />
               Fachspezialistenprüfung anmelden

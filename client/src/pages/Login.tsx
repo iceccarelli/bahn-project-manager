@@ -69,7 +69,7 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center bg-muted/30 px-4 py-12">
       <div className="w-full max-w-md space-y-8">
         <div className="flex flex-col items-center text-center space-y-2">
-          <div className="w-16 h-16 bg-[#FF0000] rounded-xl flex items-center justify-center text-white font-bold text-5xl shadow-lg mb-4">
+          <div className="w-16 h-16 bg-primary rounded-xl flex items-center justify-center text-white font-bold text-5xl shadow-lg mb-4">
             DB
           </div>
           <h1 className="text-3xl font-bold tracking-tight">Bahn Project Manager</h1>
@@ -124,7 +124,7 @@ export default function Login() {
                   required
                 />
               </div>
-              <Button type="submit" className="w-full bg-[#FF0000] hover:bg-[#CC0000]" disabled={isLoading || success}>
+              <Button type="submit" className="w-full bg-primary hover:bg-primary/90" disabled={isLoading || success}>
                 {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                 Anmelden
               </Button>

@@ -7,10 +7,10 @@
  * Project fields match Excel Übersichtsliste column structure exactly.
  */
 
-import { normalizeBahnhofsmanagement } from "@shared/bahnhofsmanagement";
 import { DEPARTMENTS } from "@shared/validation";
 import type { ProjectChecklist } from "@shared/validation";
 import type { Project, Review, Stats, AuditLogEntry } from "@/hooks/useDataQuery";
+import { describeIngest, ingestProjects } from "@shared/ingest";
 
 export interface ProjectUpdateInput {
   id: number;
@@ -75,36 +75,26 @@ const LOCAL_DATA_JSON_URL = "/data.json";
 // placeholder tokens ("???", "Bitte auswählen") that break exact-match filters
 // and pollute dropdowns. Normalize once, at the single read chokepoint, so that
 // filter options, `===` filtering, and display are always consistent.
-const PLACEHOLDER_TOKENS = new Set(["", "???", "n/a", "na", "null", "bitte auswählen"]);
+// PLACEHOLDER_TOKENS and cleanStr moved to shared/ingest.ts. The copy that
+// lived here recognised 6 placeholders; the workbook also produces "-", "--",
+// "?", "??", "undefined" and "Bitte ausfüllen", which this copy passed through
+// as if they were real values. One list now, and it is the longer one.
 
-function cleanStr(v: unknown): string | null {
-  if (v == null) return null;
-  const s = String(v).replace(/\s+/g, " ").trim();
-  if (PLACEHOLDER_TOKENS.has(s.toLowerCase())) return null;
-  return s;
-}
-
-function normalizeProjects(projects: any[]): Project[] {
-  if (!Array.isArray(projects)) return [];
-  return projects.map((p) => ({
-    ...p,
-    // Canonical BM, so `===` region filters, the station cascade and the map all
-    // agree. scripts/normalize-existing-data.ts already cleans data.json; this
-    // is the second line of defence for rows created before Stage 1 or edited
-    // by hand. Never guesses — an unknown value becomes null.
-    bahnhofsmanagement: normalizeBahnhofsmanagement(p?.bahnhofsmanagement).value,
-    station: cleanStr(p?.station),
-    projektleiter: cleanStr(p?.projektleiter),
-    projektstand: cleanStr(p?.projektstand),
-    projektnummer: cleanStr(p?.projektnummer),
-    reviews: Array.isArray(p?.reviews)
-      ? p.reviews.map((r: any) => ({
-          ...r,
-          prueferName: cleanStr(r?.prueferName),
-          status: cleanStr(r?.status),
-        }))
-      : [],
-  })) as Project[];
+/**
+ * Validate, then normalize. This used to be `(projects: any[])` ending in
+ * `as Project[]` — an assertion, not a check: whatever arrived became a
+ * Project as far as the compiler was concerned.
+ *
+ * ingestProjects() runs the payload through ProjectSchema (49 ms for all
+ * 1,298 rows) and hands back the rows that passed plus the ones that did not,
+ * so a malformed row is reported rather than rendered as a half-empty card.
+ */
+function normalizeProjects(raw: unknown): Project[] {
+  const result = ingestProjects(raw);
+  if (!result.clean) {
+    console.warn(`[data] ${describeIngest(result)}`);
+  }
+  return result.projects as unknown as Project[];
 }
 
 async function initializeStorage() {
@@ -112,9 +102,21 @@ async function initializeStorage() {
   const stored = localStorage.getItem(STORAGE_KEY_PROJECTS);
   if (stored) {
     try {
-      return JSON.parse(stored);
+      const cached = ingestProjects(JSON.parse(stored));
+      // A cache written by an older build can hold a shape this build no
+      // longer understands. Serving it forever is how a single browser ends up
+      // quietly disagreeing with every other one, so a cache that does not
+      // validate cleanly is discarded and refetched rather than trusted.
+      if (cached.clean && cached.projects.length > 0) {
+        return cached.projects;
+      }
+      if (!cached.clean) {
+        console.warn(`[data] cache rejected — ${describeIngest(cached)}; reloading from /data.json`);
+        localStorage.removeItem(STORAGE_KEY_PROJECTS);
+      }
     } catch (_e) {
-      console.warn("Corrupted localStorage, reloading from data.json");
+      console.warn("[data] cache is not valid JSON; reloading from /data.json");
+      localStorage.removeItem(STORAGE_KEY_PROJECTS);
     }
   }
 
@@ -122,11 +124,12 @@ async function initializeStorage() {
     // 1. Try local /data.json first (fastest + most reliable)
     const res = await fetch(LOCAL_DATA_JSON_URL);
     if (res.ok) {
-      const data = await res.json();
-      const projects = data.projects || data;
-      localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
-      console.log(`✅ Loaded ${projects.length} projects from local /data.json`);
-      return projects;
+      const result = ingestProjects(await res.json());
+      // Cache only what validated. Writing the raw payload back would put the
+      // bad rows straight into the cache we just taught ourselves to distrust.
+      localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(result.projects));
+      console.log(`[data] /data.json — ${describeIngest(result)}`);
+      return result.projects;
     }
   } catch (_err) {
     console.warn("Local /data.json not available, trying remote fallback...");
@@ -135,10 +138,10 @@ async function initializeStorage() {
   // 2. Fallback to remote GitHub raw (original behavior)
   try {
     const res = await fetch("https://raw.githubusercontent.com/iceccarelli/bahn-project-manager/refs/heads/main/client/public/data.json");
-    const data = await res.json();
-    const projects = data.projects || data;
-    localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
-    return projects;
+    const result = ingestProjects(await res.json());
+    localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(result.projects));
+    console.log(`[data] remote fallback — ${describeIngest(result)}`);
+    return result.projects;
   } catch (err) {
     console.error("Failed to load any data source:", err);
     return [];

@@ -24,7 +24,7 @@ export function Step3Pruefungen({ draft }: { draft: ChecklistDraft }) {
 
         <div className="space-y-3">
           <div>
-            <div className="mb-1.5 text-2xs font-black uppercase tracking-widest text-[#FF0000]">
+            <div className="mb-1.5 text-2xs font-black uppercase tracking-widest text-primary-strong">
               Prüfung offen ({open.length})
             </div>
             {open.length === 0 ? (
@@ -38,13 +38,13 @@ export function Step3Pruefungen({ draft }: { draft: ChecklistDraft }) {
                   return (
                     <li
                       key={r.department}
-                      className="flex items-baseline justify-between gap-3 rounded-md border border-[#FF0000]/30 bg-[#FF0000]/5 px-3 py-1.5"
+                      className="flex items-baseline justify-between gap-3 rounded-md border border-primary/30 bg-primary/5 px-3 py-1.5"
                     >
                       <span className="text-xs font-black">{r.department}</span>
                       <span className="text-right text-2xs leading-tight text-muted-foreground">
                         Nr. {q?.nr} · {q?.gewerk}
                         {r.viaSecondary && (
-                          <span className="ml-1 font-bold text-[#FF0000]">(2. Frage)</span>
+                          <span className="ml-1 font-bold text-primary-strong">(2. Frage)</span>
                         )}
                       </span>
                     </li>

@@ -42,7 +42,7 @@ export function Unterschriftenblatt({
           : "bg-card border-2 border-border rounded-xl p-6 text-2xs print:border-0 print:p-0"
       }
     >
-      <div className="flex items-baseline justify-between border-b-2 border-[#FF0000] pb-2">
+      <div className="flex items-baseline justify-between border-b-2 border-primary pb-2">
         <span className="font-black tracking-tight">{UNTERSCHRIFTENBLATT_ISSUER}</span>
         <span className="text-2xs uppercase tracking-widest text-muted-foreground print:text-black">
           Vorschau
@@ -101,7 +101,7 @@ export function Unterschriftenblatt({
                     <span
                       className={
                         required
-                          ? "rounded bg-[#FF0000]/10 px-2 py-0.5 font-black text-[#FF0000]"
+                          ? "rounded bg-primary/10 px-2 py-0.5 font-black text-primary-strong"
                           : "text-muted-foreground print:text-black"
                       }
                     >
