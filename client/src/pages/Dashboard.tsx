@@ -1,21 +1,37 @@
 import React, { useMemo, useState } from 'react';
 import { deriveProjectMetrics, percent } from '@shared/project-metrics';
-import { statusBadgeClass, statusHex } from '@shared/status-appearance';
+import { statusBadgeClass, statusHex, TONE_APPEARANCE } from '@shared/status-appearance';
+import { BLOCKING_STATUSES, normalizeReviewStatus, OPEN_STATUSES } from '@shared/review-status';
+import { toDate } from '@shared/date';
+import { useLocation } from 'wouter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { 
   PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip 
 } from 'recharts';
-import { 
-  Users, AlertTriangle, CheckCircle, Clock, TrendingUp, 
-  ChevronDown, ChevronUp, ExternalLink,
-  Bell, Mail, Calendar, MessageSquare, Send, Zap, LogIn
+import {
+  AlertTriangle,
+  Bell,
+  CheckCircle,
+  ChevronDown,
+  ChevronUp,
+  ClipboardCheck,
+  Clock,
+  ExternalLink,
+  FileCheck,
+  History,
+  MessageSquare,
+  Table2,
+  TrendingUp,
+  Users,
+  Zap,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useAllData, useAuditLog, useRecordAudit } from '@/hooks/useDataQuery';
+import { useAllData, useAuditLog } from '@/hooks/useDataQuery';
+import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 // DB Corporate Status Colors (perfect harmony with Projects.tsx)
@@ -66,13 +82,13 @@ interface WorkloadItem {
 }
 
 export default function Dashboard() {
+  const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();
   const { data: allData } = useAllData();
   const { data: auditEntries } = useAuditLog();
-  const recordAudit = useRecordAudit();
   const [selectedGewerke, setSelectedGewerke] = useState<string | null>(null);
   const [expandedFach, setExpandedFach] = useState<string | null>(null);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
-  const [showMicrosoftInfo, setShowMicrosoftInfo] = useState(false);
 
   const projects: Project[] = allData?.projects || [];
 
@@ -188,21 +204,84 @@ export default function Dashboard() {
   });
 
   // Fixed: Proper typing for upcomingDeadlines (no more union type errors)
-  const upcomingDeadlines = projects
-    .filter(p => p.reviews.some(r => r.pruefDatum))
-    .slice(0, 12)
-    .map(p => {
-      const criticalReview = p.reviews.find(r => 
-        ["offen", "in Bearbeitung", "Nachforderung"].includes(r.status || "")
-      );
-      return {
-        id: p.id,
-        station: p.station,
-        deadline: criticalReview?.pruefDatum || "2026-06-15",
-        status: criticalReview?.status || "offen",
-        reviewer: criticalReview?.prueferName || "Unbekannt"
-      };
-    });
+  /**
+   * Reviews that carry a real Prüfdatum and are still open, soonest first.
+   *
+   * This used to be `projects.filter(has any pruefDatum).slice(0, 12)` with
+   * `deadline: criticalReview?.pruefDatum || "2026-06-15"` and
+   * `reviewer: ... || "Unbekannt"`. Three separate problems: the list was not
+   * sorted by date at all, so it showed twelve arbitrary projects rather than
+   * the nearest deadlines; a project whose critical review had no date got a
+   * hardcoded one, which is why every row read 2026-06-15; and an unknown
+   * reviewer was rendered as the literal word "Unbekannt".
+   */
+  const upcomingDeadlines = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const rows: Array<{
+      id: number;
+      station: string;
+      department: string;
+      due: Date;
+      dueLabel: string;
+      status: string;
+      reviewer: string | null;
+      overdue: boolean;
+    }> = [];
+    for (const p of projects) {
+      for (const r of p.reviews || []) {
+        const status = normalizeReviewStatus(r.status);
+        if (!status || !OPEN_STATUSES.includes(status)) continue;
+        const due = toDate(r.pruefDatum);
+        if (!due) continue; // no date on file — it is not a deadline
+        rows.push({
+          id: p.id,
+          station: p.station || p.projektnummer || `Projekt ${p.id}`,
+          department: r.department,
+          due,
+          dueLabel: due.toLocaleDateString("de-DE"),
+          status,
+          reviewer: r.prueferName?.trim() || null,
+          overdue: due < today,
+        });
+      }
+    }
+    return rows.sort((a, b) => a.due.getTime() - b.due.getTime()).slice(0, 12);
+  }, [projects]);
+
+  /**
+   * Real alerts, replacing five invented notifications ("Projekt Bad Hersfeld
+   * - Nachforderung von ITK", "vor 12 Min", and three more — two of which
+   * named stations outside RB Mitte entirely). Every figure here is counted
+   * from the review rows.
+   */
+  const handlungsbedarf = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    let overdue = 0;
+    let blocked = 0;
+    let nachforderung = 0;
+    let unassigned = 0;
+    for (const p of projects) {
+      for (const r of p.reviews || []) {
+        const status = normalizeReviewStatus(r.status);
+        if (!status) continue;
+        if (BLOCKING_STATUSES.includes(status)) blocked++;
+        if (status === "Nachforderung") nachforderung++;
+        if (OPEN_STATUSES.includes(status)) {
+          const due = toDate(r.pruefDatum);
+          if (due && due < today) overdue++;
+          if (!r.prueferName?.trim()) unassigned++;
+        }
+      }
+    }
+    return [
+      { key: "overdue", label: "Prüftermin überschritten", count: overdue, tone: "blocked" as const },
+      { key: "blocked", label: "abgelehnt oder gestoppt", count: blocked, tone: "blocked" as const },
+      { key: "nachforderung", label: "Nachforderung offen", count: nachforderung, tone: "attention" as const },
+      { key: "unassigned", label: "offen, ohne Prüfer", count: unassigned, tone: "pending" as const },
+    ];
+  }, [projects]);
 
   const relativeTime = (iso: string): string => {
     const diff = Date.now() - new Date(iso).getTime();
@@ -229,21 +308,8 @@ export default function Dashboard() {
     icon: iconForAction(e.action),
   }));
 
-  const notifications = [
-    { type: "urgent", message: "Projekt Bad Hersfeld - Nachforderung von ITK", time: "vor 12 Min" },
-    { type: "info", message: "Zustimmung erteilt für Frankfurt Hbf (EEA)", time: "vor 47 Min" },
-    { type: "warning", message: "Deadline überschritten: Köln Messe/Deutz", time: "vor 2 Std" },
-    { type: "success", message: "Neues Projekt angelegt: München Ost", time: "vor 4 Std" },
-    { type: "info", message: "Neue Excel-Datei hochgeladen: 47 Projekte", time: "vor 6 Std" },
-  ];
 
 
-  const handleMicrosoftConnect = () => {
-    setShowMicrosoftInfo(true);
-    toast.info("Microsoft 365 Integration", {
-      description: "Diese Funktion wird in Kürze aktiviert. Bitte kontaktieren Sie den Administrator für Setup."
-    });
-  };
 
   return (
     <div className="space-y-8 p-6 bg-background min-h-screen">
@@ -252,20 +318,23 @@ export default function Dashboard() {
         <div>
           <h1 className="text-4xl font-bold tracking-tight">Dashboard</h1>
           <p className="text-muted-foreground mt-2">
-            Live Übersicht über alle {totalProjects.toLocaleString('de-DE')}+ Projekte • {new Date().toLocaleDateString('de-DE')}
+            Live Übersicht über alle {totalProjects.toLocaleString('de-DE')} Projekte • {new Date().toLocaleDateString('de-DE')}
           </p>
         </div>
         
         <div className="flex items-center gap-3">
-          <Button 
-            onClick={handleMicrosoftConnect} 
-            className="gap-2 bg-primary hover:bg-primary/90"
+          {/* "Mit Microsoft 365 verbinden" removed along with its dialog: there
+              is no integration to connect to. "Aktualisieren" used to write an
+              audit entry reading "Manuelle Synchronisierung ausgelöst" and
+              synchronise nothing; it now genuinely refetches. */}
+          <Button
+            onClick={async () => {
+              await queryClient.invalidateQueries();
+              toast.success("Daten neu geladen");
+            }}
+            className="gap-2"
           >
-            <LogIn className="h-4 w-4" /> Mit Microsoft 365 verbinden (Optional)
-          </Button>
-          
-          <Button onClick={() => { recordAudit.mutate({ action: "Daten synchronisiert", details: "Manuelle Synchronisierung ausgelöst" }); toast.success("Daten synchronisiert"); }} className="gap-2">
-            <TrendingUp className="h-4 w-4" /> Aktualisieren
+            <TrendingUp className="h-4 w-4" aria-hidden="true" /> Aktualisieren
           </Button>
         </div>
       </div>
@@ -558,59 +627,52 @@ export default function Dashboard() {
           <div className="h-px flex-1 bg-border" />
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-6">
+        {/* Four cards, not five. The Microsoft 365 card was removed: it showed
+            a pulsing green "connected" dot and three "Verfügbar" labels while
+            no integration existed — @azure/msal-browser and @azure/msal-react
+            were dependencies with no code behind them, and both buttons only
+            raised a toast saying the feature "wird in Kürze aktiviert". */}
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
           <Card className="border-l-4 border-l-rose-500">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-base">
-                <Clock className="h-5 w-5 text-rose-500" /> Anstehende Deadlines
+                <Clock className="h-5 w-5 text-rose-500" /> Anstehende Prüftermine
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3 max-h-[280px] overflow-auto pr-1">
-              {upcomingDeadlines.length > 0 ? upcomingDeadlines.map((p) => (
-                // Not a <button>: this row already contains the "Erinnerung"
-                // button, and a button inside a button is invalid HTML that
-                // browsers silently un-nest. The title below carries the click
-                // target instead.
-                <div
-                  key={p.id}
-                  className="flex w-full items-start gap-3 rounded-xl border bg-card p-3 transition-colors hover:bg-muted/50"
-                >
-                  <div className="mt-1">
-                    {p.status === "Nachforderung" || p.status === "abgelehnt" ? 
-                      <AlertTriangle className="h-4 w-4 text-rose-500" /> : 
-                      <Clock className="h-4 w-4 text-amber-500" />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setSelectedProject(projects.find((pr) => pr.id === p.id) || null)
-                      }
-                      className="w-full truncate text-left text-sm font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                    >
-                      {p.station}
-                    </button>
-                    <div className="text-xs text-muted-foreground">
-                      {p.reviewer} • {p.deadline}
-                    </div>
-                    <Badge variant="outline" className="mt-1 text-2xs">
-                      {p.status}
-                    </Badge>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    aria-label={`Erinnerung für ${p.station} vorbereiten`}
-                    className="h-7 px-2"
+            <CardContent className="max-h-[280px] space-y-2 overflow-auto pr-1">
+              {upcomingDeadlines.length > 0 ? (
+                upcomingDeadlines.map((d) => (
+                  <button
+                    key={`${d.id}-${d.department}`}
+                    type="button"
                     onClick={() =>
-                      toast.success(`Erinnerung für ${p.station} wurde vorbereitet`)
+                      setSelectedProject(projects.find((pr) => pr.id === d.id) || null)
                     }
+                    className="flex w-full items-start gap-2.5 rounded-xl border bg-card p-2.5 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   >
-                    <Send className="h-3 w-3" aria-hidden="true" />
-                  </Button>
-                </div>
-              )) : (
-                <div className="text-center py-8 text-muted-foreground text-sm">Keine anstehenden Deadlines</div>
+                    <Clock
+                      className={`mt-0.5 h-4 w-4 shrink-0 ${d.overdue ? "text-rose-500" : "text-amber-500"}`}
+                      aria-hidden="true"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">{d.station}</span>
+                      <span className="mt-0.5 block text-2xs text-muted-foreground">
+                        {d.department} · {d.dueLabel}
+                        {d.overdue ? " · überfällig" : ""}
+                        {d.reviewer ? ` · ${d.reviewer}` : ""}
+                      </span>
+                      <span
+                        className={`mt-1 inline-block rounded-full px-2 py-0.5 text-2xs font-medium ${statusBadgeClass(d.status)}`}
+                      >
+                        {d.status}
+                      </span>
+                    </span>
+                  </button>
+                ))
+              ) : (
+                <p className="py-8 text-center text-sm text-muted-foreground">
+                  Keine offene Prüfung mit hinterlegtem Termin.
+                </p>
               )}
             </CardContent>
           </Card>
@@ -618,28 +680,30 @@ export default function Dashboard() {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-base">
-                <Bell className="h-5 w-5 text-primary-strong" /> Benachrichtigungen
-                <Badge className="ml-auto bg-primary">{notifications.length}</Badge>
+                <Bell className="h-5 w-5 text-primary-strong" /> Handlungsbedarf
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3 max-h-[280px] overflow-auto pr-1">
-              {notifications.map((n) => (
-                <motion.div
-                  key={`${n.type}-${n.message}`}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  className="flex gap-3 p-3 rounded-xl border-l-4 bg-muted/30"
-                  style={{ borderLeftColor: n.type === "urgent" ? "#ef4444" : n.type === "warning" ? "#f59e0b" : "#10b981" }}
+            <CardContent className="max-h-[280px] space-y-2 overflow-auto pr-1">
+              {handlungsbedarf.map((h) => (
+                <div
+                  key={h.key}
+                  className="flex items-center justify-between gap-3 rounded-xl border bg-card p-3"
                 >
-                  <div className="flex-1">
-                    <div className="text-sm font-medium leading-tight">{n.message}</div>
-                    <div className="text-2xs text-muted-foreground mt-1">{n.time}</div>
-                  </div>
-                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { recordAudit.mutate({ action: "Benachrichtigung gesendet", details: "Benachrichtigung an Team versendet" }); toast.success("Benachrichtigung gesendet"); }}>
-                    Senden
-                  </Button>
-                </motion.div>
+                  <span className="min-w-0 text-sm leading-tight">{h.label}</span>
+                  <span
+                    className={`shrink-0 rounded-full px-2.5 py-0.5 text-sm font-bold tabular-nums ${
+                      h.count === 0
+                        ? "bg-muted text-muted-foreground"
+                        : TONE_APPEARANCE[h.tone].badge
+                    }`}
+                  >
+                    {h.count.toLocaleString("de-DE")}
+                  </span>
+                </div>
               ))}
+              <p className="pt-1 text-2xs text-muted-foreground">
+                Aus {totalReviews.toLocaleString("de-DE")} Prüfzeilen berechnet.
+              </p>
             </CardContent>
           </Card>
 
@@ -649,19 +713,28 @@ export default function Dashboard() {
                 <MessageSquare className="h-5 w-5" /> Team-Aktivität
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4 max-h-[280px] overflow-auto pr-1 text-sm">
-              {activityFeed.map((activity) => (
-                <div key={`${activity.user}-${activity.project}-${activity.time}`} className="flex gap-3">
-                  <div className="mt-1">
-                    <activity.icon className="h-4 w-4 text-emerald-500" />
+            <CardContent className="max-h-[280px] space-y-4 overflow-auto pr-1 text-sm">
+              {activityFeed.length > 0 ? (
+                activityFeed.map((activity) => (
+                  <div
+                    key={`${activity.user}-${activity.project}-${activity.time}`}
+                    className="flex gap-3"
+                  >
+                    <activity.icon className="mt-1 h-4 w-4 shrink-0 text-emerald-500" aria-hidden="true" />
+                    <div className="min-w-0 flex-1">
+                      <span className="font-semibold">{activity.user}</span> {activity.action}
+                      {activity.project && (
+                        <span className="text-muted-foreground"> · {activity.project}</span>
+                      )}
+                      <div className="mt-0.5 text-2xs text-muted-foreground">{activity.time}</div>
+                    </div>
                   </div>
-                  <div className="flex-1">
-                    <span className="font-semibold">{activity.user}</span> {activity.action}
-                    {activity.project && <span className="text-muted-foreground"> • {activity.project}</span>}
-                    <div className="text-2xs text-muted-foreground mt-0.5">{activity.time}</div>
-                  </div>
-                </div>
-              ))}
+                ))
+              ) : (
+                <p className="py-8 text-center text-muted-foreground">
+                  Noch keine Änderungen in dieser Sitzung.
+                </p>
+              )}
             </CardContent>
           </Card>
 
@@ -671,56 +744,43 @@ export default function Dashboard() {
                 <Zap className="h-5 w-5 text-primary-strong" /> Schnellaktionen
               </CardTitle>
             </CardHeader>
+            {/* Every button here now does what its label says. The previous four
+                wrote an audit entry claiming the work had happened — "Status-Update
+                vorbereitet", "Kritische Fälle eskaliert" — and then did nothing,
+                which put false records into the very trail the audit page reads. */}
             <CardContent className="space-y-3">
-              <Button variant="outline" className="w-full justify-start gap-2 h-11" onClick={() => { recordAudit.mutate({ action: "Status-Update vorbereitet", details: "Status-Update-E-Mail erstellt" }); toast.success("Status-Update-E-Mail wurde vorbereitet"); }}>
-                <Mail className="h-4 w-4" /> Status-Update an alle Projektleiter
+              <Button
+                variant="outline"
+                className="h-auto min-h-11 w-full justify-start gap-2 whitespace-normal py-2 text-left leading-tight"
+                onClick={() => setLocation("/anmeldung")}
+              >
+                <ClipboardCheck className="h-4 w-4" aria-hidden="true" />
+                Fachspezialistenprüfung anmelden
               </Button>
-              <Button variant="outline" className="w-full justify-start gap-2 h-11" onClick={() => { recordAudit.mutate({ action: "Outlook-Termin vorbereitet", details: "Kalendereintrag erstellt" }); toast.success("Outlook-Termin wurde vorbereitet"); }}>
-                <Calendar className="h-4 w-4" /> Outlook-Termin erstellen
+              <Button
+                variant="outline"
+                className="h-auto min-h-11 w-full justify-start gap-2 whitespace-normal py-2 text-left leading-tight"
+                onClick={() => setLocation("/projects")}
+              >
+                <Table2 className="h-4 w-4" aria-hidden="true" />
+                Alle {totalProjects.toLocaleString("de-DE")} Projekte öffnen
               </Button>
-              <Button variant="outline" className="w-full justify-start gap-2 h-11" onClick={() => { recordAudit.mutate({ action: "Teams-Zusammenfassung vorbereitet", details: "Zusammenfassung für Teams erstellt" }); toast.success("Zusammenfassung wurde für Teams vorbereitet"); }}>
-                <MessageSquare className="h-4 w-4" /> In Teams-Kanal posten
+              <Button
+                variant="outline"
+                className="h-auto min-h-11 w-full justify-start gap-2 whitespace-normal py-2 text-left leading-tight"
+                onClick={() => setLocation("/audit")}
+              >
+                <History className="h-4 w-4" aria-hidden="true" />
+                Änderungshistorie öffnen
               </Button>
-              <Button variant="destructive" className="w-full justify-start gap-2 h-11" onClick={() => { recordAudit.mutate({ action: "Kritische Fälle eskaliert", details: `${criticalProjects} kritische Projekte eskaliert` }); toast.success("Kritische Fälle wurden eskaliert"); }}>
-                <AlertTriangle className="h-4 w-4" /> Kritische Fälle eskalieren
+              <Button
+                variant="outline"
+                className="h-auto min-h-11 w-full justify-start gap-2 whitespace-normal py-2 text-left leading-tight"
+                onClick={() => setLocation("/bvb-eea")}
+              >
+                <FileCheck className="h-4 w-4" aria-hidden="true" />
+                BVB-EEA-Prüfungen ansehen
               </Button>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-gradient-to-br from-primary/5 to-transparent border-primary/30">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <div className="flex items-center gap-1.5">
-                  <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-                  Microsoft 365
-                </div>
-              </CardTitle>
-              <p className="text-xs text-muted-foreground">Optional - Klicken Sie oben zum Verbinden</p>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-center">
-                <div>
-                  <div className="text-emerald-500 text-xs">OUTLOOK</div>
-                  <div className="font-mono text-2xs">Verfügbar</div>
-                </div>
-                <div>
-                  <div className="text-emerald-500 text-xs">TEAMS</div>
-                  <div className="font-mono text-2xs">Verfügbar</div>
-                </div>
-                <div>
-                  <div className="text-emerald-500 text-xs">SHAREPOINT</div>
-                  <div className="font-mono text-2xs">Verfügbar</div>
-                </div>
-              </div>
-
-              <div className="pt-2 border-t space-y-2">
-                <Button size="sm" className="w-full bg-primary hover:bg-primary/90 text-white" onClick={handleMicrosoftConnect}>
-                  In Teams posten
-                </Button>
-                <Button size="sm" variant="outline" className="w-full" onClick={handleMicrosoftConnect}>
-                  Outlook-Ereignis erstellen
-                </Button>
-              </div>
             </CardContent>
           </Card>
         </div>
@@ -821,17 +881,16 @@ export default function Dashboard() {
                 <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
                 <span>Excel Sync: Aktiv</span>
               </div>
+              {/* "API: Verbunden" with a green pulse was false: production is a
+                  static SPA (vercel.json declares no functions) and the data
+                  lives in localStorage seeded from /data.json. */}
               <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-                <span>API: Verbunden</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
-                <span>Microsoft 365: Optional</span>
+                <div className="h-2 w-2 rounded-full bg-emerald-500" />
+                <span>Daten lokal geladen ({totalProjects.toLocaleString('de-DE')} Projekte)</span>
               </div>
             </div>
             <div className="mt-4 text-xs text-muted-foreground">
-              Letzte Aktualisierung: {new Date().toLocaleString('de-DE')} • Version 2.4.1 • Build: Production
+              Stand: {new Date().toLocaleString('de-DE')} • Version {__APP_VERSION__} • Build {__BUILD_DATE__}
             </div>
           </CardContent>
         </Card>
@@ -895,24 +954,6 @@ export default function Dashboard() {
         </DialogContent>
       </Dialog>
 
-      {/* Microsoft Info Dialog */}
-      <Dialog open={showMicrosoftInfo} onOpenChange={setShowMicrosoftInfo}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Microsoft 365 Integration</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <p>Diese Funktion ermöglicht die direkte Integration mit Outlook, Teams und SharePoint.</p>
-            <p className="text-sm text-muted-foreground">
-              Für die Aktivierung wird eine Azure App Registration benötigt. 
-              Bitte kontaktieren Sie den Systemadministrator.
-            </p>
-            <Button onClick={() => setShowMicrosoftInfo(false)} className="w-full">
-              Verstanden
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

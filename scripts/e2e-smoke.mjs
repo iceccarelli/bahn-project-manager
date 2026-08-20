@@ -377,6 +377,50 @@ await check("CSV export produces a file with the expected header", async () => {
   fs.unlinkSync(f);
 });
 
+
+console.log("\n== no invented data ==");
+
+await check("the dashboard contains no placeholder or fabricated content", async () => {
+  await go("/");
+  const body = await page.locator("body").innerText();
+  // Every string below was on the dashboard and was not real: five invented
+  // notifications (two naming stations outside RB Mitte), a hardcoded fallback
+  // deadline, a literal "Unbekannt" reviewer, three "Verfügbar" labels over a
+  // Microsoft 365 integration that had no code behind it, an "API: Verbunden"
+  // badge on a static SPA, and a version that disagreed with package.json.
+  const invented = [
+    "Bad Hersfeld - Nachforderung",
+    "Zustimmung erteilt für Frankfurt Hbf",
+    "Köln Messe",
+    "München Ost",
+    "Neue Excel-Datei hochgeladen",
+    "Unbekannt",
+    "2026-06-15",
+    "Verfügbar",
+    "API: Verbunden",
+    "Version 2.4.1",
+  ];
+  const found = invented.filter((s) => body.includes(s));
+  assert(found.length === 0, `fabricated content is back: ${found.join(", ")}`);
+});
+
+await check("every Schnellaktion navigates somewhere real", async () => {
+  // The previous four wrote an audit entry claiming the work had happened
+  // ("Kritische Fälle eskaliert") and then did nothing at all.
+  const routes = {
+    "Fachspezialistenprüfung anmelden": "/anmeldung",
+    "Änderungshistorie öffnen": "/audit",
+    "BVB-EEA-Prüfungen ansehen": "/bvb-eea",
+  };
+  for (const [label, route] of Object.entries(routes)) {
+    await go("/");
+    await page.getByRole("button", { name: label }).click();
+    await page.waitForTimeout(800);
+    assert(new URL(page.url()).pathname === route,
+      `"${label}" went to ${new URL(page.url()).pathname}, expected ${route}`);
+  }
+});
+
 console.log("\n== summary ==");
 console.log(`${passed} passed, ${failures.length} failed`);
 await browser.close();
