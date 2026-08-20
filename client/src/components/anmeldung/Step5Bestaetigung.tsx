@@ -3,6 +3,12 @@ import { Unterschriftenblatt } from "./Unterschriftenblatt";
 import type { ChecklistDraft } from "@/hooks/useChecklistDraft";
 import { CHECKLIST_BY_KEY } from "@shared/checklist";
 import { formatGerman } from "@shared/date";
+import {
+  bahnhofsmanagementContact,
+  displayName,
+  mailListFor,
+  recipientsFor,
+} from "@shared/contacts";
 import { Printer } from "lucide-react";
 
 function Row({ label, value }: { label: string; value: string }) {
@@ -20,6 +26,15 @@ export function Step5Bestaetigung({ draft }: { draft: ChecklistDraft }) {
   const blocking = Object.entries(stepIssues).flatMap(([step, issues]) =>
     issues.map((i) => ({ step: Number(step), ...i })),
   );
+
+  // Who this actually reaches. The Excel macro never showed this, which is how
+  // the ITK off-by-two survived: the mail went out, and nobody could see that
+  // it went to a Brandschutz specialist instead of the two busiest ITK
+  // reviewers. shared/contacts.ts has the corrected ranges.
+  const openDepartments = reviews.filter((r) => r.status === "offen").map((r) => r.department);
+  const mailCount = mailListFor(openDepartments).length;
+  const unreachable = openDepartments.filter((d) => recipientsFor(d).length === 0);
+  const bmContact = bahnhofsmanagementContact(header.bahnhofsmanagement);
 
   return (
     <div className="space-y-6">
@@ -88,6 +103,53 @@ export function Step5Bestaetigung({ draft }: { draft: ChecklistDraft }) {
                 Zusätzlich benachrichtigt:{" "}
                 {notified.map((k) => CHECKLIST_BY_KEY[k]?.gewerk).join(" · ")}
               </p>
+            )}
+          </section>
+
+          <section>
+            <h3 className="mb-2 text-sm font-black tracking-tight">
+              Benachrichtigungen
+            </h3>
+            {openDepartments.length === 0 ? (
+              <p className="text-2xs text-muted-foreground">
+                Keine Fachprüfung erforderlich — es wird niemand benachrichtigt.
+              </p>
+            ) : (
+              <>
+                <ul className="space-y-1.5">
+                  {openDepartments.map((dept) => {
+                    const people = recipientsFor(dept);
+                    return (
+                      <li key={dept} className="grid grid-cols-[auto_1fr] gap-x-3 text-2xs">
+                        <span className="font-black">{dept}</span>
+                        {people.length > 0 ? (
+                          <span className="text-muted-foreground">
+                            {people.map(displayName).join(", ")}
+                          </span>
+                        ) : (
+                          <span className="font-bold text-primary-strong">
+                            keine Adresse hinterlegt — es wird niemand benachrichtigt
+                          </span>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+                <p className="mt-2 text-2xs text-muted-foreground">
+                  {mailCount} {mailCount === 1 ? "Empfänger" : "Empfänger"} insgesamt
+                  {bmContact ? ` · BM ${bmContact.group}: ${bmContact.name}` : ""}
+                </p>
+                {unreachable.length > 0 && (
+                  // Named rather than swallowed: the Excel macro reported a
+                  // successful send for these too, which is how LST went 52
+                  // reviews without anyone being told.
+                  <p className="mt-2 rounded border border-primary/40 bg-primary/5 px-3 py-2 text-2xs font-bold text-primary-strong">
+                    Für {unreachable.join(", ")} ist in der Hilfsdatei keine
+                    E-Mail-Adresse hinterlegt. Diese Prüfung wird angelegt, aber es
+                    kann niemand benachrichtigt werden.
+                  </p>
+                )}
+              </>
             )}
           </section>
 

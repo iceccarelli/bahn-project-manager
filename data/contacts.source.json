@@ -1,0 +1,428 @@
+[
+ {
+  "row": 2,
+  "group": "Ja",
+  "name": "",
+  "mail": ""
+ },
+ {
+  "row": 3,
+  "group": "Nein",
+  "name": "",
+  "mail": ""
+ },
+ {
+  "row": 5,
+  "group": "Brandschutz",
+  "name": "Patrick Bierbaum",
+  "mail": "patrick.bierbaum@deutschebahn.com"
+ },
+ {
+  "row": 6,
+  "group": "Brandschutz",
+  "name": "Sebastian Fey",
+  "mail": "sebastian.s.fey@deutschebahn.com"
+ },
+ {
+  "row": 7,
+  "group": "Brandschutz",
+  "name": "Mert-Yakup Afteni",
+  "mail": "mert-yakup.afteni@deutschebahn.com"
+ },
+ {
+  "row": 8,
+  "group": "Brandschutz",
+  "name": "Lucas Gorißen",
+  "mail": "Lucas.Gorissen@deutschebahn.com"
+ },
+ {
+  "row": 10,
+  "group": "Informations- und Telekommunikationstechnologien (ITK)",
+  "name": "",
+  "mail": "DB.InfraGO.AG-RB.Mitte.ITKAM@deutschebahn.com"
+ },
+ {
+  "row": 11,
+  "group": "Informations- und Telekommunikationstechnologien (ITK)",
+  "name": "Robert Gabai",
+  "mail": "Robert.Gabai@deutschebahn.com"
+ },
+ {
+  "row": 12,
+  "group": "Informations- und Telekommunikationstechnologien (ITK)",
+  "name": "Vincenzo Grimaldi",
+  "mail": "Vincenzo.V.Ceccarelli-Grimaldi@deutschebahn.com"
+ },
+ {
+  "row": 13,
+  "group": "Informations- und Telekommunikationstechnologien (ITK)",
+  "name": "Emin Er",
+  "mail": "emin.er@deutschebahn.com"
+ },
+ {
+  "row": 14,
+  "group": "Informations- und Telekommunikationstechnologien (ITK)",
+  "name": "Daniel Goldhausen",
+  "mail": "Daniel.Goldhausen@deutschebahn.com"
+ },
+ {
+  "row": 15,
+  "group": "Fachkoordinator Energie",
+  "name": "Florian Lorenz",
+  "mail": "florian.f.lorenz@deutschebahn.com"
+ },
+ {
+  "row": 16,
+  "group": "Fachspezialist Heizung-, Lüftung-, Sanitärtechnik",
+  "name": "Thorben Haberla",
+  "mail": "Thorben.Haberla@deutschebahn.com"
+ },
+ {
+  "row": 17,
+  "group": "Fachkoordinator Gebäudeautomation",
+  "name": "Sascha Weyer",
+  "mail": "sascha.weyer@deutschebahn.com"
+ },
+ {
+  "row": 18,
+  "group": "Elektrotechnik",
+  "name": "Nils Schomber",
+  "mail": "nils.schomber@deutschebahn.com"
+ },
+ {
+  "row": 19,
+  "group": "Elektrotechnik",
+  "name": "Jan Degen",
+  "mail": "jan.degen@deutschebahn.com"
+ },
+ {
+  "row": 20,
+  "group": "Elektrotechnik",
+  "name": "Dirk Ries",
+  "mail": "dirk.ries@deutschebahn.com"
+ },
+ {
+  "row": 21,
+  "group": "Elektrotechnik",
+  "name": "Ali Aydogdu",
+  "mail": "ali.aydogdu@deutschebahn.com"
+ },
+ {
+  "row": 22,
+  "group": "Fördertechnik",
+  "name": "Stephan Hartung",
+  "mail": "stephan.hartung@deutschebahn.com"
+ },
+ {
+  "row": 23,
+  "group": "Umweltmanagement",
+  "name": "Christian Kohlwey",
+  "mail": "christian.kohlwey@deutschebahn.com"
+ },
+ {
+  "row": 24,
+  "group": "Umweltmanagement",
+  "name": "Julia Hebbrecht",
+  "mail": "Julia.hebbrecht@deutschebahn.com"
+ },
+ {
+  "row": 25,
+  "group": "Fachkoordinator Heizung-, Lüftung-, Sanitärtechnik",
+  "name": "Benjamin Frischbier",
+  "mail": "benjamin.frischbier@deutschebahn.com"
+ },
+ {
+  "row": 26,
+  "group": "Fachspezialist Gebäudeautomation",
+  "name": "Johannes Kröcker",
+  "mail": "johannes.kroecker@deutschebahn.com"
+ },
+ {
+  "row": 27,
+  "group": "",
+  "name": "Erforderlich",
+  "mail": ""
+ },
+ {
+  "row": 28,
+  "group": "",
+  "name": "Bereits vorhanden",
+  "mail": ""
+ },
+ {
+  "row": 29,
+  "group": "",
+  "name": "Mieterbaukoordination",
+  "mail": ""
+ },
+ {
+  "row": 30,
+  "group": "",
+  "name": "Bitte auswählen",
+  "mail": ""
+ },
+ {
+  "row": 32,
+  "group": "",
+  "name": "Erforderlich",
+  "mail": ""
+ },
+ {
+  "row": 33,
+  "group": "",
+  "name": "Bereits vorhanden",
+  "mail": ""
+ },
+ {
+  "row": 34,
+  "group": "",
+  "name": "Bitte auswählen",
+  "mail": ""
+ },
+ {
+  "row": 35,
+  "group": "",
+  "name": "Mieterbaukoordination",
+  "mail": ""
+ },
+ {
+  "row": 38,
+  "group": "FAA-Mail in",
+  "name": "",
+  "mail": "FAA-DBInfraGO.RBMitte@deutschebahn.com"
+ },
+ {
+  "row": 39,
+  "group": "FAA kaufm. PM",
+  "name": "",
+  "mail": "kfm-PoM-DBInfraGO-RBMitte@deutschebahn.com"
+ },
+ {
+  "row": 40,
+  "group": "TBQ",
+  "name": "Masoud Vafaei",
+  "mail": "masoud.vafaei@deutschebahn.com"
+ },
+ {
+  "row": 41,
+  "group": "TBQ",
+  "name": "Sarah Dauth",
+  "mail": "sarah.dauth@deutschebahn.com"
+ },
+ {
+  "row": 42,
+  "group": "TBQ",
+  "name": "Torben-Leif Glandorf",
+  "mail": "torben-leif.glandorf@deutschebahn.com"
+ },
+ {
+  "row": 43,
+  "group": "TBQ",
+  "name": "Michel Bierbrauer",
+  "mail": "michel.bierbrauer@deutschebahn.com"
+ },
+ {
+  "row": 44,
+  "group": "TBQ",
+  "name": "Venuste Kubwimana",
+  "mail": "venuste.kubwimana@deutschebahn.com"
+ },
+ {
+  "row": 45,
+  "group": "TBQ",
+  "name": "Patrick Kalisa",
+  "mail": "patrick.kalisa@deutschebahn.com"
+ },
+ {
+  "row": 47,
+  "group": "Umweltmanagement",
+  "name": "Helena Burkhardt",
+  "mail": "Helena.Burkhardt@deutschebahn.com"
+ },
+ {
+  "row": 49,
+  "group": "BM",
+  "name": "",
+  "mail": ""
+ },
+ {
+  "row": 50,
+  "group": "Darmstadt",
+  "name": "Benjamin Schmidt",
+  "mail": "benjamin.schmidt@deutschebahn.com"
+ },
+ {
+  "row": 51,
+  "group": "Frankfurt",
+  "name": "Melanie Kühner",
+  "mail": "melanie.kuehner@deutschebahn.com"
+ },
+ {
+  "row": 52,
+  "group": "Gießen",
+  "name": "Carsten Hoepfner",
+  "mail": "carsten.hoepfner@deutschebahn.com"
+ },
+ {
+  "row": 53,
+  "group": "Kaiserslautern",
+  "name": "Kathrin Behsler",
+  "mail": "kathrin.behsler@deutschebahn.com"
+ },
+ {
+  "row": 54,
+  "group": "Kassel",
+  "name": "Michaela Andresen",
+  "mail": "michaela.andresen@deutschebahn.com"
+ },
+ {
+  "row": 55,
+  "group": "Koblenz",
+  "name": "Britta Remahne",
+  "mail": "britta.remahne@deutschebahn.com"
+ },
+ {
+  "row": 56,
+  "group": "Mainz",
+  "name": "Andre Schulte",
+  "mail": "Andre.An.Schulte@deutschebahn.com"
+ },
+ {
+  "row": 57,
+  "group": "Saarbrücken",
+  "name": "Jennifer Sauer",
+  "mail": "jennifer.sauer@deutschebahn.com"
+ },
+ {
+  "row": 58,
+  "group": "übergreifend",
+  "name": "",
+  "mail": ""
+ },
+ {
+  "row": 60,
+  "group": "HuBs",
+  "name": "Luigi La Rocca",
+  "mail": "luigi.la-rocca@deutschebahn.com"
+ },
+ {
+  "row": 61,
+  "group": "ITK",
+  "name": "Klaus Hock",
+  "mail": "klaus.hock@deutschebahn.com"
+ },
+ {
+  "row": 62,
+  "group": "ITK",
+  "name": "Mirwais Khondel",
+  "mail": "Mirwais.Khondel@deutschebahn.com"
+ },
+ {
+  "row": 63,
+  "group": "BIM",
+  "name": "Beata Rabkin",
+  "mail": "beata.rabkin@deutschebahn.com"
+ },
+ {
+  "row": 64,
+  "group": "BIM",
+  "name": "Izzet Köksal",
+  "mail": "izzet.i.koeksal@deutschebahn.com"
+ },
+ {
+  "row": 65,
+  "group": "BIM",
+  "name": "Janis Schauß",
+  "mail": "janis.schauss@deutschebahn.com"
+ },
+ {
+  "row": 66,
+  "group": "BIM",
+  "name": "Duc Minh Nguyen",
+  "mail": "duc-minh.d.nguyen@deutschebahn.com"
+ },
+ {
+  "row": 67,
+  "group": "BIM",
+  "name": "",
+  "mail": ""
+ },
+ {
+  "row": 69,
+  "group": "HKLS",
+  "name": "",
+  "mail": ""
+ },
+ {
+  "row": 71,
+  "group": "Vermessung",
+  "name": "Eda Pourabbas",
+  "mail": "Eda-Ahu.Pourabbas@deutschebahn.com"
+ },
+ {
+  "row": 72,
+  "group": "Vermessung",
+  "name": "",
+  "mail": ""
+ },
+ {
+  "row": 74,
+  "group": "LST",
+  "name": "",
+  "mail": ""
+ },
+ {
+  "row": 75,
+  "group": "LST",
+  "name": "",
+  "mail": ""
+ },
+ {
+  "row": 77,
+  "group": "Baubetriebsplanung",
+  "name": "Gundolf Tielmann",
+  "mail": "gundolf.tielmann@deutschebahn.com"
+ },
+ {
+  "row": 78,
+  "group": "Baubetriebsplanung",
+  "name": "Kevin Kliwer",
+  "mail": "kevin.kliwer@deutschebahn.com"
+ },
+ {
+  "row": 79,
+  "group": "Baubetriebsplanung",
+  "name": "Morsal Rashidi",
+  "mail": "morsal.rashidi@deutschebahn.com"
+ },
+ {
+  "row": 80,
+  "group": "Baubetriebsplanung",
+  "name": "",
+  "mail": ""
+ },
+ {
+  "row": 82,
+  "group": "Baubetriebstechnologe",
+  "name": "",
+  "mail": ""
+ },
+ {
+  "row": 83,
+  "group": "Baubetriebstechnologe",
+  "name": "Dimitri Widjajanto",
+  "mail": "Dimitri.Widjajanto@deutschebahn.com"
+ },
+ {
+  "row": 84,
+  "group": "Baubetriebstechnologe",
+  "name": "Markus Fuchs",
+  "mail": "Markus.Fuchs@deutschebahn.com"
+ },
+ {
+  "row": 85,
+  "group": "Baubetriebstechnologe",
+  "name": "",
+  "mail": ""
+ }
+]

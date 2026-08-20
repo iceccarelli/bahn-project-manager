@@ -7,3 +7,9 @@
 declare const __APP_VERSION__: string;
 /** ISO date (YYYY-MM-DD) the production bundle was built. */
 declare const __BUILD_DATE__: string;
+
+/** TTF imported with Vite's `?url` suffix, for PDF font embedding. */
+declare module "*.ttf?url" {
+  const src: string;
+  export default src;
+}
