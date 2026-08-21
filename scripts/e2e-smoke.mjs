@@ -98,7 +98,25 @@ const page = await (await browser.newContext({ viewport: { width: 1440, height: 
 
 let consoleErrors = [];
 page.on("pageerror", (e) => consoleErrors.push(`PAGEERROR ${String(e).slice(0, 160)}`));
-page.on("console", (m) => { if (m.type() === "error") consoleErrors.push(`console ${m.text().slice(0, 160)}`); });
+/**
+ * A failed OpenStreetMap tile is an environment fact, not an app defect.
+ *
+ * Chromium reports every blocked or unreachable subresource as a console
+ * error, so in a sandbox or on a CI runner without egress the map view alone
+ * emits dozens of them and would fail whichever assertion happened to open it.
+ * Only requests to a host this bundle does not serve are ignored — an error
+ * from the app's own code or its own assets still fails the suite.
+ */
+const EXTERNAL_RESOURCE_ERROR =
+  /Failed to load resource|net::ERR_(TUNNEL_CONNECTION_FAILED|NAME_NOT_RESOLVED|INTERNET_DISCONNECTED|CONNECTION_(REFUSED|TIMED_OUT)|BLOCKED_BY_CLIENT)/;
+page.on("console", (m) => {
+  if (m.type() !== "error") return;
+  const text = m.text();
+  const url = m.location?.()?.url ?? "";
+  const isExternal = url !== "" && !url.startsWith(`http://localhost:${PORT}`);
+  if (isExternal && EXTERNAL_RESOURCE_ERROR.test(text)) return;
+  consoleErrors.push(`console ${text.slice(0, 160)}`);
+});
 
 const U = (r) => `http://localhost:${PORT}${r}`;
 const go = async (r) => { await page.goto(U(r), { waitUntil: "networkidle" }); await page.waitForTimeout(800); };
@@ -419,6 +437,151 @@ await check("every Schnellaktion navigates somewhere real", async () => {
     assert(new URL(page.url()).pathname === route,
       `"${label}" went to ${new URL(page.url()).pathname}, expected ${route}`);
   }
+});
+
+console.log("\n== map -> cards -> details ==");
+
+/**
+ * The path the CEO view actually takes: a marker on the map, the station's
+ * cards, one project's details, and a contact route out of it.
+ *
+ * Before this existed, `handleMapProjectSelect` was `setViewMode("table")`
+ * plus a toast claiming the project was "in der Tabelle angezeigt" — nothing
+ * was selected, filtered or scrolled to — and "Details anzeigen" was the same
+ * `setViewMode("table")` with no details behind it. Both passed every check in
+ * this file, because no check followed the flow.
+ */
+let stationName = null;
+
+await check("a map marker opens a popup that offers the whole station", async () => {
+  await go("/projects");
+  await page.click('[aria-label="Kartenansicht"]');
+  await page.waitForSelector(".leaflet-container", { timeout: 15000 });
+  await page.waitForTimeout(2500);
+  const markers = await page.$$(".db-dot-marker");
+  assert(markers.length > 0, "no markers rendered");
+  // force: the markers overlap heavily at the initial zoom, so Playwright's
+  // actionability check sees a neighbour on top of the one we mean.
+  await markers[markers.length - 1].click({ force: true });
+  await page.waitForTimeout(700);
+  assert(await page.$("[data-station-all]"), "popup has no station-level action");
+  const projectButtons = await page.$$("[data-pid]");
+  assert(projectButtons.length > 0, "popup lists no projects");
+});
+
+await check("clicking a project in the popup lands on the filtered card view", async () => {
+  const projectButtons = await page.$$("[data-pid]");
+  await projectButtons[0].click({ force: true });
+  await page.waitForTimeout(1200);
+
+  const pressed = await page.getAttribute('[aria-label="Kachelansicht"]', "aria-pressed");
+  assert(pressed === "true", `expected the card view, aria-pressed was ${pressed}`);
+
+  stationName = await page.evaluate(() => {
+    const el = [...document.querySelectorAll("span")].find(
+      (e) => e.children.length === 0 && /^Station: /.test(e.textContent || ""),
+    );
+    return el ? el.textContent.replace(/^Station:\s*/, "") : null;
+  });
+  assert(stationName, "no station filter chip after arriving from the map");
+
+  // every rendered card belongs to that station
+  const stations = await page.$$eval("[data-project-card]", (cards) =>
+    cards.map((c) => c.querySelector("h3, [data-slot='card-title']")?.textContent?.trim() ?? ""),
+  );
+  assert(stations.length > 0, "card view rendered no cards");
+  // Guard the guard: if the title selector stopped matching, every entry would
+  // be "" and the leak check below would pass while testing nothing.
+  assert(
+    stations.every((s) => s.length > 0),
+    "could not read the station off every card — the leak check would be vacuous",
+  );
+  const foreign = stations.filter((s) => s !== stationName);
+  assert(foreign.length === 0, `cards from other stations leaked through: ${foreign.join(", ")}`);
+});
+
+await check("the detail dialog opens with every Fachprüfung", async () => {
+  const dialog = await page.$('[role="dialog"]');
+  assert(dialog, "no dialog after clicking a project on the map");
+  const rows = await page.$$eval('[role="dialog"] tbody tr', (r) => r.length);
+  assert(rows === 14, `dialog listed ${rows} Fachprüfungen, expected all 14`);
+});
+
+await check("contact links are real addresses, never constructed ones", async () => {
+  const links = await page.evaluate(() => {
+    const d = document.querySelector('[role="dialog"]');
+    return {
+      mail: [...d.querySelectorAll('a[href^="mailto:"]')].map((a) => a.getAttribute("href")),
+      teams: [...d.querySelectorAll('a[href^="https://teams.microsoft.com"]')].map((a) =>
+        a.getAttribute("href"),
+      ),
+      tel: [...d.querySelectorAll('a[href^="tel:"]')].length,
+    };
+  });
+  assert(links.mail.length > 0, "dialog offered no mail route at all");
+  assert(links.teams.length > 0, "dialog offered no Teams route at all");
+  // No source carries a telephone number, so a tel: link could only be invented.
+  assert(links.tel === 0, `dialog rendered ${links.tel} telephone links from data that has none`);
+
+  // Every address must exist in Hilfsdatei. Anything else is constructed.
+  const known = new Set(
+    JSON.parse(fs.readFileSync("data/contacts.source.json", "utf8"))
+      .map((c) => (c.mail || "").toLowerCase())
+      .filter(Boolean),
+  );
+  const addresses = links.mail.map((h) =>
+    decodeURIComponent(h.slice("mailto:".length).split("?")[0]).toLowerCase(),
+  );
+  const invented = [...new Set(addresses)].filter((a) => !known.has(a));
+  assert(invented.length === 0, `addresses not in Hilfsdatei: ${invented.join(", ")}`);
+
+  // The Teams link must target the same person the mail link writes to.
+  const teamsUsers = links.teams.map((h) => new URL(h).searchParams.get("users").toLowerCase());
+  const strayTeams = [...new Set(teamsUsers)].filter((u) => !known.has(u));
+  assert(strayTeams.length === 0, `Teams links to unknown addresses: ${strayTeams.join(", ")}`);
+});
+
+await check("clearing the station filter restores the full result set", async () => {
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(400);
+  const before = await page.$$eval("[data-project-card]", (c) => c.length);
+  await page.getByRole("button", { name: /Filter .* entfernen/ }).first().click();
+  await page.waitForTimeout(600);
+  const after = await page.$$eval("[data-project-card]", (c) => c.length);
+  assert(after > before, `clearing the chip did not widen the set (${before} -> ${after})`);
+  const chipGone = await page.evaluate(
+    () =>
+      ![...document.querySelectorAll("span")].some(
+        (e) => e.children.length === 0 && /^Station: /.test(e.textContent || ""),
+      ),
+  );
+  assert(chipGone, "the station chip survived being dismissed");
+});
+
+await check("\"Details anzeigen\" on a card opens that project's dialog", async () => {
+  const card = await page.$("[data-project-card]");
+  const id = await card.getAttribute("data-project-card");
+  const nummer = await page.evaluate((pid) => {
+    const c = document.querySelector(`[data-project-card="${pid}"]`);
+    return c?.querySelector(".font-mono")?.textContent?.trim() ?? null;
+  }, id);
+  await page.evaluate((pid) => {
+    document
+      .querySelector(`[data-project-card="${pid}"]`)
+      .querySelector('button[aria-label^="Details"]')
+      .click();
+  }, id);
+  await page.waitForTimeout(700);
+  const dialog = await page.$('[role="dialog"]');
+  assert(dialog, "\"Details anzeigen\" opened nothing");
+  const shown = await page.evaluate(
+    () => document.querySelector('[role="dialog"] .font-mono')?.textContent?.trim() ?? null,
+  );
+  assert(
+    !nummer || nummer === "N/A" || shown === nummer,
+    `dialog showed ${shown} for the card that reads ${nummer}`,
+  );
+  await page.keyboard.press("Escape");
 });
 
 console.log("\n== summary ==");

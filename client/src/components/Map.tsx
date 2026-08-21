@@ -51,6 +51,12 @@ function workStateOf(p: Project): {
   return { open, inProgress, blocked, oldestOpen, overdue };
 }
 
+/** What the page needs to filter to one station, without re-deriving grouping. */
+export interface StationSelection {
+  name: string;
+  projectIds: number[];
+}
+
 interface StationGroup {
   key: string;
   name: string;
@@ -109,7 +115,17 @@ interface MapViewProps {
   initialZoom?: number;
   className?: string;
   onBoundsChange?: (bounds: { minLat: number; maxLat: number; minLng: number; maxLng: number }) => void;
-  onProjectSelect?: (projectId: number) => void;
+  /**
+   * A project inside a station's popup was clicked.
+   *
+   * The station group comes with it because the page cannot re-derive it: the
+   * grouping lives in buildStationGeo and folds ambiguous and region-fallback
+   * matches together. Passing it means "show me everything at this station"
+   * filters on exact ids rather than on a substring of the station name.
+   */
+  onProjectSelect?: (projectId: number, station: StationSelection) => void;
+  /** The popup's station header was clicked — show the whole group. */
+  onStationSelect?: (station: StationSelection) => void;
 }
 
 /**
@@ -183,7 +199,7 @@ function popupHtml(group: StationGroup): string {
   return (
     `<div style="min-width:240px;max-width:300px;"><div style="font:800 14px system-ui;line-height:1.2;">${esc(group.name)}</div><div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;font-weight:800;color:${group.isPrecise ? "#888" : "#b45309"};margin-top:2px;">${group.projects.length} ${group.projects.length === 1 ? "Projekt" : "Projekte"}${group.isPrecise ? "" : ` · ${esc(style.label)}`}${group.ambiguous ? " · mehrdeutig" : ""}</div>${group.bm ? `<div style="font-size:9px;color:#888;margin-top:1px;">BM ${esc(group.bm)}</div>` : ""}${mix.length > 1
       ? `<div style="font-size:9px;color:#888;margin-top:1px;">${mix.join(" · ")}</div>`
-      : ""}<div style="max-height:240px;overflow-y:auto;margin-top:8px;border-top:1px solid #eee;padding-top:6px;">${rows}${more}</div></div>`
+      : ""}<button data-station-all="1" style="display:flex;width:100%;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;border:1px solid ${DB_RED_RING};background:${DB_RED_SUBTLE};color:${DB_RED};border-radius:10px;padding:8px 10px;cursor:pointer;font:800 11px system-ui;min-height:44px;">Alle ${group.projects.length} ${group.projects.length === 1 ? "Projekt" : "Projekte"} als Karten anzeigen<span aria-hidden="true">&rarr;</span></button><div style="max-height:240px;overflow-y:auto;margin-top:8px;border-top:1px solid #eee;padding-top:6px;">${rows}${more}</div></div>`
   );
 }
 
@@ -194,6 +210,7 @@ export const MapView: React.FC<MapViewProps> = ({
   className = "h-full w-full",
   onBoundsChange,
   onProjectSelect,
+  onStationSelect,
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -308,9 +325,11 @@ export const MapView: React.FC<MapViewProps> = ({
   // latest callbacks in refs so the init effect can stay mount-only
   const onBoundsRef = useRef(onBoundsChange);
   const onSelectRef = useRef(onProjectSelect);
+  const onStationSelectRef = useRef(onStationSelect);
   const groupsRef = useRef(groups);
   onBoundsRef.current = onBoundsChange;
   onSelectRef.current = onProjectSelect;
+  onStationSelectRef.current = onStationSelect;
   groupsRef.current = groups;
 
   // ---- create the map exactly once per mount, and tear it down cleanly ----
@@ -358,18 +377,11 @@ export const MapView: React.FC<MapViewProps> = ({
     map.on("moveend", emitBounds);
     map.on("zoomend", emitBounds);
 
-    // delegate clicks inside popups to onProjectSelect
-    map.on("popupopen", (e: L.PopupEvent) => {
-      const root = (e.popup as L.Popup & { getElement?: () => HTMLElement | undefined })
-        .getElement?.();
-      if (!root) return;
-      root.querySelectorAll<HTMLElement>("[data-pid]").forEach((btn) => {
-        btn.onclick = () => {
-          const id = Number(btn.getAttribute("data-pid"));
-          if (!Number.isNaN(id)) onSelectRef.current?.(id);
-        };
-      });
-    });
+    // Popup click delegation moved onto each marker (see the draw effect), so
+    // the handler closes over the station group it belongs to. A map-level
+    // listener had no way to know which group's popup had opened, which is why
+    // clicking a project could only ever pass an id and the page could not
+    // filter to the rest of the station.
 
     // size correctly once layout settles
     setTimeout(() => map.invalidateSize(), 0);
@@ -411,6 +423,23 @@ export const MapView: React.FC<MapViewProps> = ({
         marker.on("click", () =>
           map.flyTo([g.lat, g.lng], Math.max(map.getZoom(), 13), { duration: 0.6 }),
         );
+        marker.on("popupopen", (e: L.PopupEvent) => {
+          const root = (e.popup as L.Popup & { getElement?: () => HTMLElement | undefined })
+            .getElement?.();
+          if (!root) return;
+          const selection: StationSelection = {
+            name: g.name,
+            projectIds: g.projects.map((p) => p.id),
+          };
+          const all = root.querySelector<HTMLElement>("[data-station-all]");
+          if (all) all.onclick = () => onStationSelectRef.current?.(selection);
+          root.querySelectorAll<HTMLElement>("[data-pid]").forEach((btn) => {
+            btn.onclick = () => {
+              const id = Number(btn.getAttribute("data-pid"));
+              if (!Number.isNaN(id)) onSelectRef.current?.(id, selection);
+            };
+          });
+        });
         layer.addLayer(marker);
       };
       if (reduceMotion || step === 0) add();

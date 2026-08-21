@@ -11,12 +11,13 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Download, Table, LayoutGrid, MapPin, Filter, X, ArrowUpDown, ExternalLink, MessageSquare, Search, Loader2 } from "lucide-react";
+import { Plus, Download, Table, LayoutGrid, MapPin, Filter, X, ArrowUpDown, ExternalLink, MessageSquare, Search, Loader2, Info } from "lucide-react";
 import { DEPARTMENTS, REVIEW_STATUSES } from "@shared/types";
 import { deriveProjectMetrics, percent } from "@shared/project-metrics";
 import { statusBadgeClass } from "@shared/status-appearance";
 import { toast } from "sonner";
-import { MapView } from "@/components/Map";
+import { MapView, type StationSelection } from "@/components/Map";
+import { ProjectDetailDialog } from "@/components/ProjectDetailDialog";
 // DB Corporate Status Colors (perfect harmony with Dashboard.tsx)
 
 function StatusBadge({ status }: { status: string | null }) {
@@ -82,6 +83,40 @@ function InlineEditCell({
   );
 }
 
+/**
+ * A removable filter chip.
+ *
+ * The dismiss control is a <button>, not an <X> with an onClick. The previous
+ * chips rendered the icon directly with a click handler, so a keyboard user
+ * could apply a filter from the panel and then had no way to remove it.
+ */
+function FilterChip({
+  label,
+  onClear,
+  emphasis = false,
+}: {
+  label: string;
+  onClear: () => void;
+  emphasis?: boolean;
+}) {
+  return (
+    <Badge
+      variant={emphasis ? "default" : "secondary"}
+      className="gap-1 pr-1 text-2xs font-bold"
+    >
+      <span className="max-w-[16rem] truncate">{label}</span>
+      <button
+        type="button"
+        onClick={onClear}
+        aria-label={`Filter „${label}" entfernen`}
+        className="rounded-full p-0.5 transition-colors hover:bg-black/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:hover:bg-white/20"
+      >
+        <X className="h-3 w-3" aria-hidden="true" />
+      </button>
+    </Badge>
+  );
+}
+
 interface SortHeaderProps {
   column: string;
   label: string;
@@ -132,6 +167,12 @@ export default function Projects() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [, setLocation] = useLocation();
   const [viewMode, setViewMode] = useState<"table" | "cards" | "map">("table");
+  /** Set by the map; narrows the card view to one station's exact project ids. */
+  const [stationFocus, setStationFocus] = useState<StationSelection | null>(null);
+  /** The card to scroll to and ring after arriving from the map. */
+  const [focusProjectId, setFocusProjectId] = useState<number | null>(null);
+  /** Which project the detail dialog is showing, if any. */
+  const [detailProjectId, setDetailProjectId] = useState<number | null>(null);
 
   const { data, isLoading, applyEdit, applyReviewEdit } = useProjects({
     search: search || undefined,
@@ -230,11 +271,97 @@ export default function Projects() {
     "Baubetriebstechnologie", "Baubetriebsplanung"
   ];
 
-  // Map integration callback
-  const handleMapProjectSelect = (projectId: number) => {
-    setViewMode("table");
-    toast.info(`Projekt #${projectId} in der Tabelle angezeigt`);
-  };
+  /**
+   * Map -> cards.
+   *
+   * This used to be `setViewMode("table")` plus a toast claiming the project
+   * was "in der Tabelle angezeigt" — nothing was selected, filtered or
+   * scrolled to, so the toast was the only evidence anything had happened.
+   *
+   * Now a marker's project switches to the card view, narrows it to that
+   * station's exact project ids (the map passes them, so it is an id match and
+   * not a substring of the station name), scrolls the card into view and opens
+   * its detail dialog.
+   */
+  const handleMapProjectSelect = useCallback(
+    (projectId: number, station: StationSelection) => {
+      setStationFocus(station);
+      setViewMode("cards");
+      setDetailProjectId(projectId);
+      setFocusProjectId(projectId);
+    },
+    [],
+  );
+
+  /** The popup's "alle N Projekte" action — same filter, no dialog. */
+  const handleStationSelect = useCallback((station: StationSelection) => {
+    setStationFocus(station);
+    setViewMode("cards");
+    setFocusProjectId(null);
+    setDetailProjectId(null);
+  }, []);
+
+  /**
+   * "Alle Projekte dieser Station" from inside the dialog.
+   *
+   * Reached without a map group, so it falls back to matching the station name
+   * across every loaded project — the same set the map would have grouped,
+   * derived from the data rather than from the map's geometry.
+   */
+  const handleShowStationByName = useCallback(
+    (stationName: string) => {
+      const ids = (allData?.projects ?? [])
+        .filter((p: Project) => (p.station ?? "").trim() === stationName.trim())
+        .map((p: Project) => p.id);
+      setStationFocus({ name: stationName, projectIds: ids });
+      setViewMode("cards");
+      setFocusProjectId(null);
+    },
+    [allData],
+  );
+
+  const clearStationFocus = useCallback(() => {
+    setStationFocus(null);
+    setFocusProjectId(null);
+  }, []);
+
+  /**
+   * The cards actually rendered.
+   *
+   * Station focus is an id filter layered on top of whatever the search and
+   * the filter panel already produced, so clearing it returns to the previous
+   * result rather than to everything.
+   */
+  const visibleProjects = useMemo(() => {
+    const list: Project[] = data?.projects ?? [];
+    if (!stationFocus) return list;
+    const ids = new Set(stationFocus.projectIds);
+    return list.filter((p) => ids.has(p.id));
+  }, [data, stationFocus]);
+
+  const detailProject = useMemo(
+    () =>
+      detailProjectId == null
+        ? null
+        : ((allData?.projects ?? []).find((p: Project) => p.id === detailProjectId) ?? null),
+    [detailProjectId, allData],
+  );
+
+  // Scroll the card the map pointed at into view once it has rendered, and
+  // leave the ring on it long enough to be seen without it becoming permanent.
+  //
+  // visibleProjects is a deliberate re-run trigger, not a read value: on the
+  // first pass the card may not exist yet (the query can still be resolving
+  // when the map hands over), and querySelector would find nothing. Re-running
+  // when the rendered set changes is what makes the scroll land.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: see above
+  useEffect(() => {
+    if (focusProjectId == null || viewMode !== "cards") return;
+    const el = document.querySelector(`[data-project-card="${focusProjectId}"]`);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+    const t = setTimeout(() => setFocusProjectId(null), 2600);
+    return () => clearTimeout(t);
+  }, [focusProjectId, viewMode, visibleProjects]);
 
   return (
     <div className="space-y-8 p-6 bg-background min-h-screen">
@@ -487,16 +614,44 @@ export default function Projects() {
         </Card>
       )}
 
-      {/* Results count */}
+      {/*
+        Results count and active filters.
+
+        Two fixes here. The count read `data.total` unconditionally, which
+        would have said "1.298 Projekte gefunden" above twelve rendered cards
+        as soon as a station focus was active — the card view now reports what
+        it is actually showing. And each chip's dismiss control was a bare
+        <X> SVG with an onClick: not focusable, not in the tab order, no role,
+        so five filters could be applied by keyboard and none removed.
+      */}
       {data && data.total > 0 && (
-        <div className="text-sm text-muted-foreground">
-          <span className="font-semibold text-foreground">{data.total.toLocaleString("de-DE")}</span> Projekte gefunden
-          {search && <span className="ml-2">für &quot;{search}&quot;</span>}
-          {region && <Badge variant="secondary" className="ml-2 text-2xs">{region} <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => setRegion("")} /></Badge>}
-          {projektleiter && <Badge variant="secondary" className="ml-2 text-2xs">{projektleiter} <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => setProjektleiter("")} /></Badge>}
-          {pruefer && <Badge variant="secondary" className="ml-2 text-2xs">{pruefer} <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => setPruefer("")} /></Badge>}
-          {status && <Badge variant="secondary" className="ml-2 text-2xs">{status} <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => setStatus("")} /></Badge>}
-          {department && <Badge variant="secondary" className="ml-2 text-2xs">{department} <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => setDepartment("")} /></Badge>}
+        <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+          <span>
+            <span className="font-semibold text-foreground">
+              {(viewMode === "cards" ? visibleProjects.length : data.total).toLocaleString("de-DE")}
+            </span>{" "}
+            {(viewMode === "cards" ? visibleProjects.length : data.total) === 1
+              ? "Projekt"
+              : "Projekte"}{" "}
+            gefunden
+            {stationFocus && viewMode === "cards" && (
+              <span className="ml-1">von {data.total.toLocaleString("de-DE")} gefilterten</span>
+            )}
+          </span>
+          {search && <span>für &quot;{search}&quot;</span>}
+
+          {stationFocus && (
+            <FilterChip
+              label={`Station: ${stationFocus.name}`}
+              onClear={clearStationFocus}
+              emphasis
+            />
+          )}
+          {region && <FilterChip label={region} onClear={() => setRegion("")} />}
+          {projektleiter && <FilterChip label={projektleiter} onClear={() => setProjektleiter("")} />}
+          {pruefer && <FilterChip label={pruefer} onClear={() => setPruefer("")} />}
+          {status && <FilterChip label={status} onClear={() => setStatus("")} />}
+          {department && <FilterChip label={department} onClear={() => setDepartment("")} />}
         </div>
       )}
 
@@ -613,6 +768,18 @@ export default function Projects() {
                               : "-"}
                           </td>
                           <td className="py-3 px-3 text-center">
+                            {/* Details reachable from the table too, so the
+                                three views expose the same action rather than
+                                the card grid being the only way in. */}
+                            <button
+                              type="button"
+                              aria-label={`Details zu Projekt ${project.projektnummer ?? project.id} anzeigen`}
+                              title="Details anzeigen"
+                              onClick={() => setDetailProjectId(project.id)}
+                              className="mr-1 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                            >
+                              <Info className="h-4 w-4" aria-hidden="true" />
+                            </button>
                             <Dialog>
                               <DialogTrigger asChild>
                                 <button
@@ -727,10 +894,18 @@ export default function Projects() {
             {/* CARDS VIEW */}
             {viewMode === "cards" && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 p-6">
-                {data?.projects.map((project: Project) => {
+                {visibleProjects.map((project: Project) => {
                   const mainReview = project.reviews?.find((r: Review) => r.status && r.status !== "nicht erforderlich") || project.reviews?.[0];
                   return (
-                    <Card key={project.id} className="hover:shadow-xl transition-all group border-2 hover:border-primary/20">
+                    <Card
+                      key={project.id}
+                      data-project-card={project.id}
+                      className={`group border-2 transition-all hover:border-primary/20 hover:shadow-xl ${
+                        focusProjectId === project.id
+                          ? "border-primary ring-2 ring-primary/40 ring-offset-2 ring-offset-background"
+                          : ""
+                      }`}
+                    >
                       <CardHeader className="pb-3 space-y-3">
                         <div className="flex justify-between items-start">
                           <StatusBadge status={mainReview?.status || null} />
@@ -758,11 +933,15 @@ export default function Projects() {
                             <span className="text-xs">{project.bahnhofsmanagement || "-"}</span>
                           </div>
                         </div>
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          className="w-full text-primary-strong hover:bg-primary hover:text-white transition-all"
-                          onClick={() => setViewMode("table")}
+                        {/* Was `onClick={() => setViewMode("table")}` — a button
+                            labelled "Details anzeigen" that showed no details
+                            and did not even select the row it switched to. */}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full text-primary-strong transition-all hover:bg-primary hover:text-white"
+                          aria-label={`Details zu Projekt ${project.projektnummer ?? project.id} anzeigen`}
+                          onClick={() => setDetailProjectId(project.id)}
                         >
                           Details anzeigen
                         </Button>
@@ -797,13 +976,21 @@ export default function Projects() {
                 className="h-[65vh] min-h-[380px] sm:h-[560px] lg:h-[600px] w-full relative"
                 onBoundsChange={setMapBounds}
                 onProjectSelect={handleMapProjectSelect}
+                onStationSelect={handleStationSelect}
               />
             )}
           </>
         )}
       </div>
 
-      {/* New Project Dialog */}
+      <ProjectDetailDialog
+        project={detailProject}
+        open={detailProjectId !== null}
+        onOpenChange={(o) => {
+          if (!o) setDetailProjectId(null);
+        }}
+        onShowStation={handleShowStationByName}
+      />
     </div>
   );
 }

@@ -327,9 +327,15 @@
     min-height: 44px;
   }
 
-  /* icon-only controls are square, so widen them too */
+  /* Icon-only controls are square, so widen them too.
+     `:only-child` alone missed every icon button that also carries a visually
+     hidden label — the dialog close button among them, measured 16x44 on both
+     a phone and an iPad. A button whose only text is screen-reader-only is an
+     icon button by definition, so match that shape as well. */
   button:has(> svg:only-child),
-  [role="button"]:has(> svg:only-child) {
+  [role="button"]:has(> svg:only-child),
+  button:has(> svg):has(> .sr-only),
+  [role="button"]:has(> svg):has(> .sr-only) {
     min-width: 44px;
   }
 
