@@ -1,0 +1,2280 @@
+From fb188859764149d92bf72a88180c097c1c207ec4 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 21 Aug 2026 19:07:30 +0000
+Subject: [PATCH] remove every figure the data does not support, and every
+ control that lied
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+A full audit of all eight pages. Findings are measured against the shipped
+client/public/data.json (1,298 projects, 18,172 review rows, 15,646 of
+them carrying a status), not inspected by eye.
+
+FABRICATED CONTENT REMOVED
+--------------------------
+- Dashboard "+23 seit letzter Woche" under the live project count. There
+  is no time series in the data — no created-at, no snapshot, nothing to
+  difference — so the number could only ever have been typed in.
+- Dashboard "Datenbank: Online" and "Excel Sync: Aktiv", each with a
+  pulsing green dot. Both false for the reason the third indicator in the
+  same card was already removed: production is a static SPA, there is no
+  database connection and no sync process. Nothing polled them.
+- Login "Version 1.0.0" against package.json 2.0.0 — the same drift
+  Footer.tsx documents as fixed by reading the Vite define.
+- Wizard "22 Fragen" in two places; Step 2 renders 19 in Projektanmeldung
+  and 18 in Projektkonfiguration. Now derived from the mode.
+- Step 3's frozen "18.172 Prüfzeilen" in a component with no data in
+  scope, and its promise that mail "folgt in Stufe 4".
+- Step 5's "PDF-Export ... folgt in Stufe 4", printed on a screen that
+  already renders a working "Checkliste als PDF" button.
+
+CHARTS THAT DROPPED ROWS
+------------------------
+- The "Alle Gewerke" pie was five hardcoded buckets matched by exact
+  string: it plotted 14,587 of 15,646 rows and silently dropped 1,059 —
+  Projektkonfig. 474, Prüfung erfolgt 229, Niederschrift erstellt 180 +
+  80 annotated, zurückgestellt 44, Projektkonfiguration 33, prüffähig 19.
+  All 260 sign-offs were missing from a chart headed "alle". It also
+  painted Nachforderung red where status-appearance.ts gives it amber.
+  Now grouped by tone: 8 slices, 8 distinct colours, every row counted,
+  and the tooltip names the statuses folded into each. Per-status slices
+  would have been complete but unreadable — 12 statuses share 8 tones, so
+  four pairs would have had one colour and one legend swatch.
+- Per-Gewerk pies keyed on the raw status, so statusHex fell through to
+  its neutral grey: TBQ's 80 "Niederschrift erstellt (LP05-05-01-F31)"
+  rows rendered in exactly the grey used for 688 "nicht erforderlich" —
+  a completed sign-off painted as irrelevant. Verbatim the regression
+  status-appearance.ts exists to prevent.
+- Recharts matched <Cell> to slice by index while the Pie got a filtered
+  array: every colour would have shifted the moment a bucket hit zero.
+- Truncated lists now say so: "Status pro Gewerke — 8 von 14" and
+  "Regionale Verteilung — Top 5 von 8". They were hiding 6 departments
+  and 288 projects under headings that claimed coverage.
+
+COUNTS THAT WERE WRONG
+----------------------
+- "Projekte mit Verzögerung" compared r.status to two literals, a third
+  definition of "open" on a page that already had two. It missed
+  Nachforderung and prüffähig and every annotated variant: 304 shown,
+  347 real. The date also went through new Date(), which reads a
+  date-only string as UTC midnight and shifts a day west of Greenwich.
+- The reviewer roster was a hardcoded list of 37. It missed 8 of the 44
+  reviewers in the data — 985 rows, Haberla 512, Colak 250, Wagner 83 —
+  so Colak, third by volume, never appeared in "Top Performer" at all.
+  It also listed "Zentrale" twice: a duplicate React key, and its
+  workload double-counted. Derived from the data now.
+- "Niederschrift erstellt (LP05-...)" never counted as completed in the
+  workload panel.
+- The activity timeline keyed on date+project+status, which is not
+  unique: one reviewer signing two Gewerke on the same project on the
+  same day collapsed onto one key and React dropped 1,509 rows. The
+  department is now in the key and on screen.
+- KPI caption read "Abgelehnt / Nachforderung" over a value that counts
+  only abgelehnt and gestoppt — 122 shown, 204 described.
+- Two different numbers were both labelled "Prüfzeilen" on one screen.
+
+CONTROLS THAT LIED
+------------------
+- The header search box, present on every route, searched nothing: no
+  submit, no navigation, no callback out of the component. It now hands
+  the term to /projects?q=, which also makes a result set linkable.
+- The map's onBoundsChange fed four parameters that useProjects declares
+  and never reads, so every pan and zoom re-rendered the page and changed
+  nothing while the count still said 1.298. Wiring removed rather than
+  left looking functional.
+- The notification bell read a localStorage key nothing writes:
+  useNotifications() is imported nowhere, so the store was always empty.
+  It now shows the audit trail — the app's only real event stream.
+- The avatar had cursor-pointer and a hover ring with no menu behind it.
+- 72 of the 138 populated projektLink values are free-text notes, not
+  URLs; three places rendered them as anchors, producing a relative href
+  that opens the app's own 404. One rule now, in shared/project-link.ts.
+
+BVB-EEA AND PSV-ITK
+-------------------
+Never reviewed until now, and 105 near-identical lines each, so every
+defect existed twice. Collapsed into one DepartmentReviewTable:
+- raw status into statusBadgeClass — 3 ITK rows mis-coloured today
+- new Date().toLocaleDateString() — drops the leading zero (627 of 757
+  dated EEA rows disagree with the detail dialog) and shifts a whole day
+  west of Greenwich
+- 8 `any` at an already-typed boundary
+- a sticky thead in a container with no height, so with 814 unpaginated
+  rows the column labels left the screen and never came back
+- one spinner for loading, empty AND failed alike
+- "Verwaltung der EEA-Freigabeerklärungen" on a page with no controls,
+  listing 231 rows that are explicitly not Freigaben
+- "Datum" on a Projektvorstellungen page showing the Prüfdatum: the two
+  differ on 355 of 510 rows
+- three columns with whitespace-nowrap, so a 96-character Station in one
+  row set the width for all 814 — the table measured 2,499px against a
+  1,066px viewport, now 1,268px
+
+ACCESSIBILITY
+-------------
+- The review-status <select> was the only unlabeled control in the app,
+  and it writes.
+- Both suggestion lists used onMouseDown, which never fires from Enter or
+  Space: mouse-only.
+- The sidebar resize handle was a <div> with onMouseDown, unusable by
+  keyboard and by touch. Now role="separator", focusable, arrow keys,
+  pointer events.
+- Nav items exposed no aria-current; the filter panel no aria-expanded;
+  the 14 department toggles no aria-pressed.
+- The fullscreen map had no Escape.
+- Dashboard rendered nothing for loading or failure, so a failed read
+  produced a confident dashboard of zeros.
+
+REGRESSION FIXED FROM MY OWN LAST PATCH
+---------------------------------------
+The coarse-pointer ::after hit area applied to both buttons in the table's
+action cell — two 44px strips 32px apart overlap by 12px and the later
+sibling wins hit-testing, so on touch, tapping the right edge of "Details
+anzeigen" opened the Kommentar dialog. The strip is now scoped to cells
+with a single control; the two-button cell gets real 44px targets in a
+flex row. Forcing width alone made them wrap and tripled the row to 97px.
+
+Seven new e2e assertions pin all of it, including one that reads the pie
+caption and compares it against a row count computed independently from
+data.json.
+
+Gates: 0 type errors · 145 passed / 6 skipped · 72 lint warnings (down
+from 80: -8 noExplicitAny, -4 noForEach) · e2e 35/35 · responsive 61/61 ·
+map chrome 6/6.
+---
+ client/src/components/DashboardLayout.tsx     |  44 +-
+ .../src/components/DepartmentReviewTable.tsx  | 193 ++++++++
+ client/src/components/Header.tsx              |  93 +++-
+ client/src/components/Map.tsx                 |  16 +
+ client/src/components/PresenceIndicator.tsx   |   2 +-
+ client/src/components/ProjectDetailDialog.tsx |  21 +-
+ .../src/components/anmeldung/Step1Projekt.tsx |   2 +-
+ .../components/anmeldung/Step2Checkliste.tsx  |   2 +-
+ .../components/anmeldung/Step3Pruefungen.tsx  |   4 +-
+ .../anmeldung/Step5Bestaetigung.tsx           |   5 +-
+ client/src/hooks/useDataQuery.ts              |  43 +-
+ client/src/index.css                          |  22 +-
+ client/src/pages/Anmeldung.tsx                |  18 +-
+ client/src/pages/BvbEea.tsx                   | 121 +----
+ client/src/pages/Dashboard.tsx                | 414 ++++++++++++++----
+ client/src/pages/Login.tsx                    |   5 +-
+ client/src/pages/NotFound.tsx                 |   2 +-
+ client/src/pages/Projects.tsx                 |  92 +++-
+ client/src/pages/PsvItk.tsx                   | 117 +----
+ scripts/e2e-smoke.mjs                         | 135 +++++-
+ shared/project-link.ts                        |  32 ++
+ 21 files changed, 995 insertions(+), 388 deletions(-)
+ create mode 100644 client/src/components/DepartmentReviewTable.tsx
+ create mode 100644 shared/project-link.ts
+
+diff --git a/client/src/components/DashboardLayout.tsx b/client/src/components/DashboardLayout.tsx
+index 32bc4eb..d89eb58 100644
+--- a/client/src/components/DashboardLayout.tsx
++++ b/client/src/components/DashboardLayout.tsx
+@@ -129,7 +129,8 @@ function DashboardLayoutContent({
+   setSidebarWidth,
+ }: {
+   children: React.ReactNode;
+-  setSidebarWidth: (width: number) => void;
++  /** The real setter, so the keyboard handler can read the current width. */
++  setSidebarWidth: React.Dispatch<React.SetStateAction<number>>;
+ }) {
+   const [location, setLocation] = useLocation();
+   const { state, toggleSidebar } = useSidebar();
+@@ -140,7 +141,9 @@ function DashboardLayoutContent({
+ 
+   useEffect(() => {
+     if (isMobile) return; // No resize on mobile
+-    const handleMouseMove = (e: MouseEvent) => {
++    // pointermove, not mousemove: a touch or pen drag never produced a
++    // mousemove, so the handle was mouse-only on an iPad.
++    const handleMouseMove = (e: PointerEvent) => {
+       if (!isResizing) return;
+       const sidebarLeft = sidebarRef.current?.getBoundingClientRect().left ?? 0;
+       const newWidth = e.clientX - sidebarLeft;
+@@ -152,15 +155,15 @@ function DashboardLayoutContent({
+     const handleMouseUp = () => setIsResizing(false);
+ 
+     if (isResizing) {
+-      document.addEventListener("mousemove", handleMouseMove);
+-      document.addEventListener("mouseup", handleMouseUp);
++      document.addEventListener("pointermove", handleMouseMove);
++      document.addEventListener("pointerup", handleMouseUp);
+       document.body.style.cursor = "col-resize";
+       document.body.style.userSelect = "none";
+     }
+ 
+     return () => {
+-      document.removeEventListener("mousemove", handleMouseMove);
+-      document.removeEventListener("mouseup", handleMouseUp);
++      document.removeEventListener("pointermove", handleMouseMove);
++      document.removeEventListener("pointerup", handleMouseUp);
+       document.body.style.cursor = "";
+       document.body.style.userSelect = "";
+     };
+@@ -209,8 +212,12 @@ function DashboardLayoutContent({
+                   const isActive = location === item.path;
+                   return (
+                     <SidebarMenuItem key={item.path}>
++                      {/* aria-current, because `isActive` only produced a colour and a left
++                          border. Six nav items announced identically and a screen-reader
++                          user had no way to tell which page was open. */}
+                       <SidebarMenuButton
+                         isActive={isActive}
++                        aria-current={isActive ? "page" : undefined}
+                         onClick={() => setLocation(item.path)}
+                         tooltip={item.label}
+                         className={`h-10 transition-all font-normal ${
+@@ -232,9 +239,30 @@ function DashboardLayoutContent({
+           </Sidebar>
+ 
+           {!isCollapsed && (
++            /* A bare <div> with onMouseDown: no role, no tabIndex, no keyboard
++               handler, and mouse events only — so it was unusable both by
++               keyboard and by touch on an iPad. It is a separator, it is
++               focusable, and the arrow keys move it. */
+             <div
+-              className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/20 transition-colors z-50"
+-              onMouseDown={() => setIsResizing(true)}
++              role="separator"
++              aria-orientation="vertical"
++              aria-label="Breite der Seitenleiste anpassen"
++              tabIndex={0}
++              className="absolute top-0 right-0 z-50 h-full w-1 cursor-col-resize transition-colors hover:bg-primary/20 focus-visible:bg-primary/40 focus-visible:outline-none"
++              onPointerDown={(e) => {
++                e.currentTarget.setPointerCapture(e.pointerId);
++                setIsResizing(true);
++              }}
++              onKeyDown={(e) => {
++                const step = e.shiftKey ? 32 : 8;
++                if (e.key === "ArrowLeft") {
++                  e.preventDefault();
++                  setSidebarWidth((w) => Math.max(MIN_WIDTH, w - step));
++                } else if (e.key === "ArrowRight") {
++                  e.preventDefault();
++                  setSidebarWidth((w) => Math.min(MAX_WIDTH, w + step));
++                }
++              }}
+             />
+           )}
+         </div>
+diff --git a/client/src/components/DepartmentReviewTable.tsx b/client/src/components/DepartmentReviewTable.tsx
+new file mode 100644
+index 0000000..cc46f52
+--- /dev/null
++++ b/client/src/components/DepartmentReviewTable.tsx
+@@ -0,0 +1,193 @@
++/**
++ * The one implementation behind /bvb-eea and /psv-itk.
++ *
++ * Those two pages were 105 near-identical lines each, and every defect the
++ * audit found existed twice:
++ *
++ *   - `statusBadgeClass(review.status)` on the RAW status. It looks up
++ *     STATUS_TONE by exact key, so only the 12 canonical values resolve. ITK
++ *     stores 3 rows as "Projektkonfiguration" against 51 as "Projektkonfig." —
++ *     identical meaning, and the 3 rendered in the neutral grey the page uses
++ *     for irrelevant work while the 51 rendered violet.
++ *   - `new Date(d).toLocaleDateString("de-DE")`. Two bugs: it drops the leading
++ *     zero (19.1.2021 here, 19.01.2021 in the detail dialog — the same review's
++ *     date spelled two ways in one app, differing on 627 of 757 dated EEA rows),
++ *     and it parses a date-only string as UTC midnight, so west of Greenwich
++ *     every one of those 757 rows renders a day early.
++ *   - `(p: any)` and `(r: any)` at a boundary that was already typed, deleting
++ *     the guarantee rather than adding one.
++ *   - A `sticky top-0` thead inside a container with `overflow-x: auto` and no
++ *     height. overflow-y then computes to auto, so the thead is bound to a
++ *     scrollport that never scrolls: with 814 rows unpaginated, the column
++ *     labels leave the screen and never come back.
++ *   - `isLoading || !data` rendered the spinner. useAllData returned null for
++ *     loading, empty AND failed alike, so a failed read span "Lade …" forever.
++ *   - Counts without a German thousands separator, on pages whose parent set
++ *     already numbers 1,298.
++ */
++import { Card, CardContent } from "@/components/ui/card";
++import { Loader2, AlertTriangle } from "lucide-react";
++import { useAllData, type Project, type Review } from "@/hooks/useDataQuery";
++import { statusBadgeClass } from "@shared/status-appearance";
++import { normalizeReviewStatus } from "@shared/review-status";
++import { formatGerman } from "@shared/date";
++import type { Department } from "@shared/types";
++
++interface DepartmentReviewTableProps {
++  department: Department;
++  /** Page heading. */
++  title: string;
++  /** What the list actually contains — not what a reader might hope it does. */
++  subtitle: string;
++  /** Column header for the department's reviewer. */
++  prueferLabel: string;
++}
++
++const TH = "whitespace-nowrap border-b px-3 py-3 text-left font-semibold text-muted-foreground";
++
++export function DepartmentReviewTable({
++  department,
++  title,
++  subtitle,
++  prueferLabel,
++}: DepartmentReviewTableProps) {
++  const { data, isLoading, isError } = useAllData();
++
++  if (isLoading) {
++    return (
++      <div className="flex min-h-[60vh] items-center justify-center bg-background">
++        <div className="flex flex-col items-center gap-4">
++          <Loader2 className="h-12 w-12 animate-spin text-primary-strong" aria-hidden="true" />
++          <p className="text-lg font-medium text-muted-foreground">Lade {title}…</p>
++        </div>
++      </div>
++    );
++  }
++
++  if (isError || !data) {
++    return (
++      <div className="flex min-h-[60vh] items-center justify-center bg-background p-6">
++        <Card className="max-w-md border-2 border-destructive/30">
++          <CardContent className="flex flex-col items-center gap-3 p-6 text-center">
++            <AlertTriangle className="h-10 w-10 text-destructive" aria-hidden="true" />
++            <h2 className="text-lg font-bold">Projektdaten konnten nicht geladen werden</h2>
++            <p className="text-sm text-muted-foreground">
++              Die Datenquelle hat keine Projekte geliefert. Bitte die Seite neu laden — bleibt es
++              dabei, fehlt <code className="font-mono">/data.json</code> oder der lokale Speicher
++              ist leer.
++            </p>
++          </CardContent>
++        </Card>
++      </div>
++    );
++  }
++
++  // The status is normalised before it is compared, so an unmappable value is
++  // dropped deliberately rather than listed under a heading it contradicts.
++  const rows = data.projects
++    .map((p: Project) => ({
++      project: p,
++      review: (p.reviews ?? []).find((r: Review) => r.department === department),
++    }))
++    .filter(({ review }) => {
++      const status = normalizeReviewStatus(review?.status);
++      return status !== null && status !== "nicht erforderlich";
++    });
++
++  return (
++    <div className="min-h-screen space-y-8 bg-background p-6">
++      <div>
++        <h1 className="page-title">{title}</h1>
++        <p className="mt-2 text-muted-foreground">
++          {subtitle} &bull; {rows.length.toLocaleString("de-DE")}{" "}
++          {rows.length === 1 ? "Eintrag" : "Einträge"} von{" "}
++          {data.projects.length.toLocaleString("de-DE")} Projekten
++        </p>
++      </div>
++
++      <Card className="overflow-hidden rounded-xl border bg-card shadow-sm">
++        <CardContent className="p-0">
++          {/* An explicit max-height is what makes `sticky` mean anything: the
++              thead sticks to this scrollport, and without a height the
++              scrollport is as tall as its content and never scrolls. */}
++          <div className="max-h-[75vh] overflow-x-auto overflow-y-auto">
++            <table className="w-full border-collapse text-xs">
++              <caption className="sr-only">
++                {title} – {rows.length} Einträge mit Prüfer, Prüfdatum und Status
++              </caption>
++              <thead className="sticky top-0 z-10 bg-card shadow-[0_1px_0_0_hsl(var(--border))]">
++                <tr>
++                  <th scope="col" className={TH}>Projektnummer</th>
++                  <th scope="col" className={TH}>Region</th>
++                  <th scope="col" className={TH}>Station</th>
++                  <th scope="col" className={TH}>Beschreibung</th>
++                  <th scope="col" className={TH}>Projektleiter</th>
++                  <th scope="col" className={TH}>{prueferLabel}</th>
++                  <th scope="col" className={TH}>Prüfdatum</th>
++                  <th scope="col" className={TH}>Status</th>
++                </tr>
++              </thead>
++              <tbody>
++                {rows.map(({ project, review }) => {
++                  const status = normalizeReviewStatus(review?.status);
++                  return (
++                    <tr key={project.id} className="border-b transition-colors hover:bg-muted/30">
++                      {/*
++                        No `whitespace-nowrap` on the three free-text columns.
++                        A handful of rows carry comma-separated lists — one
++                        Projektnummer is 76 characters, one Station 96, one
++                        Projektleiter 79 — and nowrap let those single rows set
++                        the column width for all 814. The table measured
++                        2,499px against a 1,066px viewport: Projektnummer 581px
++                        and Station 611px, while the 95th percentile of both is
++                        under 30 characters. They wrap now; everything else
++                        still fits on one line.
++                      */}
++                      <td className="max-w-[13rem] px-3 py-3 font-mono text-xs font-medium break-words">
++                        {project.projektnummer || "—"}
++                      </td>
++                      <td className="whitespace-nowrap px-3 py-3 text-xs">
++                        {project.bahnhofsmanagement || "—"}
++                      </td>
++                      <td className="max-w-[14rem] px-3 py-3 text-xs font-medium break-words">
++                        {project.station || "—"}
++                      </td>
++                      <td className="max-w-[20rem] px-3 py-3 text-xs">
++                        <span className="line-clamp-2">{project.projektbeschreibung || "—"}</span>
++                      </td>
++                      <td className="max-w-[12rem] px-3 py-3 text-xs break-words">
++                        {project.projektleiter || "—"}
++                      </td>
++                      <td className="max-w-[11rem] px-3 py-3 text-xs break-words">
++                        {review?.prueferName || "—"}
++                      </td>
++                      <td className="whitespace-nowrap px-3 py-3 text-xs tabular-nums">
++                        {formatGerman(review?.pruefDatum) || "—"}
++                      </td>
++                      <td className="whitespace-nowrap px-3 py-3 text-xs">
++                        <span
++                          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-2xs font-medium ${statusBadgeClass(status)}`}
++                        >
++                          {status ?? review?.status ?? "—"}
++                        </span>
++                      </td>
++                    </tr>
++                  );
++                })}
++                {rows.length === 0 && (
++                  <tr>
++                    <td colSpan={8} className="py-12 text-center text-muted-foreground">
++                      Kein Projekt hat derzeit eine {department}-Prüfung mit einem Status.
++                    </td>
++                  </tr>
++                )}
++              </tbody>
++            </table>
++          </div>
++        </CardContent>
++      </Card>
++    </div>
++  );
++}
++
++export default DepartmentReviewTable;
+diff --git a/client/src/components/Header.tsx b/client/src/components/Header.tsx
+index dd651ee..a33e59f 100644
+--- a/client/src/components/Header.tsx
++++ b/client/src/components/Header.tsx
+@@ -1,13 +1,15 @@
+-import { useState, useMemo } from "react";
++import { useState, useMemo, useCallback } from "react";
+ import { Search, Bell, Sun, Moon, X, Menu } from "lucide-react";
+ import { Button } from "@/components/ui/button";
+ import { Input } from "@/components/ui/input";
++import { useLocation } from "wouter";
+ import { useSidebar } from "@/components/ui/sidebar";
+ import PresenceIndicator from "./PresenceIndicator";
+ import { useAuth } from "@/_core/hooks/useAuth";
+ import {
+   DropdownMenu,
+   DropdownMenuContent,
++  DropdownMenuItem,
+   DropdownMenuLabel,
+   DropdownMenuSeparator,
+   DropdownMenuTrigger,
+@@ -15,19 +17,53 @@ import {
+ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+ import { useTheme } from "@/contexts/ThemeContext";
+ import { useSearchSuggestions } from "@/hooks/useDataQuery";
+-import { useRecentNotifications } from "@/_core/hooks/useNotifications";
++import { useAuditLog } from "@/hooks/useDataQuery";
+ 
+ export default function Header() {
+   const [searchTerm, setSearchTerm] = useState("");
+   const [showSuggestions, setShowSuggestions] = useState(false);
++  const [, setLocation] = useLocation();
++
++  /**
++   * The one search box present on every route used to search nothing.
++   *
++   * `searchTerm` fed the suggestion query and the reset X and went nowhere
++   * else: no onKeyDown, no submit, no navigation, no callback out of the
++   * component. Typing a station and pressing Enter did nothing, and picking a
++   * suggestion only wrote the text back into the same dead field.
++   *
++   * It now hands the term to the Projekte page through the query string, which
++   * is also what makes a search result linkable and survivable across a reload.
++   */
++  const runSearch = useCallback(
++    (term: string) => {
++      const q = term.trim();
++      setShowSuggestions(false);
++      if (!q) return;
++      setLocation(`/projects?q=${encodeURIComponent(q)}`);
++    },
++    [setLocation],
++  );
+   const { theme, toggleTheme } = useTheme();
+   const { toggleSidebar } = useSidebar();
+   const { user } = useAuth();
+   const { data: suggestions } = useSearchSuggestions(searchTerm);
+-  // Real notifications. The badge used to be the literal string "7" while the
+-  // dropdown underneath said "Keine neuen Benachrichtigungen" — the two could
+-  // never agree, because one of them was a decoration.
+-  const notifications = useRecentNotifications(10);
++  /**
++   * The bell shows the audit trail, because that is the app's only real event
++   * stream.
++   *
++   * It used to read `useRecentNotifications(10)`, which reads a localStorage
++   * key that nothing ever writes: `useNotifications()` — the only hook that
++   * emits — is imported nowhere in the app. So the store was always empty, the
++   * badge never appeared, and the dropdown always said "Keine neuen
++   * Benachrichtigungen". A bell that cannot ring is decoration.
++   *
++   * Every inline edit, review change and Anmeldung already writes an audit
++   * entry, so those are the notifications — real, produced by real actions, and
++   * they update through the same query cache as the Änderungshistorie page.
++   */
++  const { data: auditEntries } = useAuditLog();
++  const notifications = useMemo(() => (auditEntries ?? []).slice(0, 10), [auditEntries]);
+ 
+   const userInitials = useMemo(
+     () =>
+@@ -93,6 +129,10 @@ export default function Header() {
+               }}
+               onFocus={() => setShowSuggestions(true)}
+               onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
++              onKeyDown={(e) => {
++                if (e.key === "Enter") runSearch(searchTerm);
++                if (e.key === "Escape") setShowSuggestions(false);
++              }}
+               aria-label="Projekte, Stationen und Prüfer durchsuchen"
+             placeholder="Projekte, Stationen, Prüfer durchsuchen…"
+               className="pl-11 h-9 bg-muted/50 border-border focus:bg-background focus:border-primary w-full text-sm rounded-lg transition-all"
+@@ -114,9 +154,12 @@ export default function Header() {
+                 <button type="button"
+                   key={s}
+                   className="w-full text-left px-4 py-2 text-sm hover:bg-muted/80 transition-colors"
+-                  onMouseDown={() => {
++                  /* onClick, not onMouseDown: mousedown never fires from
++                     Enter or Space, so a keyboard user could tab onto a
++                     suggestion and pressing Enter did nothing. */
++                  onClick={() => {
+                     setSearchTerm(s);
+-                    setShowSuggestions(false);
++                    runSearch(s);
+                   }}
+                 >
+                   {s}
+@@ -147,8 +190,8 @@ export default function Header() {
+                 variant="ghost"
+                 aria-label={
+                   notifications.length > 0
+-                    ? `Benachrichtigungen (${notifications.length} neu)`
+-                    : "Benachrichtigungen"
++                    ? `Änderungen (${notifications.length} zuletzt)`
++                    : "Änderungen"
+                 }
+                 className="relative p-2 h-9 w-9 rounded-lg text-foreground hover:bg-accent"
+               >
+@@ -161,31 +204,39 @@ export default function Header() {
+               </Button>
+             </DropdownMenuTrigger>
+             <DropdownMenuContent align="end" className="w-80">
+-              <DropdownMenuLabel>Benachrichtigungen</DropdownMenuLabel>
++              <DropdownMenuLabel>Letzte Änderungen</DropdownMenuLabel>
+               <DropdownMenuSeparator />
+               {notifications.length === 0 ? (
+                 <div className="p-4 text-center text-sm text-muted-foreground">
+-                  Keine neuen Benachrichtigungen
++                  Noch keine Änderungen erfasst
+                 </div>
+               ) : (
+-                <ul className="max-h-80 overflow-y-auto">
++                <div className="max-h-80 overflow-y-auto">
+                   {notifications.map((n) => (
+-                    <li
++                    <DropdownMenuItem
+                       key={n.id}
+-                      className="border-b border-border/60 px-3 py-2 last:border-0"
++                      onSelect={() => setLocation("/audit")}
++                      className="flex-col items-start gap-0.5"
+                     >
+-                      <p className="text-xs font-bold leading-tight">{n.title}</p>
+-                      <p className="mt-0.5 text-2xs leading-snug text-muted-foreground">
+-                        {n.message}
++                      <p className="text-xs font-bold leading-tight">{n.action}</p>
++                      <p className="text-2xs leading-snug text-muted-foreground">{n.details}</p>
++                      <p className="text-2xs text-muted-foreground/70">
++                        {new Date(n.timestamp).toLocaleString("de-DE")} · {n.user}
+                       </p>
+-                    </li>
++                    </DropdownMenuItem>
+                   ))}
+-                </ul>
++                  <DropdownMenuSeparator />
++                  <DropdownMenuItem onSelect={() => setLocation("/audit")} className="justify-center text-xs font-bold">
++                    Gesamte Änderungshistorie
++                  </DropdownMenuItem>
++                </div>
+               )}
+             </DropdownMenuContent>
+           </DropdownMenu>
+ 
+-          <Avatar className="h-8 w-8 cursor-pointer ring-2 ring-offset-2 ring-primary/30 hover:ring-primary transition-all">
++          {/* No cursor-pointer and no hover ring: there is no menu behind this,
++              and an affordance that promises one is a control that lies. */}
++          <Avatar className="h-8 w-8 ring-2 ring-offset-2 ring-primary/30">
+             <AvatarFallback className="bg-primary text-white text-xs font-bold">
+               {userInitials}
+             </AvatarFallback>
+diff --git a/client/src/components/Map.tsx b/client/src/components/Map.tsx
+index 983261a..1f872d2 100644
+--- a/client/src/components/Map.tsx
++++ b/client/src/components/Map.tsx
+@@ -233,6 +233,22 @@ export const MapView: React.FC<MapViewProps> = ({
+       : window.matchMedia("(min-width: 640px)").matches,
+   );
+   const legendTouched = useRef(false);
++
++  /**
++   * Escape leaves fullscreen.
++   *
++   * `isFullscreen` renders `fixed inset-0 z-[9999]` over the whole app and the
++   * file had no keydown handler anywhere, so the only way out was to find the
++   * shrink button again. Every other overlay in this app closes on Escape.
++   */
++  useEffect(() => {
++    if (!isFullscreen) return;
++    const onKey = (e: KeyboardEvent) => {
++      if (e.key === "Escape") setIsFullscreen(false);
++    };
++    window.addEventListener("keydown", onKey);
++    return () => window.removeEventListener("keydown", onKey);
++  }, [isFullscreen]);
+   useEffect(() => {
+     if (typeof window === "undefined" || !window.matchMedia) return;
+     const mq = window.matchMedia("(min-width: 640px)");
+diff --git a/client/src/components/PresenceIndicator.tsx b/client/src/components/PresenceIndicator.tsx
+index 38a89db..6d5a96c 100644
+--- a/client/src/components/PresenceIndicator.tsx
++++ b/client/src/components/PresenceIndicator.tsx
+@@ -23,7 +23,7 @@ export default function PresenceIndicator() {
+       <PopoverTrigger asChild>
+         <button type="button"
+           className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 transition-colors cursor-pointer border border-emerald-500/20"
+-          aria-label="Online colleagues"
++          
+         >
+           <div className="flex items-center gap-1">
+             <Users className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+diff --git a/client/src/components/ProjectDetailDialog.tsx b/client/src/components/ProjectDetailDialog.tsx
+index 0f39006..64d2738 100644
+--- a/client/src/components/ProjectDetailDialog.tsx
++++ b/client/src/components/ProjectDetailDialog.tsx
+@@ -60,6 +60,7 @@ import { DEPARTMENTS, type Department } from "@shared/types";
+ import { statusBadgeClass } from "@shared/status-appearance";
+ import { normalizeReviewStatus, isOpen, isBlocking } from "@shared/review-status";
+ import { formatGerman } from "@shared/date";
++import { projectLinkUrl } from "@shared/project-link";
+ import { bahnhofsmanagementContact, recipientsFor, type Contact } from "@shared/contacts";
+ import {
+   resolveContact,
+@@ -78,24 +79,6 @@ interface ProjectDetailDialogProps {
+   onShowStation?: (station: string) => void;
+ }
+ 
+-/**
+- * A projektLink is only a link when it is one.
+- *
+- * 138 of 1,298 rows carry something in this column and only 66 of those are
+- * URLs; the other 72 are free-text notes ("ITK - noch offen; BS an Hr.
+- * Engstfeld über..."). Rendering all 138 as a button produces 72 buttons that
+- * navigate nowhere, so the note is rendered as text instead.
+- */
+-function asHttpUrl(value: string | null | undefined): string | null {
+-  const v = String(value ?? "").trim();
+-  if (!/^https?:\/\//i.test(v)) return null;
+-  try {
+-    return new URL(v).toString();
+-  } catch {
+-    return null;
+-  }
+-}
+-
+ /** Subject line built from real fields only. */
+ function subjectFor(project: Project, department?: string): string {
+   const nr = project.projektnummer?.trim();
+@@ -260,7 +243,7 @@ export function ProjectDetailDialog({
+ 
+   if (!project) return null;
+ 
+-  const url = asHttpUrl(project.projektLink);
++  const url = projectLinkUrl(project.projektLink);
+   const linkNote = !url && project.projektLink?.trim() ? project.projektLink.trim() : null;
+   const bmContact = bahnhofsmanagementContact(project.bahnhofsmanagement);
+   const subject = subjectFor(project);
+diff --git a/client/src/components/anmeldung/Step1Projekt.tsx b/client/src/components/anmeldung/Step1Projekt.tsx
+index 149273a..614a388 100644
+--- a/client/src/components/anmeldung/Step1Projekt.tsx
++++ b/client/src/components/anmeldung/Step1Projekt.tsx
+@@ -211,7 +211,7 @@ export function Step1Projekt({ draft }: { draft: ChecklistDraft }) {
+             id="bahnhofsnummer"
+             value={header.bahnhofsnummer}
+             readOnly
+-            tabIndex={-1}
++           
+             aria-readonly="true"
+             aria-describedby="bahnhofsnummer-hint"
+             className="cursor-not-allowed bg-muted text-muted-foreground"
+diff --git a/client/src/components/anmeldung/Step2Checkliste.tsx b/client/src/components/anmeldung/Step2Checkliste.tsx
+index 3519c0c..f5937bc 100644
+--- a/client/src/components/anmeldung/Step2Checkliste.tsx
++++ b/client/src/components/anmeldung/Step2Checkliste.tsx
+@@ -203,7 +203,7 @@ export function Step2Checkliste({ draft }: { draft: ChecklistDraft }) {
+       <div className="overflow-x-auto">
+         <table className="w-full border-collapse">
+           <caption className="sr-only">
+-            Checkliste zur Projektanmeldung — 22 Fragen aus dem Formular
++            Checkliste zur Projektanmeldung — {questions.length} Fragen aus dem Formular
+           </caption>
+           <thead>
+             <tr className="border-y border-border text-2xs uppercase tracking-wider text-muted-foreground">
+diff --git a/client/src/components/anmeldung/Step3Pruefungen.tsx b/client/src/components/anmeldung/Step3Pruefungen.tsx
+index 597152f..629fcac 100644
+--- a/client/src/components/anmeldung/Step3Pruefungen.tsx
++++ b/client/src/components/anmeldung/Step3Pruefungen.tsx
+@@ -18,7 +18,7 @@ export function Step3Pruefungen({ draft }: { draft: ChecklistDraft }) {
+             Aus den Antworten der Checkliste entstehen immer alle 14 Prüfzeilen —{" "}
+             <strong className="font-bold text-foreground">{requiredCount}</strong> mit dem Status
+             „offen", {closed.length} als „nicht erforderlich". Das entspricht der Struktur der
+-            bestehenden 18.172 Prüfzeilen.
++            bestehenden Prüfzeilen.
+           </p>
+         </div>
+ 
+@@ -91,7 +91,7 @@ export function Step3Pruefungen({ draft }: { draft: ChecklistDraft }) {
+           {answers.freischaltungFaa?.answer === "Erforderlich" && (
+             <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-2xs text-muted-foreground">
+               Freischaltung FAA ist als <strong className="text-foreground">Erforderlich</strong>{" "}
+-              markiert. Der Versand der FAA-Mail folgt in Stufe 4.
++              markiert. Es wird derzeit keine Mail verschickt — der Versand ist noch nicht gebaut.
+             </p>
+           )}
+         </div>
+diff --git a/client/src/components/anmeldung/Step5Bestaetigung.tsx b/client/src/components/anmeldung/Step5Bestaetigung.tsx
+index 7900348..edbae5d 100644
+--- a/client/src/components/anmeldung/Step5Bestaetigung.tsx
++++ b/client/src/components/anmeldung/Step5Bestaetigung.tsx
+@@ -162,8 +162,9 @@ export function Step5Bestaetigung({ draft }: { draft: ChecklistDraft }) {
+               <li>Ein Eintrag in der Änderungshistorie wird geschrieben.</li>
+             </ol>
+             <p className="mt-2 text-2xs text-muted-foreground">
+-              PDF-Export und der Versand an FAA / TBQ / BM folgen in Stufe 4. Bis dahin lässt sich
+-              das Unterschriftenblatt über „Drucken" als PDF ausgeben.
++              Die Checkliste lässt sich jederzeit über „Checkliste als PDF" exportieren und das
++              Unterschriftenblatt über „Drucken". Ein automatischer Versand an FAA / TBQ / BM
++              findet nicht statt.
+             </p>
+           </section>
+         </div>
+diff --git a/client/src/hooks/useDataQuery.ts b/client/src/hooks/useDataQuery.ts
+index 775d0f5..b43d5f1 100644
+--- a/client/src/hooks/useDataQuery.ts
++++ b/client/src/hooks/useDataQuery.ts
+@@ -259,10 +259,13 @@ export function useProjects(params: {
+   sortBy?: string;
+   sortDir?: "asc" | "desc";
+   showAll?: boolean;
+-  minLat?: number;
+-  maxLat?: number;
+-  minLng?: number;
+-  maxLng?: number;
++  /*
++   * minLat / maxLat / minLng / maxLng were declared here and never
++   * destructured or used in the filter memo below. The Projekte page passed
++   * them from the map's onBoundsChange on every pan and zoom, so the map
++   * looked like it filtered the table and did not. Declaring a parameter you
++   * ignore is worse than not accepting it: the type says the feature exists.
++   */
+ }) {
+   const { data: allProjectsData, isLoading: allProjectsLoading } = useAllProjects();
+   const updateProjectMutation = useUpdateProject();
+@@ -389,7 +392,7 @@ export function useProjects(params: {
+ }
+ 
+ export function useFilters() {
+-  const { data: allProjectsData, isLoading } = useAllProjects();
++  const { data: allProjectsData, isLoading, isError } = useAllProjects();
+ 
+   const data: Filters = useMemo(() => {
+     const allProjects = allProjectsData?.projects || [];
+@@ -430,7 +433,7 @@ export function useFilters() {
+     };
+   }, [allProjectsData]);
+ 
+-  return { data, isLoading };
++  return { data, isLoading, isError };
+ }
+ 
+ export function useSearchSuggestions(term: string) {
+@@ -442,10 +445,21 @@ export function useSearchSuggestions(term: string) {
+   });
+ }
+ 
++/**
++ * The three queries the pages need, folded into one result.
++ *
++ * `isError` and `isEmpty` are separate on purpose. `data` is null in three very
++ * different situations — still loading, loaded but empty, and failed — and
++ * every page that consumed only `{ data, isLoading }` rendered the same
++ * "Lade …" spinner for all three. Because the loader in _core/api/client.ts
++ * catches its own failures and returns [], a total data-source failure landed
++ * as `isLoading === false, data === null`: a spinner that spins forever over a
++ * read that has already given up.
++ */
+ export function useAllData() {
+-  const { data: projectsData, isLoading: pLoading } = useAllProjects();
+-  const { data: stats, isLoading: sLoading } = useDashboardStats();
+-  const { data: filters, isLoading: fLoading } = useFilters();
++  const { data: projectsData, isLoading: pLoading, isError: pError } = useAllProjects();
++  const { data: stats, isLoading: sLoading, isError: sError } = useDashboardStats();
++  const { data: filters, isLoading: fLoading, isError: fError } = useFilters();
+ 
+   const data = useMemo(() => {
+     const projects = projectsData?.projects || [];
+@@ -453,7 +467,16 @@ export function useAllData() {
+     return { projects, stats, filters };
+   }, [projectsData, stats, filters]);
+ 
+-  return { data, isLoading: pLoading || sLoading || fLoading };
++  const isLoading = pLoading || sLoading || fLoading;
++  const isError = pError || sError || fError;
++
++  return {
++    data,
++    isLoading,
++    isError,
++    /** settled, no error, and still nothing to show */
++    isEmpty: !isLoading && !isError && data === null,
++  };
+ }
+ 
+ export type { ProjectUpdateInput, ReviewUpdateInput, ProjectCreateInput };
+diff --git a/client/src/index.css b/client/src/index.css
+index 9405f68..eba4802 100644
+--- a/client/src/index.css
++++ b/client/src/index.css
+@@ -374,8 +374,26 @@
+     position: relative;
+   }
+ 
+-  td button::after,
+-  td [role="button"]::after,
++  /* A cell holding more than one control cannot use the invisible strip: two
++     44px strips 32px apart overlap by 12px and the later sibling wins
++     hit-testing, so tapping the right edge of "Details" opened the Kommentar
++     dialog. These get real size instead, in a flex row that keeps them apart.
++     Forcing width alone made them wrap and tripled the row to 97px. */
++  .cell-actions > button,
++  .cell-actions > [role="button"] {
++    min-width: 44px;
++    min-height: 44px;
++  }
++
++  /* Only when the control is alone in its cell.
++     The Projekte table's action cell holds two 28px icon buttons 32px apart.
++     Widening BOTH to a 44px strip made them overlap by 12px, and the later
++     sibling wins hit-testing — so on a phone, tapping the right edge of
++     "Details anzeigen" opened the Kommentar dialog instead. A cell with two
++     controls gets padding on the buttons themselves rather than an invisible
++     strip that reaches into its neighbour. */
++  td:has(> button:only-of-type) button::after,
++  td:has(> [role="button"]:only-of-type) [role="button"]::after,
+   th button::after {
+     content: "";
+     position: absolute;
+diff --git a/client/src/pages/Anmeldung.tsx b/client/src/pages/Anmeldung.tsx
+index 040268d..da972db 100644
+--- a/client/src/pages/Anmeldung.tsx
++++ b/client/src/pages/Anmeldung.tsx
+@@ -8,6 +8,7 @@ import { Step2Checkliste } from "@/components/anmeldung/Step2Checkliste";
+ import { Step3Pruefungen } from "@/components/anmeldung/Step3Pruefungen";
+ import { Step4Termin } from "@/components/anmeldung/Step4Termin";
+ import { Step5Bestaetigung } from "@/components/anmeldung/Step5Bestaetigung";
++import { visibleQuestions } from "@shared/checklist";
+ import { useChecklistDraft } from "@/hooks/useChecklistDraft";
+ import { bookSlot } from "@/hooks/useSchedule";
+ import { CHECKLIST_MODES } from "@shared/checklist";
+@@ -15,7 +16,11 @@ import { Check, ChevronLeft, ChevronRight, FileDown, Save } from "lucide-react";
+ 
+ const STEPS = [
+   { n: 1, title: "Projekt", subtitle: "Kopfdaten & Station" },
+-  { n: 2, title: "Checkliste", subtitle: "22 Fragen" },
++  // Was the literal "22 Fragen" (= CHECKLIST_QUESTIONS.length), but Step 2
++  // renders visibleQuestions(mode): 19 in Projektanmeldung, 18 in
++  // Projektkonfiguration. The step header promised three questions that are
++  // never shown.
++  { n: 2, title: "Checkliste", subtitle: null },
+   { n: 3, title: "Prüfungen", subtitle: "14 Gewerke" },
+   { n: 4, title: "Termin", subtitle: "Fachspezialistenprüfung" },
+   { n: 5, title: "Bestätigung", subtitle: "Anmelden" },
+@@ -164,6 +169,12 @@ export default function Anmeldung() {
+                   type="button"
+                   onClick={() => goTo(s.n)}
+                   aria-current={active ? "step" : undefined}
++                  // An explicit name: the visible content concatenates to
++                  // "2Checkliste19 Fragen" with no separators, which is what a
++                  // screen reader announced.
++                  aria-label={`Schritt ${s.n}: ${s.title}${
++                    s.subtitle ? ` – ${s.subtitle}` : ` – ${visibleQuestions(draft.mode).length} Fragen`
++                  }`}
+                   className={`w-full rounded-lg border-2 px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 ${
+                     active
+                       ? "border-primary bg-primary/5"
+@@ -187,7 +198,10 @@ export default function Anmeldung() {
+                     <span className="text-xs font-black leading-none">{s.title}</span>
+                   </div>
+                   <div className="mt-1 pl-7 text-2xs leading-none text-muted-foreground">
+-                    {s.subtitle}
++                    {/* The Checkliste subtitle is derived, because the count
++                        depends on the mode: 19 questions in Projektanmeldung,
++                        18 in Projektkonfiguration. */}
++                    {s.subtitle ?? `${visibleQuestions(draft.mode).length} Fragen`}
+                   </div>
+                 </button>
+               </li>
+diff --git a/client/src/pages/BvbEea.tsx b/client/src/pages/BvbEea.tsx
+index 5eed24d..56200d1 100644
+--- a/client/src/pages/BvbEea.tsx
++++ b/client/src/pages/BvbEea.tsx
+@@ -1,107 +1,24 @@
+-import { Card, CardContent } from "@/components/ui/card";
+-import { Loader2 } from "lucide-react";
+-import { useAllData } from "@/hooks/useDataQuery";
+-import { statusBadgeClass } from "@shared/status-appearance";
++import { DepartmentReviewTable } from "@/components/DepartmentReviewTable";
+ 
++/**
++ * The subtitle used to read "Verwaltung der EEA-Freigabeerklärungen".
++ *
++ * Both halves were wrong. *Verwaltung* implies create/edit/delete and this page
++ * has no interactive element at all — the Dashboard's own entry point calls it
++ * correctly, "BVB-EEA-Prüfungen ansehen". And *Freigabeerklärungen* implies
++ * approvals, while the list is every EEA review that is not "nicht
++ * erforderlich": of 814 rows only 583 are "Zustimmung erteilt". The other 231
++ * are abgelehnt (88), Projektkonfig. (55), offen (54), Nachforderung (26),
++ * zurückgestellt (5) and one each of gestoppt, in Bearbeitung and prüffähig —
++ * explicitly not Freigaben.
++ */
+ export default function BvbEea() {
+-  const { data, isLoading } = useAllData();
+-
+-  if (isLoading || !data) {
+-    return (
+-      <div className="flex items-center justify-center h-screen bg-background">
+-        <div className="flex flex-col items-center gap-4">
+-          <Loader2 className="h-12 w-12 animate-spin text-primary-strong" />
+-          <p className="text-lg font-medium text-muted-foreground">Lade BVB-EEA Daten...</p>
+-        </div>
+-      </div>
+-    );
+-  }
+-
+-  // Filter projects that have EEA reviews with a status
+-  const eaaProjects = data.projects.filter((p: any) => {
+-    const eaaReview = p.reviews?.find((r: any) => r.department === 'EEA');
+-    return eaaReview?.status && eaaReview.status !== 'nicht erforderlich';
+-  });
+-
+   return (
+-    <div className="space-y-8 p-6 bg-background min-h-screen">
+-      {/* HEADER SECTION */}
+-      <div className="flex items-center justify-between">
+-        <div>
+-          <h1 className="page-title">BVB-EEA Freigaben</h1>
+-          <p className="text-muted-foreground mt-2">
+-            Verwaltung der EEA-Freigabeerklärungen &bull; {eaaProjects.length} Einträge
+-          </p>
+-        </div>
+-      </div>
+-
+-      {/* MAIN CONTENT AREA */}
+-      <Card className="bg-card rounded-xl border shadow-sm overflow-hidden">
+-        <CardContent className="p-0">
+-          <div className="table-scroll-container">
+-            <table className="w-full text-xs border-collapse">
+-              <thead className="bg-muted/50 sticky top-0 z-10">
+-                <tr>
+-                  <th className="text-left py-3 px-4 font-semibold text-muted-foreground whitespace-nowrap border-b">Projektnummer</th>
+-                  <th className="text-left py-3 px-4 font-semibold text-muted-foreground whitespace-nowrap border-b">Region</th>
+-                  <th className="text-left py-3 px-4 font-semibold text-muted-foreground whitespace-nowrap border-b">Station</th>
+-                  <th className="text-left py-3 px-4 font-semibold text-muted-foreground whitespace-nowrap border-b min-w-[250px]">Beschreibung</th>
+-                  <th className="text-left py-3 px-4 font-semibold text-muted-foreground whitespace-nowrap border-b">Projektleiter</th>
+-                  <th className="text-left py-3 px-4 font-semibold text-muted-foreground whitespace-nowrap border-b">EEA-Prüfer</th>
+-                  <th className="text-left py-3 px-4 font-semibold text-muted-foreground whitespace-nowrap border-b">Datum</th>
+-                  <th className="text-left py-3 px-4 font-semibold text-muted-foreground whitespace-nowrap border-b">Status</th>
+-                </tr>
+-              </thead>
+-              <tbody>
+-                {eaaProjects.map((item: any) => {
+-                  const eaaReview = item.reviews?.find((r: any) => r.department === 'EEA');
+-                  return (
+-                    <tr key={item.id} className="border-b hover:bg-muted/30 transition-colors">
+-                      <td className="py-3 px-4 font-mono text-xs whitespace-nowrap font-medium">
+-                        {item.projektnummer || '-'}
+-                      </td>
+-                      <td className="py-3 px-4 text-xs whitespace-nowrap">
+-                        {item.bahnhofsmanagement || '-'}
+-                      </td>
+-                      <td className="py-3 px-4 text-xs whitespace-nowrap font-medium">
+-                        {item.station || '-'}
+-                      </td>
+-                      <td className="py-3 px-4 text-xs max-w-[300px]">
+-                        <span className="line-clamp-2">{item.projektbeschreibung || '-'}</span>
+-                      </td>
+-                      <td className="py-3 px-4 text-xs whitespace-nowrap">
+-                        {item.projektleiter || '-'}
+-                      </td>
+-                      <td className="py-3 px-4 text-xs whitespace-nowrap">
+-                        {eaaReview?.prueferName || '-'}
+-                      </td>
+-                      <td className="py-3 px-4 text-xs whitespace-nowrap">
+-                        {eaaReview?.pruefDatum ? new Date(eaaReview.pruefDatum).toLocaleDateString('de-DE') : '-'}
+-                      </td>
+-                      <td className="py-3 px-4 text-xs whitespace-nowrap">
+-                        {/* Was a 3-branch ternary; the other 9 canonical
+-                            statuses fell through to an unstyled default. */}
+-                        <span
+-                          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-2xs font-medium ${statusBadgeClass(eaaReview?.status)}`}
+-                        >
+-                          {eaaReview?.status || '-'}
+-                        </span>
+-                      </td>
+-                    </tr>
+-                  );
+-                })}
+-                {eaaProjects.length === 0 && (
+-                  <tr>
+-                    <td colSpan={8} className="py-12 text-center text-muted-foreground">
+-                      Keine BVB-EEA Einträge vorhanden.
+-                    </td>
+-                  </tr>
+-                )}
+-              </tbody>
+-            </table>
+-          </div>
+-        </CardContent>
+-      </Card>
+-    </div>
++    <DepartmentReviewTable
++      department="EEA"
++      title="BVB-EEA Prüfungen"
++      subtitle="Übersicht der EEA-Prüfungen"
++      prueferLabel="EEA-Prüfer"
++    />
+   );
+ }
+diff --git a/client/src/pages/Dashboard.tsx b/client/src/pages/Dashboard.tsx
+index 521f3c2..5914c0a 100644
+--- a/client/src/pages/Dashboard.tsx
++++ b/client/src/pages/Dashboard.tsx
+@@ -1,8 +1,9 @@
+ import React, { useMemo, useState } from 'react';
+ import { deriveProjectMetrics, percent } from '@shared/project-metrics';
+-import { statusBadgeClass, statusHex, TONE_APPEARANCE } from '@shared/status-appearance';
+-import { BLOCKING_STATUSES, normalizeReviewStatus, OPEN_STATUSES } from '@shared/review-status';
+-import { toDate } from '@shared/date';
++import { statusBadgeClass, statusHex, STATUS_TONE, TONE_APPEARANCE } from '@shared/status-appearance';
++import { APPROVED_STATUSES, BLOCKING_STATUSES, normalizeReviewStatus, OPEN_STATUSES, type ReviewStatus } from '@shared/review-status';
++import { formatGerman, toDate } from '@shared/date';
++import { projectLinkNote, projectLinkUrl } from '@shared/project-link';
+ import { useLocation } from 'wouter';
+ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+ import { Button } from '@/components/ui/button';
+@@ -24,6 +25,7 @@ import {
+   MessageSquare,
+   Table2,
+   TrendingUp,
++  Loader2,
+   Users,
+   Zap,
+ } from 'lucide-react';
+@@ -37,20 +39,41 @@ import { toast } from 'sonner';
+ // DB Corporate Status Colors (perfect harmony with Projects.tsx)
+ 
+ // Exact department order from Übersichtsliste_Dashboard_1.xlsm (perfect consistency)
++/** How many Gewerke tiles the grid shows. Named so the heading and the slice
++ *  cannot drift apart. */
++const GEWERKE_TILES = 8;
++
+ const GEWERKE = [
+   "EEA", "ITK", "BS", "GA", "Energie", "HFT", "HKLS", 
+   "TBQ", "UM", "BIM", "LST", "Vermessung", 
+   "Baubetriebstechnologie", "Baubetriebsplanung"
+ ];
+ 
+-const FACHSPEZIALISTEN = [
+-  "Aydogdu", "Degen", "Ries", "Schomber", "Bär", "Oker", "Zentrale",
+-  "Er", "Grimaldi", "Goldhausen", "Fey", "Kröcker", "Afteni", "Bierbaum",
+-  "Engstfeld", "Weyer", "Lorenz", "Hartung", "Frischbier", "Vafaei", 
+-  "Kohlwey", "Rabkin", "Köksal", "Haag", "Pourabbas", "Glandorf", "Krejtschi",
+-  "Frousiou-Bauer", "Kalisa", "Dauth", "Hebbrecht", "Kubwimana", "Vatter",
+-  "Schauß", "Bierbrauer", "Zentrale", "Zuordnung erforderlich"
+-];
++/*
++ * The reviewer roster is derived from the data, never listed by hand.
++ *
++ * It used to be a literal array of 37 entries. Measured against the shipped
++ * data.json that list was wrong in two ways at once:
++ *
++ *   - 8 of the 44 reviewers in the data were missing from it — 985 review rows,
++ *     Haberla 512, Colak 250, Wagner 83, Matteka 46, "BSB des BM´s" 33,
++ *     Eda Pourabbas 32, Ates 23, Herr 6. Colak alone would have ranked third in
++ *     the "Top Performer" list the page renders, and was absent from it.
++ *   - "Zentrale" appeared twice, so two rows rendered with the same React key
++ *     and its workload was counted twice in the panel total.
++ *
++ * A derived roster cannot drift from the data it describes.
++ */
++function reviewerNames(projects: Project[]): string[] {
++  const seen = new Set<string>();
++  for (const p of projects) {
++    for (const r of p.reviews ?? []) {
++      const n = (r.prueferName ?? "").trim();
++      if (n) seen.add(n);
++    }
++  }
++  return [...seen].sort((a, b) => a.localeCompare(b, "de"));
++}
+ 
+ interface Project {
+   id: number;
+@@ -78,13 +101,22 @@ interface WorkloadItem {
+   incoming: number;
+   completed: number;
+   total: number;
+-  timeline: Array<{ date: string; action: string; project: string }>;
++  /** department and projectId are what make a timeline row unique: without them
++   *  two Gewerke signed on the same day for the same project share a React key
++   *  and one of them is dropped from the render. Measured: 1,509 rows. */
++  timeline: Array<{
++    date: string;
++    action: string;
++    project: string;
++    department: string;
++    projectId: number;
++  }>;
+ }
+ 
+ export default function Dashboard() {
+   const [, setLocation] = useLocation();
+   const queryClient = useQueryClient();
+-  const { data: allData } = useAllData();
++  const { data: allData, isLoading: dataLoading, isError: dataError } = useAllData();
+   const { data: auditEntries } = useAuditLog();
+   const [selectedGewerke, setSelectedGewerke] = useState<string | null>(null);
+   const [expandedFach, setExpandedFach] = useState<string | null>(null);
+@@ -113,13 +145,27 @@ export default function Dashboard() {
+ 
+   // "Delayed" = presentation date is in the past but at least one review is still open.
+   const today = new Date();
++  // Was `r.status === "offen" || r.status === "in Bearbeitung"`, which is a
++  // third definition of "open" on a page that already had two. It missed
++  // Nachforderung and prüffähig entirely and every annotated variant, and
++  // reported 304 where the canonical OPEN_STATUSES gives 347. The date also
++  // went through `new Date()`, which parses a date-only string as UTC midnight
++  // and can shift a whole day west of Greenwich; toDate() is timezone-safe.
++  today.setHours(0, 0, 0, 0);
+   const delayedProjects = projects.filter(p => {
+-    const d = p.terminProjektvorstellung ? new Date(p.terminProjektvorstellung) : null;
+-    const stillOpen = p.reviews.some(r => r.status === "offen" || r.status === "in Bearbeitung");
+-    return d && !Number.isNaN(d.getTime()) && d < today && stillOpen;
++    const d = toDate(p.terminProjektvorstellung);
++    const stillOpen = p.reviews.some(r => {
++      const s = normalizeReviewStatus(r.status);
++      return s !== null && (OPEN_STATUSES as readonly string[]).includes(s);
++    });
++    return d !== null && d < today && stillOpen;
+   }).length;
+ 
+   // Real regional distribution from actual bahnhofsmanagement values (top 5).
++  const regionCount = new Set(
++    projects.map((p) => (p.bahnhofsmanagement ?? "").trim()).filter(Boolean),
++  ).size;
++
+   const regionDistribution = (() => {
+     const counts: Record<string, number> = {};
+     for (const p of projects) {
+@@ -132,11 +178,18 @@ export default function Dashboard() {
+       .map(([region, count], i) => ({ region, count, color: palette[i % palette.length] }));
+   })();
+ 
++  // `counts[review.status]` keyed on the raw string, so statusHex() fell
++  // through to its neutral fallback: TBQ's 80 "Niederschrift erstellt
++  // (LP05-05-01-F31)" rows rendered in exactly the grey used for the 688
++  // "nicht erforderlich" rows in the same pie — a completed sign-off painted
++  // as irrelevant. That is verbatim the regression status-appearance.ts was
++  // written to make impossible.
+   const gewerkeStatusData = GEWERKE.map(gew => {
+     const counts: Record<string, number> = {};
+     projects.forEach(p => {
+       const review = p.reviews.find(r => r.department === gew);
+-      if (review?.status) counts[review.status] = (counts[review.status] || 0) + 1;
++      const status = normalizeReviewStatus(review?.status);
++      if (status) counts[status] = (counts[status] || 0) + 1;
+     });
+     return {
+       name: gew,
+@@ -150,58 +203,128 @@ export default function Dashboard() {
+     : null;
+ 
+   const selectedPieData = selectedGewerkeData 
+-    ? Object.entries(selectedGewerkeData.breakdown).map(([status, value]) => ({
+-        name: status, value, color: statusHex(status)
+-      }))
++    ? Object.entries(selectedGewerkeData.breakdown)
++        .sort((a, b) => b[1] - a[1])
++        .map(([status, value]) => ({ name: status, value, color: statusHex(status) }))
+     : [];
+ 
+-  const fachWorkload: WorkloadItem[] = FACHSPEZIALISTEN.map(name => {
+-    let incoming = 0;
+-    let completed = 0;
+-    const timeline: Array<{date: string, action: string, project: string}> = [];
+-
+-    projects.forEach(p => {
+-      p.reviews.forEach(r => {
+-        if (r.prueferName === name) {
+-          if (["offen", "in Bearbeitung", "Nachforderung", "prüffähig"].includes(r.status || "")) incoming++;
+-          if (["Zustimmung erteilt", "Niederschrift erstellt"].includes(r.status || "")) completed++;
+-          if (r.pruefDatum) {
+-            timeline.push({
+-              date: r.pruefDatum,
+-              action: r.status || "Update",
+-              project: p.station || p.projektnummer || "Unknown"
+-            });
+-          }
++  /*
++   * Workload per reviewer.
++   *
++   * Three defects, all measured:
++   *   - the roster was a hardcoded list missing 8 of the 44 reviewers in the
++   *     data (985 rows), so Colak — who ranks third by volume — never appeared
++   *     in "Top Performer" at all;
++   *   - `includes(r.status)` on raw strings never counted the 80
++   *     "Niederschrift erstellt (LP05-05-01-F31)" rows as completed;
++   *   - the timeline row carried no department, so two Gewerke signed on the
++   *     same day for the same project collapsed onto one React key and 1,509
++   *     rows were dropped from the panel.
++   */
++  const fachWorkload: WorkloadItem[] = useMemo(() => {
++    const byName = new Map<string, WorkloadItem>();
++    for (const name of reviewerNames(projects)) {
++      byName.set(name, { name, incoming: 0, completed: 0, total: 0, timeline: [] });
++    }
++    for (const p of projects) {
++      for (const r of p.reviews ?? []) {
++        const name = (r.prueferName ?? "").trim();
++        const item = name ? byName.get(name) : undefined;
++        if (!item) continue;
++        const status = normalizeReviewStatus(r.status);
++        if (status && (OPEN_STATUSES as readonly string[]).includes(status)) item.incoming++;
++        if (status && (APPROVED_STATUSES as readonly string[]).includes(status)) item.completed++;
++        if (r.pruefDatum) {
++          item.timeline.push({
++            date: r.pruefDatum,
++            action: status ?? r.status ?? "Update",
++            project: p.station || p.projektnummer || "Ohne Station",
++            department: r.department ?? "",
++            projectId: p.id,
++          });
+         }
+-      });
+-    });
++      }
++    }
++    return [...byName.values()]
++      .map((f) => ({
++        ...f,
++        total: f.incoming + f.completed,
++        timeline: f.timeline.sort((a, b) => b.date.localeCompare(a.date)),
++      }))
++      .filter((f) => f.total > 0)
++      .sort((a, b) => b.total - a.total);
++  }, [projects]);
+ 
++  /*
++   * Status distribution over every review row.
++   *
++   * This was five hardcoded buckets matched by exact string. Measured against
++   * the shipped data: 15,646 non-null review rows, of which it plotted 14,587
++   * and silently dropped 1,059 — Projektkonfig. 474, Prüfung erfolgt 229,
++   * Niederschrift erstellt 180 + 80 annotated, zurückgestellt 44,
++   * Projektkonfiguration 33, prüffähig 19. Every one of the 260 Niederschrift
++   * sign-offs was missing from a chart headed "Alle Gewerke". It also painted
++   * Nachforderung red, while status-appearance.ts gives it the amber
++   * `attention` tone.
++   *
++   * Now: one bucket per canonical status, coloured by the same table the
++   * badges use, and a row whose status cannot be mapped is counted as
++   * unbekannt instead of vanishing.
++   */
++  const { visibleStatusData, unmappedStatusRows, totalStatusRows } = useMemo(() => {
++    const counts = new Map<string, number>();
++    let unmapped = 0;
++    for (const p of projects) {
++      for (const r of p.reviews ?? []) {
++        if (!r.status) continue;
++        const s = normalizeReviewStatus(r.status);
++        if (s === null) { unmapped++; continue; }
++        counts.set(s, (counts.get(s) ?? 0) + 1);
++      }
++    }
++    /*
++     * Grouped by tone, not by status.
++     *
++     * Plotting all 12 canonical statuses made the chart complete but
++     * unreadable: status-appearance.ts maps 12 statuses onto 8 tones, so
++     * "Zustimmung erteilt" and "Niederschrift erstellt" are the same green and
++     * "abgelehnt" and "gestoppt" the same red. Two slices with one colour and
++     * two legend entries with one swatch is not a legend. Grouping by tone
++     * gives 8 slices, 8 distinct colours, and still counts every row — the
++     * tooltip names the statuses inside each.
++     */
++    const byTone = new Map<string, { value: number; statuses: string[]; color: string }>();
++    for (const [status, n] of counts) {
++      const tone = STATUS_TONE[status as ReviewStatus];
++      const label = TONE_APPEARANCE[tone].label;
++      const entry = byTone.get(label) ?? {
++        value: 0,
++        statuses: [],
++        color: TONE_APPEARANCE[tone].hex,
++      };
++      entry.value += n;
++      entry.statuses.push(`${status} (${n.toLocaleString("de-DE")})`);
++      byTone.set(label, entry);
++    }
++    const data = [...byTone.entries()]
++      .sort((a, b) => b[1].value - a[1].value)
++      .map(([name, e]) => ({ name, value: e.value, color: e.color, statuses: e.statuses }));
++    if (unmapped > 0) {
++      data.push({
++        name: "unbekannter Status",
++        value: unmapped,
++        color: statusHex(null),
++        statuses: [],
++      });
++    }
+     return {
+-      name, incoming, completed,
+-      total: incoming + completed,
+-      timeline: timeline.sort((a, b) => b.date.localeCompare(a.date))
++      // already filtered: a zero bucket cannot occur, since every bucket is
++      // built from a status that was actually counted
++      visibleStatusData: data,
++      unmappedStatusRows: unmapped,
++      totalStatusRows: data.reduce((n, d) => n + d.value, 0),
+     };
+-  }).filter(f => f.total > 0).sort((a, b) => b.total - a.total);
+-
+-  const overallStatusData = [
+-    { name: "Zustimmung erteilt", value: 0, color: "#10b981" },
+-    { name: "offen", value: 0, color: "#f59e0b" },
+-    { name: "in Bearbeitung", value: 0, color: "#3b82f6" },
+-    { name: "nicht erforderlich", value: 0, color: "#64748b" },
+-    { name: "abgelehnt / Kritisch", value: 0, color: "#ef4444" },
+-  ];
+-
+-  projects.forEach(p => {
+-    p.reviews.forEach(r => {
+-      if (!r.status) return;
+-      const entry = overallStatusData.find(s => s.name === r.status);
+-      if (entry) entry.value++;
+-      else if (["abgelehnt", "Nachforderung", "gestoppt"].includes(r.status)) {
+-        const sonstige = overallStatusData[4];
+-        if (sonstige) sonstige.value++;
+-      }
+-    });
+-  });
++  }, [projects]);
+ 
+   // Fixed: Proper typing for upcomingDeadlines (no more union type errors)
+   /**
+@@ -311,6 +434,48 @@ export default function Dashboard() {
+ 
+ 
+ 
++  /*
++   * Loading and failure were indistinguishable from "everything is zero".
++   *
++   * The page destructured only `data` and rendered unconditionally, and
++   * useAllData returns null while loading, when empty AND when the read failed
++   * — the loader in _core/api/client.ts catches its own errors and returns [].
++   * So a failed load produced a complete, confident dashboard: "Live Übersicht
++   * über alle 0 Projekte", 0 in all four KPI tiles, "0% aller Projekte", empty
++   * charts. Fabricated zeros presented as measurements are worse than an error.
++   */
++  if (dataLoading) {
++    return (
++      <div className="flex min-h-[60vh] items-center justify-center bg-background">
++        <div className="flex flex-col items-center gap-4">
++          <Loader2 className="h-12 w-12 animate-spin text-primary-strong" aria-hidden="true" />
++          <p className="text-lg font-medium text-muted-foreground">Lade Projektdaten…</p>
++        </div>
++      </div>
++    );
++  }
++
++  if (dataError || !allData) {
++    return (
++      <div className="flex min-h-[60vh] items-center justify-center bg-background p-6">
++        <Card className="max-w-md border-2 border-destructive/30">
++          <CardContent className="flex flex-col items-center gap-3 p-6 text-center">
++            <AlertTriangle className="h-10 w-10 text-destructive" aria-hidden="true" />
++            <h2 className="text-lg font-bold">Projektdaten konnten nicht geladen werden</h2>
++            <p className="text-sm text-muted-foreground">
++              Es sind keine Projekte verfügbar, daher kann keine Kennzahl berechnet werden. Bitte
++              die Seite neu laden — bleibt es dabei, fehlt <code className="font-mono">/data.json</code>{" "}
++              oder der lokale Speicher ist leer.
++            </p>
++            <Button variant="outline" onClick={() => window.location.reload()}>
++              Neu laden
++            </Button>
++          </CardContent>
++        </Card>
++      </div>
++    );
++  }
++
+   return (
+     <div className="space-y-8 p-6 bg-background min-h-screen">
+       {/* HEADER */}
+@@ -349,7 +514,12 @@ export default function Dashboard() {
+           </CardHeader>
+           <CardContent>
+             <div className="text-5xl font-bold text-primary-strong">{totalProjects.toLocaleString('de-DE')}</div>
+-            <p className="text-xs text-muted-foreground mt-1">+23 seit letzter Woche</p>
++            {/* "+23 seit letzter Woche" stood here. There is no time series in
++                the data — no created-at, no snapshot, nothing to difference —
++                so the number could only ever have been typed in. */}
++            <p className="text-xs text-muted-foreground mt-1">
++              {metrics.totalReviews.toLocaleString("de-DE")} Fachprüfungen
++            </p>
+           </CardContent>
+         </Card>
+ 
+@@ -389,7 +559,7 @@ export default function Dashboard() {
+           </CardHeader>
+           <CardContent>
+             <div className="text-5xl font-bold text-rose-600">{criticalProjects}</div>
+-            <p className="text-xs text-rose-600 mt-1">Abgelehnt / Nachforderung</p>
++            <p className="text-xs text-rose-600 mt-1">Abgelehnt / gestoppt</p>
+           </CardContent>
+         </Card>
+       </div>
+@@ -402,19 +572,42 @@ export default function Dashboard() {
+           <Card>
+             <CardHeader>
+               <CardTitle>Status-Verteilung (Alle Gewerke)</CardTitle>
++              {/* Says which Prüfzeilen: the panel below counts all 18.172 rows,
++                  this pie only the ones that carry a status. Two different
++                  numbers under the same word on one screen is drift. */}
++              <p className="text-2xs text-muted-foreground">
++                {totalStatusRows.toLocaleString("de-DE")} von{" "}
++                {metrics.totalReviews.toLocaleString("de-DE")} Prüfzeilen tragen einen Status
++                {unmappedStatusRows > 0
++                  ? ` · ${unmappedStatusRows.toLocaleString("de-DE")} davon unbekannt`
++                  : ""}
++              </p>
+             </CardHeader>
+             <CardContent className="h-[420px]">
+               <ResponsiveContainer width="100%" height="100%">
+                 <PieChart>
++                  {/* One array, used for both. Recharts matches <Cell> to slice
++                      by index, so feeding the Pie a filtered array while
++                      mapping Cells from the unfiltered one shifts every colour
++                      the moment any bucket reaches zero. */}
+                   <Pie
+-                    data={overallStatusData.filter(d => d.value > 0)}
++                    data={visibleStatusData}
+                     cx="50%" cy="50%" innerRadius={90} outerRadius={160} paddingAngle={2} dataKey="value"
+                   >
+-                    {overallStatusData.map((entry) => (
++                    {visibleStatusData.map((entry) => (
+                       <Cell key={entry.name} fill={entry.color} />
+                     ))}
+                   </Pie>
+-                  <Tooltip />
++                  {/* The tooltip names the statuses folded into each tone, so
++                      grouping costs no detail. */}
++                  <Tooltip
++                    formatter={(value: number, name: string, item: { payload?: { statuses?: string[] } }) => [
++                      `${value.toLocaleString("de-DE")} Prüfzeilen${
++                        item?.payload?.statuses?.length ? ` — ${item.payload.statuses.join(", ")}` : ""
++                      }`,
++                      name,
++                    ]}
++                  />
+                   <Legend formatter={(value) => <span className="text-foreground">{value}</span>} />
+                 </PieChart>
+               </ResponsiveContainer>
+@@ -424,11 +617,18 @@ export default function Dashboard() {
+           {/* Per Gewerke Grid */}
+           <Card>
+             <CardHeader>
+-              <CardTitle>Status pro Gewerke (Fachbereich)</CardTitle>
++              <CardTitle>
++                Status pro Gewerke — {Math.min(GEWERKE_TILES, gewerkeStatusData.length)} von{" "}
++                {gewerkeStatusData.length}
++              </CardTitle>
+             </CardHeader>
+             <CardContent>
+               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+-                {gewerkeStatusData.slice(0, 8).map((gew) => (
++                {/* 8 of 14. Silently dropping UM, BIM, LST, Vermessung and both
++                    Baubetrieb departments under a heading that reads "pro
++                    Gewerke" claims coverage the grid does not have — the
++                    heading now says how many. */}
++                {gewerkeStatusData.slice(0, GEWERKE_TILES).map((gew) => (
+                   <button
+                     type="button"
+                     key={gew.name}
+@@ -436,9 +636,9 @@ export default function Dashboard() {
+                     onClick={() => setSelectedGewerke(gew.name)}
+                   >
+                     <div className="font-semibold text-lg mb-2">{gew.name}</div>
+-                    <div className="text-3xl font-bold mb-3">{gew.value}</div>
++                    <div className="text-3xl font-bold mb-3">{gew.value.toLocaleString("de-DE")}</div>
+                     <div className="space-y-1 text-xs">
+-                      {Object.entries(gew.breakdown).slice(0, 3).map(([status, count]) => (
++                      {Object.entries(gew.breakdown).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([status, count]) => (
+                         <div key={status} className="flex justify-between">
+                           <span className="text-muted-foreground">{status}</span>
+                           <span className="font-medium">{count}</span>
+@@ -509,7 +709,7 @@ export default function Dashboard() {
+                   <div className="lg:col-span-2 space-y-4">
+                     <div>
+                       <div className="text-sm text-muted-foreground mb-1">Gesamtzahl Prüfungen</div>
+-                      <div className="text-4xl font-bold">{selectedGewerkeData?.value}</div>
++                      <div className="text-4xl font-bold">{selectedGewerkeData?.value?.toLocaleString("de-DE")}</div>
+                     </div>
+                     <div className="space-y-2 pt-4 border-t">
+                       {selectedPieData.map((item) => (
+@@ -563,13 +763,13 @@ export default function Dashboard() {
+                       <div>
+                         <div className="font-semibold">{fach.name}</div>
+                         <div className="text-xs text-muted-foreground">
+-                          {fach.incoming} offen • {fach.completed} erledigt
++                          {fach.incoming.toLocaleString("de-DE")} offen • {fach.completed.toLocaleString("de-DE")} erledigt
+                         </div>
+                       </div>
+                     </div>
+                     <div className="flex items-center gap-2">
+                       <Badge variant={fach.incoming > 5 ? "destructive" : "secondary"}>
+-                        {fach.total} Tasks
++                        {fach.total.toLocaleString("de-DE")} Tasks
+                       </Badge>
+                       {expandedFach === fach.name ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                     </div>
+@@ -585,15 +785,15 @@ export default function Dashboard() {
+                       >
+                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+                           <div className="text-center">
+-                            <div className="text-2xl font-bold text-amber-600">{fach.incoming}</div>
++                            <div className="text-2xl font-bold text-amber-600">{fach.incoming.toLocaleString("de-DE")}</div>
+                             <div className="text-xs">Eingehend</div>
+                           </div>
+                           <div className="text-center">
+-                            <div className="text-2xl font-bold text-emerald-600">{fach.completed}</div>
++                            <div className="text-2xl font-bold text-emerald-600">{fach.completed.toLocaleString("de-DE")}</div>
+                             <div className="text-xs">Erledigt</div>
+                           </div>
+                           <div className="text-center">
+-                            <div className="text-2xl font-bold">{fach.total}</div>
++                            <div className="text-2xl font-bold">{fach.total.toLocaleString("de-DE")}</div>
+                             <div className="text-xs">Gesamt</div>
+                           </div>
+                         </div>
+@@ -601,10 +801,20 @@ export default function Dashboard() {
+                           <div className="text-xs font-medium mb-2 text-muted-foreground">AKTUELLE AKTIVITÄT</div>
+                           <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
+                             {fach.timeline.length > 0 ? fach.timeline.map((item) => (
+-                              <div key={`${item.date}-${item.project}-${item.action}`} className="flex items-start gap-3 text-sm border-l-2 border-primary pl-3 py-1">
+-                                <div className="font-mono text-xs text-muted-foreground w-20 shrink-0">{item.date}</div>
+-                                <div>
++                              /* Key was `date-project-action`, which is not
++                                 unique: one reviewer signing two Gewerke on the
++                                 same project on the same day produced the same
++                                 key twice and React dropped the second row —
++                                 1,509 rows across the panel. The department is
++                                 what distinguishes them, so it is now in the
++                                 key and on screen. */
++                              <div key={`${item.date}-${item.projectId}-${item.department}-${item.action}`} className="flex items-start gap-3 text-sm border-l-2 border-primary pl-3 py-1">
++                                <div className="font-mono text-xs text-muted-foreground w-24 shrink-0">{formatGerman(item.date) || item.date}</div>
++                                <div className="min-w-0">
+                                   <span className="font-medium">{item.action}</span> — {item.project}
++                                  {item.department && (
++                                    <span className="ml-1 text-xs text-muted-foreground">({item.department})</span>
++                                  )}
+                                 </div>
+                               </div>
+                             )) : (
+@@ -824,7 +1034,9 @@ export default function Dashboard() {
+ 
+           <Card>
+             <CardHeader>
+-              <CardTitle>Regionale Verteilung</CardTitle>
++              <CardTitle>
++                Regionale Verteilung — Top {regionDistribution.length} von {regionCount}
++              </CardTitle>
+             </CardHeader>
+             <CardContent>
+               <div className="space-y-3">
+@@ -832,7 +1044,7 @@ export default function Dashboard() {
+                   <div key={r.region} className="flex items-center gap-3">
+                     <div className="w-3 h-3 rounded-full" style={{ backgroundColor: r.color }} />
+                     <div className="flex-1">{r.region}</div>
+-                    <div className="font-mono font-bold">{r.count}</div>
++                    <div className="font-mono font-bold">{r.count.toLocaleString("de-DE")}</div>
+                     <div className="w-24 h-2 bg-muted rounded-full overflow-hidden">
+                       <div className="h-full bg-current" style={{ width: `${(r.count / totalProjects) * 100}%`, color: r.color }} />
+                     </div>
+@@ -876,17 +1088,12 @@ export default function Dashboard() {
+           </CardHeader>
+           <CardContent>
+             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+-              <div className="flex items-center gap-2">
+-                <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+-                <span>Datenbank: Online</span>
+-              </div>
+-              <div className="flex items-center gap-2">
+-                <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+-                <span>Excel Sync: Aktiv</span>
+-              </div>
+-              {/* "API: Verbunden" with a green pulse was false: production is a
+-                  static SPA (vercel.json declares no functions) and the data
+-                  lives in localStorage seeded from /data.json. */}
++              {/* "Datenbank: Online" and "Excel Sync: Aktiv" stood here with
++                  pulsing green dots. Both were false for the same reason the
++                  third one below was already removed: production is a static
++                  SPA (vercel.json declares no functions), there is no database
++                  connection and no Excel sync process. Nothing polled them —
++                  they were literals styled to look like telemetry. */}
+               <div className="flex items-center gap-2">
+                 <div className="h-2 w-2 rounded-full bg-emerald-500" />
+                 <span>Daten lokal geladen ({totalProjects.toLocaleString('de-DE')} Projekte)</span>
+@@ -939,19 +1146,32 @@ export default function Dashboard() {
+                         </Badge>
+                       </div>
+                       <div className="text-sm mt-1">{review.prueferName}</div>
+-                      <div className="text-xs text-muted-foreground">{review.pruefDatum}</div>
++                      <div className="text-xs text-muted-foreground">{formatGerman(review.pruefDatum) || "—"}</div>
+                     </div>
+                   ))}
+                 </div>
+               </div>
+ 
+-              {selectedProject.projektLink && (
++              {/* Only 66 of the 138 populated projektLink values are URLs; the
++                  other 72 are notes. Rendering those as an anchor made a
++                  relative href that opened the app's own 404 page. */}
++              {projectLinkUrl(selectedProject.projektLink) && (
+                 <Button variant="outline" asChild>
+-                  <a href={selectedProject.projektLink} target="_blank" rel="noopener noreferrer">
++                  <a
++                    href={projectLinkUrl(selectedProject.projektLink) as string}
++                    target="_blank"
++                    rel="noopener noreferrer"
++                  >
+                     <ExternalLink className="mr-2 h-4 w-4" /> Projektlink öffnen
+                   </a>
+                 </Button>
+               )}
++              {projectLinkNote(selectedProject.projektLink) && (
++                <p className="rounded-lg border bg-muted/40 p-3 text-xs leading-relaxed text-muted-foreground">
++                  <span className="font-bold">Projektlink-Feld (kein Link):</span>{" "}
++                  {projectLinkNote(selectedProject.projektLink)}
++                </p>
++              )}
+             </div>
+           )}
+         </DialogContent>
+diff --git a/client/src/pages/Login.tsx b/client/src/pages/Login.tsx
+index 7329fde..5478ee0 100644
+--- a/client/src/pages/Login.tsx
++++ b/client/src/pages/Login.tsx
+@@ -150,7 +150,10 @@ export default function Login() {
+           </CardContent>
+           <CardFooter>
+             <p className="text-xs text-center w-full text-muted-foreground">
+-              Version 1.0.0 | © 2026 Deutsche Bahn AG
++              {/* Was the literal "Version 1.0.0" while package.json said 2.0.0 —
++                  exactly the drift Footer.tsx already documents as fixed by
++                  reading the Vite define. */}
++              Version {__APP_VERSION__} | © {new Date().getFullYear()} Deutsche Bahn AG
+             </p>
+           </CardFooter>
+         </Card>
+diff --git a/client/src/pages/NotFound.tsx b/client/src/pages/NotFound.tsx
+index 9c74a0b..73fb1cc 100644
+--- a/client/src/pages/NotFound.tsx
++++ b/client/src/pages/NotFound.tsx
+@@ -27,7 +27,7 @@ export default function NotFound() {
+               <div className="absolute inset-0 bg-red-100 rounded-full animate-pulse" />
+               <AlertCircle 
+                 className="relative h-16 w-16 text-red-500" 
+-                aria-label="Page not found icon" 
++                aria-hidden="true" 
+               />
+             </div>
+           </div>
+diff --git a/client/src/pages/Projects.tsx b/client/src/pages/Projects.tsx
+index 26166f3..98f4e4e 100644
+--- a/client/src/pages/Projects.tsx
++++ b/client/src/pages/Projects.tsx
+@@ -1,5 +1,5 @@
+ import React, { useState, useMemo, useCallback, useEffect } from "react";
+-import { useLocation } from "wouter";
++import { useLocation, useSearch as useRouteSearch } from "wouter";
+ 
+ import {
+   TableBody,
+@@ -18,6 +18,7 @@ import { statusBadgeClass } from "@shared/status-appearance";
+ import { toast } from "sonner";
+ import { MapView, type StationSelection } from "@/components/Map";
+ import { ProjectDetailDialog } from "@/components/ProjectDetailDialog";
++import { projectLinkUrl } from "@shared/project-link";
+ // DB Corporate Status Colors (perfect harmony with Dashboard.tsx)
+ 
+ function StatusBadge({ status }: { status: string | null }) {
+@@ -152,10 +153,34 @@ function SortHeader({ column, label, sortBy, sortDir, onSort }: SortHeaderProps)
+ }
+ 
+ export default function Projects() {
+-  const [searchInput, setSearchInput] = useState("");
+-  const [search, setSearch] = useState("");
++  /**
++   * Seeded from ?q=, so the header's search box has somewhere to land and a
++   * result set is linkable. Reading it during useState rather than in an effect
++   * means the first render already shows the filtered set — an effect would
++   * paint all 1,298 rows and then replace them.
++   */
++  const initialQuery = useMemo(() => {
++    const raw = new URLSearchParams(
++      typeof window === "undefined" ? "" : window.location.search,
++    ).get("q");
++    return (raw ?? "").trim();
++  }, []);
++  const [searchInput, setSearchInput] = useState(initialQuery);
++  const [search, setSearch] = useState(initialQuery);
+   const { data: searchSuggestions } = useSearchSuggestions(searchInput);
+-  const [mapBounds, setMapBounds] = useState<{ minLat?: number; maxLat?: number; minLng?: number; maxLng?: number } | Record<string, never>>({});
++  /*
++   * Removed: `mapBounds` state fed by the map's onBoundsChange and spread into
++   * useProjects. The hook declares minLat/maxLat/minLng/maxLng in its parameter
++   * type and never destructures or uses them, so every pan and zoom fired a
++   * state update, re-rendered the page and changed nothing — while the count
++   * above the map kept saying "1.298 Projekte gefunden" as the user zoomed into
++   * one city. A control that appears to filter and does not is worse than no
++   * control, so the wiring is gone rather than left looking functional.
++   *
++   * Filtering by viewport is a real feature; it needs the station geocoding the
++   * map already does (buildStationGeo) to be available to the page, which is a
++   * change to where that resolution lives, not a prop rename.
++   */
+   const [region, setRegion] = useState<string>("");
+   const [projektleiter, setProjektleiter] = useState<string>("");
+   const [pruefer, setPruefer] = useState<string>("");
+@@ -166,6 +191,7 @@ export default function Projects() {
+   const [sortBy, setSortBy] = useState("id");
+   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+   const [, setLocation] = useLocation();
++  const routeSearch = useRouteSearch();
+   const [viewMode, setViewMode] = useState<"table" | "cards" | "map">("table");
+   /** Set by the map; narrows the card view to one station's exact project ids. */
+   const [stationFocus, setStationFocus] = useState<StationSelection | null>(null);
+@@ -184,7 +210,6 @@ export default function Projects() {
+     sortBy,
+     sortDir,
+     showAll: true,
+-    ...mapBounds,
+   });
+ 
+   const { data: filterOptions } = useFilters();
+@@ -209,6 +234,18 @@ export default function Projects() {
+     return () => clearTimeout(t);
+   }, [searchInput]);
+ 
++  // Searching again from the header while already on this page changes only the
++  // query string; wouter keeps the component mounted, so the initial-state read
++  // above never runs a second time.
++  useEffect(() => {
++    const q = (new URLSearchParams(routeSearch).get("q") ?? "").trim();
++    if (q) {
++      setSearchInput(q);
++      setSearch(q);
++      setStationFocus(null);
++    }
++  }, [routeSearch]);
++
+   const handleSort = (column: string) => {
+     if (sortBy === column) {
+       setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+@@ -218,6 +255,8 @@ export default function Projects() {
+     }
+   };
+ 
++  // aria-pressed, because these are toggles: they add or remove a department's
++  // three columns from the table and had no state exposed to assistive tech.
+   const toggleDept = (dept: string) => {
+     setExpandedDepts((prev) =>
+       prev.includes(dept) ? prev.filter((d) => d !== dept) : [...prev, dept]
+@@ -436,7 +475,9 @@ export default function Projects() {
+                       key={suggestion}
+                       type="button"
+                       className="w-full cursor-pointer px-4 py-2 text-left hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:outline-none"
+-                      onMouseDown={() => {
++                      /* onClick, not onMouseDown — mousedown never fires from
++                         Enter or Space, so this list was mouse-only. */
++                      onClick={() => {
+                         setSearchInput(suggestion);
+                         setSearch(suggestion);
+                       }}
+@@ -452,6 +493,8 @@ export default function Projects() {
+           <Button
+             variant={showFilters ? "default" : "outline"}
+             size="sm"
++            aria-expanded={showFilters}
++            aria-controls="projects-filter-panel"
+             onClick={() => setShowFilters(!showFilters)}
+             className="gap-2 h-10"
+           >
+@@ -510,7 +553,7 @@ export default function Projects() {
+ 
+       {/* Filter Panel */}
+       {showFilters && (
+-        <Card className="border-primary/20 shadow-md animate-in fade-in slide-in-from-top-4 duration-300">
++        <Card id="projects-filter-panel" className="border-primary/20 shadow-md animate-in fade-in slide-in-from-top-4 duration-300">
+           <CardContent className="p-6">
+             <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
+               <div className="space-y-2">
+@@ -591,6 +634,7 @@ export default function Projects() {
+                     key={dept}
+                     variant={expandedDepts.includes(dept) ? "default" : "outline"}
+                     size="sm"
++                    aria-pressed={expandedDepts.includes(dept)}
+                     onClick={() => toggleDept(dept)}
+                     className={`text-2xs h-7 px-3 ${expandedDepts.includes(dept) ? "bg-primary hover:bg-primary/90 text-white" : ""}`}
+                   >
+@@ -767,7 +811,12 @@ export default function Projects() {
+                               ? new Date(project.terminProjektvorstellung).toLocaleDateString("de-DE")
+                               : "-"}
+                           </td>
+-                          <td className="py-3 px-3 text-center">
++                          <td className="min-w-[104px] px-3 py-3">
++                            {/* A flex row, not two inline buttons: the two 44px
++                                touch targets need to be laid out side by side
++                                with a gap, and `text-center` on the cell let
++                                them wrap instead. */}
++                            <div className="cell-actions flex items-center justify-center gap-1">
+                             {/* Details reachable from the table too, so the
+                                 three views expose the same action rather than
+                                 the card grid being the only way in. */}
+@@ -776,7 +825,7 @@ export default function Projects() {
+                               aria-label={`Details zu Projekt ${project.projektnummer ?? project.id} anzeigen`}
+                               title="Details anzeigen"
+                               onClick={() => setDetailProjectId(project.id)}
+-                              className="mr-1 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
++                              className="flex items-center justify-center rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                             >
+                               <Info className="h-4 w-4" aria-hidden="true" />
+                             </button>
+@@ -785,7 +834,7 @@ export default function Projects() {
+                                 <button
+                                   type="button"
+                                   aria-label={`Kommentar und Link zu Projekt ${project.projektnummer ?? project.id}`}
+-                                  className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
++                                  className="flex items-center justify-center rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                                 >
+                                   <MessageSquare className="h-4 w-4" aria-hidden="true" />
+                                 </button>
+@@ -825,10 +874,18 @@ export default function Projects() {
+                                         className="flex-1"
+                                         placeholder="https://..."
+                                       />
+-                                      {project.projektLink && (
++                                      {/* Only when it parses as a URL — see
++                                          shared/project-link.ts. And an
++                                          icon-only link needs a name. */}
++                                      {projectLinkUrl(project.projektLink) && (
+                                         <Button variant="outline" size="icon" asChild>
+-                                          <a href={project.projektLink} target="_blank" rel="noopener noreferrer">
+-                                            <ExternalLink className="h-4 w-4 text-primary-strong" />
++                                          <a
++                                            href={projectLinkUrl(project.projektLink) as string}
++                                            target="_blank"
++                                            rel="noopener noreferrer"
++                                            aria-label={`Projektlink von ${project.projektnummer ?? project.id} in neuem Tab öffnen`}
++                                          >
++                                            <ExternalLink className="h-4 w-4 text-primary-strong" aria-hidden="true" />
+                                           </a>
+                                         </Button>
+                                       )}
+@@ -837,6 +894,7 @@ export default function Projects() {
+                                 </div>
+                               </DialogContent>
+                             </Dialog>
++                          </div>
+                           </td>
+ 
+                           {expandedDepts.length > 0 ? (
+@@ -858,7 +916,14 @@ export default function Projects() {
+                                   </td>
+                                   <td className="py-3 px-3">
+                                     {review ? (
++                                      /* The only unlabeled form control in the
++                                         app — and it writes. A screen reader
++                                         announced "offen, combo box" with no
++                                         way to know which Gewerk or project it
++                                         belonged to, once per project per
++                                         department. */
+                                       <select
++                                        aria-label={`Status ${dept} für Projekt ${project.projektnummer ?? project.id}`}
+                                         value={review.status || ""}
+                                         onChange={(e) => applyReviewEdit(project.id, dept, "status", e.target.value)}
+                                         className="text-2xs bg-transparent border rounded-md px-2 py-1 w-full focus:ring-1 focus:ring-primary outline-none"
+@@ -974,7 +1039,6 @@ export default function Projects() {
+                 initialCenter={{ lat: 51.1657, lng: 10.4515 }}
+                 initialZoom={6}
+                 className="h-[65vh] min-h-[380px] sm:h-[560px] lg:h-[600px] w-full relative"
+-                onBoundsChange={setMapBounds}
+                 onProjectSelect={handleMapProjectSelect}
+                 onStationSelect={handleStationSelect}
+               />
+diff --git a/client/src/pages/PsvItk.tsx b/client/src/pages/PsvItk.tsx
+index 2fa3d79..251fa61 100644
+--- a/client/src/pages/PsvItk.tsx
++++ b/client/src/pages/PsvItk.tsx
+@@ -1,107 +1,20 @@
+-import { Card, CardContent } from "@/components/ui/card";
+-import { Loader2 } from "lucide-react";
+-import { useAllData } from "@/hooks/useDataQuery";
+-import { statusBadgeClass } from "@shared/status-appearance";
++import { DepartmentReviewTable } from "@/components/DepartmentReviewTable";
+ 
++/**
++ * The date column was headed "Datum" on a page titled "Projektvorstellungen",
++ * while it renders the ITK Prüfdatum. Measured over the 510 listed rows the two
++ * fields differ on 355 and agree on 126, and 73 rows show "—" for a project
++ * that does have a Termin on file — so a reader taking "Datum" as the
++ * Projektvorstellung date was wrong two times in three. The shared component
++ * labels it "Prüfdatum", which is what it is.
++ */
+ export default function PsvItk() {
+-  const { data, isLoading } = useAllData();
+-
+-  if (isLoading || !data) {
+-    return (
+-      <div className="flex items-center justify-center h-screen bg-background">
+-        <div className="flex flex-col items-center gap-4">
+-          <Loader2 className="h-12 w-12 animate-spin text-primary-strong" />
+-          <p className="text-lg font-medium text-muted-foreground">Lade PSV-ITK Daten...</p>
+-        </div>
+-      </div>
+-    );
+-  }
+-
+-  // Filter projects that have ITK reviews with a status
+-  const itkProjects = data.projects.filter((p: any) => {
+-    const itkReview = p.reviews?.find((r: any) => r.department === 'ITK');
+-    return itkReview?.status && itkReview.status !== 'nicht erforderlich';
+-  });
+-
+   return (
+-    <div className="space-y-8 p-6 bg-background min-h-screen">
+-      {/* HEADER SECTION */}
+-      <div className="flex items-center justify-between">
+-        <div>
+-          <h1 className="page-title">PSV-ITK Projektvorstellungen</h1>
+-          <p className="text-muted-foreground mt-2">
+-            Verwaltung der ITK-Projektvorstellungen &bull; {itkProjects.length} Einträge
+-          </p>
+-        </div>
+-      </div>
+-
+-      {/* MAIN CONTENT AREA */}
+-      <Card className="bg-card rounded-xl border shadow-sm overflow-hidden">
+-        <CardContent className="p-0">
+-          <div className="table-scroll-container">
+-            <table className="w-full text-xs border-collapse">
+-              <thead className="bg-muted/50 sticky top-0 z-10">
+-                <tr>
+-                  <th className="text-left py-3 px-4 font-semibold text-muted-foreground whitespace-nowrap border-b">Projektnummer</th>
+-                  <th className="text-left py-3 px-4 font-semibold text-muted-foreground whitespace-nowrap border-b">Region</th>
+-                  <th className="text-left py-3 px-4 font-semibold text-muted-foreground whitespace-nowrap border-b">Station</th>
+-                  <th className="text-left py-3 px-4 font-semibold text-muted-foreground whitespace-nowrap border-b min-w-[250px]">Beschreibung</th>
+-                  <th className="text-left py-3 px-4 font-semibold text-muted-foreground whitespace-nowrap border-b">Projektleiter</th>
+-                  <th className="text-left py-3 px-4 font-semibold text-muted-foreground whitespace-nowrap border-b">ITK-Prüfer</th>
+-                  <th className="text-left py-3 px-4 font-semibold text-muted-foreground whitespace-nowrap border-b">Datum</th>
+-                  <th className="text-left py-3 px-4 font-semibold text-muted-foreground whitespace-nowrap border-b">Status</th>
+-                </tr>
+-              </thead>
+-              <tbody>
+-                {itkProjects.map((item: any) => {
+-                  const itkReview = item.reviews?.find((r: any) => r.department === 'ITK');
+-                  return (
+-                    <tr key={item.id} className="border-b hover:bg-muted/30 transition-colors">
+-                      <td className="py-3 px-4 font-mono text-xs whitespace-nowrap font-medium">
+-                        {item.projektnummer || '-'}
+-                      </td>
+-                      <td className="py-3 px-4 text-xs whitespace-nowrap">
+-                        {item.bahnhofsmanagement || '-'}
+-                      </td>
+-                      <td className="py-3 px-4 text-xs whitespace-nowrap font-medium">
+-                        {item.station || '-'}
+-                      </td>
+-                      <td className="py-3 px-4 text-xs max-w-[300px]">
+-                        <span className="line-clamp-2">{item.projektbeschreibung || '-'}</span>
+-                      </td>
+-                      <td className="py-3 px-4 text-xs whitespace-nowrap">
+-                        {item.projektleiter || '-'}
+-                      </td>
+-                      <td className="py-3 px-4 text-xs whitespace-nowrap">
+-                        {itkReview?.prueferName || '-'}
+-                      </td>
+-                      <td className="py-3 px-4 text-xs whitespace-nowrap">
+-                        {itkReview?.pruefDatum ? new Date(itkReview.pruefDatum).toLocaleDateString('de-DE') : '-'}
+-                      </td>
+-                      <td className="py-3 px-4 text-xs whitespace-nowrap">
+-                        {/* Was a 3-branch ternary; the other 9 canonical
+-                            statuses fell through to an unstyled default. */}
+-                        <span
+-                          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-2xs font-medium ${statusBadgeClass(itkReview?.status)}`}
+-                        >
+-                          {itkReview?.status || '-'}
+-                        </span>
+-                      </td>
+-                    </tr>
+-                  );
+-                })}
+-                {itkProjects.length === 0 && (
+-                  <tr>
+-                    <td colSpan={8} className="py-12 text-center text-muted-foreground">
+-                      Keine PSV-ITK Einträge vorhanden.
+-                    </td>
+-                  </tr>
+-                )}
+-              </tbody>
+-            </table>
+-          </div>
+-        </CardContent>
+-      </Card>
+-    </div>
++    <DepartmentReviewTable
++      department="ITK"
++      title="PSV-ITK Prüfungen"
++      subtitle="Übersicht der ITK-Prüfungen"
++      prueferLabel="ITK-Prüfer"
++    />
+   );
+ }
+diff --git a/scripts/e2e-smoke.mjs b/scripts/e2e-smoke.mjs
+index 0a8f8bd..34234c4 100644
+--- a/scripts/e2e-smoke.mjs
++++ b/scripts/e2e-smoke.mjs
+@@ -227,7 +227,7 @@ await check("wizard exports a real PDF with the corrected ITK recipients", async
+   await go("/anmeldung");
+   await page.getByLabel("Projektnummer", { exact: false }).first().fill("E2E.0001");
+   await page.getByLabel("Projektleitung", { exact: false }).first().fill("E2E Prüfer");
+-  await page.getByRole("button", { name: "Checkliste 22 Fragen" }).click();
++  await page.getByRole("button", { name: /^Schritt 2:/ }).click();
+   await page.waitForTimeout(600);
+ 
+   // answer ITK "Ja" so a review opens and the notification list is populated
+@@ -279,7 +279,7 @@ await check("submitting the wizard creates a project with exactly the right revi
+   const station = page.getByLabel("Station", { exact: false }).first();
+   if (await station.count()) await station.fill("Frankfurt (Main) Süd");
+ 
+-  await page.getByRole("button", { name: "Checkliste 22 Fragen" }).click();
++  await page.getByRole("button", { name: /^Schritt 2:/ }).click();
+   await page.waitForTimeout(600);
+ 
+   // Answer exactly two Gewerke "Ja" -> exactly two reviews must open.
+@@ -584,6 +584,137 @@ await check("\"Details anzeigen\" on a card opens that project's dialog", async
+   await page.keyboard.press("Escape");
+ });
+ 
++console.log("\n== derived, not typed in ==");
++
++/**
++ * The audit that produced these found the same shape of defect nine times: a
++ * figure on screen that no code derives, or a chart keyed on a raw status
++ * string so rows silently vanish. These assertions pin the fixes.
++ */
++await check("no page states a figure the data does not support", async () => {
++  for (const route of ["/", "/projects", "/bvb-eea", "/psv-itk", "/anmeldung"]) {
++    await go(route);
++    const body = await page.locator("body").innerText();
++    const invented = [
++      "+23 seit letzter Woche",   // a weekly delta with no time series behind it
++      "Datenbank: Online",        // no database exists in this build
++      "Excel Sync: Aktiv",        // no sync process exists
++      "Version 1.0.0",            // package.json says 2.0.0
++      "22 Fragen",                // the wizard renders 19 or 18, never 22
++      "folgt in Stufe 4",         // promised features that already shipped
++    ];
++    // The wizard has no project data in scope, so any total it prints is a
++    // literal. 18.172 was frozen into Step 3.
++    if (route === "/anmeldung") invented.push("18.172");
++    for (const phrase of invented) {
++      assert(!body.includes(phrase), `${route} still shows "${phrase}"`);
++    }
++  }
++});
++
++await check("the status pie plots every review row, not a hardcoded subset", async () => {
++  await go("/");
++  const caption = await page
++    .locator("text=/von .* Prüfzeilen tragen einen Status/")
++    .first()
++    .innerText();
++  const shown = Number((caption.match(/^[\d.]+/) ?? ["0"])[0].replace(/\./g, ""));
++  // Every non-null status in the shipped data, counted independently here.
++  const projects = JSON.parse(fs.readFileSync("client/public/data.json", "utf8")).projects;
++  let expected = 0;
++  for (const p of projects) for (const r of p.reviews ?? []) if (r.status) expected++;
++  assert(shown === expected, `pie caption says ${shown} rows, the data has ${expected}`);
++});
++
++await check("truncated lists say how much they are hiding", async () => {
++  await go("/");
++  const body = await page.locator("body").innerText();
++  assert(/Status pro Gewerke — \d+ von \d+/.test(body), "the Gewerke grid does not state its own coverage");
++  assert(/Regionale Verteilung — Top \d+ von \d+/.test(body), "the region list does not state its own coverage");
++});
++
++await check("BVB-EEA and PSV-ITK render German dates and honest headings", async () => {
++  for (const [route, heading] of [["/bvb-eea", "BVB-EEA"], ["/psv-itk", "PSV-ITK"]]) {
++    await go(route);
++    await page.waitForSelector("table tbody tr", { timeout: 15000 });
++    const body = await page.locator("body").innerText();
++    assert(body.includes(heading), `${route} lost its heading`);
++    assert(!/Verwaltung der/.test(body), `${route} still claims to be a Verwaltung; it has no controls`);
++    // dd.mm.yyyy with leading zeros — never yyyy-mm-dd, never d.m.yyyy
++    const dates = await page.$$eval("table tbody tr td:nth-child(7)", (tds) =>
++      tds.map((t) => t.textContent.trim()).filter((t) => t && t !== "—"),
++    );
++    assert(dates.length > 0, `${route} rendered no Prüfdatum at all`);
++    const bad = dates.filter((d) => !/^\d{2}\.\d{2}\.\d{4}$/.test(d));
++    assert(bad.length === 0, `${route} renders non-German dates: ${bad.slice(0, 3).join(", ")}`);
++  }
++});
++
++await check("the header search reaches the Projekte page", async () => {
++  await go("/");
++  const box = page.getByLabel("Projekte, Stationen und Prüfer durchsuchen");
++  await box.fill("Bensheim");
++  await box.press("Enter");
++  await page.waitForTimeout(900);
++  assert(/\/projects/.test(page.url()), `search went to ${page.url()}`);
++  assert(new URL(page.url()).searchParams.get("q") === "Bensheim", "the term did not survive the navigation");
++  const count = await page.$$eval("table tbody tr", (r) => r.length);
++  const total = JSON.parse(fs.readFileSync("client/public/data.json", "utf8")).projects.length;
++  assert(count > 0 && count < total, `search returned ${count} of ${total} rows — it did not filter`);
++});
++
++await check("the bell shows real events, not an empty store", async () => {
++  await go("/");
++  await page.getByRole("button", { name: /^Änderungen/ }).click();
++  await page.waitForTimeout(500);
++  const menu = await page.locator('[role="menu"]').innerText();
++  assert(
++    !menu.includes("Keine neuen Benachrichtigungen"),
++    "the bell still reads from a store nothing writes",
++  );
++  await page.keyboard.press("Escape");
++});
++
++await check("both table row actions are separate 44px targets on touch", async () => {
++  const touch = await browser.newContext({
++    viewport: { width: 834, height: 1194 },
++    hasTouch: true, isMobile: true, deviceScaleFactor: 2,
++  });
++  await touch.addInitScript(() =>
++    localStorage.setItem(
++      "bahn-demo-user",
++      JSON.stringify({ id: 1, openId: "e2e", name: "Vincenzo Grimaldi", email: "v@db.de", role: "admin" }),
++    ),
++  );
++  const tp = await touch.newPage();
++  await tp.goto(U("/projects"), { waitUntil: "networkidle" });
++  await tp.waitForSelector("table tbody tr", { timeout: 15000 });
++  await tp.waitForTimeout(800);
++  const r = await tp.evaluate(() => {
++    const cell = [...document.querySelectorAll("td")].find(
++      (td) => td.querySelectorAll("button").length >= 2,
++    );
++    if (!cell) return { err: "no action cell" };
++    const rects = [...cell.querySelectorAll("button")].map((b) => b.getBoundingClientRect());
++    let overlap = 0;
++    for (let i = 0; i < rects.length; i++)
++      for (let j = i + 1; j < rects.length; j++) {
++        const ox = Math.max(0, Math.min(rects[i].right, rects[j].right) - Math.max(rects[i].left, rects[j].left));
++        const oy = Math.max(0, Math.min(rects[i].bottom, rects[j].bottom) - Math.max(rects[i].top, rects[j].top));
++        overlap += ox * oy;
++      }
++    return {
++      small: rects.filter((b) => b.width < 43.5 || b.height < 43.5).length,
++      overlap: Math.round(overlap),
++      count: rects.length,
++    };
++  });
++  await touch.close();
++  assert(!r.err, r.err);
++  assert(r.small === 0, `${r.small} of ${r.count} row actions are under 44px on touch`);
++  assert(r.overlap === 0, `row actions overlap by ${r.overlap}px² — one steals the other's taps`);
++});
++
+ console.log("\n== summary ==");
+ console.log(`${passed} passed, ${failures.length} failed`);
+ await browser.close();
+diff --git a/shared/project-link.ts b/shared/project-link.ts
+new file mode 100644
+index 0000000..e3ea25d
+--- /dev/null
++++ b/shared/project-link.ts
+@@ -0,0 +1,32 @@
++/**
++ * The `projektLink` column is only sometimes a link.
++ *
++ * Measured over the shipped data: 138 of 1,298 rows carry something, and only
++ * 66 of those parse as an http(s) URL. The other 72 are free-text notes that
++ * were typed into the same cell —
++ *
++ *   "ITK - noch offen; BS - noch offen ; BS an Hr. Engstfeld über"
++ *   "BS - lt. PL zurzeit keine Prüfung notwendig, Mieterauftaktge"
++ *
++ * — and rendering those as an anchor produces a *relative* href, so the tab
++ * that opens lands on the app's own 404 page. Three separate places rendered
++ * the raw value; this is the one rule they now share.
++ */
++
++/** The value as a navigable absolute URL, or null when it is not one. */
++export function projectLinkUrl(value: string | null | undefined): string | null {
++  const v = String(value ?? "").trim();
++  if (!/^https?:\/\//i.test(v)) return null;
++  try {
++    return new URL(v).toString();
++  } catch {
++    return null;
++  }
++}
++
++/** The value as a note: present, but not a link. Null when it is a link or empty. */
++export function projectLinkNote(value: string | null | undefined): string | null {
++  const v = String(value ?? "").trim();
++  if (!v) return null;
++  return projectLinkUrl(v) ? null : v;
++}
+-- 
+2.43.0
+
