@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import { deriveProjectMetrics, percent } from '@shared/project-metrics';
-import { statusBadgeClass, statusHex, TONE_APPEARANCE } from '@shared/status-appearance';
-import { BLOCKING_STATUSES, normalizeReviewStatus, OPEN_STATUSES } from '@shared/review-status';
-import { toDate } from '@shared/date';
+import { statusBadgeClass, statusHex, STATUS_TONE, TONE_APPEARANCE } from '@shared/status-appearance';
+import { APPROVED_STATUSES, BLOCKING_STATUSES, normalizeReviewStatus, OPEN_STATUSES, type ReviewStatus } from '@shared/review-status';
+import { formatGerman, toDate } from '@shared/date';
+import { projectLinkNote, projectLinkUrl } from '@shared/project-link';
 import { useLocation } from 'wouter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -24,6 +25,7 @@ import {
   MessageSquare,
   Table2,
   TrendingUp,
+  Loader2,
   Users,
   Zap,
 } from 'lucide-react';
@@ -37,20 +39,41 @@ import { toast } from 'sonner';
 // DB Corporate Status Colors (perfect harmony with Projects.tsx)
 
 // Exact department order from Übersichtsliste_Dashboard_1.xlsm (perfect consistency)
+/** How many Gewerke tiles the grid shows. Named so the heading and the slice
+ *  cannot drift apart. */
+const GEWERKE_TILES = 8;
+
 const GEWERKE = [
   "EEA", "ITK", "BS", "GA", "Energie", "HFT", "HKLS", 
   "TBQ", "UM", "BIM", "LST", "Vermessung", 
   "Baubetriebstechnologie", "Baubetriebsplanung"
 ];
 
-const FACHSPEZIALISTEN = [
-  "Aydogdu", "Degen", "Ries", "Schomber", "Bär", "Oker", "Zentrale",
-  "Er", "Grimaldi", "Goldhausen", "Fey", "Kröcker", "Afteni", "Bierbaum",
-  "Engstfeld", "Weyer", "Lorenz", "Hartung", "Frischbier", "Vafaei", 
-  "Kohlwey", "Rabkin", "Köksal", "Haag", "Pourabbas", "Glandorf", "Krejtschi",
-  "Frousiou-Bauer", "Kalisa", "Dauth", "Hebbrecht", "Kubwimana", "Vatter",
-  "Schauß", "Bierbrauer", "Zentrale", "Zuordnung erforderlich"
-];
+/*
+ * The reviewer roster is derived from the data, never listed by hand.
+ *
+ * It used to be a literal array of 37 entries. Measured against the shipped
+ * data.json that list was wrong in two ways at once:
+ *
+ *   - 8 of the 44 reviewers in the data were missing from it — 985 review rows,
+ *     Haberla 512, Colak 250, Wagner 83, Matteka 46, "BSB des BM´s" 33,
+ *     Eda Pourabbas 32, Ates 23, Herr 6. Colak alone would have ranked third in
+ *     the "Top Performer" list the page renders, and was absent from it.
+ *   - "Zentrale" appeared twice, so two rows rendered with the same React key
+ *     and its workload was counted twice in the panel total.
+ *
+ * A derived roster cannot drift from the data it describes.
+ */
+function reviewerNames(projects: Project[]): string[] {
+  const seen = new Set<string>();
+  for (const p of projects) {
+    for (const r of p.reviews ?? []) {
+      const n = (r.prueferName ?? "").trim();
+      if (n) seen.add(n);
+    }
+  }
+  return [...seen].sort((a, b) => a.localeCompare(b, "de"));
+}
 
 interface Project {
   id: number;
@@ -78,13 +101,22 @@ interface WorkloadItem {
   incoming: number;
   completed: number;
   total: number;
-  timeline: Array<{ date: string; action: string; project: string }>;
+  /** department and projectId are what make a timeline row unique: without them
+   *  two Gewerke signed on the same day for the same project share a React key
+   *  and one of them is dropped from the render. Measured: 1,509 rows. */
+  timeline: Array<{
+    date: string;
+    action: string;
+    project: string;
+    department: string;
+    projectId: number;
+  }>;
 }
 
 export default function Dashboard() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
-  const { data: allData } = useAllData();
+  const { data: allData, isLoading: dataLoading, isError: dataError } = useAllData();
   const { data: auditEntries } = useAuditLog();
   const [selectedGewerke, setSelectedGewerke] = useState<string | null>(null);
   const [expandedFach, setExpandedFach] = useState<string | null>(null);
@@ -113,13 +145,27 @@ export default function Dashboard() {
 
   // "Delayed" = presentation date is in the past but at least one review is still open.
   const today = new Date();
+  // Was `r.status === "offen" || r.status === "in Bearbeitung"`, which is a
+  // third definition of "open" on a page that already had two. It missed
+  // Nachforderung and prüffähig entirely and every annotated variant, and
+  // reported 304 where the canonical OPEN_STATUSES gives 347. The date also
+  // went through `new Date()`, which parses a date-only string as UTC midnight
+  // and can shift a whole day west of Greenwich; toDate() is timezone-safe.
+  today.setHours(0, 0, 0, 0);
   const delayedProjects = projects.filter(p => {
-    const d = p.terminProjektvorstellung ? new Date(p.terminProjektvorstellung) : null;
-    const stillOpen = p.reviews.some(r => r.status === "offen" || r.status === "in Bearbeitung");
-    return d && !Number.isNaN(d.getTime()) && d < today && stillOpen;
+    const d = toDate(p.terminProjektvorstellung);
+    const stillOpen = p.reviews.some(r => {
+      const s = normalizeReviewStatus(r.status);
+      return s !== null && (OPEN_STATUSES as readonly string[]).includes(s);
+    });
+    return d !== null && d < today && stillOpen;
   }).length;
 
   // Real regional distribution from actual bahnhofsmanagement values (top 5).
+  const regionCount = new Set(
+    projects.map((p) => (p.bahnhofsmanagement ?? "").trim()).filter(Boolean),
+  ).size;
+
   const regionDistribution = (() => {
     const counts: Record<string, number> = {};
     for (const p of projects) {
@@ -132,11 +178,18 @@ export default function Dashboard() {
       .map(([region, count], i) => ({ region, count, color: palette[i % palette.length] }));
   })();
 
+  // `counts[review.status]` keyed on the raw string, so statusHex() fell
+  // through to its neutral fallback: TBQ's 80 "Niederschrift erstellt
+  // (LP05-05-01-F31)" rows rendered in exactly the grey used for the 688
+  // "nicht erforderlich" rows in the same pie — a completed sign-off painted
+  // as irrelevant. That is verbatim the regression status-appearance.ts was
+  // written to make impossible.
   const gewerkeStatusData = GEWERKE.map(gew => {
     const counts: Record<string, number> = {};
     projects.forEach(p => {
       const review = p.reviews.find(r => r.department === gew);
-      if (review?.status) counts[review.status] = (counts[review.status] || 0) + 1;
+      const status = normalizeReviewStatus(review?.status);
+      if (status) counts[status] = (counts[status] || 0) + 1;
     });
     return {
       name: gew,
@@ -150,58 +203,128 @@ export default function Dashboard() {
     : null;
 
   const selectedPieData = selectedGewerkeData 
-    ? Object.entries(selectedGewerkeData.breakdown).map(([status, value]) => ({
-        name: status, value, color: statusHex(status)
-      }))
+    ? Object.entries(selectedGewerkeData.breakdown)
+        .sort((a, b) => b[1] - a[1])
+        .map(([status, value]) => ({ name: status, value, color: statusHex(status) }))
     : [];
 
-  const fachWorkload: WorkloadItem[] = FACHSPEZIALISTEN.map(name => {
-    let incoming = 0;
-    let completed = 0;
-    const timeline: Array<{date: string, action: string, project: string}> = [];
-
-    projects.forEach(p => {
-      p.reviews.forEach(r => {
-        if (r.prueferName === name) {
-          if (["offen", "in Bearbeitung", "Nachforderung", "prüffähig"].includes(r.status || "")) incoming++;
-          if (["Zustimmung erteilt", "Niederschrift erstellt"].includes(r.status || "")) completed++;
-          if (r.pruefDatum) {
-            timeline.push({
-              date: r.pruefDatum,
-              action: r.status || "Update",
-              project: p.station || p.projektnummer || "Unknown"
-            });
-          }
+  /*
+   * Workload per reviewer.
+   *
+   * Three defects, all measured:
+   *   - the roster was a hardcoded list missing 8 of the 44 reviewers in the
+   *     data (985 rows), so Colak — who ranks third by volume — never appeared
+   *     in "Top Performer" at all;
+   *   - `includes(r.status)` on raw strings never counted the 80
+   *     "Niederschrift erstellt (LP05-05-01-F31)" rows as completed;
+   *   - the timeline row carried no department, so two Gewerke signed on the
+   *     same day for the same project collapsed onto one React key and 1,509
+   *     rows were dropped from the panel.
+   */
+  const fachWorkload: WorkloadItem[] = useMemo(() => {
+    const byName = new Map<string, WorkloadItem>();
+    for (const name of reviewerNames(projects)) {
+      byName.set(name, { name, incoming: 0, completed: 0, total: 0, timeline: [] });
+    }
+    for (const p of projects) {
+      for (const r of p.reviews ?? []) {
+        const name = (r.prueferName ?? "").trim();
+        const item = name ? byName.get(name) : undefined;
+        if (!item) continue;
+        const status = normalizeReviewStatus(r.status);
+        if (status && (OPEN_STATUSES as readonly string[]).includes(status)) item.incoming++;
+        if (status && (APPROVED_STATUSES as readonly string[]).includes(status)) item.completed++;
+        if (r.pruefDatum) {
+          item.timeline.push({
+            date: r.pruefDatum,
+            action: status ?? r.status ?? "Update",
+            project: p.station || p.projektnummer || "Ohne Station",
+            department: r.department ?? "",
+            projectId: p.id,
+          });
         }
-      });
-    });
-
-    return {
-      name, incoming, completed,
-      total: incoming + completed,
-      timeline: timeline.sort((a, b) => b.date.localeCompare(a.date))
-    };
-  }).filter(f => f.total > 0).sort((a, b) => b.total - a.total);
-
-  const overallStatusData = [
-    { name: "Zustimmung erteilt", value: 0, color: "#10b981" },
-    { name: "offen", value: 0, color: "#f59e0b" },
-    { name: "in Bearbeitung", value: 0, color: "#3b82f6" },
-    { name: "nicht erforderlich", value: 0, color: "#64748b" },
-    { name: "abgelehnt / Kritisch", value: 0, color: "#ef4444" },
-  ];
-
-  projects.forEach(p => {
-    p.reviews.forEach(r => {
-      if (!r.status) return;
-      const entry = overallStatusData.find(s => s.name === r.status);
-      if (entry) entry.value++;
-      else if (["abgelehnt", "Nachforderung", "gestoppt"].includes(r.status)) {
-        const sonstige = overallStatusData[4];
-        if (sonstige) sonstige.value++;
       }
-    });
-  });
+    }
+    return [...byName.values()]
+      .map((f) => ({
+        ...f,
+        total: f.incoming + f.completed,
+        timeline: f.timeline.sort((a, b) => b.date.localeCompare(a.date)),
+      }))
+      .filter((f) => f.total > 0)
+      .sort((a, b) => b.total - a.total);
+  }, [projects]);
+
+  /*
+   * Status distribution over every review row.
+   *
+   * This was five hardcoded buckets matched by exact string. Measured against
+   * the shipped data: 15,646 non-null review rows, of which it plotted 14,587
+   * and silently dropped 1,059 — Projektkonfig. 474, Prüfung erfolgt 229,
+   * Niederschrift erstellt 180 + 80 annotated, zurückgestellt 44,
+   * Projektkonfiguration 33, prüffähig 19. Every one of the 260 Niederschrift
+   * sign-offs was missing from a chart headed "Alle Gewerke". It also painted
+   * Nachforderung red, while status-appearance.ts gives it the amber
+   * `attention` tone.
+   *
+   * Now: one bucket per canonical status, coloured by the same table the
+   * badges use, and a row whose status cannot be mapped is counted as
+   * unbekannt instead of vanishing.
+   */
+  const { visibleStatusData, unmappedStatusRows, totalStatusRows } = useMemo(() => {
+    const counts = new Map<string, number>();
+    let unmapped = 0;
+    for (const p of projects) {
+      for (const r of p.reviews ?? []) {
+        if (!r.status) continue;
+        const s = normalizeReviewStatus(r.status);
+        if (s === null) { unmapped++; continue; }
+        counts.set(s, (counts.get(s) ?? 0) + 1);
+      }
+    }
+    /*
+     * Grouped by tone, not by status.
+     *
+     * Plotting all 12 canonical statuses made the chart complete but
+     * unreadable: status-appearance.ts maps 12 statuses onto 8 tones, so
+     * "Zustimmung erteilt" and "Niederschrift erstellt" are the same green and
+     * "abgelehnt" and "gestoppt" the same red. Two slices with one colour and
+     * two legend entries with one swatch is not a legend. Grouping by tone
+     * gives 8 slices, 8 distinct colours, and still counts every row — the
+     * tooltip names the statuses inside each.
+     */
+    const byTone = new Map<string, { value: number; statuses: string[]; color: string }>();
+    for (const [status, n] of counts) {
+      const tone = STATUS_TONE[status as ReviewStatus];
+      const label = TONE_APPEARANCE[tone].label;
+      const entry = byTone.get(label) ?? {
+        value: 0,
+        statuses: [],
+        color: TONE_APPEARANCE[tone].hex,
+      };
+      entry.value += n;
+      entry.statuses.push(`${status} (${n.toLocaleString("de-DE")})`);
+      byTone.set(label, entry);
+    }
+    const data = [...byTone.entries()]
+      .sort((a, b) => b[1].value - a[1].value)
+      .map(([name, e]) => ({ name, value: e.value, color: e.color, statuses: e.statuses }));
+    if (unmapped > 0) {
+      data.push({
+        name: "unbekannter Status",
+        value: unmapped,
+        color: statusHex(null),
+        statuses: [],
+      });
+    }
+    return {
+      // already filtered: a zero bucket cannot occur, since every bucket is
+      // built from a status that was actually counted
+      visibleStatusData: data,
+      unmappedStatusRows: unmapped,
+      totalStatusRows: data.reduce((n, d) => n + d.value, 0),
+    };
+  }, [projects]);
 
   // Fixed: Proper typing for upcomingDeadlines (no more union type errors)
   /**
@@ -311,6 +434,48 @@ export default function Dashboard() {
 
 
 
+  /*
+   * Loading and failure were indistinguishable from "everything is zero".
+   *
+   * The page destructured only `data` and rendered unconditionally, and
+   * useAllData returns null while loading, when empty AND when the read failed
+   * — the loader in _core/api/client.ts catches its own errors and returns [].
+   * So a failed load produced a complete, confident dashboard: "Live Übersicht
+   * über alle 0 Projekte", 0 in all four KPI tiles, "0% aller Projekte", empty
+   * charts. Fabricated zeros presented as measurements are worse than an error.
+   */
+  if (dataLoading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-12 w-12 animate-spin text-primary-strong" aria-hidden="true" />
+          <p className="text-lg font-medium text-muted-foreground">Lade Projektdaten…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (dataError || !allData) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center bg-background p-6">
+        <Card className="max-w-md border-2 border-destructive/30">
+          <CardContent className="flex flex-col items-center gap-3 p-6 text-center">
+            <AlertTriangle className="h-10 w-10 text-destructive" aria-hidden="true" />
+            <h2 className="text-lg font-bold">Projektdaten konnten nicht geladen werden</h2>
+            <p className="text-sm text-muted-foreground">
+              Es sind keine Projekte verfügbar, daher kann keine Kennzahl berechnet werden. Bitte
+              die Seite neu laden — bleibt es dabei, fehlt <code className="font-mono">/data.json</code>{" "}
+              oder der lokale Speicher ist leer.
+            </p>
+            <Button variant="outline" onClick={() => window.location.reload()}>
+              Neu laden
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8 p-6 bg-background min-h-screen">
       {/* HEADER */}
@@ -349,7 +514,12 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-5xl font-bold text-primary-strong">{totalProjects.toLocaleString('de-DE')}</div>
-            <p className="text-xs text-muted-foreground mt-1">+23 seit letzter Woche</p>
+            {/* "+23 seit letzter Woche" stood here. There is no time series in
+                the data — no created-at, no snapshot, nothing to difference —
+                so the number could only ever have been typed in. */}
+            <p className="text-xs text-muted-foreground mt-1">
+              {metrics.totalReviews.toLocaleString("de-DE")} Fachprüfungen
+            </p>
           </CardContent>
         </Card>
 
@@ -389,7 +559,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-5xl font-bold text-rose-600">{criticalProjects}</div>
-            <p className="text-xs text-rose-600 mt-1">Abgelehnt / Nachforderung</p>
+            <p className="text-xs text-rose-600 mt-1">Abgelehnt / gestoppt</p>
           </CardContent>
         </Card>
       </div>
@@ -402,19 +572,42 @@ export default function Dashboard() {
           <Card>
             <CardHeader>
               <CardTitle>Status-Verteilung (Alle Gewerke)</CardTitle>
+              {/* Says which Prüfzeilen: the panel below counts all 18.172 rows,
+                  this pie only the ones that carry a status. Two different
+                  numbers under the same word on one screen is drift. */}
+              <p className="text-2xs text-muted-foreground">
+                {totalStatusRows.toLocaleString("de-DE")} von{" "}
+                {metrics.totalReviews.toLocaleString("de-DE")} Prüfzeilen tragen einen Status
+                {unmappedStatusRows > 0
+                  ? ` · ${unmappedStatusRows.toLocaleString("de-DE")} davon unbekannt`
+                  : ""}
+              </p>
             </CardHeader>
             <CardContent className="h-[420px]">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
+                  {/* One array, used for both. Recharts matches <Cell> to slice
+                      by index, so feeding the Pie a filtered array while
+                      mapping Cells from the unfiltered one shifts every colour
+                      the moment any bucket reaches zero. */}
                   <Pie
-                    data={overallStatusData.filter(d => d.value > 0)}
+                    data={visibleStatusData}
                     cx="50%" cy="50%" innerRadius={90} outerRadius={160} paddingAngle={2} dataKey="value"
                   >
-                    {overallStatusData.map((entry) => (
+                    {visibleStatusData.map((entry) => (
                       <Cell key={entry.name} fill={entry.color} />
                     ))}
                   </Pie>
-                  <Tooltip />
+                  {/* The tooltip names the statuses folded into each tone, so
+                      grouping costs no detail. */}
+                  <Tooltip
+                    formatter={(value: number, name: string, item: { payload?: { statuses?: string[] } }) => [
+                      `${value.toLocaleString("de-DE")} Prüfzeilen${
+                        item?.payload?.statuses?.length ? ` — ${item.payload.statuses.join(", ")}` : ""
+                      }`,
+                      name,
+                    ]}
+                  />
                   <Legend formatter={(value) => <span className="text-foreground">{value}</span>} />
                 </PieChart>
               </ResponsiveContainer>
@@ -424,11 +617,18 @@ export default function Dashboard() {
           {/* Per Gewerke Grid */}
           <Card>
             <CardHeader>
-              <CardTitle>Status pro Gewerke (Fachbereich)</CardTitle>
+              <CardTitle>
+                Status pro Gewerke — {Math.min(GEWERKE_TILES, gewerkeStatusData.length)} von{" "}
+                {gewerkeStatusData.length}
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {gewerkeStatusData.slice(0, 8).map((gew) => (
+                {/* 8 of 14. Silently dropping UM, BIM, LST, Vermessung and both
+                    Baubetrieb departments under a heading that reads "pro
+                    Gewerke" claims coverage the grid does not have — the
+                    heading now says how many. */}
+                {gewerkeStatusData.slice(0, GEWERKE_TILES).map((gew) => (
                   <button
                     type="button"
                     key={gew.name}
@@ -436,9 +636,9 @@ export default function Dashboard() {
                     onClick={() => setSelectedGewerke(gew.name)}
                   >
                     <div className="font-semibold text-lg mb-2">{gew.name}</div>
-                    <div className="text-3xl font-bold mb-3">{gew.value}</div>
+                    <div className="text-3xl font-bold mb-3">{gew.value.toLocaleString("de-DE")}</div>
                     <div className="space-y-1 text-xs">
-                      {Object.entries(gew.breakdown).slice(0, 3).map(([status, count]) => (
+                      {Object.entries(gew.breakdown).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([status, count]) => (
                         <div key={status} className="flex justify-between">
                           <span className="text-muted-foreground">{status}</span>
                           <span className="font-medium">{count}</span>
@@ -509,7 +709,7 @@ export default function Dashboard() {
                   <div className="lg:col-span-2 space-y-4">
                     <div>
                       <div className="text-sm text-muted-foreground mb-1">Gesamtzahl Prüfungen</div>
-                      <div className="text-4xl font-bold">{selectedGewerkeData?.value}</div>
+                      <div className="text-4xl font-bold">{selectedGewerkeData?.value?.toLocaleString("de-DE")}</div>
                     </div>
                     <div className="space-y-2 pt-4 border-t">
                       {selectedPieData.map((item) => (
@@ -563,13 +763,13 @@ export default function Dashboard() {
                       <div>
                         <div className="font-semibold">{fach.name}</div>
                         <div className="text-xs text-muted-foreground">
-                          {fach.incoming} offen • {fach.completed} erledigt
+                          {fach.incoming.toLocaleString("de-DE")} offen • {fach.completed.toLocaleString("de-DE")} erledigt
                         </div>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge variant={fach.incoming > 5 ? "destructive" : "secondary"}>
-                        {fach.total} Tasks
+                        {fach.total.toLocaleString("de-DE")} Tasks
                       </Badge>
                       {expandedFach === fach.name ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                     </div>
@@ -585,15 +785,15 @@ export default function Dashboard() {
                       >
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
                           <div className="text-center">
-                            <div className="text-2xl font-bold text-amber-600">{fach.incoming}</div>
+                            <div className="text-2xl font-bold text-amber-600">{fach.incoming.toLocaleString("de-DE")}</div>
                             <div className="text-xs">Eingehend</div>
                           </div>
                           <div className="text-center">
-                            <div className="text-2xl font-bold text-emerald-600">{fach.completed}</div>
+                            <div className="text-2xl font-bold text-emerald-600">{fach.completed.toLocaleString("de-DE")}</div>
                             <div className="text-xs">Erledigt</div>
                           </div>
                           <div className="text-center">
-                            <div className="text-2xl font-bold">{fach.total}</div>
+                            <div className="text-2xl font-bold">{fach.total.toLocaleString("de-DE")}</div>
                             <div className="text-xs">Gesamt</div>
                           </div>
                         </div>
@@ -601,10 +801,20 @@ export default function Dashboard() {
                           <div className="text-xs font-medium mb-2 text-muted-foreground">AKTUELLE AKTIVITÄT</div>
                           <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
                             {fach.timeline.length > 0 ? fach.timeline.map((item) => (
-                              <div key={`${item.date}-${item.project}-${item.action}`} className="flex items-start gap-3 text-sm border-l-2 border-primary pl-3 py-1">
-                                <div className="font-mono text-xs text-muted-foreground w-20 shrink-0">{item.date}</div>
-                                <div>
+                              /* Key was `date-project-action`, which is not
+                                 unique: one reviewer signing two Gewerke on the
+                                 same project on the same day produced the same
+                                 key twice and React dropped the second row —
+                                 1,509 rows across the panel. The department is
+                                 what distinguishes them, so it is now in the
+                                 key and on screen. */
+                              <div key={`${item.date}-${item.projectId}-${item.department}-${item.action}`} className="flex items-start gap-3 text-sm border-l-2 border-primary pl-3 py-1">
+                                <div className="font-mono text-xs text-muted-foreground w-24 shrink-0">{formatGerman(item.date) || item.date}</div>
+                                <div className="min-w-0">
                                   <span className="font-medium">{item.action}</span> — {item.project}
+                                  {item.department && (
+                                    <span className="ml-1 text-xs text-muted-foreground">({item.department})</span>
+                                  )}
                                 </div>
                               </div>
                             )) : (
@@ -824,7 +1034,9 @@ export default function Dashboard() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Regionale Verteilung</CardTitle>
+              <CardTitle>
+                Regionale Verteilung — Top {regionDistribution.length} von {regionCount}
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
@@ -832,7 +1044,7 @@ export default function Dashboard() {
                   <div key={r.region} className="flex items-center gap-3">
                     <div className="w-3 h-3 rounded-full" style={{ backgroundColor: r.color }} />
                     <div className="flex-1">{r.region}</div>
-                    <div className="font-mono font-bold">{r.count}</div>
+                    <div className="font-mono font-bold">{r.count.toLocaleString("de-DE")}</div>
                     <div className="w-24 h-2 bg-muted rounded-full overflow-hidden">
                       <div className="h-full bg-current" style={{ width: `${(r.count / totalProjects) * 100}%`, color: r.color }} />
                     </div>
@@ -876,17 +1088,12 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-                <span>Datenbank: Online</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-                <span>Excel Sync: Aktiv</span>
-              </div>
-              {/* "API: Verbunden" with a green pulse was false: production is a
-                  static SPA (vercel.json declares no functions) and the data
-                  lives in localStorage seeded from /data.json. */}
+              {/* "Datenbank: Online" and "Excel Sync: Aktiv" stood here with
+                  pulsing green dots. Both were false for the same reason the
+                  third one below was already removed: production is a static
+                  SPA (vercel.json declares no functions), there is no database
+                  connection and no Excel sync process. Nothing polled them —
+                  they were literals styled to look like telemetry. */}
               <div className="flex items-center gap-2">
                 <div className="h-2 w-2 rounded-full bg-emerald-500" />
                 <span>Daten lokal geladen ({totalProjects.toLocaleString('de-DE')} Projekte)</span>
@@ -939,18 +1146,31 @@ export default function Dashboard() {
                         </Badge>
                       </div>
                       <div className="text-sm mt-1">{review.prueferName}</div>
-                      <div className="text-xs text-muted-foreground">{review.pruefDatum}</div>
+                      <div className="text-xs text-muted-foreground">{formatGerman(review.pruefDatum) || "—"}</div>
                     </div>
                   ))}
                 </div>
               </div>
 
-              {selectedProject.projektLink && (
+              {/* Only 66 of the 138 populated projektLink values are URLs; the
+                  other 72 are notes. Rendering those as an anchor made a
+                  relative href that opened the app's own 404 page. */}
+              {projectLinkUrl(selectedProject.projektLink) && (
                 <Button variant="outline" asChild>
-                  <a href={selectedProject.projektLink} target="_blank" rel="noopener noreferrer">
+                  <a
+                    href={projectLinkUrl(selectedProject.projektLink) as string}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
                     <ExternalLink className="mr-2 h-4 w-4" /> Projektlink öffnen
                   </a>
                 </Button>
+              )}
+              {projectLinkNote(selectedProject.projektLink) && (
+                <p className="rounded-lg border bg-muted/40 p-3 text-xs leading-relaxed text-muted-foreground">
+                  <span className="font-bold">Projektlink-Feld (kein Link):</span>{" "}
+                  {projectLinkNote(selectedProject.projektLink)}
+                </p>
               )}
             </div>
           )}

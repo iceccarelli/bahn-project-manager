@@ -227,7 +227,7 @@ await check("wizard exports a real PDF with the corrected ITK recipients", async
   await go("/anmeldung");
   await page.getByLabel("Projektnummer", { exact: false }).first().fill("E2E.0001");
   await page.getByLabel("Projektleitung", { exact: false }).first().fill("E2E Prüfer");
-  await page.getByRole("button", { name: "Checkliste 22 Fragen" }).click();
+  await page.getByRole("button", { name: /^Schritt 2:/ }).click();
   await page.waitForTimeout(600);
 
   // answer ITK "Ja" so a review opens and the notification list is populated
@@ -279,7 +279,7 @@ await check("submitting the wizard creates a project with exactly the right revi
   const station = page.getByLabel("Station", { exact: false }).first();
   if (await station.count()) await station.fill("Frankfurt (Main) Süd");
 
-  await page.getByRole("button", { name: "Checkliste 22 Fragen" }).click();
+  await page.getByRole("button", { name: /^Schritt 2:/ }).click();
   await page.waitForTimeout(600);
 
   // Answer exactly two Gewerke "Ja" -> exactly two reviews must open.
@@ -582,6 +582,137 @@ await check("\"Details anzeigen\" on a card opens that project's dialog", async 
     `dialog showed ${shown} for the card that reads ${nummer}`,
   );
   await page.keyboard.press("Escape");
+});
+
+console.log("\n== derived, not typed in ==");
+
+/**
+ * The audit that produced these found the same shape of defect nine times: a
+ * figure on screen that no code derives, or a chart keyed on a raw status
+ * string so rows silently vanish. These assertions pin the fixes.
+ */
+await check("no page states a figure the data does not support", async () => {
+  for (const route of ["/", "/projects", "/bvb-eea", "/psv-itk", "/anmeldung"]) {
+    await go(route);
+    const body = await page.locator("body").innerText();
+    const invented = [
+      "+23 seit letzter Woche",   // a weekly delta with no time series behind it
+      "Datenbank: Online",        // no database exists in this build
+      "Excel Sync: Aktiv",        // no sync process exists
+      "Version 1.0.0",            // package.json says 2.0.0
+      "22 Fragen",                // the wizard renders 19 or 18, never 22
+      "folgt in Stufe 4",         // promised features that already shipped
+    ];
+    // The wizard has no project data in scope, so any total it prints is a
+    // literal. 18.172 was frozen into Step 3.
+    if (route === "/anmeldung") invented.push("18.172");
+    for (const phrase of invented) {
+      assert(!body.includes(phrase), `${route} still shows "${phrase}"`);
+    }
+  }
+});
+
+await check("the status pie plots every review row, not a hardcoded subset", async () => {
+  await go("/");
+  const caption = await page
+    .locator("text=/von .* Prüfzeilen tragen einen Status/")
+    .first()
+    .innerText();
+  const shown = Number((caption.match(/^[\d.]+/) ?? ["0"])[0].replace(/\./g, ""));
+  // Every non-null status in the shipped data, counted independently here.
+  const projects = JSON.parse(fs.readFileSync("client/public/data.json", "utf8")).projects;
+  let expected = 0;
+  for (const p of projects) for (const r of p.reviews ?? []) if (r.status) expected++;
+  assert(shown === expected, `pie caption says ${shown} rows, the data has ${expected}`);
+});
+
+await check("truncated lists say how much they are hiding", async () => {
+  await go("/");
+  const body = await page.locator("body").innerText();
+  assert(/Status pro Gewerke — \d+ von \d+/.test(body), "the Gewerke grid does not state its own coverage");
+  assert(/Regionale Verteilung — Top \d+ von \d+/.test(body), "the region list does not state its own coverage");
+});
+
+await check("BVB-EEA and PSV-ITK render German dates and honest headings", async () => {
+  for (const [route, heading] of [["/bvb-eea", "BVB-EEA"], ["/psv-itk", "PSV-ITK"]]) {
+    await go(route);
+    await page.waitForSelector("table tbody tr", { timeout: 15000 });
+    const body = await page.locator("body").innerText();
+    assert(body.includes(heading), `${route} lost its heading`);
+    assert(!/Verwaltung der/.test(body), `${route} still claims to be a Verwaltung; it has no controls`);
+    // dd.mm.yyyy with leading zeros — never yyyy-mm-dd, never d.m.yyyy
+    const dates = await page.$$eval("table tbody tr td:nth-child(7)", (tds) =>
+      tds.map((t) => t.textContent.trim()).filter((t) => t && t !== "—"),
+    );
+    assert(dates.length > 0, `${route} rendered no Prüfdatum at all`);
+    const bad = dates.filter((d) => !/^\d{2}\.\d{2}\.\d{4}$/.test(d));
+    assert(bad.length === 0, `${route} renders non-German dates: ${bad.slice(0, 3).join(", ")}`);
+  }
+});
+
+await check("the header search reaches the Projekte page", async () => {
+  await go("/");
+  const box = page.getByLabel("Projekte, Stationen und Prüfer durchsuchen");
+  await box.fill("Bensheim");
+  await box.press("Enter");
+  await page.waitForTimeout(900);
+  assert(/\/projects/.test(page.url()), `search went to ${page.url()}`);
+  assert(new URL(page.url()).searchParams.get("q") === "Bensheim", "the term did not survive the navigation");
+  const count = await page.$$eval("table tbody tr", (r) => r.length);
+  const total = JSON.parse(fs.readFileSync("client/public/data.json", "utf8")).projects.length;
+  assert(count > 0 && count < total, `search returned ${count} of ${total} rows — it did not filter`);
+});
+
+await check("the bell shows real events, not an empty store", async () => {
+  await go("/");
+  await page.getByRole("button", { name: /^Änderungen/ }).click();
+  await page.waitForTimeout(500);
+  const menu = await page.locator('[role="menu"]').innerText();
+  assert(
+    !menu.includes("Keine neuen Benachrichtigungen"),
+    "the bell still reads from a store nothing writes",
+  );
+  await page.keyboard.press("Escape");
+});
+
+await check("both table row actions are separate 44px targets on touch", async () => {
+  const touch = await browser.newContext({
+    viewport: { width: 834, height: 1194 },
+    hasTouch: true, isMobile: true, deviceScaleFactor: 2,
+  });
+  await touch.addInitScript(() =>
+    localStorage.setItem(
+      "bahn-demo-user",
+      JSON.stringify({ id: 1, openId: "e2e", name: "Vincenzo Grimaldi", email: "v@db.de", role: "admin" }),
+    ),
+  );
+  const tp = await touch.newPage();
+  await tp.goto(U("/projects"), { waitUntil: "networkidle" });
+  await tp.waitForSelector("table tbody tr", { timeout: 15000 });
+  await tp.waitForTimeout(800);
+  const r = await tp.evaluate(() => {
+    const cell = [...document.querySelectorAll("td")].find(
+      (td) => td.querySelectorAll("button").length >= 2,
+    );
+    if (!cell) return { err: "no action cell" };
+    const rects = [...cell.querySelectorAll("button")].map((b) => b.getBoundingClientRect());
+    let overlap = 0;
+    for (let i = 0; i < rects.length; i++)
+      for (let j = i + 1; j < rects.length; j++) {
+        const ox = Math.max(0, Math.min(rects[i].right, rects[j].right) - Math.max(rects[i].left, rects[j].left));
+        const oy = Math.max(0, Math.min(rects[i].bottom, rects[j].bottom) - Math.max(rects[i].top, rects[j].top));
+        overlap += ox * oy;
+      }
+    return {
+      small: rects.filter((b) => b.width < 43.5 || b.height < 43.5).length,
+      overlap: Math.round(overlap),
+      count: rects.length,
+    };
+  });
+  await touch.close();
+  assert(!r.err, r.err);
+  assert(r.small === 0, `${r.small} of ${r.count} row actions are under 44px on touch`);
+  assert(r.overlap === 0, `row actions overlap by ${r.overlap}px² — one steals the other's taps`);
 });
 
 console.log("\n== summary ==");

@@ -8,6 +8,7 @@ import { Step2Checkliste } from "@/components/anmeldung/Step2Checkliste";
 import { Step3Pruefungen } from "@/components/anmeldung/Step3Pruefungen";
 import { Step4Termin } from "@/components/anmeldung/Step4Termin";
 import { Step5Bestaetigung } from "@/components/anmeldung/Step5Bestaetigung";
+import { visibleQuestions } from "@shared/checklist";
 import { useChecklistDraft } from "@/hooks/useChecklistDraft";
 import { bookSlot } from "@/hooks/useSchedule";
 import { CHECKLIST_MODES } from "@shared/checklist";
@@ -15,7 +16,11 @@ import { Check, ChevronLeft, ChevronRight, FileDown, Save } from "lucide-react";
 
 const STEPS = [
   { n: 1, title: "Projekt", subtitle: "Kopfdaten & Station" },
-  { n: 2, title: "Checkliste", subtitle: "22 Fragen" },
+  // Was the literal "22 Fragen" (= CHECKLIST_QUESTIONS.length), but Step 2
+  // renders visibleQuestions(mode): 19 in Projektanmeldung, 18 in
+  // Projektkonfiguration. The step header promised three questions that are
+  // never shown.
+  { n: 2, title: "Checkliste", subtitle: null },
   { n: 3, title: "Prüfungen", subtitle: "14 Gewerke" },
   { n: 4, title: "Termin", subtitle: "Fachspezialistenprüfung" },
   { n: 5, title: "Bestätigung", subtitle: "Anmelden" },
@@ -164,6 +169,12 @@ export default function Anmeldung() {
                   type="button"
                   onClick={() => goTo(s.n)}
                   aria-current={active ? "step" : undefined}
+                  // An explicit name: the visible content concatenates to
+                  // "2Checkliste19 Fragen" with no separators, which is what a
+                  // screen reader announced.
+                  aria-label={`Schritt ${s.n}: ${s.title}${
+                    s.subtitle ? ` – ${s.subtitle}` : ` – ${visibleQuestions(draft.mode).length} Fragen`
+                  }`}
                   className={`w-full rounded-lg border-2 px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 ${
                     active
                       ? "border-primary bg-primary/5"
@@ -187,7 +198,10 @@ export default function Anmeldung() {
                     <span className="text-xs font-black leading-none">{s.title}</span>
                   </div>
                   <div className="mt-1 pl-7 text-2xs leading-none text-muted-foreground">
-                    {s.subtitle}
+                    {/* The Checkliste subtitle is derived, because the count
+                        depends on the mode: 19 questions in Projektanmeldung,
+                        18 in Projektkonfiguration. */}
+                    {s.subtitle ?? `${visibleQuestions(draft.mode).length} Fragen`}
                   </div>
                 </button>
               </li>

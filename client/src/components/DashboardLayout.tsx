@@ -129,7 +129,8 @@ function DashboardLayoutContent({
   setSidebarWidth,
 }: {
   children: React.ReactNode;
-  setSidebarWidth: (width: number) => void;
+  /** The real setter, so the keyboard handler can read the current width. */
+  setSidebarWidth: React.Dispatch<React.SetStateAction<number>>;
 }) {
   const [location, setLocation] = useLocation();
   const { state, toggleSidebar } = useSidebar();
@@ -140,7 +141,9 @@ function DashboardLayoutContent({
 
   useEffect(() => {
     if (isMobile) return; // No resize on mobile
-    const handleMouseMove = (e: MouseEvent) => {
+    // pointermove, not mousemove: a touch or pen drag never produced a
+    // mousemove, so the handle was mouse-only on an iPad.
+    const handleMouseMove = (e: PointerEvent) => {
       if (!isResizing) return;
       const sidebarLeft = sidebarRef.current?.getBoundingClientRect().left ?? 0;
       const newWidth = e.clientX - sidebarLeft;
@@ -152,15 +155,15 @@ function DashboardLayoutContent({
     const handleMouseUp = () => setIsResizing(false);
 
     if (isResizing) {
-      document.addEventListener("mousemove", handleMouseMove);
-      document.addEventListener("mouseup", handleMouseUp);
+      document.addEventListener("pointermove", handleMouseMove);
+      document.addEventListener("pointerup", handleMouseUp);
       document.body.style.cursor = "col-resize";
       document.body.style.userSelect = "none";
     }
 
     return () => {
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
+      document.removeEventListener("pointermove", handleMouseMove);
+      document.removeEventListener("pointerup", handleMouseUp);
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
     };
@@ -209,8 +212,12 @@ function DashboardLayoutContent({
                   const isActive = location === item.path;
                   return (
                     <SidebarMenuItem key={item.path}>
+                      {/* aria-current, because `isActive` only produced a colour and a left
+                          border. Six nav items announced identically and a screen-reader
+                          user had no way to tell which page was open. */}
                       <SidebarMenuButton
                         isActive={isActive}
+                        aria-current={isActive ? "page" : undefined}
                         onClick={() => setLocation(item.path)}
                         tooltip={item.label}
                         className={`h-10 transition-all font-normal ${
@@ -232,9 +239,30 @@ function DashboardLayoutContent({
           </Sidebar>
 
           {!isCollapsed && (
+            /* A bare <div> with onMouseDown: no role, no tabIndex, no keyboard
+               handler, and mouse events only — so it was unusable both by
+               keyboard and by touch on an iPad. It is a separator, it is
+               focusable, and the arrow keys move it. */
             <div
-              className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/20 transition-colors z-50"
-              onMouseDown={() => setIsResizing(true)}
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Breite der Seitenleiste anpassen"
+              tabIndex={0}
+              className="absolute top-0 right-0 z-50 h-full w-1 cursor-col-resize transition-colors hover:bg-primary/20 focus-visible:bg-primary/40 focus-visible:outline-none"
+              onPointerDown={(e) => {
+                e.currentTarget.setPointerCapture(e.pointerId);
+                setIsResizing(true);
+              }}
+              onKeyDown={(e) => {
+                const step = e.shiftKey ? 32 : 8;
+                if (e.key === "ArrowLeft") {
+                  e.preventDefault();
+                  setSidebarWidth((w) => Math.max(MIN_WIDTH, w - step));
+                } else if (e.key === "ArrowRight") {
+                  e.preventDefault();
+                  setSidebarWidth((w) => Math.min(MAX_WIDTH, w + step));
+                }
+              }}
             />
           )}
         </div>

@@ -27,7 +27,7 @@ export default function NotFound() {
               <div className="absolute inset-0 bg-red-100 rounded-full animate-pulse" />
               <AlertCircle 
                 className="relative h-16 w-16 text-red-500" 
-                aria-label="Page not found icon" 
+                aria-hidden="true" 
               />
             </div>
           </div>

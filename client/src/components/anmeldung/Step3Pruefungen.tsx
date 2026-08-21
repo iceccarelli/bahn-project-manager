@@ -18,7 +18,7 @@ export function Step3Pruefungen({ draft }: { draft: ChecklistDraft }) {
             Aus den Antworten der Checkliste entstehen immer alle 14 Prüfzeilen —{" "}
             <strong className="font-bold text-foreground">{requiredCount}</strong> mit dem Status
             „offen", {closed.length} als „nicht erforderlich". Das entspricht der Struktur der
-            bestehenden 18.172 Prüfzeilen.
+            bestehenden Prüfzeilen.
           </p>
         </div>
 
@@ -91,7 +91,7 @@ export function Step3Pruefungen({ draft }: { draft: ChecklistDraft }) {
           {answers.freischaltungFaa?.answer === "Erforderlich" && (
             <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-2xs text-muted-foreground">
               Freischaltung FAA ist als <strong className="text-foreground">Erforderlich</strong>{" "}
-              markiert. Der Versand der FAA-Mail folgt in Stufe 4.
+              markiert. Es wird derzeit keine Mail verschickt — der Versand ist noch nicht gebaut.
             </p>
           )}
         </div>

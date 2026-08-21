@@ -162,8 +162,9 @@ export function Step5Bestaetigung({ draft }: { draft: ChecklistDraft }) {
               <li>Ein Eintrag in der Änderungshistorie wird geschrieben.</li>
             </ol>
             <p className="mt-2 text-2xs text-muted-foreground">
-              PDF-Export und der Versand an FAA / TBQ / BM folgen in Stufe 4. Bis dahin lässt sich
-              das Unterschriftenblatt über „Drucken" als PDF ausgeben.
+              Die Checkliste lässt sich jederzeit über „Checkliste als PDF" exportieren und das
+              Unterschriftenblatt über „Drucken". Ein automatischer Versand an FAA / TBQ / BM
+              findet nicht statt.
             </p>
           </section>
         </div>

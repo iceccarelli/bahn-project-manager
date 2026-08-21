@@ -1,13 +1,15 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { Search, Bell, Sun, Moon, X, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useLocation } from "wouter";
 import { useSidebar } from "@/components/ui/sidebar";
 import PresenceIndicator from "./PresenceIndicator";
 import { useAuth } from "@/_core/hooks/useAuth";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -15,19 +17,53 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useSearchSuggestions } from "@/hooks/useDataQuery";
-import { useRecentNotifications } from "@/_core/hooks/useNotifications";
+import { useAuditLog } from "@/hooks/useDataQuery";
 
 export default function Header() {
   const [searchTerm, setSearchTerm] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [, setLocation] = useLocation();
+
+  /**
+   * The one search box present on every route used to search nothing.
+   *
+   * `searchTerm` fed the suggestion query and the reset X and went nowhere
+   * else: no onKeyDown, no submit, no navigation, no callback out of the
+   * component. Typing a station and pressing Enter did nothing, and picking a
+   * suggestion only wrote the text back into the same dead field.
+   *
+   * It now hands the term to the Projekte page through the query string, which
+   * is also what makes a search result linkable and survivable across a reload.
+   */
+  const runSearch = useCallback(
+    (term: string) => {
+      const q = term.trim();
+      setShowSuggestions(false);
+      if (!q) return;
+      setLocation(`/projects?q=${encodeURIComponent(q)}`);
+    },
+    [setLocation],
+  );
   const { theme, toggleTheme } = useTheme();
   const { toggleSidebar } = useSidebar();
   const { user } = useAuth();
   const { data: suggestions } = useSearchSuggestions(searchTerm);
-  // Real notifications. The badge used to be the literal string "7" while the
-  // dropdown underneath said "Keine neuen Benachrichtigungen" — the two could
-  // never agree, because one of them was a decoration.
-  const notifications = useRecentNotifications(10);
+  /**
+   * The bell shows the audit trail, because that is the app's only real event
+   * stream.
+   *
+   * It used to read `useRecentNotifications(10)`, which reads a localStorage
+   * key that nothing ever writes: `useNotifications()` — the only hook that
+   * emits — is imported nowhere in the app. So the store was always empty, the
+   * badge never appeared, and the dropdown always said "Keine neuen
+   * Benachrichtigungen". A bell that cannot ring is decoration.
+   *
+   * Every inline edit, review change and Anmeldung already writes an audit
+   * entry, so those are the notifications — real, produced by real actions, and
+   * they update through the same query cache as the Änderungshistorie page.
+   */
+  const { data: auditEntries } = useAuditLog();
+  const notifications = useMemo(() => (auditEntries ?? []).slice(0, 10), [auditEntries]);
 
   const userInitials = useMemo(
     () =>
@@ -93,6 +129,10 @@ export default function Header() {
               }}
               onFocus={() => setShowSuggestions(true)}
               onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") runSearch(searchTerm);
+                if (e.key === "Escape") setShowSuggestions(false);
+              }}
               aria-label="Projekte, Stationen und Prüfer durchsuchen"
             placeholder="Projekte, Stationen, Prüfer durchsuchen…"
               className="pl-11 h-9 bg-muted/50 border-border focus:bg-background focus:border-primary w-full text-sm rounded-lg transition-all"
@@ -114,9 +154,12 @@ export default function Header() {
                 <button type="button"
                   key={s}
                   className="w-full text-left px-4 py-2 text-sm hover:bg-muted/80 transition-colors"
-                  onMouseDown={() => {
+                  /* onClick, not onMouseDown: mousedown never fires from
+                     Enter or Space, so a keyboard user could tab onto a
+                     suggestion and pressing Enter did nothing. */
+                  onClick={() => {
                     setSearchTerm(s);
-                    setShowSuggestions(false);
+                    runSearch(s);
                   }}
                 >
                   {s}
@@ -147,8 +190,8 @@ export default function Header() {
                 variant="ghost"
                 aria-label={
                   notifications.length > 0
-                    ? `Benachrichtigungen (${notifications.length} neu)`
-                    : "Benachrichtigungen"
+                    ? `Änderungen (${notifications.length} zuletzt)`
+                    : "Änderungen"
                 }
                 className="relative p-2 h-9 w-9 rounded-lg text-foreground hover:bg-accent"
               >
@@ -161,31 +204,39 @@ export default function Header() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-80">
-              <DropdownMenuLabel>Benachrichtigungen</DropdownMenuLabel>
+              <DropdownMenuLabel>Letzte Änderungen</DropdownMenuLabel>
               <DropdownMenuSeparator />
               {notifications.length === 0 ? (
                 <div className="p-4 text-center text-sm text-muted-foreground">
-                  Keine neuen Benachrichtigungen
+                  Noch keine Änderungen erfasst
                 </div>
               ) : (
-                <ul className="max-h-80 overflow-y-auto">
+                <div className="max-h-80 overflow-y-auto">
                   {notifications.map((n) => (
-                    <li
+                    <DropdownMenuItem
                       key={n.id}
-                      className="border-b border-border/60 px-3 py-2 last:border-0"
+                      onSelect={() => setLocation("/audit")}
+                      className="flex-col items-start gap-0.5"
                     >
-                      <p className="text-xs font-bold leading-tight">{n.title}</p>
-                      <p className="mt-0.5 text-2xs leading-snug text-muted-foreground">
-                        {n.message}
+                      <p className="text-xs font-bold leading-tight">{n.action}</p>
+                      <p className="text-2xs leading-snug text-muted-foreground">{n.details}</p>
+                      <p className="text-2xs text-muted-foreground/70">
+                        {new Date(n.timestamp).toLocaleString("de-DE")} · {n.user}
                       </p>
-                    </li>
+                    </DropdownMenuItem>
                   ))}
-                </ul>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onSelect={() => setLocation("/audit")} className="justify-center text-xs font-bold">
+                    Gesamte Änderungshistorie
+                  </DropdownMenuItem>
+                </div>
               )}
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <Avatar className="h-8 w-8 cursor-pointer ring-2 ring-offset-2 ring-primary/30 hover:ring-primary transition-all">
+          {/* No cursor-pointer and no hover ring: there is no menu behind this,
+              and an affordance that promises one is a control that lies. */}
+          <Avatar className="h-8 w-8 ring-2 ring-offset-2 ring-primary/30">
             <AvatarFallback className="bg-primary text-white text-xs font-bold">
               {userInitials}
             </AvatarFallback>

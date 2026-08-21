@@ -211,7 +211,7 @@ export function Step1Projekt({ draft }: { draft: ChecklistDraft }) {
             id="bahnhofsnummer"
             value={header.bahnhofsnummer}
             readOnly
-            tabIndex={-1}
+           
             aria-readonly="true"
             aria-describedby="bahnhofsnummer-hint"
             className="cursor-not-allowed bg-muted text-muted-foreground"

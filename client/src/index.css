@@ -374,8 +374,26 @@
     position: relative;
   }
 
-  td button::after,
-  td [role="button"]::after,
+  /* A cell holding more than one control cannot use the invisible strip: two
+     44px strips 32px apart overlap by 12px and the later sibling wins
+     hit-testing, so tapping the right edge of "Details" opened the Kommentar
+     dialog. These get real size instead, in a flex row that keeps them apart.
+     Forcing width alone made them wrap and tripled the row to 97px. */
+  .cell-actions > button,
+  .cell-actions > [role="button"] {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  /* Only when the control is alone in its cell.
+     The Projekte table's action cell holds two 28px icon buttons 32px apart.
+     Widening BOTH to a 44px strip made them overlap by 12px, and the later
+     sibling wins hit-testing — so on a phone, tapping the right edge of
+     "Details anzeigen" opened the Kommentar dialog instead. A cell with two
+     controls gets padding on the buttons themselves rather than an invisible
+     strip that reaches into its neighbour. */
+  td:has(> button:only-of-type) button::after,
+  td:has(> [role="button"]:only-of-type) [role="button"]::after,
   th button::after {
     content: "";
     position: absolute;

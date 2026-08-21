@@ -150,7 +150,10 @@ export default function Login() {
           </CardContent>
           <CardFooter>
             <p className="text-xs text-center w-full text-muted-foreground">
-              Version 1.0.0 | © 2026 Deutsche Bahn AG
+              {/* Was the literal "Version 1.0.0" while package.json said 2.0.0 —
+                  exactly the drift Footer.tsx already documents as fixed by
+                  reading the Vite define. */}
+              Version {__APP_VERSION__} | © {new Date().getFullYear()} Deutsche Bahn AG
             </p>
           </CardFooter>
         </Card>

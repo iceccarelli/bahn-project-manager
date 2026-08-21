@@ -203,7 +203,7 @@ export function Step2Checkliste({ draft }: { draft: ChecklistDraft }) {
       <div className="overflow-x-auto">
         <table className="w-full border-collapse">
           <caption className="sr-only">
-            Checkliste zur Projektanmeldung — 22 Fragen aus dem Formular
+            Checkliste zur Projektanmeldung — {questions.length} Fragen aus dem Formular
           </caption>
           <thead>
             <tr className="border-y border-border text-2xs uppercase tracking-wider text-muted-foreground">

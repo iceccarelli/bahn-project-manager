@@ -259,10 +259,13 @@ export function useProjects(params: {
   sortBy?: string;
   sortDir?: "asc" | "desc";
   showAll?: boolean;
-  minLat?: number;
-  maxLat?: number;
-  minLng?: number;
-  maxLng?: number;
+  /*
+   * minLat / maxLat / minLng / maxLng were declared here and never
+   * destructured or used in the filter memo below. The Projekte page passed
+   * them from the map's onBoundsChange on every pan and zoom, so the map
+   * looked like it filtered the table and did not. Declaring a parameter you
+   * ignore is worse than not accepting it: the type says the feature exists.
+   */
 }) {
   const { data: allProjectsData, isLoading: allProjectsLoading } = useAllProjects();
   const updateProjectMutation = useUpdateProject();
@@ -389,7 +392,7 @@ export function useProjects(params: {
 }
 
 export function useFilters() {
-  const { data: allProjectsData, isLoading } = useAllProjects();
+  const { data: allProjectsData, isLoading, isError } = useAllProjects();
 
   const data: Filters = useMemo(() => {
     const allProjects = allProjectsData?.projects || [];
@@ -430,7 +433,7 @@ export function useFilters() {
     };
   }, [allProjectsData]);
 
-  return { data, isLoading };
+  return { data, isLoading, isError };
 }
 
 export function useSearchSuggestions(term: string) {
@@ -442,10 +445,21 @@ export function useSearchSuggestions(term: string) {
   });
 }
 
+/**
+ * The three queries the pages need, folded into one result.
+ *
+ * `isError` and `isEmpty` are separate on purpose. `data` is null in three very
+ * different situations — still loading, loaded but empty, and failed — and
+ * every page that consumed only `{ data, isLoading }` rendered the same
+ * "Lade …" spinner for all three. Because the loader in _core/api/client.ts
+ * catches its own failures and returns [], a total data-source failure landed
+ * as `isLoading === false, data === null`: a spinner that spins forever over a
+ * read that has already given up.
+ */
 export function useAllData() {
-  const { data: projectsData, isLoading: pLoading } = useAllProjects();
-  const { data: stats, isLoading: sLoading } = useDashboardStats();
-  const { data: filters, isLoading: fLoading } = useFilters();
+  const { data: projectsData, isLoading: pLoading, isError: pError } = useAllProjects();
+  const { data: stats, isLoading: sLoading, isError: sError } = useDashboardStats();
+  const { data: filters, isLoading: fLoading, isError: fError } = useFilters();
 
   const data = useMemo(() => {
     const projects = projectsData?.projects || [];
@@ -453,7 +467,16 @@ export function useAllData() {
     return { projects, stats, filters };
   }, [projectsData, stats, filters]);
 
-  return { data, isLoading: pLoading || sLoading || fLoading };
+  const isLoading = pLoading || sLoading || fLoading;
+  const isError = pError || sError || fError;
+
+  return {
+    data,
+    isLoading,
+    isError,
+    /** settled, no error, and still nothing to show */
+    isEmpty: !isLoading && !isError && data === null,
+  };
 }
 
 export type { ProjectUpdateInput, ReviewUpdateInput, ProjectCreateInput };

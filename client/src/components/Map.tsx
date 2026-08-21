@@ -233,6 +233,22 @@ export const MapView: React.FC<MapViewProps> = ({
       : window.matchMedia("(min-width: 640px)").matches,
   );
   const legendTouched = useRef(false);
+
+  /**
+   * Escape leaves fullscreen.
+   *
+   * `isFullscreen` renders `fixed inset-0 z-[9999]` over the whole app and the
+   * file had no keydown handler anywhere, so the only way out was to find the
+   * shrink button again. Every other overlay in this app closes on Escape.
+   */
+  useEffect(() => {
+    if (!isFullscreen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsFullscreen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isFullscreen]);
   useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia) return;
     const mq = window.matchMedia("(min-width: 640px)");

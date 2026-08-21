@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useSearch as useRouteSearch } from "wouter";
 
 import {
   TableBody,
@@ -18,6 +18,7 @@ import { statusBadgeClass } from "@shared/status-appearance";
 import { toast } from "sonner";
 import { MapView, type StationSelection } from "@/components/Map";
 import { ProjectDetailDialog } from "@/components/ProjectDetailDialog";
+import { projectLinkUrl } from "@shared/project-link";
 // DB Corporate Status Colors (perfect harmony with Dashboard.tsx)
 
 function StatusBadge({ status }: { status: string | null }) {
@@ -152,10 +153,34 @@ function SortHeader({ column, label, sortBy, sortDir, onSort }: SortHeaderProps)
 }
 
 export default function Projects() {
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState("");
+  /**
+   * Seeded from ?q=, so the header's search box has somewhere to land and a
+   * result set is linkable. Reading it during useState rather than in an effect
+   * means the first render already shows the filtered set — an effect would
+   * paint all 1,298 rows and then replace them.
+   */
+  const initialQuery = useMemo(() => {
+    const raw = new URLSearchParams(
+      typeof window === "undefined" ? "" : window.location.search,
+    ).get("q");
+    return (raw ?? "").trim();
+  }, []);
+  const [searchInput, setSearchInput] = useState(initialQuery);
+  const [search, setSearch] = useState(initialQuery);
   const { data: searchSuggestions } = useSearchSuggestions(searchInput);
-  const [mapBounds, setMapBounds] = useState<{ minLat?: number; maxLat?: number; minLng?: number; maxLng?: number } | Record<string, never>>({});
+  /*
+   * Removed: `mapBounds` state fed by the map's onBoundsChange and spread into
+   * useProjects. The hook declares minLat/maxLat/minLng/maxLng in its parameter
+   * type and never destructures or uses them, so every pan and zoom fired a
+   * state update, re-rendered the page and changed nothing — while the count
+   * above the map kept saying "1.298 Projekte gefunden" as the user zoomed into
+   * one city. A control that appears to filter and does not is worse than no
+   * control, so the wiring is gone rather than left looking functional.
+   *
+   * Filtering by viewport is a real feature; it needs the station geocoding the
+   * map already does (buildStationGeo) to be available to the page, which is a
+   * change to where that resolution lives, not a prop rename.
+   */
   const [region, setRegion] = useState<string>("");
   const [projektleiter, setProjektleiter] = useState<string>("");
   const [pruefer, setPruefer] = useState<string>("");
@@ -166,6 +191,7 @@ export default function Projects() {
   const [sortBy, setSortBy] = useState("id");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [, setLocation] = useLocation();
+  const routeSearch = useRouteSearch();
   const [viewMode, setViewMode] = useState<"table" | "cards" | "map">("table");
   /** Set by the map; narrows the card view to one station's exact project ids. */
   const [stationFocus, setStationFocus] = useState<StationSelection | null>(null);
@@ -184,7 +210,6 @@ export default function Projects() {
     sortBy,
     sortDir,
     showAll: true,
-    ...mapBounds,
   });
 
   const { data: filterOptions } = useFilters();
@@ -209,6 +234,18 @@ export default function Projects() {
     return () => clearTimeout(t);
   }, [searchInput]);
 
+  // Searching again from the header while already on this page changes only the
+  // query string; wouter keeps the component mounted, so the initial-state read
+  // above never runs a second time.
+  useEffect(() => {
+    const q = (new URLSearchParams(routeSearch).get("q") ?? "").trim();
+    if (q) {
+      setSearchInput(q);
+      setSearch(q);
+      setStationFocus(null);
+    }
+  }, [routeSearch]);
+
   const handleSort = (column: string) => {
     if (sortBy === column) {
       setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -218,6 +255,8 @@ export default function Projects() {
     }
   };
 
+  // aria-pressed, because these are toggles: they add or remove a department's
+  // three columns from the table and had no state exposed to assistive tech.
   const toggleDept = (dept: string) => {
     setExpandedDepts((prev) =>
       prev.includes(dept) ? prev.filter((d) => d !== dept) : [...prev, dept]
@@ -436,7 +475,9 @@ export default function Projects() {
                       key={suggestion}
                       type="button"
                       className="w-full cursor-pointer px-4 py-2 text-left hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:outline-none"
-                      onMouseDown={() => {
+                      /* onClick, not onMouseDown — mousedown never fires from
+                         Enter or Space, so this list was mouse-only. */
+                      onClick={() => {
                         setSearchInput(suggestion);
                         setSearch(suggestion);
                       }}
@@ -452,6 +493,8 @@ export default function Projects() {
           <Button
             variant={showFilters ? "default" : "outline"}
             size="sm"
+            aria-expanded={showFilters}
+            aria-controls="projects-filter-panel"
             onClick={() => setShowFilters(!showFilters)}
             className="gap-2 h-10"
           >
@@ -510,7 +553,7 @@ export default function Projects() {
 
       {/* Filter Panel */}
       {showFilters && (
-        <Card className="border-primary/20 shadow-md animate-in fade-in slide-in-from-top-4 duration-300">
+        <Card id="projects-filter-panel" className="border-primary/20 shadow-md animate-in fade-in slide-in-from-top-4 duration-300">
           <CardContent className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
               <div className="space-y-2">
@@ -591,6 +634,7 @@ export default function Projects() {
                     key={dept}
                     variant={expandedDepts.includes(dept) ? "default" : "outline"}
                     size="sm"
+                    aria-pressed={expandedDepts.includes(dept)}
                     onClick={() => toggleDept(dept)}
                     className={`text-2xs h-7 px-3 ${expandedDepts.includes(dept) ? "bg-primary hover:bg-primary/90 text-white" : ""}`}
                   >
@@ -767,7 +811,12 @@ export default function Projects() {
                               ? new Date(project.terminProjektvorstellung).toLocaleDateString("de-DE")
                               : "-"}
                           </td>
-                          <td className="py-3 px-3 text-center">
+                          <td className="min-w-[104px] px-3 py-3">
+                            {/* A flex row, not two inline buttons: the two 44px
+                                touch targets need to be laid out side by side
+                                with a gap, and `text-center` on the cell let
+                                them wrap instead. */}
+                            <div className="cell-actions flex items-center justify-center gap-1">
                             {/* Details reachable from the table too, so the
                                 three views expose the same action rather than
                                 the card grid being the only way in. */}
@@ -776,7 +825,7 @@ export default function Projects() {
                               aria-label={`Details zu Projekt ${project.projektnummer ?? project.id} anzeigen`}
                               title="Details anzeigen"
                               onClick={() => setDetailProjectId(project.id)}
-                              className="mr-1 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                              className="flex items-center justify-center rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                             >
                               <Info className="h-4 w-4" aria-hidden="true" />
                             </button>
@@ -785,7 +834,7 @@ export default function Projects() {
                                 <button
                                   type="button"
                                   aria-label={`Kommentar und Link zu Projekt ${project.projektnummer ?? project.id}`}
-                                  className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                                  className="flex items-center justify-center rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                                 >
                                   <MessageSquare className="h-4 w-4" aria-hidden="true" />
                                 </button>
@@ -825,10 +874,18 @@ export default function Projects() {
                                         className="flex-1"
                                         placeholder="https://..."
                                       />
-                                      {project.projektLink && (
+                                      {/* Only when it parses as a URL — see
+                                          shared/project-link.ts. And an
+                                          icon-only link needs a name. */}
+                                      {projectLinkUrl(project.projektLink) && (
                                         <Button variant="outline" size="icon" asChild>
-                                          <a href={project.projektLink} target="_blank" rel="noopener noreferrer">
-                                            <ExternalLink className="h-4 w-4 text-primary-strong" />
+                                          <a
+                                            href={projectLinkUrl(project.projektLink) as string}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            aria-label={`Projektlink von ${project.projektnummer ?? project.id} in neuem Tab öffnen`}
+                                          >
+                                            <ExternalLink className="h-4 w-4 text-primary-strong" aria-hidden="true" />
                                           </a>
                                         </Button>
                                       )}
@@ -837,6 +894,7 @@ export default function Projects() {
                                 </div>
                               </DialogContent>
                             </Dialog>
+                          </div>
                           </td>
 
                           {expandedDepts.length > 0 ? (
@@ -858,7 +916,14 @@ export default function Projects() {
                                   </td>
                                   <td className="py-3 px-3">
                                     {review ? (
+                                      /* The only unlabeled form control in the
+                                         app — and it writes. A screen reader
+                                         announced "offen, combo box" with no
+                                         way to know which Gewerk or project it
+                                         belonged to, once per project per
+                                         department. */
                                       <select
+                                        aria-label={`Status ${dept} für Projekt ${project.projektnummer ?? project.id}`}
                                         value={review.status || ""}
                                         onChange={(e) => applyReviewEdit(project.id, dept, "status", e.target.value)}
                                         className="text-2xs bg-transparent border rounded-md px-2 py-1 w-full focus:ring-1 focus:ring-primary outline-none"
@@ -974,7 +1039,6 @@ export default function Projects() {
                 initialCenter={{ lat: 51.1657, lng: 10.4515 }}
                 initialZoom={6}
                 className="h-[65vh] min-h-[380px] sm:h-[560px] lg:h-[600px] w-full relative"
-                onBoundsChange={setMapBounds}
                 onProjectSelect={handleMapProjectSelect}
                 onStationSelect={handleStationSelect}
               />

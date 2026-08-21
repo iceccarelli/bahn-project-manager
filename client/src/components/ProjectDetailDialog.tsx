@@ -60,6 +60,7 @@ import { DEPARTMENTS, type Department } from "@shared/types";
 import { statusBadgeClass } from "@shared/status-appearance";
 import { normalizeReviewStatus, isOpen, isBlocking } from "@shared/review-status";
 import { formatGerman } from "@shared/date";
+import { projectLinkUrl } from "@shared/project-link";
 import { bahnhofsmanagementContact, recipientsFor, type Contact } from "@shared/contacts";
 import {
   resolveContact,
@@ -76,24 +77,6 @@ interface ProjectDetailDialogProps {
   onOpenChange: (open: boolean) => void;
   /** Jump to every other project at this station. Hidden when not provided. */
   onShowStation?: (station: string) => void;
-}
-
-/**
- * A projektLink is only a link when it is one.
- *
- * 138 of 1,298 rows carry something in this column and only 66 of those are
- * URLs; the other 72 are free-text notes ("ITK - noch offen; BS an Hr.
- * Engstfeld über..."). Rendering all 138 as a button produces 72 buttons that
- * navigate nowhere, so the note is rendered as text instead.
- */
-function asHttpUrl(value: string | null | undefined): string | null {
-  const v = String(value ?? "").trim();
-  if (!/^https?:\/\//i.test(v)) return null;
-  try {
-    return new URL(v).toString();
-  } catch {
-    return null;
-  }
 }
 
 /** Subject line built from real fields only. */
@@ -260,7 +243,7 @@ export function ProjectDetailDialog({
 
   if (!project) return null;
 
-  const url = asHttpUrl(project.projektLink);
+  const url = projectLinkUrl(project.projektLink);
   const linkNote = !url && project.projektLink?.trim() ? project.projektLink.trim() : null;
   const bmContact = bahnhofsmanagementContact(project.bahnhofsmanagement);
   const subject = subjectFor(project);

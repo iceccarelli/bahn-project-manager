@@ -23,7 +23,7 @@ export default function PresenceIndicator() {
       <PopoverTrigger asChild>
         <button type="button"
           className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 transition-colors cursor-pointer border border-emerald-500/20"
-          aria-label="Online colleagues"
+          
         >
           <div className="flex items-center gap-1">
             <Users className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
