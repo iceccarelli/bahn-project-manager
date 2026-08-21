@@ -1,0 +1,1789 @@
+From f764f6978a7a9b80a209c2e4f1506631287c2ca8 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 21 Aug 2026 17:37:49 +0000
+Subject: [PATCH] make the map, the cards and the details one flow, on real
+ contact data
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Two buttons in this app were labelled for work they did not do:
+
+  handleMapProjectSelect(id)  ->  setViewMode("table")
+                                  toast.info("Projekt #id in der Tabelle
+                                  angezeigt")
+  "Details anzeigen"          ->  setViewMode("table")
+
+Nothing was selected, filtered, scrolled to or shown. The toast was the
+only evidence anything had happened, and it was false.
+
+Now: a marker's popup offers the station as a whole and each project in
+it. Clicking a project switches to the card view, narrows it to that
+station's exact project ids (the map passes the ids, so it is an id
+match and not a substring of the station name), scrolls the card into
+view, rings it for 2.6s and opens its detail dialog. A dismissible
+"Station: X" chip says what is being filtered, and the result count
+reports what the card view is actually showing rather than the unfiltered
+total.
+
+The dialog carries Stammdaten, the Kommentar, all 14 Fachprüfungen with
+status tone / Prüfer / Prüfdatum, the per-project audit trail, and a
+contact route for each party. Reachable from the cards, the table and
+the map, so the three views expose the same action.
+
+shared/contact-resolution.ts — the join, and what it can honestly reach
+------------------------------------------------------------------------
+Hilfsdatei holds full names; the review rows hold surnames. Matching in
+full found 1 of 44 reviewer names (32 of 10,489 rows). Matching the
+surname is safe here because all 48 Hilfsdatei surnames are unique —
+measured, asserted, and enforced: SURNAME_INDEX drops any surname that
+ever collides, so a future duplicate degrades to "ambiguous" rather than
+addressing mail to the wrong person.
+
+  exact                29 names / 6,855 rows resolve to a real address
+  + unique surname
+  placeholder           3 names / 2,799 rows are not people at all
+                        ("Zuordnung erforderlich", "Zentrale", "BSB des
+                        BM´s") and get no mail button
+  unknown              12 names /   835 rows have no address on file
+
+That answers the open Stage 4a question with data: the reviewer gap is
+11 people and 829 rows (plus "Herr", 6 rows, which is a truncation), not
+the 20 people and 1,083 rows that counting full names suggested.
+
+Reach per party, stated in the UI rather than implied by a uniform row
+of buttons:
+
+  Bahnhofsmanagement   8 of 8 regions   always contactable
+  Fachprüfer          29 of 44 names    else the Fachbereich's own
+                                        recipients, else "keine Adresse"
+  Projektleiter        3 of 252 names   else the zuständiges BM
+
+No address is ever constructed. `vorname.nachname@deutschebahn.com`
+would look right often enough to be dangerous, so `unknown` stays
+`unknown`. Teams links are derived from the address already on file, so
+the chat and the mail reach the same person. There is no telephone
+button because no source carries a telephone number — Hilfsdatei has
+columns A-C only — and the dialog says so once instead of rendering a
+dead control.
+
+projektLink is rendered as a button only when it parses as an http(s)
+URL: 138 of 1,298 rows are populated and 72 of those are free-text
+notes, which would have been 72 buttons that navigate nowhere.
+
+Also fixed along the way
+------------------------------------------------------------------------
+- Filter chips dismissed via a bare <X> with an onClick: not focusable,
+  no role, not in the tab order. Five filters could be applied by
+  keyboard and none removed. Now a real <button> with an aria-label.
+- The dialog close button measured 16x44 on every touch device: the
+  coarse-pointer rule matched `svg:only-child`, and that button also
+  carries a visually hidden label. Now matches "only text is sr-only"
+  too — every icon button in the app, not just this one.
+- That button's screen-reader label was the English "Close".
+- DialogContent ends its class list with `sm:max-w-lg`, so an unprefixed
+  `max-w-3xl` never won: the dialog measured 512px wide.
+- e2e-smoke treated a failed OpenStreetMap tile as an app defect, so any
+  assertion that opened the map failed without egress. Now only
+  same-origin console errors fail the suite.
+
+Six new e2e assertions follow the whole path — marker to popup to
+filtered cards to dialog to contact link — including one that reads
+every mailto: and Teams href out of the dialog and fails if any address
+is absent from data/contacts.source.json.
+
+Gates: 0 type errors · 145 passed / 6 skipped (13 files) · lint at
+parity with baseline · e2e 28/28 · responsive 61/61 · map chrome 6/6 ·
+dialog fits, scrolls and clears 44px on iPhone SE and iPad Pro.
+Projects chunk 40.40 -> 60.77 kB (gzip 11.61 -> 16.78); entry chunk
+429.77 -> 429.91 kB.
+---
+ client/src/components/Map.tsx                 |  57 +-
+ client/src/components/ProjectDetailDialog.tsx | 615 ++++++++++++++++++
+ client/src/components/ui/dialog.tsx           |   2 +-
+ client/src/index.css                          |  10 +-
+ client/src/pages/Projects.tsx                 | 235 ++++++-
+ scripts/e2e-smoke.mjs                         | 165 ++++-
+ shared/contact-resolution.test.ts             | 159 +++++
+ shared/contact-resolution.ts                  | 235 +++++++
+ 8 files changed, 1436 insertions(+), 42 deletions(-)
+ create mode 100644 client/src/components/ProjectDetailDialog.tsx
+ create mode 100644 shared/contact-resolution.test.ts
+ create mode 100644 shared/contact-resolution.ts
+
+diff --git a/client/src/components/Map.tsx b/client/src/components/Map.tsx
+index f8780d4..983261a 100644
+--- a/client/src/components/Map.tsx
++++ b/client/src/components/Map.tsx
+@@ -51,6 +51,12 @@ function workStateOf(p: Project): {
+   return { open, inProgress, blocked, oldestOpen, overdue };
+ }
+ 
++/** What the page needs to filter to one station, without re-deriving grouping. */
++export interface StationSelection {
++  name: string;
++  projectIds: number[];
++}
++
+ interface StationGroup {
+   key: string;
+   name: string;
+@@ -109,7 +115,17 @@ interface MapViewProps {
+   initialZoom?: number;
+   className?: string;
+   onBoundsChange?: (bounds: { minLat: number; maxLat: number; minLng: number; maxLng: number }) => void;
+-  onProjectSelect?: (projectId: number) => void;
++  /**
++   * A project inside a station's popup was clicked.
++   *
++   * The station group comes with it because the page cannot re-derive it: the
++   * grouping lives in buildStationGeo and folds ambiguous and region-fallback
++   * matches together. Passing it means "show me everything at this station"
++   * filters on exact ids rather than on a substring of the station name.
++   */
++  onProjectSelect?: (projectId: number, station: StationSelection) => void;
++  /** The popup's station header was clicked — show the whole group. */
++  onStationSelect?: (station: StationSelection) => void;
+ }
+ 
+ /**
+@@ -183,7 +199,7 @@ function popupHtml(group: StationGroup): string {
+   return (
+     `<div style="min-width:240px;max-width:300px;"><div style="font:800 14px system-ui;line-height:1.2;">${esc(group.name)}</div><div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;font-weight:800;color:${group.isPrecise ? "#888" : "#b45309"};margin-top:2px;">${group.projects.length} ${group.projects.length === 1 ? "Projekt" : "Projekte"}${group.isPrecise ? "" : ` · ${esc(style.label)}`}${group.ambiguous ? " · mehrdeutig" : ""}</div>${group.bm ? `<div style="font-size:9px;color:#888;margin-top:1px;">BM ${esc(group.bm)}</div>` : ""}${mix.length > 1
+       ? `<div style="font-size:9px;color:#888;margin-top:1px;">${mix.join(" · ")}</div>`
+-      : ""}<div style="max-height:240px;overflow-y:auto;margin-top:8px;border-top:1px solid #eee;padding-top:6px;">${rows}${more}</div></div>`
++      : ""}<button data-station-all="1" style="display:flex;width:100%;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;border:1px solid ${DB_RED_RING};background:${DB_RED_SUBTLE};color:${DB_RED};border-radius:10px;padding:8px 10px;cursor:pointer;font:800 11px system-ui;min-height:44px;">Alle ${group.projects.length} ${group.projects.length === 1 ? "Projekt" : "Projekte"} als Karten anzeigen<span aria-hidden="true">&rarr;</span></button><div style="max-height:240px;overflow-y:auto;margin-top:8px;border-top:1px solid #eee;padding-top:6px;">${rows}${more}</div></div>`
+   );
+ }
+ 
+@@ -194,6 +210,7 @@ export const MapView: React.FC<MapViewProps> = ({
+   className = "h-full w-full",
+   onBoundsChange,
+   onProjectSelect,
++  onStationSelect,
+ }) => {
+   const containerRef = useRef<HTMLDivElement | null>(null);
+   const mapRef = useRef<L.Map | null>(null);
+@@ -308,9 +325,11 @@ export const MapView: React.FC<MapViewProps> = ({
+   // latest callbacks in refs so the init effect can stay mount-only
+   const onBoundsRef = useRef(onBoundsChange);
+   const onSelectRef = useRef(onProjectSelect);
++  const onStationSelectRef = useRef(onStationSelect);
+   const groupsRef = useRef(groups);
+   onBoundsRef.current = onBoundsChange;
+   onSelectRef.current = onProjectSelect;
++  onStationSelectRef.current = onStationSelect;
+   groupsRef.current = groups;
+ 
+   // ---- create the map exactly once per mount, and tear it down cleanly ----
+@@ -358,18 +377,11 @@ export const MapView: React.FC<MapViewProps> = ({
+     map.on("moveend", emitBounds);
+     map.on("zoomend", emitBounds);
+ 
+-    // delegate clicks inside popups to onProjectSelect
+-    map.on("popupopen", (e: L.PopupEvent) => {
+-      const root = (e.popup as L.Popup & { getElement?: () => HTMLElement | undefined })
+-        .getElement?.();
+-      if (!root) return;
+-      root.querySelectorAll<HTMLElement>("[data-pid]").forEach((btn) => {
+-        btn.onclick = () => {
+-          const id = Number(btn.getAttribute("data-pid"));
+-          if (!Number.isNaN(id)) onSelectRef.current?.(id);
+-        };
+-      });
+-    });
++    // Popup click delegation moved onto each marker (see the draw effect), so
++    // the handler closes over the station group it belongs to. A map-level
++    // listener had no way to know which group's popup had opened, which is why
++    // clicking a project could only ever pass an id and the page could not
++    // filter to the rest of the station.
+ 
+     // size correctly once layout settles
+     setTimeout(() => map.invalidateSize(), 0);
+@@ -411,6 +423,23 @@ export const MapView: React.FC<MapViewProps> = ({
+         marker.on("click", () =>
+           map.flyTo([g.lat, g.lng], Math.max(map.getZoom(), 13), { duration: 0.6 }),
+         );
++        marker.on("popupopen", (e: L.PopupEvent) => {
++          const root = (e.popup as L.Popup & { getElement?: () => HTMLElement | undefined })
++            .getElement?.();
++          if (!root) return;
++          const selection: StationSelection = {
++            name: g.name,
++            projectIds: g.projects.map((p) => p.id),
++          };
++          const all = root.querySelector<HTMLElement>("[data-station-all]");
++          if (all) all.onclick = () => onStationSelectRef.current?.(selection);
++          root.querySelectorAll<HTMLElement>("[data-pid]").forEach((btn) => {
++            btn.onclick = () => {
++              const id = Number(btn.getAttribute("data-pid"));
++              if (!Number.isNaN(id)) onSelectRef.current?.(id, selection);
++            };
++          });
++        });
+         layer.addLayer(marker);
+       };
+       if (reduceMotion || step === 0) add();
+diff --git a/client/src/components/ProjectDetailDialog.tsx b/client/src/components/ProjectDetailDialog.tsx
+new file mode 100644
+index 0000000..0f39006
+--- /dev/null
++++ b/client/src/components/ProjectDetailDialog.tsx
+@@ -0,0 +1,615 @@
++/**
++ * The project detail dialog.
++ *
++ * What was here before: a "Details anzeigen" button whose entire handler was
++ * `setViewMode("table")`. It showed no details, and the map's project click
++ * did the same thing plus a toast that claimed the project was "in der Tabelle
++ * angezeigt" while nothing was selected, filtered or scrolled to.
++ *
++ * ---------------------------------------------------------------------------
++ * Contact data — what is real and what is absent
++ * ---------------------------------------------------------------------------
++ * Every address shown here comes from `Hilfsdatei` via shared/contacts.ts.
++ * Nothing is constructed. The three channels differ in reach, and the dialog
++ * says which is which instead of showing a uniform row of buttons that half
++ * work:
++ *
++ *   Bahnhofsmanagement  8 of 8 regions have an address — always contactable
++ *   Fachprüfer          29 of 44 names resolve (6,855 of 10,489 review rows)
++ *   Projektleiter       3 of 252 names resolve (8 of 1,260 projects)
++ *
++ * Where a name does not resolve, the dialog states why and offers the
++ * department's own recipients instead, which is the route the Anmeldung macro
++ * already uses. It never falls back to a guessed address.
++ *
++ * Telephone: there is no telephone number in any source — `Hilfsdatei` holds
++ * row, group, name and mail, and data.json holds no contact column at all. The
++ * dialog says so once, in the contact section, rather than rendering a dead
++ * button.
++ *
++ * Microsoft Teams: `https://teams.microsoft.com/l/chat/0/0?users=<mail>` is
++ * derived from the address already on file, so it opens a chat with the same
++ * person the mail button writes to.
++ */
++import { useMemo } from "react";
++import {
++  Dialog,
++  DialogContent,
++  DialogDescription,
++  DialogHeader,
++  DialogTitle,
++} from "@/components/ui/dialog";
++import { Button } from "@/components/ui/button";
++import { Badge } from "@/components/ui/badge";
++import { Separator } from "@/components/ui/separator";
++import {
++  Mail,
++  MessageSquare,
++  ExternalLink,
++  Phone,
++  MapPin,
++  User,
++  CalendarClock,
++  Hash,
++  Info,
++  ArrowRight,
++} from "lucide-react";
++import type { Project } from "@/hooks/useDataQuery";
++import { useAuditLog } from "@/hooks/useDataQuery";
++import { DEPARTMENTS, type Department } from "@shared/types";
++import { statusBadgeClass } from "@shared/status-appearance";
++import { normalizeReviewStatus, isOpen, isBlocking } from "@shared/review-status";
++import { formatGerman } from "@shared/date";
++import { bahnhofsmanagementContact, recipientsFor, type Contact } from "@shared/contacts";
++import {
++  resolveContact,
++  contactOf,
++  resolutionNote,
++  displayNameOf,
++  mailtoHref,
++  teamsChatHref,
++} from "@shared/contact-resolution";
++
++interface ProjectDetailDialogProps {
++  project: Project | null;
++  open: boolean;
++  onOpenChange: (open: boolean) => void;
++  /** Jump to every other project at this station. Hidden when not provided. */
++  onShowStation?: (station: string) => void;
++}
++
++/**
++ * A projektLink is only a link when it is one.
++ *
++ * 138 of 1,298 rows carry something in this column and only 66 of those are
++ * URLs; the other 72 are free-text notes ("ITK - noch offen; BS an Hr.
++ * Engstfeld über..."). Rendering all 138 as a button produces 72 buttons that
++ * navigate nowhere, so the note is rendered as text instead.
++ */
++function asHttpUrl(value: string | null | undefined): string | null {
++  const v = String(value ?? "").trim();
++  if (!/^https?:\/\//i.test(v)) return null;
++  try {
++    return new URL(v).toString();
++  } catch {
++    return null;
++  }
++}
++
++/** Subject line built from real fields only. */
++function subjectFor(project: Project, department?: string): string {
++  const nr = project.projektnummer?.trim();
++  const station = project.station?.trim();
++  const head = nr ? `Projekt ${nr}` : "Projekt";
++  const parts = [head, station, department].filter(Boolean);
++  return parts.join(" – ");
++}
++
++function ContactActions({
++  contact,
++  subject,
++  size = "sm",
++}: {
++  contact: Contact;
++  subject: string;
++  size?: "sm" | "xs";
++}) {
++  const h = size === "xs" ? "h-8" : "h-9";
++  return (
++    <div className="flex flex-wrap gap-2">
++      <Button asChild variant="outline" size="sm" className={`${h} gap-1.5`}>
++        <a href={mailtoHref(contact, subject)} aria-label={`E-Mail an ${contact.name || contact.mail}`}>
++          <Mail className="h-3.5 w-3.5" aria-hidden="true" />
++          E-Mail
++        </a>
++      </Button>
++      <Button asChild variant="outline" size="sm" className={`${h} gap-1.5`}>
++        <a
++          href={teamsChatHref(contact)}
++          target="_blank"
++          rel="noreferrer"
++          aria-label={`Microsoft-Teams-Chat mit ${contact.name || contact.mail}`}
++        >
++          <MessageSquare className="h-3.5 w-3.5" aria-hidden="true" />
++          Teams
++        </a>
++      </Button>
++    </div>
++  );
++}
++
++/** One named person, with whatever contact route actually exists for them. */
++function ContactRow({
++  /** Named `roleLabel`, not `role`: on a component `role` reads as the ARIA
++   *  attribute, and the linter flags "Projektleiter" as an invalid one. */
++  roleLabel,
++  name,
++  subject,
++  fallback,
++  fallbackLabel,
++}: {
++  roleLabel: string;
++  name: string | null | undefined;
++  subject: string;
++  /** Who to write to when the person has no address of their own. */
++  fallback?: Contact[] | null;
++  fallbackLabel?: string;
++}) {
++  const resolution = resolveContact(name);
++  const contact = contactOf(resolution);
++  const note = resolutionNote(resolution);
++
++  return (
++    /* Identity above, actions below. Side by side, a two-line role label plus a
++       full name lost a measured half of its width to the buttons and truncated
++       to "BAHNHOFSMANAG..." / "Kathrin Behs...". */
++    <div className="flex flex-col gap-2 rounded-xl border border-border/60 p-3">
++      <div className="min-w-0">
++        <p className="text-2xs font-black uppercase leading-tight tracking-widest text-muted-foreground">
++          {roleLabel}
++        </p>
++        <p className="break-words text-sm font-bold">{displayNameOf(resolution, name)}</p>
++        {contact && <p className="break-all text-2xs text-muted-foreground">{contact.mail}</p>}
++      </div>
++      {contact && <ContactActions contact={contact} subject={subject} size="xs" />}
++
++      {!contact && (
++        <p className="text-2xs leading-relaxed text-amber-700 dark:text-amber-500">
++          {note}
++          {fallback && fallback.length > 0 && ` — ${fallbackLabel ?? "Ersatzweise erreichbar über"}:`}
++        </p>
++      )}
++
++      {!contact && fallback && fallback.length > 0 && (
++        <div className="flex flex-wrap gap-2">
++          {fallback.map((c) => (
++            <Button key={c.row} asChild variant="outline" size="sm" className="h-8 gap-1.5">
++              <a href={mailtoHref(c, subject)} aria-label={`E-Mail an ${c.name || c.mail}`}>
++                <Mail className="h-3.5 w-3.5" aria-hidden="true" />
++                {c.name || c.mail}
++              </a>
++            </Button>
++          ))}
++        </div>
++      )}
++    </div>
++  );
++}
++
++function Field({
++  label,
++  value,
++  icon: Icon,
++}: {
++  label: string;
++  value: string | null | undefined;
++  icon?: React.ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
++}) {
++  const v = String(value ?? "").trim();
++  return (
++    /* min-h on the label, so "Termin Projektvorstellung" wrapping to two lines
++       does not push its value below the values beside it. */
++    <div className="min-w-0">
++      <p className="flex min-h-[1.75rem] items-start gap-1.5 text-2xs font-black uppercase leading-tight tracking-widest text-muted-foreground">
++        {Icon && <Icon className="mt-px h-3 w-3 shrink-0" aria-hidden={true} />}
++        <span>{label}</span>
++      </p>
++      <p className={`mt-0.5 break-words text-sm ${v ? "font-semibold" : "text-muted-foreground"}`}>
++        {v || "—"}
++      </p>
++    </div>
++  );
++}
++
++export function ProjectDetailDialog({
++  project,
++  open,
++  onOpenChange,
++  onShowStation,
++}: ProjectDetailDialogProps) {
++  const { data: auditEntries } = useAuditLog();
++
++  // Every department, not only the ones with a row: a Fachprüfung that is
++  // absent from the data is information too ("nicht erforderlich" vs "offen"
++  // vs never recorded), and the checklist always produces all 14.
++  const reviewByDept = useMemo(() => {
++    const m = new Map<string, Project["reviews"][number]>();
++    for (const r of project?.reviews ?? []) if (r.department) m.set(r.department, r);
++    return m;
++  }, [project]);
++
++  const openCount = useMemo(
++    () => (project?.reviews ?? []).filter((r) => isOpen(r.status)).length,
++    [project],
++  );
++  const blockedCount = useMemo(
++    () => (project?.reviews ?? []).filter((r) => isBlocking(r.status)).length,
++    [project],
++  );
++
++  /** Audit entries that name this project. The trail stores free text, so the
++   *  match is on the Projektnummer when there is one and on the id otherwise. */
++  const history = useMemo(() => {
++    if (!project || !auditEntries) return [];
++    const needles = [project.projektnummer?.trim(), `#${project.id}`].filter(Boolean) as string[];
++    if (needles.length === 0) return [];
++    return auditEntries
++      .filter((e) => needles.some((n) => e.details?.includes(n)))
++      .slice(0, 8);
++  }, [project, auditEntries]);
++
++  if (!project) return null;
++
++  const url = asHttpUrl(project.projektLink);
++  const linkNote = !url && project.projektLink?.trim() ? project.projektLink.trim() : null;
++  const bmContact = bahnhofsmanagementContact(project.bahnhofsmanagement);
++  const subject = subjectFor(project);
++
++  return (
++    <Dialog open={open} onOpenChange={onOpenChange}>
++      {/*
++        Full height minus the gutter on a phone, capped on a desktop. The body
++        scrolls, not the page behind it, and the header stays put — a 14-row
++        Fachprüfungen table plus the contact block is well past one screen on
++        a 667px phone.
++      */}
++      {/* `sm:max-w-3xl`, not `max-w-3xl`: DialogContent's own class list ends with
++          `sm:max-w-lg`, so an unprefixed override loses at every width the
++          dialog is actually wide at. Measured 512px before this. */}
++      <DialogContent className="flex max-h-[92vh] w-[calc(100vw-1.5rem)] flex-col gap-0 overflow-hidden p-0 sm:w-full sm:max-w-3xl">
++        {/* pr-14: the primitive parks its close button at top-4 right-4, and on a
++            375px phone the badge row wrapped straight under it — "6 offen" and
++            the X occupied the same 40px. */}
++        <DialogHeader className="space-y-3 border-b bg-muted/30 p-5 pr-14 text-left">
++          <div className="flex flex-wrap items-center gap-2">
++            <span className="rounded-md bg-primary/10 px-2 py-0.5 font-mono text-xs font-black text-primary-strong">
++              {project.projektnummer || "ohne Projektnummer"}
++            </span>
++            {project.projektstand && (
++              <Badge variant="outline" className="text-2xs font-bold">
++                {project.projektstand}
++              </Badge>
++            )}
++            {openCount > 0 && (
++              <Badge className={`${statusBadgeClass("offen")} text-2xs font-bold`}>
++                {openCount} offen
++              </Badge>
++            )}
++            {blockedCount > 0 && (
++              <Badge className={`${statusBadgeClass("abgelehnt")} text-2xs font-bold`}>
++                {blockedCount} blockiert
++              </Badge>
++            )}
++          </div>
++
++          <DialogTitle className="text-xl font-black leading-tight tracking-tight sm:text-2xl">
++            {project.station || "Ohne Station"}
++          </DialogTitle>
++
++          <DialogDescription className="text-sm leading-relaxed">
++            {project.projektbeschreibung?.trim() || "Keine Projektbeschreibung hinterlegt."}
++          </DialogDescription>
++
++          <div className="flex flex-wrap gap-2 pt-1">
++            {url && (
++              <Button asChild size="sm" className="h-9 gap-1.5">
++                <a href={url} target="_blank" rel="noreferrer">
++                  <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
++                  Projekt öffnen
++                </a>
++              </Button>
++            )}
++            {onShowStation && project.station && (
++              <Button
++                variant="outline"
++                size="sm"
++                className="h-9 gap-1.5"
++                onClick={() => {
++                  onShowStation(project.station as string);
++                  onOpenChange(false);
++                }}
++              >
++                <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
++                Alle Projekte dieser Station
++                <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
++              </Button>
++            )}
++            {bmContact && (
++              <Button asChild variant="outline" size="sm" className="h-9 gap-1.5">
++                <a href={mailtoHref(bmContact, subject)}>
++                  <Mail className="h-3.5 w-3.5" aria-hidden="true" />
++                  Bahnhofsmanagement
++                </a>
++              </Button>
++            )}
++          </div>
++        </DialogHeader>
++
++        <div className="min-h-0 flex-1 overflow-y-auto p-5">
++          <section aria-labelledby="pd-stamm">
++            <h3 id="pd-stamm" className="mb-3 text-2xs font-black uppercase tracking-widest text-muted-foreground">
++              Stammdaten
++            </h3>
++            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
++              <Field label="Region / BM" value={project.bahnhofsmanagement} icon={MapPin} />
++              <Field label="Bahnhofsnummer" value={project.bahnhofsnummer} icon={Hash} />
++              <Field label="Streckennummer" value={project.streckennummer} icon={Hash} />
++              <Field label="Projektleiter" value={project.projektleiter} icon={User} />
++              <Field
++                label="Termin Projektvorstellung"
++                value={formatGerman(project.terminProjektvorstellung)}
++                icon={CalendarClock}
++              />
++              <Field label="Projektstand" value={project.projektstand} />
++            </div>
++
++            {linkNote && (
++              <p className="mt-4 rounded-lg border border-border/60 bg-muted/40 p-3 text-2xs leading-relaxed text-muted-foreground">
++                <span className="font-black uppercase tracking-widest">Projektlink-Feld</span>
++                <br />
++                {linkNote}
++                <br />
++                <span className="italic">
++                  Kein Link — dieses Feld enthält hier eine Notiz, keine Adresse.
++                </span>
++              </p>
++            )}
++
++            {project.kommentar?.trim() && (
++              <div className="mt-4">
++                <p className="text-2xs font-black uppercase tracking-widest text-muted-foreground">
++                  Kommentar
++                </p>
++                <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed">
++                  {project.kommentar.trim()}
++                </p>
++              </div>
++            )}
++          </section>
++
++          <Separator className="my-5" />
++
++          <section aria-labelledby="pd-kontakt">
++            <h3 id="pd-kontakt" className="mb-3 text-2xs font-black uppercase tracking-widest text-muted-foreground">
++              Kontakt
++            </h3>
++            <div className="grid gap-3 sm:grid-cols-2">
++              <ContactRow
++                roleLabel="Projektleiter"
++                name={project.projektleiter}
++                subject={subject}
++                fallback={bmContact ? [bmContact] : null}
++                fallbackLabel="Zuständiges Bahnhofsmanagement"
++              />
++              {bmContact ? (
++                <div className="flex flex-col gap-2 rounded-xl border border-border/60 p-3">
++                  <div className="min-w-0">
++                    <p className="text-2xs font-black uppercase leading-tight tracking-widest text-muted-foreground">
++                      Bahnhofsmanagement {project.bahnhofsmanagement}
++                    </p>
++                    <p className="break-words text-sm font-bold">{bmContact.name}</p>
++                    <p className="break-all text-2xs text-muted-foreground">{bmContact.mail}</p>
++                  </div>
++                  <ContactActions contact={bmContact} subject={subject} size="xs" />
++                </div>
++              ) : (
++                <div className="rounded-xl border border-border/60 p-3">
++                  <p className="text-2xs font-black uppercase tracking-widest text-muted-foreground">
++                    Bahnhofsmanagement
++                  </p>
++                  <p className="mt-1 text-2xs text-amber-700 dark:text-amber-500">
++                    Für „{project.bahnhofsmanagement || "—"}“ ist in der Hilfsdatei kein
++                    Bahnhofsmanagement hinterlegt.
++                  </p>
++                </div>
++              )}
++            </div>
++
++            <p className="mt-3 flex items-start gap-2 text-2xs leading-relaxed text-muted-foreground">
++              <Phone className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
++              <span>
++                Telefonnummern sind in keiner Quelle hinterlegt — die Hilfsdatei führt Zeile,
++                Gruppe, Name und E-Mail. Sobald dort eine Telefonspalte existiert, erscheint sie
++                hier automatisch.
++              </span>
++            </p>
++          </section>
++
++          <Separator className="my-5" />
++
++          <section aria-labelledby="pd-pruefungen">
++            <h3 id="pd-pruefungen" className="mb-3 text-2xs font-black uppercase tracking-widest text-muted-foreground">
++              Fachprüfungen ({reviewByDept.size} von {DEPARTMENTS.length} erfasst)
++            </h3>
++
++            <div className="overflow-x-auto rounded-xl border border-border/60">
++              <table className="w-full border-collapse text-xs">
++                <caption className="sr-only">
++                  Fachprüfungen des Projekts mit Status, Prüfer, Prüfdatum und Kontaktweg
++                </caption>
++                <thead className="bg-muted/50">
++                  <tr>
++                    <th scope="col" className="whitespace-nowrap px-3 py-2 text-left font-semibold text-muted-foreground">
++                      Gewerk
++                    </th>
++                    <th scope="col" className="whitespace-nowrap px-3 py-2 text-left font-semibold text-muted-foreground">
++                      Status
++                    </th>
++                    <th scope="col" className="whitespace-nowrap px-3 py-2 text-left font-semibold text-muted-foreground">
++                      Prüfer
++                    </th>
++                    <th scope="col" className="whitespace-nowrap px-3 py-2 text-left font-semibold text-muted-foreground">
++                      Prüfdatum
++                    </th>
++                    <th scope="col" className="whitespace-nowrap px-3 py-2 text-left font-semibold text-muted-foreground">
++                      Kontakt
++                    </th>
++                  </tr>
++                </thead>
++                <tbody>
++                  {DEPARTMENTS.map((dept) => {
++                    const review = reviewByDept.get(dept);
++                    const status = normalizeReviewStatus(review?.status);
++                    const resolution = resolveContact(review?.prueferName);
++                    const prueferContact = contactOf(resolution);
++                    // The department's own recipients are the route the
++                    // Anmeldung macro uses; LST has none on file at all.
++                    const deptRecipients = recipientsFor(dept as Department);
++                    const deptSubject = subjectFor(project, dept);
++
++                    return (
++                      <tr key={dept} className="border-t border-border/60 align-top">
++                        <td className="px-3 py-2">
++                          <span className="font-bold">{dept}</span>
++                          {/* The Hilfsdatei group label, but only when it says
++                              more than the code already does: "Baubetriebs-
++                              technologie" over "Baubetriebstechnologe" is noise,
++                              "Fördertechnik" over "HFT" is not. */}
++                          {(() => {
++                            const group = deptRecipients[0]?.group?.trim();
++                            if (!group) return null;
++                            const a = group.toLowerCase();
++                            const b = dept.toLowerCase();
++                            if (a === b || a.startsWith(b) || b.startsWith(a)) return null;
++                            return (
++                              <span className="block text-2xs text-muted-foreground">{group}</span>
++                            );
++                          })()}
++                        </td>
++                        <td className="px-3 py-2">
++                          {review ? (
++                            <Badge className={`${statusBadgeClass(review.status)} text-2xs font-bold`}>
++                              {status ?? review.status ?? "—"}
++                            </Badge>
++                          ) : (
++                            <span className="text-muted-foreground">nicht erfasst</span>
++                          )}
++                        </td>
++                        <td className="px-3 py-2">
++                          <span className={prueferContact ? "font-semibold" : "text-muted-foreground"}>
++                            {resolution.kind === "empty"
++                              ? "—"
++                              : displayNameOf(resolution, review?.prueferName)}
++                          </span>
++                          {/* Only when the note adds something the name does not
++                              already say. A placeholder's label IS the note, and
++                              printing both rendered "Noch niemand zugeordnet"
++                              twice in the same cell. */}
++                          {resolution.kind === "unknown" || resolution.kind === "ambiguous" ? (
++                            <span className="block text-2xs text-amber-700 dark:text-amber-500">
++                              {resolutionNote(resolution)}
++                            </span>
++                          ) : null}
++                        </td>
++                        <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">
++                          {formatGerman(review?.pruefDatum) || "—"}
++                        </td>
++                        <td className="px-3 py-2">
++                          {prueferContact ? (
++                            <div className="flex gap-1">
++                              <Button asChild variant="ghost" size="icon" className="h-8 w-8">
++                                <a
++                                  href={mailtoHref(prueferContact, deptSubject)}
++                                  title={`E-Mail an ${prueferContact.name}`}
++                                  aria-label={`E-Mail an ${prueferContact.name} (${dept})`}
++                                >
++                                  <Mail className="h-3.5 w-3.5" aria-hidden="true" />
++                                </a>
++                              </Button>
++                              <Button asChild variant="ghost" size="icon" className="h-8 w-8">
++                                <a
++                                  href={teamsChatHref(prueferContact)}
++                                  target="_blank"
++                                  rel="noreferrer"
++                                  title={`Teams-Chat mit ${prueferContact.name}`}
++                                  aria-label={`Teams-Chat mit ${prueferContact.name} (${dept})`}
++                                >
++                                  <MessageSquare className="h-3.5 w-3.5" aria-hidden="true" />
++                                </a>
++                              </Button>
++                            </div>
++                          ) : deptRecipients.length > 0 ? (
++                            <Button asChild variant="ghost" size="sm" className="h-8 gap-1.5 px-2">
++                              <a
++                                href={mailtoHref(deptRecipients[0] as Contact, deptSubject)}
++                                title={`An den Fachbereich ${dept} schreiben`}
++                                aria-label={`An den Fachbereich ${dept} schreiben`}
++                              >
++                                <Mail className="h-3.5 w-3.5" aria-hidden="true" />
++                                Fachbereich
++                              </a>
++                            </Button>
++                          ) : (
++                            <span
++                              className="text-2xs text-amber-700 dark:text-amber-500"
++                              title={`Für ${dept} ist in der Hilfsdatei keine Adresse hinterlegt`}
++                            >
++                              keine Adresse
++                            </span>
++                          )}
++                        </td>
++                      </tr>
++                    );
++                  })}
++                </tbody>
++              </table>
++            </div>
++          </section>
++
++          {history.length > 0 && (
++            <>
++              <Separator className="my-5" />
++              <section aria-labelledby="pd-verlauf">
++                <h3 id="pd-verlauf" className="mb-3 text-2xs font-black uppercase tracking-widest text-muted-foreground">
++                  Änderungen an diesem Projekt
++                </h3>
++                <ul className="space-y-2">
++                  {history.map((e) => (
++                    <li key={e.id} className="flex gap-3 text-2xs">
++                      <span className="shrink-0 tabular-nums text-muted-foreground">
++                        {new Date(e.timestamp).toLocaleString("de-DE")}
++                      </span>
++                      <span className="min-w-0 break-words">
++                        <span className="font-bold">{e.user}</span> — {e.details}
++                      </span>
++                    </li>
++                  ))}
++                </ul>
++              </section>
++            </>
++          )}
++
++          <p className="mt-5 flex items-start gap-2 text-2xs leading-relaxed text-muted-foreground">
++            <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
++            <span>
++              Alle Angaben stammen aus derselben Quelle wie Tabelle, Karte und Dashboard.
++              Änderungen an einer Stelle sind hier sofort sichtbar.
++            </span>
++          </p>
++        </div>
++      </DialogContent>
++    </Dialog>
++  );
++}
++
++export default ProjectDetailDialog;
+diff --git a/client/src/components/ui/dialog.tsx b/client/src/components/ui/dialog.tsx
+index 45433e6..b775f8c 100644
+--- a/client/src/components/ui/dialog.tsx
++++ b/client/src/components/ui/dialog.tsx
+@@ -137,7 +137,7 @@ function DialogContent({
+             className="ring-offset-background focus:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+           >
+             <XIcon />
+-            <span className="sr-only">Close</span>
++            <span className="sr-only">Schließen</span>
+           </DialogPrimitive.Close>
+         )}
+       </DialogPrimitive.Content>
+diff --git a/client/src/index.css b/client/src/index.css
+index 756c565..9405f68 100644
+--- a/client/src/index.css
++++ b/client/src/index.css
+@@ -327,9 +327,15 @@
+     min-height: 44px;
+   }
+ 
+-  /* icon-only controls are square, so widen them too */
++  /* Icon-only controls are square, so widen them too.
++     `:only-child` alone missed every icon button that also carries a visually
++     hidden label — the dialog close button among them, measured 16x44 on both
++     a phone and an iPad. A button whose only text is screen-reader-only is an
++     icon button by definition, so match that shape as well. */
+   button:has(> svg:only-child),
+-  [role="button"]:has(> svg:only-child) {
++  [role="button"]:has(> svg:only-child),
++  button:has(> svg):has(> .sr-only),
++  [role="button"]:has(> svg):has(> .sr-only) {
+     min-width: 44px;
+   }
+ 
+diff --git a/client/src/pages/Projects.tsx b/client/src/pages/Projects.tsx
+index 816cd12..26166f3 100644
+--- a/client/src/pages/Projects.tsx
++++ b/client/src/pages/Projects.tsx
+@@ -11,12 +11,13 @@ import { Input } from "@/components/ui/input";
+ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+ import { Badge } from "@/components/ui/badge";
+-import { Plus, Download, Table, LayoutGrid, MapPin, Filter, X, ArrowUpDown, ExternalLink, MessageSquare, Search, Loader2 } from "lucide-react";
++import { Plus, Download, Table, LayoutGrid, MapPin, Filter, X, ArrowUpDown, ExternalLink, MessageSquare, Search, Loader2, Info } from "lucide-react";
+ import { DEPARTMENTS, REVIEW_STATUSES } from "@shared/types";
+ import { deriveProjectMetrics, percent } from "@shared/project-metrics";
+ import { statusBadgeClass } from "@shared/status-appearance";
+ import { toast } from "sonner";
+-import { MapView } from "@/components/Map";
++import { MapView, type StationSelection } from "@/components/Map";
++import { ProjectDetailDialog } from "@/components/ProjectDetailDialog";
+ // DB Corporate Status Colors (perfect harmony with Dashboard.tsx)
+ 
+ function StatusBadge({ status }: { status: string | null }) {
+@@ -82,6 +83,40 @@ function InlineEditCell({
+   );
+ }
+ 
++/**
++ * A removable filter chip.
++ *
++ * The dismiss control is a <button>, not an <X> with an onClick. The previous
++ * chips rendered the icon directly with a click handler, so a keyboard user
++ * could apply a filter from the panel and then had no way to remove it.
++ */
++function FilterChip({
++  label,
++  onClear,
++  emphasis = false,
++}: {
++  label: string;
++  onClear: () => void;
++  emphasis?: boolean;
++}) {
++  return (
++    <Badge
++      variant={emphasis ? "default" : "secondary"}
++      className="gap-1 pr-1 text-2xs font-bold"
++    >
++      <span className="max-w-[16rem] truncate">{label}</span>
++      <button
++        type="button"
++        onClick={onClear}
++        aria-label={`Filter „${label}" entfernen`}
++        className="rounded-full p-0.5 transition-colors hover:bg-black/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:hover:bg-white/20"
++      >
++        <X className="h-3 w-3" aria-hidden="true" />
++      </button>
++    </Badge>
++  );
++}
++
+ interface SortHeaderProps {
+   column: string;
+   label: string;
+@@ -132,6 +167,12 @@ export default function Projects() {
+   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+   const [, setLocation] = useLocation();
+   const [viewMode, setViewMode] = useState<"table" | "cards" | "map">("table");
++  /** Set by the map; narrows the card view to one station's exact project ids. */
++  const [stationFocus, setStationFocus] = useState<StationSelection | null>(null);
++  /** The card to scroll to and ring after arriving from the map. */
++  const [focusProjectId, setFocusProjectId] = useState<number | null>(null);
++  /** Which project the detail dialog is showing, if any. */
++  const [detailProjectId, setDetailProjectId] = useState<number | null>(null);
+ 
+   const { data, isLoading, applyEdit, applyReviewEdit } = useProjects({
+     search: search || undefined,
+@@ -230,11 +271,97 @@ export default function Projects() {
+     "Baubetriebstechnologie", "Baubetriebsplanung"
+   ];
+ 
+-  // Map integration callback
+-  const handleMapProjectSelect = (projectId: number) => {
+-    setViewMode("table");
+-    toast.info(`Projekt #${projectId} in der Tabelle angezeigt`);
+-  };
++  /**
++   * Map -> cards.
++   *
++   * This used to be `setViewMode("table")` plus a toast claiming the project
++   * was "in der Tabelle angezeigt" — nothing was selected, filtered or
++   * scrolled to, so the toast was the only evidence anything had happened.
++   *
++   * Now a marker's project switches to the card view, narrows it to that
++   * station's exact project ids (the map passes them, so it is an id match and
++   * not a substring of the station name), scrolls the card into view and opens
++   * its detail dialog.
++   */
++  const handleMapProjectSelect = useCallback(
++    (projectId: number, station: StationSelection) => {
++      setStationFocus(station);
++      setViewMode("cards");
++      setDetailProjectId(projectId);
++      setFocusProjectId(projectId);
++    },
++    [],
++  );
++
++  /** The popup's "alle N Projekte" action — same filter, no dialog. */
++  const handleStationSelect = useCallback((station: StationSelection) => {
++    setStationFocus(station);
++    setViewMode("cards");
++    setFocusProjectId(null);
++    setDetailProjectId(null);
++  }, []);
++
++  /**
++   * "Alle Projekte dieser Station" from inside the dialog.
++   *
++   * Reached without a map group, so it falls back to matching the station name
++   * across every loaded project — the same set the map would have grouped,
++   * derived from the data rather than from the map's geometry.
++   */
++  const handleShowStationByName = useCallback(
++    (stationName: string) => {
++      const ids = (allData?.projects ?? [])
++        .filter((p: Project) => (p.station ?? "").trim() === stationName.trim())
++        .map((p: Project) => p.id);
++      setStationFocus({ name: stationName, projectIds: ids });
++      setViewMode("cards");
++      setFocusProjectId(null);
++    },
++    [allData],
++  );
++
++  const clearStationFocus = useCallback(() => {
++    setStationFocus(null);
++    setFocusProjectId(null);
++  }, []);
++
++  /**
++   * The cards actually rendered.
++   *
++   * Station focus is an id filter layered on top of whatever the search and
++   * the filter panel already produced, so clearing it returns to the previous
++   * result rather than to everything.
++   */
++  const visibleProjects = useMemo(() => {
++    const list: Project[] = data?.projects ?? [];
++    if (!stationFocus) return list;
++    const ids = new Set(stationFocus.projectIds);
++    return list.filter((p) => ids.has(p.id));
++  }, [data, stationFocus]);
++
++  const detailProject = useMemo(
++    () =>
++      detailProjectId == null
++        ? null
++        : ((allData?.projects ?? []).find((p: Project) => p.id === detailProjectId) ?? null),
++    [detailProjectId, allData],
++  );
++
++  // Scroll the card the map pointed at into view once it has rendered, and
++  // leave the ring on it long enough to be seen without it becoming permanent.
++  //
++  // visibleProjects is a deliberate re-run trigger, not a read value: on the
++  // first pass the card may not exist yet (the query can still be resolving
++  // when the map hands over), and querySelector would find nothing. Re-running
++  // when the rendered set changes is what makes the scroll land.
++  // biome-ignore lint/correctness/useExhaustiveDependencies: see above
++  useEffect(() => {
++    if (focusProjectId == null || viewMode !== "cards") return;
++    const el = document.querySelector(`[data-project-card="${focusProjectId}"]`);
++    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
++    const t = setTimeout(() => setFocusProjectId(null), 2600);
++    return () => clearTimeout(t);
++  }, [focusProjectId, viewMode, visibleProjects]);
+ 
+   return (
+     <div className="space-y-8 p-6 bg-background min-h-screen">
+@@ -487,16 +614,44 @@ export default function Projects() {
+         </Card>
+       )}
+ 
+-      {/* Results count */}
++      {/*
++        Results count and active filters.
++
++        Two fixes here. The count read `data.total` unconditionally, which
++        would have said "1.298 Projekte gefunden" above twelve rendered cards
++        as soon as a station focus was active — the card view now reports what
++        it is actually showing. And each chip's dismiss control was a bare
++        <X> SVG with an onClick: not focusable, not in the tab order, no role,
++        so five filters could be applied by keyboard and none removed.
++      */}
+       {data && data.total > 0 && (
+-        <div className="text-sm text-muted-foreground">
+-          <span className="font-semibold text-foreground">{data.total.toLocaleString("de-DE")}</span> Projekte gefunden
+-          {search && <span className="ml-2">für &quot;{search}&quot;</span>}
+-          {region && <Badge variant="secondary" className="ml-2 text-2xs">{region} <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => setRegion("")} /></Badge>}
+-          {projektleiter && <Badge variant="secondary" className="ml-2 text-2xs">{projektleiter} <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => setProjektleiter("")} /></Badge>}
+-          {pruefer && <Badge variant="secondary" className="ml-2 text-2xs">{pruefer} <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => setPruefer("")} /></Badge>}
+-          {status && <Badge variant="secondary" className="ml-2 text-2xs">{status} <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => setStatus("")} /></Badge>}
+-          {department && <Badge variant="secondary" className="ml-2 text-2xs">{department} <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => setDepartment("")} /></Badge>}
++        <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
++          <span>
++            <span className="font-semibold text-foreground">
++              {(viewMode === "cards" ? visibleProjects.length : data.total).toLocaleString("de-DE")}
++            </span>{" "}
++            {(viewMode === "cards" ? visibleProjects.length : data.total) === 1
++              ? "Projekt"
++              : "Projekte"}{" "}
++            gefunden
++            {stationFocus && viewMode === "cards" && (
++              <span className="ml-1">von {data.total.toLocaleString("de-DE")} gefilterten</span>
++            )}
++          </span>
++          {search && <span>für &quot;{search}&quot;</span>}
++
++          {stationFocus && (
++            <FilterChip
++              label={`Station: ${stationFocus.name}`}
++              onClear={clearStationFocus}
++              emphasis
++            />
++          )}
++          {region && <FilterChip label={region} onClear={() => setRegion("")} />}
++          {projektleiter && <FilterChip label={projektleiter} onClear={() => setProjektleiter("")} />}
++          {pruefer && <FilterChip label={pruefer} onClear={() => setPruefer("")} />}
++          {status && <FilterChip label={status} onClear={() => setStatus("")} />}
++          {department && <FilterChip label={department} onClear={() => setDepartment("")} />}
+         </div>
+       )}
+ 
+@@ -613,6 +768,18 @@ export default function Projects() {
+                               : "-"}
+                           </td>
+                           <td className="py-3 px-3 text-center">
++                            {/* Details reachable from the table too, so the
++                                three views expose the same action rather than
++                                the card grid being the only way in. */}
++                            <button
++                              type="button"
++                              aria-label={`Details zu Projekt ${project.projektnummer ?? project.id} anzeigen`}
++                              title="Details anzeigen"
++                              onClick={() => setDetailProjectId(project.id)}
++                              className="mr-1 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
++                            >
++                              <Info className="h-4 w-4" aria-hidden="true" />
++                            </button>
+                             <Dialog>
+                               <DialogTrigger asChild>
+                                 <button
+@@ -727,10 +894,18 @@ export default function Projects() {
+             {/* CARDS VIEW */}
+             {viewMode === "cards" && (
+               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 p-6">
+-                {data?.projects.map((project: Project) => {
++                {visibleProjects.map((project: Project) => {
+                   const mainReview = project.reviews?.find((r: Review) => r.status && r.status !== "nicht erforderlich") || project.reviews?.[0];
+                   return (
+-                    <Card key={project.id} className="hover:shadow-xl transition-all group border-2 hover:border-primary/20">
++                    <Card
++                      key={project.id}
++                      data-project-card={project.id}
++                      className={`group border-2 transition-all hover:border-primary/20 hover:shadow-xl ${
++                        focusProjectId === project.id
++                          ? "border-primary ring-2 ring-primary/40 ring-offset-2 ring-offset-background"
++                          : ""
++                      }`}
++                    >
+                       <CardHeader className="pb-3 space-y-3">
+                         <div className="flex justify-between items-start">
+                           <StatusBadge status={mainReview?.status || null} />
+@@ -758,11 +933,15 @@ export default function Projects() {
+                             <span className="text-xs">{project.bahnhofsmanagement || "-"}</span>
+                           </div>
+                         </div>
+-                        <Button 
+-                          variant="outline" 
+-                          size="sm" 
+-                          className="w-full text-primary-strong hover:bg-primary hover:text-white transition-all"
+-                          onClick={() => setViewMode("table")}
++                        {/* Was `onClick={() => setViewMode("table")}` — a button
++                            labelled "Details anzeigen" that showed no details
++                            and did not even select the row it switched to. */}
++                        <Button
++                          variant="outline"
++                          size="sm"
++                          className="w-full text-primary-strong transition-all hover:bg-primary hover:text-white"
++                          aria-label={`Details zu Projekt ${project.projektnummer ?? project.id} anzeigen`}
++                          onClick={() => setDetailProjectId(project.id)}
+                         >
+                           Details anzeigen
+                         </Button>
+@@ -797,13 +976,21 @@ export default function Projects() {
+                 className="h-[65vh] min-h-[380px] sm:h-[560px] lg:h-[600px] w-full relative"
+                 onBoundsChange={setMapBounds}
+                 onProjectSelect={handleMapProjectSelect}
++                onStationSelect={handleStationSelect}
+               />
+             )}
+           </>
+         )}
+       </div>
+ 
+-      {/* New Project Dialog */}
++      <ProjectDetailDialog
++        project={detailProject}
++        open={detailProjectId !== null}
++        onOpenChange={(o) => {
++          if (!o) setDetailProjectId(null);
++        }}
++        onShowStation={handleShowStationByName}
++      />
+     </div>
+   );
+ }
+diff --git a/scripts/e2e-smoke.mjs b/scripts/e2e-smoke.mjs
+index bfbf259..0a8f8bd 100644
+--- a/scripts/e2e-smoke.mjs
++++ b/scripts/e2e-smoke.mjs
+@@ -98,7 +98,25 @@ const page = await (await browser.newContext({ viewport: { width: 1440, height:
+ 
+ let consoleErrors = [];
+ page.on("pageerror", (e) => consoleErrors.push(`PAGEERROR ${String(e).slice(0, 160)}`));
+-page.on("console", (m) => { if (m.type() === "error") consoleErrors.push(`console ${m.text().slice(0, 160)}`); });
++/**
++ * A failed OpenStreetMap tile is an environment fact, not an app defect.
++ *
++ * Chromium reports every blocked or unreachable subresource as a console
++ * error, so in a sandbox or on a CI runner without egress the map view alone
++ * emits dozens of them and would fail whichever assertion happened to open it.
++ * Only requests to a host this bundle does not serve are ignored — an error
++ * from the app's own code or its own assets still fails the suite.
++ */
++const EXTERNAL_RESOURCE_ERROR =
++  /Failed to load resource|net::ERR_(TUNNEL_CONNECTION_FAILED|NAME_NOT_RESOLVED|INTERNET_DISCONNECTED|CONNECTION_(REFUSED|TIMED_OUT)|BLOCKED_BY_CLIENT)/;
++page.on("console", (m) => {
++  if (m.type() !== "error") return;
++  const text = m.text();
++  const url = m.location?.()?.url ?? "";
++  const isExternal = url !== "" && !url.startsWith(`http://localhost:${PORT}`);
++  if (isExternal && EXTERNAL_RESOURCE_ERROR.test(text)) return;
++  consoleErrors.push(`console ${text.slice(0, 160)}`);
++});
+ 
+ const U = (r) => `http://localhost:${PORT}${r}`;
+ const go = async (r) => { await page.goto(U(r), { waitUntil: "networkidle" }); await page.waitForTimeout(800); };
+@@ -421,6 +439,151 @@ await check("every Schnellaktion navigates somewhere real", async () => {
+   }
+ });
+ 
++console.log("\n== map -> cards -> details ==");
++
++/**
++ * The path the CEO view actually takes: a marker on the map, the station's
++ * cards, one project's details, and a contact route out of it.
++ *
++ * Before this existed, `handleMapProjectSelect` was `setViewMode("table")`
++ * plus a toast claiming the project was "in der Tabelle angezeigt" — nothing
++ * was selected, filtered or scrolled to — and "Details anzeigen" was the same
++ * `setViewMode("table")` with no details behind it. Both passed every check in
++ * this file, because no check followed the flow.
++ */
++let stationName = null;
++
++await check("a map marker opens a popup that offers the whole station", async () => {
++  await go("/projects");
++  await page.click('[aria-label="Kartenansicht"]');
++  await page.waitForSelector(".leaflet-container", { timeout: 15000 });
++  await page.waitForTimeout(2500);
++  const markers = await page.$$(".db-dot-marker");
++  assert(markers.length > 0, "no markers rendered");
++  // force: the markers overlap heavily at the initial zoom, so Playwright's
++  // actionability check sees a neighbour on top of the one we mean.
++  await markers[markers.length - 1].click({ force: true });
++  await page.waitForTimeout(700);
++  assert(await page.$("[data-station-all]"), "popup has no station-level action");
++  const projectButtons = await page.$$("[data-pid]");
++  assert(projectButtons.length > 0, "popup lists no projects");
++});
++
++await check("clicking a project in the popup lands on the filtered card view", async () => {
++  const projectButtons = await page.$$("[data-pid]");
++  await projectButtons[0].click({ force: true });
++  await page.waitForTimeout(1200);
++
++  const pressed = await page.getAttribute('[aria-label="Kachelansicht"]', "aria-pressed");
++  assert(pressed === "true", `expected the card view, aria-pressed was ${pressed}`);
++
++  stationName = await page.evaluate(() => {
++    const el = [...document.querySelectorAll("span")].find(
++      (e) => e.children.length === 0 && /^Station: /.test(e.textContent || ""),
++    );
++    return el ? el.textContent.replace(/^Station:\s*/, "") : null;
++  });
++  assert(stationName, "no station filter chip after arriving from the map");
++
++  // every rendered card belongs to that station
++  const stations = await page.$$eval("[data-project-card]", (cards) =>
++    cards.map((c) => c.querySelector("h3, [data-slot='card-title']")?.textContent?.trim() ?? ""),
++  );
++  assert(stations.length > 0, "card view rendered no cards");
++  // Guard the guard: if the title selector stopped matching, every entry would
++  // be "" and the leak check below would pass while testing nothing.
++  assert(
++    stations.every((s) => s.length > 0),
++    "could not read the station off every card — the leak check would be vacuous",
++  );
++  const foreign = stations.filter((s) => s !== stationName);
++  assert(foreign.length === 0, `cards from other stations leaked through: ${foreign.join(", ")}`);
++});
++
++await check("the detail dialog opens with every Fachprüfung", async () => {
++  const dialog = await page.$('[role="dialog"]');
++  assert(dialog, "no dialog after clicking a project on the map");
++  const rows = await page.$$eval('[role="dialog"] tbody tr', (r) => r.length);
++  assert(rows === 14, `dialog listed ${rows} Fachprüfungen, expected all 14`);
++});
++
++await check("contact links are real addresses, never constructed ones", async () => {
++  const links = await page.evaluate(() => {
++    const d = document.querySelector('[role="dialog"]');
++    return {
++      mail: [...d.querySelectorAll('a[href^="mailto:"]')].map((a) => a.getAttribute("href")),
++      teams: [...d.querySelectorAll('a[href^="https://teams.microsoft.com"]')].map((a) =>
++        a.getAttribute("href"),
++      ),
++      tel: [...d.querySelectorAll('a[href^="tel:"]')].length,
++    };
++  });
++  assert(links.mail.length > 0, "dialog offered no mail route at all");
++  assert(links.teams.length > 0, "dialog offered no Teams route at all");
++  // No source carries a telephone number, so a tel: link could only be invented.
++  assert(links.tel === 0, `dialog rendered ${links.tel} telephone links from data that has none`);
++
++  // Every address must exist in Hilfsdatei. Anything else is constructed.
++  const known = new Set(
++    JSON.parse(fs.readFileSync("data/contacts.source.json", "utf8"))
++      .map((c) => (c.mail || "").toLowerCase())
++      .filter(Boolean),
++  );
++  const addresses = links.mail.map((h) =>
++    decodeURIComponent(h.slice("mailto:".length).split("?")[0]).toLowerCase(),
++  );
++  const invented = [...new Set(addresses)].filter((a) => !known.has(a));
++  assert(invented.length === 0, `addresses not in Hilfsdatei: ${invented.join(", ")}`);
++
++  // The Teams link must target the same person the mail link writes to.
++  const teamsUsers = links.teams.map((h) => new URL(h).searchParams.get("users").toLowerCase());
++  const strayTeams = [...new Set(teamsUsers)].filter((u) => !known.has(u));
++  assert(strayTeams.length === 0, `Teams links to unknown addresses: ${strayTeams.join(", ")}`);
++});
++
++await check("clearing the station filter restores the full result set", async () => {
++  await page.keyboard.press("Escape");
++  await page.waitForTimeout(400);
++  const before = await page.$$eval("[data-project-card]", (c) => c.length);
++  await page.getByRole("button", { name: /Filter .* entfernen/ }).first().click();
++  await page.waitForTimeout(600);
++  const after = await page.$$eval("[data-project-card]", (c) => c.length);
++  assert(after > before, `clearing the chip did not widen the set (${before} -> ${after})`);
++  const chipGone = await page.evaluate(
++    () =>
++      ![...document.querySelectorAll("span")].some(
++        (e) => e.children.length === 0 && /^Station: /.test(e.textContent || ""),
++      ),
++  );
++  assert(chipGone, "the station chip survived being dismissed");
++});
++
++await check("\"Details anzeigen\" on a card opens that project's dialog", async () => {
++  const card = await page.$("[data-project-card]");
++  const id = await card.getAttribute("data-project-card");
++  const nummer = await page.evaluate((pid) => {
++    const c = document.querySelector(`[data-project-card="${pid}"]`);
++    return c?.querySelector(".font-mono")?.textContent?.trim() ?? null;
++  }, id);
++  await page.evaluate((pid) => {
++    document
++      .querySelector(`[data-project-card="${pid}"]`)
++      .querySelector('button[aria-label^="Details"]')
++      .click();
++  }, id);
++  await page.waitForTimeout(700);
++  const dialog = await page.$('[role="dialog"]');
++  assert(dialog, "\"Details anzeigen\" opened nothing");
++  const shown = await page.evaluate(
++    () => document.querySelector('[role="dialog"] .font-mono')?.textContent?.trim() ?? null,
++  );
++  assert(
++    !nummer || nummer === "N/A" || shown === nummer,
++    `dialog showed ${shown} for the card that reads ${nummer}`,
++  );
++  await page.keyboard.press("Escape");
++});
++
+ console.log("\n== summary ==");
+ console.log(`${passed} passed, ${failures.length} failed`);
+ await browser.close();
+diff --git a/shared/contact-resolution.test.ts b/shared/contact-resolution.test.ts
+new file mode 100644
+index 0000000..21e5ff6
+--- /dev/null
++++ b/shared/contact-resolution.test.ts
+@@ -0,0 +1,159 @@
++/**
++ * Pins the contact join against the real workbook and the real project data.
++ *
++ * The point of these numbers is that they are measured, not chosen. If an
++ * address is added to Hilfsdatei or a Prüfer is renamed in the source, the
++ * counts move and the test says so — which is the signal that the mail layer's
++ * reach has changed.
++ */
++import { describe, it, expect } from "vitest";
++import fs from "node:fs";
++import path from "node:path";
++import { CONTACTS } from "./contacts";
++import {
++  resolveContact,
++  contactOf,
++  resolutionNote,
++  mailtoHref,
++  teamsChatHref,
++  AMBIGUOUS_SURNAMES,
++} from "./contact-resolution";
++
++const surname = (s: string) => s.trim().toLowerCase().split(/\s+/).filter(Boolean).pop() ?? "";
++
++describe("Hilfsdatei surnames", () => {
++  const named = CONTACTS.filter((c) => c.name.trim() !== "");
++
++  it("has 48 named contacts and 3 unnamed group mailboxes", () => {
++    expect(named).toHaveLength(48);
++    expect(CONTACTS.length - named.length).toBe(3);
++  });
++
++  it("carries no duplicate surname, which is what makes surname matching safe", () => {
++    const counts = new Map<string, string[]>();
++    for (const c of named) {
++      const s = surname(c.name);
++      counts.set(s, [...(counts.get(s) ?? []), c.name]);
++    }
++    const dupes = [...counts.entries()].filter(([, v]) => v.length > 1);
++    expect(dupes).toEqual([]);
++    expect(counts.size).toBe(48);
++    expect(AMBIGUOUS_SURNAMES).toEqual([]);
++  });
++});
++
++describe("resolveContact", () => {
++  it("matches a full name exactly", () => {
++    const r = resolveContact("Emin Er");
++    expect(r.kind).toBe("exact");
++    expect(contactOf(r)?.mail).toBe("emin.er@deutschebahn.com");
++  });
++
++  it("matches a surname-only Prüfer to the one person who holds it", () => {
++    const r = resolveContact("Er");
++    expect(r.kind).toBe("surname");
++    expect(contactOf(r)?.name).toBe("Emin Er");
++  });
++
++  it("is case- and whitespace-insensitive", () => {
++    expect(contactOf(resolveContact("  hartung "))?.name).toBe("Stephan Hartung");
++    expect(contactOf(resolveContact("STEPHAN HARTUNG"))?.name).toBe("Stephan Hartung");
++  });
++
++  it("classifies the workbook's non-person values as placeholders", () => {
++    for (const v of ["Zuordnung erforderlich", "Zentrale", "BSB des BM´s"]) {
++      const r = resolveContact(v);
++      expect(r.kind, v).toBe("placeholder");
++      expect(contactOf(r)).toBeNull();
++    }
++  });
++
++  it("never invents an address for a name it does not know", () => {
++    const r = resolveContact("Colak");
++    expect(r.kind).toBe("unknown");
++    expect(contactOf(r)).toBeNull();
++    expect(resolutionNote(r)).toBe("Keine Adresse in der Hilfsdatei hinterlegt");
++  });
++
++  it("reports an empty name rather than throwing", () => {
++    for (const v of [null, undefined, "", "   "]) {
++      expect(resolveContact(v).kind).toBe("empty");
++    }
++  });
++});
++
++describe("links", () => {
++  const c = { row: 13, group: "ITK", name: "Emin Er", mail: "emin.er@deutschebahn.com" };
++
++  it("builds a mailto with an encoded subject", () => {
++    expect(mailtoHref(c, "Projekt G.011551488 – ITK")).toBe(
++      "mailto:emin.er@deutschebahn.com?subject=Projekt+G.011551488+%E2%80%93+ITK",
++    );
++  });
++
++  it("omits the query entirely when there is no subject and no body", () => {
++    expect(mailtoHref(c)).toBe("mailto:emin.er@deutschebahn.com");
++  });
++
++  it("builds a Teams chat deep link from the address already on file", () => {
++    expect(teamsChatHref(c)).toBe(
++      "https://teams.microsoft.com/l/chat/0/0?users=emin.er%40deutschebahn.com",
++    );
++  });
++});
++
++/**
++ * The reach measurement. These are the numbers the mail layer will inherit,
++ * so they are asserted against the shipped data.json rather than a fixture.
++ */
++describe("reach across the real review data", () => {
++  const dataPath = path.resolve(__dirname, "..", "client", "public", "data.json");
++  const projects: Array<{ reviews?: Array<{ prueferName?: string | null }> }> = JSON.parse(
++    fs.readFileSync(dataPath, "utf8"),
++  ).projects;
++
++  const names = new Map<string, number>();
++  for (const p of projects) {
++    for (const r of p.reviews ?? []) {
++      const n = (r.prueferName ?? "").trim();
++      if (n) names.set(n, (names.get(n) ?? 0) + 1);
++    }
++  }
++
++  const tally = { exact: 0, surname: 0, placeholder: 0, unknown: 0, ambiguous: 0, empty: 0 };
++  const rows = { ...tally };
++  for (const [n, count] of names) {
++    const kind = resolveContact(n).kind;
++    tally[kind] += 1;
++    rows[kind] += count;
++  }
++
++  it("sees 44 distinct Prüfer names over 10,489 review rows", () => {
++    expect(names.size).toBe(44);
++    expect([...names.values()].reduce((a, b) => a + b, 0)).toBe(10_489);
++  });
++
++  it("resolves 29 of them — 6,855 rows — to a real address", () => {
++    expect(tally.exact + tally.surname).toBe(29);
++    expect(rows.exact + rows.surname).toBe(6_855);
++  });
++
++  it("classifies 3 names — 2,799 rows — as placeholders rather than people", () => {
++    expect(tally.placeholder).toBe(3);
++    expect(rows.placeholder).toBe(2_799);
++  });
++
++  it("leaves exactly 12 unresolved names, over 835 rows", () => {
++    expect(tally.unknown).toBe(12);
++    expect(rows.unknown).toBe(835);
++  });
++
++  it("accounts for every name and every row", () => {
++    expect(tally.exact + tally.surname + tally.placeholder + tally.unknown + tally.ambiguous).toBe(
++      names.size,
++    );
++    expect(rows.exact + rows.surname + rows.placeholder + rows.unknown + rows.ambiguous).toBe(
++      10_489,
++    );
++  });
++});
+diff --git a/shared/contact-resolution.ts b/shared/contact-resolution.ts
+new file mode 100644
+index 0000000..7b35acd
+--- /dev/null
++++ b/shared/contact-resolution.ts
+@@ -0,0 +1,235 @@
++/**
++ * Resolving a name in the project data to an address in `Hilfsdatei`.
++ *
++ * ---------------------------------------------------------------------------
++ * Why this needs a resolver at all
++ * ---------------------------------------------------------------------------
++ * The two sources spell people differently. `Hilfsdatei` holds full names
++ * ("Emin Er", "Stephan Hartung"). The review rows hold surnames ("Er",
++ * "Hartung"). Matching on the full string finds almost nothing:
++ *
++ *     exact full-name match   1 of 44 reviewer names      32 of 10,489 rows
++ *
++ * Matching the surname finds most of them, and it is safe to do here because
++ * every surname in `Hilfsdatei` is unique — measured, and asserted by
++ * contact-resolution.test.ts rather than assumed. SURNAME_INDEX below drops
++ * any surname that ever collides, so a future duplicate degrades to
++ * "ambiguous" instead of silently addressing mail to the wrong person.
++ *
++ *     exact full-name match  1 name      32 rows
++ *     unique surname match  28 names  6,823 rows
++ *     ambiguous surname      0 names      0 rows
++ *     no match              15 names  3,634 rows
++ *
++ * ---------------------------------------------------------------------------
++ * What the 15 unmatched names are
++ * ---------------------------------------------------------------------------
++ * Three of them are not people at all — they are placeholders the workbook
++ * writes into the Prüfer column, and 2,799 of the 3,634 unmatched rows are
++ * one of those: "Zuordnung erforderlich" (2,551), "Zentrale" (215) and
++ * "BSB des BM´s" (33). They are classified as `placeholder` so the UI can say
++ * "noch niemand zugeordnet" instead of offering a mail button for a phrase.
++ *
++ * The remaining 12 names cover 835 rows. Eleven are real reviewers with no row
++ * in `Hilfsdatei`:
++ *
++ *     Colak 250 · Vatter 149 · Engstfeld 127 · Wagner 83 · Oker 54 ·
++ *     Matteka 46 · Haag 43 · Bär 23 · Ates 23 · Krejtschi 16 ·
++ *     Frousiou-Bauer 15                                  (829 rows)
++ *
++ * The twelfth is "Herr" (6 rows), which is a truncated entry rather than a
++ * name — left as `unknown` rather than declared a placeholder, because what it
++ * was truncated from has not been established.
++ *
++ * That is missing data, not a code defect, and it answers the open Stage 4a
++ * question: the gap is 11 people and 829 rows, not the 20 people and 1,083
++ * rows that counting full names suggested.
++ *
++ * ---------------------------------------------------------------------------
++ * What this deliberately does NOT do
++ * ---------------------------------------------------------------------------
++ * It never constructs an address. DB's convention is predictable enough that
++ * `vorname.nachname@deutschebahn.com` would look right and be wrong often
++ * enough to matter — a mail button that silently goes nowhere is worse than
++ * no button. `unknown` stays `unknown`.
++ *
++ * There is no telephone number here because there is no telephone number in
++ * any source: `Hilfsdatei` carries exactly row, group, name and mail (columns
++ * A-C), and data.json carries no contact column at all. Adding a phone button
++ * would mean inventing the number behind it, so the UI states that none is on
++ * file. A Telefon column in `Hilfsdatei` is all that is missing; the extractor
++ * and this resolver both need one field added once it exists.
++ */
++
++import { CONTACTS, type Contact } from "./contacts";
++
++/**
++ * Values the workbook writes into a Prüfer column that are not a person.
++ *
++ * Deliberately a short, closed list. "Herr" (6 rows) is left out: it looks
++ * like a truncated real name rather than a role, and calling it a placeholder
++ * would assert something about it that has not been established.
++ */
++const PLACEHOLDER_NAMES: Readonly<Record<string, string>> = {
++  "zuordnung erforderlich": "Noch niemand zugeordnet",
++  zentrale: "Zentrale (Sammelpostfach)",
++  "bsb des bm´s": "BSB des Bahnhofsmanagements",
++  "bsb des bm's": "BSB des Bahnhofsmanagements",
++};
++
++const norm = (s: string | null | undefined): string =>
++  String(s ?? "")
++    .trim()
++    .toLowerCase()
++    .replace(/\s+/g, " ");
++
++/** Last whitespace-separated token. "Duc Minh Nguyen" -> "nguyen". */
++const surnameOf = (s: string | null | undefined): string => {
++  const parts = norm(s).split(" ").filter(Boolean);
++  return parts.length ? (parts[parts.length - 1] as string) : "";
++};
++
++/** Only rows that name a person. Rows 10, 38 and 39 are group mailboxes. */
++const NAMED_CONTACTS: readonly Contact[] = CONTACTS.filter((c) => c.name.trim() !== "");
++
++const EXACT_INDEX: ReadonlyMap<string, Contact> = new Map(
++  NAMED_CONTACTS.map((c) => [norm(c.name), c] as const),
++);
++
++/**
++ * Surname -> contact, with every colliding surname removed.
++ *
++ * The removal is the safety property: this file's whole premise is that a
++ * surname identifies one person in `Hilfsdatei`, and the index enforces that
++ * instead of trusting it. Today nothing is dropped (48 names, 48 surnames);
++ * the moment a second Schmidt is added, both stop resolving and the UI shows
++ * the department's recipients instead of guessing between them.
++ */
++const SURNAME_INDEX: ReadonlyMap<string, Contact> = (() => {
++  const seen = new Map<string, Contact[]>();
++  for (const c of NAMED_CONTACTS) {
++    const s = surnameOf(c.name);
++    if (!s) continue;
++    const bucket = seen.get(s);
++    if (bucket) bucket.push(c);
++    else seen.set(s, [c]);
++  }
++  const unique = new Map<string, Contact>();
++  for (const [s, bucket] of seen) if (bucket.length === 1) unique.set(s, bucket[0] as Contact);
++  return unique;
++})();
++
++/** Surnames held by more than one person, which therefore resolve to nobody. */
++export const AMBIGUOUS_SURNAMES: readonly string[] = (() => {
++  const counts = new Map<string, number>();
++  for (const c of NAMED_CONTACTS) {
++    const s = surnameOf(c.name);
++    if (s) counts.set(s, (counts.get(s) ?? 0) + 1);
++  }
++  return [...counts.entries()].filter(([, n]) => n > 1).map(([s]) => s);
++})();
++
++export type ContactResolution =
++  /** The name matched a `Hilfsdatei` row in full. */
++  | { kind: "exact"; contact: Contact }
++  /** The name matched exactly one `Hilfsdatei` surname. */
++  | { kind: "surname"; contact: Contact }
++  /** Two or more people share this surname, so it addresses nobody. */
++  | { kind: "ambiguous"; surname: string }
++  /** Not a person — a role or a "to be assigned" marker. */
++  | { kind: "placeholder"; label: string }
++  /** A real name with no row in `Hilfsdatei`. */
++  | { kind: "unknown"; name: string }
++  /** No name at all in the source row. */
++  | { kind: "empty" };
++
++/**
++ * Resolve one name from the project or review data.
++ *
++ * Order matters: exact before surname, so "Emin Er" never falls through to a
++ * surname lookup, and placeholders before both, so a phrase is never treated
++ * as a name.
++ */
++export function resolveContact(name: string | null | undefined): ContactResolution {
++  const n = norm(name);
++  if (!n) return { kind: "empty" };
++
++  const placeholder = PLACEHOLDER_NAMES[n];
++  if (placeholder) return { kind: "placeholder", label: placeholder };
++
++  const exact = EXACT_INDEX.get(n);
++  if (exact) return { kind: "exact", contact: exact };
++
++  const s = surnameOf(n);
++  const bySurname = SURNAME_INDEX.get(s);
++  if (bySurname) return { kind: "surname", contact: bySurname };
++  if (AMBIGUOUS_SURNAMES.includes(s)) return { kind: "ambiguous", surname: s };
++
++  return { kind: "unknown", name: String(name).trim() };
++}
++
++/** The contact behind a resolution, or null when there is nobody to write to. */
++export function contactOf(r: ContactResolution): Contact | null {
++  return r.kind === "exact" || r.kind === "surname" ? r.contact : null;
++}
++
++/**
++ * Why a name could not be resolved, in German, for display.
++ *
++ * Returns null when it resolved — callers render the contact instead.
++ */
++export function resolutionNote(r: ContactResolution): string | null {
++  switch (r.kind) {
++    case "exact":
++    case "surname":
++      return null;
++    case "placeholder":
++      return r.label;
++    case "ambiguous":
++      return `Nachname „${r.surname}“ ist in der Hilfsdatei mehrfach vergeben – keine eindeutige Adresse`;
++    case "unknown":
++      return "Keine Adresse in der Hilfsdatei hinterlegt";
++    case "empty":
++      return "Kein Name hinterlegt";
++  }
++}
++
++/**
++ * A mailto: with a subject that identifies the project.
++ *
++ * The subject is built from real fields only; a project with no
++ * Projektnummer gets a subject without one rather than a fabricated id.
++ */
++export function mailtoHref(
++  contact: Contact,
++  subject?: string | null,
++  body?: string | null,
++): string {
++  const params = new URLSearchParams();
++  if (subject) params.set("subject", subject);
++  if (body) params.set("body", body);
++  const q = params.toString();
++  return `mailto:${contact.mail}${q ? `?${q}` : ""}`;
++}
++
++/**
++ * Microsoft Teams 1:1 chat deep link.
++ *
++ * Derived from the address already on file — not a second, guessed identifier.
++ * Teams resolves `users` against the tenant directory, so this opens a chat
++ * with the same person the mail button writes to, and fails visibly in Teams
++ * if that address has no account rather than sending into the void.
++ */
++export function teamsChatHref(contact: Contact, message?: string | null): string {
++  const params = new URLSearchParams({ users: contact.mail });
++  if (message) params.set("message", message);
++  return `https://teams.microsoft.com/l/chat/0/0?${params.toString()}`;
++}
++
++/** Display name for a resolution — the Hilfsdatei spelling when we have it. */
++export function displayNameOf(r: ContactResolution, fallback: string | null | undefined): string {
++  const c = contactOf(r);
++  if (c) return c.name;
++  if (r.kind === "placeholder") return r.label;
++  return String(fallback ?? "").trim() || "Unbekannt";
++}
+-- 
+2.43.0
+
