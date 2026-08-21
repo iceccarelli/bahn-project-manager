@@ -40,7 +40,7 @@ export function Step4Termin({ draft }: { draft: ChecklistDraft }) {
   if (ohneVorstellung) {
     return (
       <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-xs dark:border-amber-800/70 dark:bg-amber-950/40">
-        <strong className="font-black">Keine Terminbuchung erforderlich.</strong>{" "}
+        <strong className="font-bold">Keine Terminbuchung erforderlich.</strong>{" "}
         {mode === "Projektkonfiguration"
           ? "Im Modus Projektkonfiguration entfällt die Projektvorstellung."
           : 'Die Frage „Projekt mit Projektvorstellung anmelden?" ist mit „Nein" beantwortet — das ist nur nach vorheriger Abstimmung mit Fachspezialisten und TBQ zulässig.'}
@@ -77,7 +77,7 @@ export function Step4Termin({ draft }: { draft: ChecklistDraft }) {
           selected ? "ring-2 ring-primary ring-offset-1" : ""
         }`}
       >
-        <span className="text-2xs font-black tabular-nums">
+        <span className="text-2xs font-bold tabular-nums">
           {s.von}–{s.bis}
         </span>
         <span className="text-2xs font-bold uppercase tracking-wide opacity-80">
@@ -96,7 +96,7 @@ export function Step4Termin({ draft }: { draft: ChecklistDraft }) {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="text-xs">
-          <strong className="font-black">{freeCount}</strong> freie Termine in den nächsten 180
+          <strong className="font-bold">{freeCount}</strong> freie Termine in den nächsten 180
           Tagen · Fachspezialistenprüfung findet dienstags statt
         </div>
         <Legend />
@@ -114,7 +114,7 @@ export function Step4Termin({ draft }: { draft: ChecklistDraft }) {
           return (
             <div key={day.datum} className="rounded-lg border border-border p-3">
               <div className="mb-2 flex items-baseline gap-3">
-                <span className="text-xs font-black tabular-nums">{formatGerman(day.datum)}</span>
+                <span className="text-xs font-bold tabular-nums">{formatGerman(day.datum)}</span>
                 <span className="text-2xs uppercase tracking-wider text-muted-foreground">
                   {day.datum === todayIso ? "heute" : "Dienstag"}
                 </span>
@@ -139,7 +139,7 @@ export function Step4Termin({ draft }: { draft: ChecklistDraft }) {
       {termin && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border-2 border-primary bg-primary/5 px-4 py-3">
           <div className="text-xs">
-            <div className="font-black">
+            <div className="font-bold">
               Gewählt: {formatGerman(termin.datum)} · {termin.von}–{termin.bis}
             </div>
             <div className="mt-0.5 text-muted-foreground">

@@ -1,5 +1,29 @@
 @import "tailwindcss";
 
+/*
+ * Tailwind v4 detects sources automatically, but only from this file's own
+ * project root — which is `client/`. Everything in `shared/` was invisible to
+ * the CSS build, including shared/status-appearance.ts, the single file that
+ * exists to make status colour consistent.
+ *
+ * Measured on the shipped bundle before this line: of the eight tone
+ * backgrounds that file names, four never reached the stylesheet —
+ * bg-slate-100, bg-amber-100, bg-violet-100 and bg-orange-100, plus
+ * text-amber-800 and text-violet-800. The other four survived only because
+ * they happen to be written a second time somewhere under client/src.
+ *
+ * The four that vanished cover 12,738 of the 15,646 statused review rows
+ * (81 %): every "nicht erforderlich" (11,947), every "offen" (650), every
+ * "Nachforderung" (97) and every "zurückgestellt" (44) badge rendered with a
+ * transparent background and, where the text colour was missing too, in
+ * default near-black — which is why a status pill in the card grid looked like
+ * plain text beside its neighbours.
+ *
+ * check-ui.mjs now asserts every class named in TONE_APPEARANCE is present in
+ * the built CSS, so a tone cannot silently stop shipping again.
+ */
+@source "../../shared";
+
 /* `inline` is required so the var() references resolve against the runtime
    :root / .dark values at use-time (light + dark both work correctly). */
 @theme inline {
@@ -101,7 +125,12 @@
     --secondary: 240 4.8% 95.9%;
     --secondary-foreground: 240 5.9% 10%;
     --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
+    /* 44%, not 46.1%. Measured against the two backgrounds it is actually
+       painted on: 4.83:1 on white but only 4.39:1 on --muted, which is where
+       every chip, table header and secondary label sits. Below the 4.5:1 floor
+       on 13 elements in the Anmeldung step alone. 44% gives 5.21:1 on white
+       and 4.74:1 on muted. The dark theme already measured 5.81:1. */
+    --muted-foreground: 240 3.8% 44%;
     --accent: 240 4.8% 95.9%;
     --accent-foreground: 240 5.9% 10%;
     /* Darkened from 60.2% lightness. shadcn's default carries white text at
@@ -406,6 +435,67 @@
     /* hit area only — never paints, never captures the pointer for anything
        other than its own button */
     pointer-events: auto;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   stack-table — a data table that becomes a list on a phone.
+
+   The Fachprüfungen table is 5 columns. In a 343px dialog it needs 2.4x the
+   available width, so `overflow-x: auto` did its job and showed columns 1 and
+   2 while Prüfer, Prüfdatum and Kontakt sat off-screen behind a scroll no
+   affordance announced. Below `sm` each row becomes its own block and each
+   cell carries its column name, so all five fields are visible without any
+   horizontal scrolling at all. Above `sm` it is an ordinary table again.
+
+   The header is hidden rather than removed: it is still the accessible name
+   for every cell, and `sr-only` geometry keeps it available to a screen
+   reader while taking no space.
+   --------------------------------------------------------------------------- */
+@media (width < 40rem) {
+  .stack-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border-width: 0;
+  }
+
+  .stack-table tr {
+    display: block;
+    padding: 0.75rem 0;
+  }
+
+  .stack-table td {
+    display: grid;
+    grid-template-columns: 6.5rem minmax(0, 1fr);
+    gap: 0.75rem;
+    align-items: baseline;
+    padding: 0.25rem 0.75rem;
+    border: 0;
+  }
+
+  .stack-table td::before {
+    content: attr(data-label);
+    font-size: var(--text-2xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: hsl(var(--muted-foreground));
+  }
+
+  /* The first cell is the row's own heading; it needs no label beside it. */
+  .stack-table td:first-child {
+    grid-template-columns: minmax(0, 1fr);
+    padding-bottom: 0.5rem;
+  }
+
+  .stack-table td:first-child::before {
+    content: none;
   }
 }
 

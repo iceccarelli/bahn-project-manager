@@ -25,7 +25,12 @@ function StatusBadge({ status }: { status: string | null }) {
   if (!status) return <span className="text-xs text-muted-foreground">-</span>;
   const colorClass = statusBadgeClass(status);
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-2xs font-medium whitespace-nowrap ${colorClass}`}>
+    /* `min-w-0` and a truncating child: `whitespace-nowrap` alone made this
+       badge an unshrinkable flex item, so it and the Projektnummer beside it
+       pushed each other out of the card. */
+    <span
+      className={`inline-flex max-w-full items-center rounded-full px-2.5 py-0.5 text-2xs font-medium leading-tight ${colorClass}`}
+    >
       {status}
     </span>
   );
@@ -962,40 +967,89 @@ export default function Projects() {
                 {visibleProjects.map((project: Project) => {
                   const mainReview = project.reviews?.find((r: Review) => r.status && r.status !== "nicht erforderlich") || project.reviews?.[0];
                   return (
+                    /*
+                      Four layout defects lived in this card, all visible in one
+                      screenshot of the grid:
+                    
+                      1. `flex justify-between` over two `whitespace-nowrap`
+                         badges with no `min-w-0`. A 76-character Projektnummer
+                         cannot shrink, so the row grew past the card and the
+                         Projektnummer was clipped mid-string at the border —
+                         measured as a 1,863px² overlap with the status badge
+                         and 1,526px² with the neighbouring card.
+                      2. No `h-full`, so a card whose Station wraps to two lines
+                         is taller than the one beside it and "Details anzeigen"
+                         sits at a different height in every column. The grid
+                         stretches the items; the card has to fill that height
+                         and push its footer down with `mt-auto`.
+                      3. `line-clamp-3 min-h-[45px]` — a 3-line clamp on a
+                         2-line box, so a long description overflowed the
+                         reserved space and shifted everything below it.
+                      4. `text-right` on the Region column while Projektleiter
+                         is left-aligned: a two-line name pushed "REGION" off
+                         its own baseline. Two equal grid columns hold both.
+                    */
                     <Card
                       key={project.id}
                       data-project-card={project.id}
-                      className={`group border-2 transition-all hover:border-primary/20 hover:shadow-xl ${
+                      className={`group flex h-full flex-col border-2 transition-all hover:border-primary/20 hover:shadow-xl ${
                         focusProjectId === project.id
                           ? "border-primary ring-2 ring-primary/40 ring-offset-2 ring-offset-background"
                           : ""
                       }`}
                     >
-                      <CardHeader className="pb-3 space-y-3">
-                        <div className="flex justify-between items-start">
+                      {/*
+                        Status and Projektnummer on separate rows.
+                      
+                        Side by side they were two unshrinkable pills in one
+                        230px row: as a flex row they overflowed the card, and
+                        once both were allowed to shrink they split the width
+                        evenly and BOTH became unreadable — "Zustimmun…" next to
+                        "G.011800063.01.…". A Projektnummer is an identifier;
+                        half of one is worth nothing. Stacked, the status keeps
+                        its full label and the number wraps in full.
+                      */}
+                      <CardHeader className="space-y-2 pb-3">
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
                           <StatusBadge status={mainReview?.status || null} />
-                          <Badge variant="secondary" className="font-mono text-2xs">{project.projektnummer || "N/A"}</Badge>
                         </div>
-                        <CardTitle className="text-lg leading-tight group-hover:text-primary-strong transition-colors line-clamp-2">
-                          {project.station}
+                        <p className="break-all font-mono text-2xs leading-tight text-muted-foreground">
+                          {project.projektnummer || "ohne Projektnummer"}
+                        </p>
+                        <CardTitle className="line-clamp-2 min-h-[2.75rem] text-lg leading-tight transition-colors group-hover:text-primary-strong">
+                          {project.station || "Ohne Station"}
                         </CardTitle>
                       </CardHeader>
-                      <CardContent className="space-y-4">
-                        <p className="text-xs text-muted-foreground line-clamp-3 min-h-[45px]">{project.projektbeschreibung || "Keine Beschreibung vorhanden."}</p>
-                        {project.projektstand && (
-                          <div className="flex items-center gap-2">
-                            <span className="text-2xs uppercase text-muted-foreground font-bold">Stand:</span>
-                            <span className="text-xs">{project.projektstand}</span>
+                      <CardContent className="flex flex-1 flex-col gap-4">
+                        <p className="line-clamp-2 min-h-[2rem] text-xs leading-relaxed text-muted-foreground">
+                          {project.projektbeschreibung || "Keine Beschreibung vorhanden."}
+                        </p>
+                        <div className="flex min-w-0 items-baseline gap-2">
+                          <span className="shrink-0 text-2xs font-bold uppercase text-muted-foreground">
+                            Stand:
+                          </span>
+                          <span className="truncate text-xs" title={project.projektstand ?? undefined}>
+                            {project.projektstand || "—"}
+                          </span>
+                        </div>
+                        <div className="mt-auto grid grid-cols-2 gap-3 border-t pt-4">
+                          <div className="flex min-w-0 flex-col">
+                            <span className="text-2xs font-bold uppercase text-muted-foreground">Projektleiter</span>
+                            <span
+                              className="line-clamp-2 text-xs font-semibold leading-tight"
+                              title={project.projektleiter ?? undefined}
+                            >
+                              {project.projektleiter || "Unbekannt"}
+                            </span>
                           </div>
-                        )}
-                        <div className="pt-4 border-t flex justify-between items-center">
-                          <div className="flex flex-col">
-                            <span className="text-2xs uppercase text-muted-foreground font-bold">Projektleiter</span>
-                            <span className="text-xs font-semibold">{project.projektleiter || "Unbekannt"}</span>
-                          </div>
-                          <div className="flex flex-col text-right">
-                            <span className="text-2xs uppercase text-muted-foreground font-bold">Region</span>
-                            <span className="text-xs">{project.bahnhofsmanagement || "-"}</span>
+                          <div className="flex min-w-0 flex-col text-right">
+                            <span className="text-2xs font-bold uppercase text-muted-foreground">Region</span>
+                            <span
+                              className="line-clamp-2 text-xs leading-tight"
+                              title={project.bahnhofsmanagement ?? undefined}
+                            >
+                              {project.bahnhofsmanagement || "—"}
+                            </span>
                           </div>
                         </div>
                         {/* Was `onClick={() => setViewMode("table")}` — a button

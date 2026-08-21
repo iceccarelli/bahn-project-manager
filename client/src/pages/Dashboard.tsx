@@ -632,18 +632,29 @@ export default function Dashboard() {
                   <button
                     type="button"
                     key={gew.name}
-                    className="w-full border rounded-xl p-4 text-left hover:shadow-md transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    className="w-full min-w-0 cursor-pointer rounded-xl border p-4 text-left transition-all hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     onClick={() => setSelectedGewerke(gew.name)}
                   >
-                    <div className="font-semibold text-lg mb-2">{gew.name}</div>
-                    <div className="text-3xl font-bold mb-3">{gew.value.toLocaleString("de-DE")}</div>
+                    <div className="mb-2 break-words text-lg font-semibold">{gew.name}</div>
+                    <div className="mb-3 text-3xl font-bold tabular-nums">{gew.value.toLocaleString("de-DE")}</div>
+                    {/* `justify-between` with an unshrinkable label pushed the
+                        count past the tile edge — measured 6 to 12px out on
+                        seven tiles at 375px. The label truncates, the number
+                        never does: it is the datum. */}
                     <div className="space-y-1 text-xs">
-                      {Object.entries(gew.breakdown).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([status, count]) => (
-                        <div key={status} className="flex justify-between">
-                          <span className="text-muted-foreground">{status}</span>
-                          <span className="font-medium">{count}</span>
-                        </div>
-                      ))}
+                      {Object.entries(gew.breakdown)
+                        .sort((a, b) => b[1] - a[1])
+                        .slice(0, 3)
+                        .map(([status, count]) => (
+                          <div key={status} className="flex min-w-0 items-baseline justify-between gap-2">
+                            <span className="truncate text-muted-foreground" title={status}>
+                              {status}
+                            </span>
+                            <span className="shrink-0 font-medium tabular-nums">
+                              {count.toLocaleString("de-DE")}
+                            </span>
+                          </div>
+                        ))}
                     </div>
                   </button>
                 ))}
@@ -1131,22 +1142,45 @@ export default function Dashboard() {
 
               <div>
                 <div className="font-semibold mb-3">Status pro Gewerke</div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {/*
+                  Two overflows lived in this grid, both visible at 375px:
+                  "Baubetriebstechnologie" is 22 characters of `font-mono` in a
+                  half-width tile and painted straight over "Baubetriebsplanung"
+                  beside it, and the Badge ships `whitespace-nowrap`, so
+                  "Zustimmung erteilt" ran out of its tile and over the
+                  neighbour's. `min-w-0` on the tile is what lets either wrap at
+                  all — a grid item defaults to `min-width: auto` and refuses to
+                  go below its content's intrinsic width.
+                */}
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                   {selectedProject.reviews.map((review) => (
-                    <div key={review.department} className="border rounded-xl p-3">
-                      <div className="font-mono text-xs text-muted-foreground">{review.department}</div>
-                      <div className="flex items-center gap-2 mt-1">
+                    <div key={review.department} className="min-w-0 rounded-xl border p-3">
+                      <div className="break-words font-mono text-xs text-muted-foreground">
+                        {review.department}
+                      </div>
+                      <div className="mt-1 flex min-w-0 items-center gap-2">
                         {/* Was white text on statusHex(). Those hexes are tuned
                             as chart *fills*; as a text background they measured
                             2.15:1 for "offen" and 2.54:1 for "Zustimmung
                             erteilt", against a 4.5:1 floor. The badge variant of
                             the same tone is built for text and passes. */}
-                        <Badge variant="outline" className={statusBadgeClass(review.status)}>
-                          {review.status || "—"}
+                        {/* Normalised, like every other status surface: the raw
+                            string misses the annotated variants entirely. And
+                            `whitespace-normal` so a two-word status wraps
+                            inside the badge instead of past the tile. */}
+                        <Badge
+                          variant="outline"
+                          className={`min-w-0 whitespace-normal break-words text-left ${statusBadgeClass(
+                            normalizeReviewStatus(review.status),
+                          )}`}
+                        >
+                          {normalizeReviewStatus(review.status) ?? review.status ?? "—"}
                         </Badge>
                       </div>
-                      <div className="text-sm mt-1">{review.prueferName}</div>
-                      <div className="text-xs text-muted-foreground">{formatGerman(review.pruefDatum) || "—"}</div>
+                      <div className="mt-1 break-words text-sm">{review.prueferName || "—"}</div>
+                      <div className="text-xs tabular-nums text-muted-foreground">
+                        {formatGerman(review.pruefDatum) || "—"}
+                      </div>
                     </div>
                   ))}
                 </div>

@@ -115,10 +115,10 @@ export default function AuditLogPage() {
               </caption>
               <thead>
                 <tr className="border-b bg-muted/40 text-2xs uppercase tracking-wider text-muted-foreground">
-                  <th scope="col" className="px-4 py-2.5 text-left font-black">Zeitpunkt</th>
-                  <th scope="col" className="px-4 py-2.5 text-left font-black">Person</th>
-                  <th scope="col" className="px-4 py-2.5 text-left font-black">Aktion</th>
-                  <th scope="col" className="px-4 py-2.5 text-left font-black">Details</th>
+                  <th scope="col" className="px-4 py-2.5 text-left font-bold">Zeitpunkt</th>
+                  <th scope="col" className="px-4 py-2.5 text-left font-bold">Person</th>
+                  <th scope="col" className="px-4 py-2.5 text-left font-bold">Aktion</th>
+                  <th scope="col" className="px-4 py-2.5 text-left font-bold">Details</th>
                 </tr>
               </thead>
               <tbody>

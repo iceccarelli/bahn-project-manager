@@ -57,7 +57,7 @@ export function Step1Projekt({ draft }: { draft: ChecklistDraft }) {
   return (
     <div className="space-y-6">
       <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-xs dark:border-amber-800/70 dark:bg-amber-950/40">
-        <strong className="font-black">Bitte nur die gelben Felder befüllen.</strong> Bahnhofsnummer
+        <strong className="font-bold">Bitte nur die gelben Felder befüllen.</strong> Bahnhofsnummer
         und BM werden aus der Station abgeleitet.
       </div>
 

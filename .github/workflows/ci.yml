@@ -135,6 +135,12 @@ jobs:
       # below 44px on a touch pointer, in both legend states.
       - run: pnpm check:responsive
       - run: pnpm check:map
+      # check:ui asserts the shared tone palette actually reaches the built
+      # stylesheet, and that no text spills its container, is painted over
+      # another string, falls below its WCAG contrast floor, or renders at a
+      # size outside the type scale — across six routes, four interactive
+      # surfaces and three viewports.
+      - run: pnpm check:ui
 
   # ---------------------------------------------------------------------------
   # Containerisation gate. Builds the production image and proves the container

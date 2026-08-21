@@ -43,12 +43,12 @@ export function Unterschriftenblatt({
       }
     >
       <div className="flex items-baseline justify-between border-b-2 border-primary pb-2">
-        <span className="font-black tracking-tight">{UNTERSCHRIFTENBLATT_ISSUER}</span>
+        <span className="font-bold tracking-tight">{UNTERSCHRIFTENBLATT_ISSUER}</span>
         <span className="text-2xs uppercase tracking-widest text-muted-foreground print:text-black">
           Vorschau
         </span>
       </div>
-      <h3 className="mt-3 text-sm font-black leading-tight">{UNTERSCHRIFTENBLATT_TITLE}</h3>
+      <h3 className="mt-3 text-sm font-bold leading-tight">{UNTERSCHRIFTENBLATT_TITLE}</h3>
 
       <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
         <dt className="font-bold">Projektnummer:</dt>
@@ -65,16 +65,16 @@ export function Unterschriftenblatt({
         </caption>
         <thead>
           <tr className="border-y border-border text-2xs uppercase tracking-wider">
-            <th scope="col" className="py-1 text-left font-black">
+            <th scope="col" className="py-1 text-left font-bold">
               Name / Funktion
             </th>
-            <th scope="col" className="py-1 text-center font-black">
+            <th scope="col" className="py-1 text-center font-bold">
               Prüfung
             </th>
-            <th scope="col" className="py-1 text-center font-black">
+            <th scope="col" className="py-1 text-center font-bold">
               Zustimmung
             </th>
-            <th scope="col" className="py-1 text-right font-black">
+            <th scope="col" className="py-1 text-right font-bold">
               Datum / Unterschrift
             </th>
           </tr>
@@ -101,7 +101,7 @@ export function Unterschriftenblatt({
                     <span
                       className={
                         required
-                          ? "rounded bg-primary/10 px-2 py-0.5 font-black text-primary-strong"
+                          ? "rounded bg-primary/10 px-2 py-0.5 font-bold text-primary-strong"
                           : "text-muted-foreground print:text-black"
                       }
                     >

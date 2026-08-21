@@ -40,7 +40,7 @@ export function Step5Bestaetigung({ draft }: { draft: ChecklistDraft }) {
     <div className="space-y-6">
       {!canSubmit && (
         <div className="rounded-lg border border-primary/40 bg-primary/5 px-4 py-3">
-          <div className="text-xs font-black text-primary-strong">
+          <div className="text-xs font-bold text-primary-strong">
             Noch nicht vollständig — {blocking.length}{" "}
             {blocking.length === 1 ? "offener Punkt" : "offene Punkte"}
           </div>
@@ -57,7 +57,7 @@ export function Step5Bestaetigung({ draft }: { draft: ChecklistDraft }) {
       <div className="grid gap-8 lg:grid-cols-2">
         <div className="space-y-5">
           <section>
-            <h3 className="mb-2 text-sm font-black tracking-tight">Zusammenfassung</h3>
+            <h3 className="mb-2 text-sm font-bold tracking-tight">Zusammenfassung</h3>
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
               <Row label="Modus" value={mode} />
               <Row label="Projektnummer" value={header.projektnummer} />
@@ -81,7 +81,7 @@ export function Step5Bestaetigung({ draft }: { draft: ChecklistDraft }) {
           </section>
 
           <section>
-            <h3 className="mb-2 text-sm font-black tracking-tight">
+            <h3 className="mb-2 text-sm font-bold tracking-tight">
               Fachprüfungen · {requiredCount} von 14 offen
             </h3>
             <div className="flex flex-wrap gap-1.5">
@@ -107,7 +107,7 @@ export function Step5Bestaetigung({ draft }: { draft: ChecklistDraft }) {
           </section>
 
           <section>
-            <h3 className="mb-2 text-sm font-black tracking-tight">
+            <h3 className="mb-2 text-sm font-bold tracking-tight">
               Benachrichtigungen
             </h3>
             {openDepartments.length === 0 ? (
@@ -121,7 +121,7 @@ export function Step5Bestaetigung({ draft }: { draft: ChecklistDraft }) {
                     const people = recipientsFor(dept);
                     return (
                       <li key={dept} className="grid grid-cols-[auto_1fr] gap-x-3 text-2xs">
-                        <span className="font-black">{dept}</span>
+                        <span className="font-bold">{dept}</span>
                         {people.length > 0 ? (
                           <span className="text-muted-foreground">
                             {people.map(displayName).join(", ")}
@@ -154,7 +154,7 @@ export function Step5Bestaetigung({ draft }: { draft: ChecklistDraft }) {
           </section>
 
           <section className="rounded-lg border border-border bg-muted/40 px-4 py-3">
-            <h3 className="text-xs font-black">Was beim Anmelden passiert</h3>
+            <h3 className="text-xs font-bold">Was beim Anmelden passiert</h3>
             <ol className="mt-1.5 list-decimal space-y-0.5 pl-4 text-2xs text-muted-foreground">
               <li>Die Checkliste wird als „submitted" gespeichert.</li>
               <li>Ein Projekt mit allen 14 Prüfzeilen wird angelegt.</li>
@@ -171,7 +171,7 @@ export function Step5Bestaetigung({ draft }: { draft: ChecklistDraft }) {
 
         <div>
           <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-sm font-black tracking-tight">Unterschriftenblatt</h3>
+            <h3 className="text-sm font-bold tracking-tight">Unterschriftenblatt</h3>
             <Button
               variant="outline"
               size="sm"

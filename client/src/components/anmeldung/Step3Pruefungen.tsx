@@ -11,7 +11,7 @@ export function Step3Pruefungen({ draft }: { draft: ChecklistDraft }) {
     <div className="grid gap-8 lg:grid-cols-2">
       <div className="space-y-5">
         <div>
-          <h3 className="text-sm font-black tracking-tight">
+          <h3 className="text-sm font-bold tracking-tight">
             Automatisch erzeugte Fachprüfungen
           </h3>
           <p className="mt-1 text-xs text-muted-foreground">
@@ -24,7 +24,7 @@ export function Step3Pruefungen({ draft }: { draft: ChecklistDraft }) {
 
         <div className="space-y-3">
           <div>
-            <div className="mb-1.5 text-2xs font-black uppercase tracking-widest text-primary-strong">
+            <div className="mb-1.5 text-2xs font-bold uppercase tracking-widest text-primary-strong">
               Prüfung offen ({open.length})
             </div>
             {open.length === 0 ? (
@@ -40,7 +40,7 @@ export function Step3Pruefungen({ draft }: { draft: ChecklistDraft }) {
                       key={r.department}
                       className="flex items-baseline justify-between gap-3 rounded-md border border-primary/30 bg-primary/5 px-3 py-1.5"
                     >
-                      <span className="text-xs font-black">{r.department}</span>
+                      <span className="text-xs font-bold">{r.department}</span>
                       <span className="text-right text-2xs leading-tight text-muted-foreground">
                         Nr. {q?.nr} · {q?.gewerk}
                         {r.viaSecondary && (
@@ -55,7 +55,7 @@ export function Step3Pruefungen({ draft }: { draft: ChecklistDraft }) {
           </div>
 
           <div>
-            <div className="mb-1.5 text-2xs font-black uppercase tracking-widest text-muted-foreground">
+            <div className="mb-1.5 text-2xs font-bold uppercase tracking-widest text-muted-foreground">
               Nicht erforderlich ({closed.length})
             </div>
             <div className="flex flex-wrap gap-1.5">
@@ -72,13 +72,13 @@ export function Step3Pruefungen({ draft }: { draft: ChecklistDraft }) {
 
           {notified.length > 0 && (
             <div>
-              <div className="mb-1.5 text-2xs font-black uppercase tracking-widest text-amber-600 dark:text-amber-500">
+              <div className="mb-1.5 text-2xs font-bold uppercase tracking-widest text-amber-600 dark:text-amber-500">
                 Zusätzlich zu informieren ({notified.length})
               </div>
               <ul className="space-y-1 text-2xs">
                 {notified.map((key) => (
                   <li key={key} className="rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 dark:border-amber-800/70 dark:bg-amber-950/40">
-                    <strong className="font-black">{CHECKLIST_BY_KEY[key]?.gewerk}</strong>
+                    <strong className="font-bold">{CHECKLIST_BY_KEY[key]?.gewerk}</strong>
                     <span className="ml-2 text-muted-foreground">
                       keine eigene Prüfspalte — wird benachrichtigt
                     </span>
@@ -98,7 +98,7 @@ export function Step3Pruefungen({ draft }: { draft: ChecklistDraft }) {
       </div>
 
       <div>
-        <h3 className="mb-3 text-sm font-black tracking-tight">Unterschriftenblatt — Vorschau</h3>
+        <h3 className="mb-3 text-sm font-bold tracking-tight">Unterschriftenblatt — Vorschau</h3>
         <Unterschriftenblatt
           projektnummer={header.projektnummer}
           projektbezeichnung={header.projektbezeichnung}

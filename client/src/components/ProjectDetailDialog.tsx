@@ -148,7 +148,7 @@ function ContactRow({
        to "BAHNHOFSMANAG..." / "Kathrin Behs...". */
     <div className="flex flex-col gap-2 rounded-xl border border-border/60 p-3">
       <div className="min-w-0">
-        <p className="text-2xs font-black uppercase leading-tight tracking-widest text-muted-foreground">
+        <p className="text-2xs font-bold uppercase leading-tight tracking-widest text-muted-foreground">
           {roleLabel}
         </p>
         <p className="break-words text-sm font-bold">{displayNameOf(resolution, name)}</p>
@@ -190,12 +190,24 @@ function Field({
 }) {
   const v = String(value ?? "").trim();
   return (
-    /* min-h on the label, so "Termin Projektvorstellung" wrapping to two lines
-       does not push its value below the values beside it. */
+    /*
+      A fixed two-line label box, not a min-height.
+    
+      `min-h` only guarantees a floor: at 375px "Termin Projektvorstellung"
+      wrapped to three lines, grew past the 1.75rem, and painted over
+      "Projektstand" in the next column — a measured 168px² collision. A fixed
+      height with a two-line clamp cannot grow into its neighbour, and it keeps
+      every value on the same baseline across the row, which is what the
+      min-height was there for in the first place. The full text stays
+      available through `title`.
+    */
     <div className="min-w-0">
-      <p className="flex min-h-[1.75rem] items-start gap-1.5 text-2xs font-black uppercase leading-tight tracking-widest text-muted-foreground">
+      <p
+        title={label}
+        className="flex h-8 items-start gap-1.5 text-2xs font-bold uppercase leading-tight tracking-widest text-muted-foreground"
+      >
         {Icon && <Icon className="mt-px h-3 w-3 shrink-0" aria-hidden={true} />}
-        <span>{label}</span>
+        <span className="line-clamp-2">{label}</span>
       </p>
       <p className={`mt-0.5 break-words text-sm ${v ? "font-semibold" : "text-muted-foreground"}`}>
         {v || "—"}
@@ -265,7 +277,7 @@ export function ProjectDetailDialog({
             the X occupied the same 40px. */}
         <DialogHeader className="space-y-3 border-b bg-muted/30 p-5 pr-14 text-left">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-md bg-primary/10 px-2 py-0.5 font-mono text-xs font-black text-primary-strong">
+            <span className="rounded-md bg-primary/10 px-2 py-0.5 font-mono text-xs font-bold text-primary-strong">
               {project.projektnummer || "ohne Projektnummer"}
             </span>
             {project.projektstand && (
@@ -285,7 +297,7 @@ export function ProjectDetailDialog({
             )}
           </div>
 
-          <DialogTitle className="text-xl font-black leading-tight tracking-tight sm:text-2xl">
+          <DialogTitle className="text-xl font-bold leading-tight tracking-tight sm:text-2xl">
             {project.station || "Ohne Station"}
           </DialogTitle>
 
@@ -330,10 +342,10 @@ export function ProjectDetailDialog({
 
         <div className="min-h-0 flex-1 overflow-y-auto p-5">
           <section aria-labelledby="pd-stamm">
-            <h3 id="pd-stamm" className="mb-3 text-2xs font-black uppercase tracking-widest text-muted-foreground">
+            <h3 id="pd-stamm" className="mb-3 text-2xs font-bold uppercase tracking-widest text-muted-foreground">
               Stammdaten
             </h3>
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
               <Field label="Region / BM" value={project.bahnhofsmanagement} icon={MapPin} />
               <Field label="Bahnhofsnummer" value={project.bahnhofsnummer} icon={Hash} />
               <Field label="Streckennummer" value={project.streckennummer} icon={Hash} />
@@ -348,7 +360,7 @@ export function ProjectDetailDialog({
 
             {linkNote && (
               <p className="mt-4 rounded-lg border border-border/60 bg-muted/40 p-3 text-2xs leading-relaxed text-muted-foreground">
-                <span className="font-black uppercase tracking-widest">Projektlink-Feld</span>
+                <span className="font-bold uppercase tracking-widest">Projektlink-Feld</span>
                 <br />
                 {linkNote}
                 <br />
@@ -360,7 +372,7 @@ export function ProjectDetailDialog({
 
             {project.kommentar?.trim() && (
               <div className="mt-4">
-                <p className="text-2xs font-black uppercase tracking-widest text-muted-foreground">
+                <p className="text-2xs font-bold uppercase tracking-widest text-muted-foreground">
                   Kommentar
                 </p>
                 <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed">
@@ -373,7 +385,7 @@ export function ProjectDetailDialog({
           <Separator className="my-5" />
 
           <section aria-labelledby="pd-kontakt">
-            <h3 id="pd-kontakt" className="mb-3 text-2xs font-black uppercase tracking-widest text-muted-foreground">
+            <h3 id="pd-kontakt" className="mb-3 text-2xs font-bold uppercase tracking-widest text-muted-foreground">
               Kontakt
             </h3>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -387,7 +399,7 @@ export function ProjectDetailDialog({
               {bmContact ? (
                 <div className="flex flex-col gap-2 rounded-xl border border-border/60 p-3">
                   <div className="min-w-0">
-                    <p className="text-2xs font-black uppercase leading-tight tracking-widest text-muted-foreground">
+                    <p className="text-2xs font-bold uppercase leading-tight tracking-widest text-muted-foreground">
                       Bahnhofsmanagement {project.bahnhofsmanagement}
                     </p>
                     <p className="break-words text-sm font-bold">{bmContact.name}</p>
@@ -397,7 +409,7 @@ export function ProjectDetailDialog({
                 </div>
               ) : (
                 <div className="rounded-xl border border-border/60 p-3">
-                  <p className="text-2xs font-black uppercase tracking-widest text-muted-foreground">
+                  <p className="text-2xs font-bold uppercase tracking-widest text-muted-foreground">
                     Bahnhofsmanagement
                   </p>
                   <p className="mt-1 text-2xs text-amber-700 dark:text-amber-500">
@@ -421,12 +433,12 @@ export function ProjectDetailDialog({
           <Separator className="my-5" />
 
           <section aria-labelledby="pd-pruefungen">
-            <h3 id="pd-pruefungen" className="mb-3 text-2xs font-black uppercase tracking-widest text-muted-foreground">
+            <h3 id="pd-pruefungen" className="mb-3 text-2xs font-bold uppercase tracking-widest text-muted-foreground">
               Fachprüfungen ({reviewByDept.size} von {DEPARTMENTS.length} erfasst)
             </h3>
 
             <div className="overflow-x-auto rounded-xl border border-border/60">
-              <table className="w-full border-collapse text-xs">
+              <table className="stack-table w-full border-collapse text-xs">
                 <caption className="sr-only">
                   Fachprüfungen des Projekts mit Status, Prüfer, Prüfdatum und Kontaktweg
                 </caption>
@@ -462,7 +474,7 @@ export function ProjectDetailDialog({
 
                     return (
                       <tr key={dept} className="border-t border-border/60 align-top">
-                        <td className="px-3 py-2">
+                        <td data-label="Gewerk" className="px-3 py-2">
                           <span className="font-bold">{dept}</span>
                           {/* The Hilfsdatei group label, but only when it says
                               more than the code already does: "Baubetriebs-
@@ -479,7 +491,7 @@ export function ProjectDetailDialog({
                             );
                           })()}
                         </td>
-                        <td className="px-3 py-2">
+                        <td data-label="Status" className="px-3 py-2">
                           {review ? (
                             <Badge className={`${statusBadgeClass(review.status)} text-2xs font-bold`}>
                               {status ?? review.status ?? "—"}
@@ -488,7 +500,7 @@ export function ProjectDetailDialog({
                             <span className="text-muted-foreground">nicht erfasst</span>
                           )}
                         </td>
-                        <td className="px-3 py-2">
+                        <td data-label="Prüfer" className="px-3 py-2">
                           <span className={prueferContact ? "font-semibold" : "text-muted-foreground"}>
                             {resolution.kind === "empty"
                               ? "—"
@@ -504,10 +516,10 @@ export function ProjectDetailDialog({
                             </span>
                           ) : null}
                         </td>
-                        <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">
+                        <td data-label="Prüfdatum" className="whitespace-nowrap px-3 py-2 text-muted-foreground">
                           {formatGerman(review?.pruefDatum) || "—"}
                         </td>
-                        <td className="px-3 py-2">
+                        <td data-label="Kontakt" className="px-3 py-2">
                           {prueferContact ? (
                             <div className="flex gap-1">
                               <Button asChild variant="ghost" size="icon" className="h-8 w-8">
@@ -563,7 +575,7 @@ export function ProjectDetailDialog({
             <>
               <Separator className="my-5" />
               <section aria-labelledby="pd-verlauf">
-                <h3 id="pd-verlauf" className="mb-3 text-2xs font-black uppercase tracking-widest text-muted-foreground">
+                <h3 id="pd-verlauf" className="mb-3 text-2xs font-bold uppercase tracking-widest text-muted-foreground">
                   Änderungen an diesem Projekt
                 </h3>
                 <ul className="space-y-2">

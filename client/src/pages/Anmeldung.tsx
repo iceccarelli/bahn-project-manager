@@ -104,7 +104,7 @@ export default function Anmeldung() {
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary">
               <Check className="h-8 w-8 text-white" aria-hidden="true" />
             </div>
-            <h1 className="text-xl font-black tracking-tight">Anmeldung abgeschlossen</h1>
+            <h1 className="text-xl font-bold tracking-tight">Anmeldung abgeschlossen</h1>
             <p className="text-sm text-muted-foreground">
               Projekt <strong className="text-foreground">{draft.header.projektnummer}</strong> ist
               angelegt, {draft.requiredCount} von 14 Fachprüfungen stehen offen
@@ -185,7 +185,7 @@ export default function Anmeldung() {
                 >
                   <div className="flex items-center gap-2">
                     <span
-                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-2xs font-black ${
+                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-2xs font-bold ${
                         done
                           ? "bg-emerald-600 text-white"
                           : active
@@ -195,7 +195,7 @@ export default function Anmeldung() {
                     >
                       {done ? <Check className="h-3 w-3" aria-hidden="true" /> : s.n}
                     </span>
-                    <span className="text-xs font-black leading-none">{s.title}</span>
+                    <span className="text-xs font-bold leading-none">{s.title}</span>
                   </div>
                   <div className="mt-1 pl-7 text-2xs leading-none text-muted-foreground">
                     {/* The Checkliste subtitle is derived, because the count

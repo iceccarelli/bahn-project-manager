@@ -526,14 +526,14 @@ export const MapView: React.FC<MapViewProps> = ({
               <MapPin className="text-white h-4.5 w-4.5 sm:h-7 sm:w-7" />
             </div>
             <div className="min-w-0">
-              <h4 className="text-sm sm:text-base font-black leading-none tracking-tight">Netz-Explorer</h4>
-              <p className="text-2xs text-muted-foreground uppercase tracking-wide sm:tracking-widest font-black mt-1 sm:mt-1.5">
+              <h4 className="text-sm sm:text-base font-bold leading-none tracking-tight">Netz-Explorer</h4>
+              <p className="text-2xs text-muted-foreground uppercase tracking-wide sm:tracking-widest font-bold mt-1 sm:mt-1.5">
                 {stationGroups.length.toLocaleString("de-DE")} Stationen ·{" "}
                 <span className="hidden sm:inline">{exactCount.toLocaleString("de-DE")} exakt · </span>
                 {placedCount.toLocaleString("de-DE")}/{projects.length.toLocaleString("de-DE")} verortet
               </p>
               {unplacedCount > 0 && (
-                <p className="text-2xs text-amber-600 dark:text-amber-500 font-black mt-0.5">
+                <p className="text-2xs text-amber-600 dark:text-amber-500 font-bold mt-0.5">
                   {unplacedCount.toLocaleString("de-DE")} ohne Station &amp; ohne BM – nicht darstellbar
                 </p>
               )}
@@ -549,7 +549,7 @@ export const MapView: React.FC<MapViewProps> = ({
             onClick={() => { legendTouched.current = true; setLegendOpen((v) => !v); }}
             aria-expanded={legendOpen}
             aria-controls={legendId}
-            className="flex w-full items-center gap-2 px-3 py-2 text-2xs font-black uppercase tracking-widest text-foreground/80 hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="flex w-full items-center gap-2 px-3 py-2 text-2xs font-bold uppercase tracking-widest text-foreground/80 hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <Info className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             <span>Legende</span>
@@ -580,7 +580,7 @@ export const MapView: React.FC<MapViewProps> = ({
                 </div>
               ))}
               <div className="flex items-center gap-3">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 border-white bg-primary text-2xs font-black text-white shadow-md">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 border-white bg-primary text-2xs font-bold text-white shadow-md">
                   12
                 </span>
                 <span className="text-foreground/80">Projekte je Station</span>

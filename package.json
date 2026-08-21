@@ -25,6 +25,7 @@
     "e2e": "node scripts/e2e-smoke.mjs",
     "e2e:doctor": "node scripts/e2e-doctor.mjs",
     "check:map": "node scripts/check-map-chrome.mjs",
+    "check:ui": "node scripts/check-ui.mjs",
     "check:responsive": "node scripts/check-responsive.mjs",
     "pdf:fonts": "python3 scripts/make-pdf-fonts.py",
     "db:push": "drizzle-kit generate && drizzle-kit migrate",
