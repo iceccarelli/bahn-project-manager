@@ -9,6 +9,47 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { MapPin, Info, Maximize, Minimize, LocateFixed } from "lucide-react";
 import { DB_RED, DB_RED_RING, DB_RED_SUBTLE } from "@shared/brand";
+import { TONE_APPEARANCE } from "@shared/status-appearance";
+import { BLOCKING_STATUSES, normalizeReviewStatus, OPEN_STATUSES } from "@shared/review-status";
+import { toDate } from "@shared/date";
+
+/**
+ * Count a project's reviews by work state and find its earliest open Prüfdatum.
+ * Kept outside the component so the grouping memo stays cheap across 1,298
+ * projects and ~18,000 review rows.
+ */
+function workStateOf(p: Project): {
+  open: number;
+  inProgress: number;
+  blocked: number;
+  oldestOpen: Date | null;
+  overdue: boolean;
+} {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  let open = 0;
+  let inProgress = 0;
+  let blocked = 0;
+  let oldestOpen: Date | null = null;
+  let overdue = false;
+  for (const r of p.reviews || []) {
+    const status = normalizeReviewStatus(r.status);
+    if (!status) continue;
+    if ((BLOCKING_STATUSES as readonly string[]).includes(status)) {
+      blocked++;
+      continue;
+    }
+    if (!(OPEN_STATUSES as readonly string[]).includes(status)) continue;
+    if (status === "in Bearbeitung" || status === "prüffähig") inProgress++;
+    else open++;
+    const due = toDate(r.pruefDatum);
+    if (due) {
+      if (!oldestOpen || due < oldestOpen) oldestOpen = due;
+      if (due < today) overdue = true;
+    }
+  }
+  return { open, inProgress, blocked, oldestOpen, overdue };
+}
 
 interface StationGroup {
   key: string;
@@ -25,6 +66,19 @@ interface StationGroup {
   counts: Record<MatchPrecision, number>;
   /** the matched station's own BM — null for the regional fallback */
   bm: string | null;
+  /** reviews here still awaiting a decision */
+  openCount: number;
+  /** reviews here actively being worked */
+  inProgressCount: number;
+  /** reviews here refused or halted */
+  blockedCount: number;
+  /**
+   * Earliest Prüfdatum among this station's open reviews, or null when none
+   * carries a date. Drives both the draw order and the urgency of the pulse.
+   */
+  oldestOpen: Date | null;
+  /** at least one open review here is past its Prüfdatum */
+  overdue: boolean;
   projects: Project[];
 }
 
@@ -58,13 +112,41 @@ interface MapViewProps {
   onProjectSelect?: (projectId: number) => void;
 }
 
-const createDotIcon = (count: number, precision: MatchPrecision) => {
+/**
+ * Colour carries the work state, the border carries the geocoding precision.
+ *
+ * It used to be colour = precision and nothing else, so a station with eleven
+ * overdue Prüfungen looked exactly like one with none as long as both had been
+ * matched exactly. Precision still matters — a region-centroid marker is not
+ * standing where it claims — so it moved to the border: solid white for a real
+ * station, dashed and translucent for a regional fallback.
+ */
+const createDotIcon = (g: StationGroup) => {
+  const count = g.projects.length;
   const size = count > 1 ? 34 : 26;
-  const { bg, ring } = PRECISION_STYLE[precision];
+  const active = g.openCount + g.inProgressCount;
+  const urgent = g.overdue || g.blockedCount > 0;
+
+  const bg = g.blockedCount > 0
+    ? TONE_APPEARANCE.blocked.hex
+    : g.openCount > 0
+      ? TONE_APPEARANCE.pending.hex
+      : g.inProgressCount > 0
+        ? TONE_APPEARANCE.active.hex
+        : TONE_APPEARANCE.done.hex;
+
+  // A region-centroid dot is deliberately quieter: it is an approximation and
+  // should not read as a precise, confident pin.
+  const border = g.precision === "region" ? "2px dashed rgba(255,255,255,0.85)" : "2.5px solid #fff";
+  const opacity = g.precision === "region" ? 0.72 : 1;
+
+  const pulseClass = active > 0 ? `db-pulse${urgent ? " db-pulse-urgent" : ""}` : "";
+
   return L.divIcon({
     className: "db-dot-marker",
     html:
-      `<div style="width:${size}px;height:${size}px;background:${bg};border:2.5px solid #fff;border-radius:50%;box-shadow:0 2px 8px ${ring},0 0 0 3px ${ring};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:${(size / 2.2).toFixed(0)}px;font-family:'DB Sans',system-ui,sans-serif;">${count > 1 ? count : ""}</div>`,
+      `<div class="db-dot ${pulseClass}" style="width:${size}px;height:${size}px;background:${bg};border:${border};opacity:${opacity};color:${bg};box-shadow:0 2px 8px rgba(0,0,0,.25);font-size:${(size / 2.2).toFixed(0)}px;">` +
+      `<span style="color:#fff;">${count > 1 ? count : ""}</span></div>`,
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2], // dot sits exactly ON the station coordinate
     popupAnchor: [0, -(size / 2) - 2],
@@ -120,9 +202,17 @@ export const MapView: React.FC<MapViewProps> = ({
     for (const p of projects) {
       const r: ResolvedStation | null = geo.resolve(p.station, p.bahnhofsmanagement);
       if (!r) continue;
+      const work = workStateOf(p);
       const g = map.get(r.key);
       if (g) {
         g.projects.push(p);
+        g.openCount += work.open;
+        g.inProgressCount += work.inProgress;
+        g.blockedCount += work.blocked;
+        g.overdue = g.overdue || work.overdue;
+        if (work.oldestOpen && (!g.oldestOpen || work.oldestOpen < g.oldestOpen)) {
+          g.oldestOpen = work.oldestOpen;
+        }
         g.counts[r.precision] += 1;
         if (r.ambiguous) g.ambiguous = true;
         // marker colour reflects the best evidence for this station
@@ -145,10 +235,27 @@ export const MapView: React.FC<MapViewProps> = ({
             number
           >,
           projects: [p],
+          openCount: work.open,
+          inProgressCount: work.inProgress,
+          blockedCount: work.blocked,
+          oldestOpen: work.oldestOpen,
+          overdue: work.overdue,
         });
       }
     }
-    return Array.from(map.values());
+    /**
+     * Oldest first. Markers are added to the layer in this order, so the
+     * longest-waiting stations are drawn first and the most recent sit on top,
+     * and the staggered reveal below sweeps the map chronologically rather
+     * than in whatever order the rows happened to arrive. Stations with no
+     * dated open review sort last — they are not waiting on anything.
+     */
+    return Array.from(map.values()).sort((a, b) => {
+      if (a.oldestOpen && b.oldestOpen) return a.oldestOpen.getTime() - b.oldestOpen.getTime();
+      if (a.oldestOpen) return -1;
+      if (b.oldestOpen) return 1;
+      return a.name.localeCompare(b.name, "de");
+    });
   }, [projects, geo]);
 
   /**
@@ -250,12 +357,30 @@ export const MapView: React.FC<MapViewProps> = ({
     if (!map || !layer) return;
     layer.clearLayers();
 
-    for (const g of groups) {
-      const marker = L.marker([g.lat, g.lng], { icon: createDotIcon(g.projects.length, g.precision) });
-      marker.bindPopup(popupHtml(g), { minWidth: 240, maxWidth: 320, className: "db-popup" });
-      marker.on("click", () => map.flyTo([g.lat, g.lng], Math.max(map.getZoom(), 13), { duration: 0.6 }));
-      layer.addLayer(marker);
-    }
+    // `groups` is sorted oldest-open-review first, so adding markers in order
+    // sweeps the map chronologically. The stagger is capped: 900 markers at a
+    // real per-marker delay would take most of a minute, so the whole reveal is
+    // budgeted at ~700ms regardless of how many there are, and skipped entirely
+    // for anyone who has asked for reduced motion.
+    const reduceMotion =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const REVEAL_MS = 700;
+    const step = groups.length > 0 ? Math.min(12, REVEAL_MS / groups.length) : 0;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+
+    groups.forEach((g, i) => {
+      const add = () => {
+        const marker = L.marker([g.lat, g.lng], { icon: createDotIcon(g) });
+        marker.bindPopup(popupHtml(g), { minWidth: 240, maxWidth: 320, className: "db-popup" });
+        marker.on("click", () =>
+          map.flyTo([g.lat, g.lng], Math.max(map.getZoom(), 13), { duration: 0.6 }),
+        );
+        layer.addLayer(marker);
+      };
+      if (reduceMotion || step === 0) add();
+      else timers.push(setTimeout(add, i * step));
+    });
 
     if (!didFitRef.current && groups.length) {
       const pts = groups
@@ -266,6 +391,12 @@ export const MapView: React.FC<MapViewProps> = ({
         didFitRef.current = true;
       }
     }
+
+    // Filtering mid-reveal would otherwise let the previous sweep keep dropping
+    // markers into a layer that has already been cleared.
+    return () => {
+      for (const t of timers) clearTimeout(t);
+    };
   }, [groups]);
 
   // Keep Leaflet sized when toggling fullscreen. isFullscreen is the trigger,
@@ -322,28 +453,39 @@ export const MapView: React.FC<MapViewProps> = ({
 
       <div className="absolute bottom-6 left-6 z-[1000] pointer-events-none">
         <div className="flex flex-col gap-3 bg-background/90 backdrop-blur-lg p-4 rounded-2xl border-2 border-border/50 text-2xs font-bold pointer-events-auto shadow-xl">
-          <div className="flex items-center gap-3">
-            <div className="w-4 h-4 rounded-full bg-primary border-2 border-white shadow-md" />
-            <span className="text-foreground/80">Station (exakt)</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="w-6 h-6 rounded-full bg-primary border-2 border-white flex items-center justify-center text-2xs text-white font-black shadow-md">
-              12
+          {/* The legend used to describe the geocoding precision, because that
+              was what colour meant. Colour now means work state, so it says so. */}
+          {[
+            { hex: TONE_APPEARANCE.pending.hex, label: "offen", pulse: true },
+            { hex: TONE_APPEARANCE.active.hex, label: "in Bearbeitung", pulse: true },
+            { hex: TONE_APPEARANCE.blocked.hex, label: "abgelehnt / gestoppt", pulse: true },
+            { hex: TONE_APPEARANCE.done.hex, label: "alle Prüfungen erledigt", pulse: false },
+          ].map((row) => (
+            <div key={row.label} className="flex items-center gap-3">
+              <span
+                className={`db-dot h-4 w-4 shrink-0 border-2 border-white shadow-md ${row.pulse ? "db-pulse" : ""}`}
+                style={{ background: row.hex, color: row.hex }}
+              />
+              <span className="text-foreground/80">{row.label}</span>
             </div>
+          ))}
+          <div className="flex items-center gap-3">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 border-white bg-primary text-2xs font-black text-white shadow-md">
+              12
+            </span>
             <span className="text-foreground/80">Projekte je Station</span>
           </div>
           <div className="flex items-center gap-3">
-            <div className="w-4 h-4 rounded-full bg-[#F59E0B] border-2 border-white shadow-md" />
-            <span className="text-foreground/80">Station (zugeordnet)</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="w-4 h-4 rounded-full bg-[#9ca3af] border-2 border-white shadow-md" />
-            <span className="text-foreground/80">ungenau (Region)</span>
+            <span
+              className="db-dot h-4 w-4 shrink-0 shadow-md"
+              style={{ background: TONE_APPEARANCE.pending.hex, border: "2px dashed rgba(255,255,255,.85)", opacity: 0.72 }}
+            />
+            <span className="text-foreground/80">ungenau verortet (Region)</span>
           </div>
           <div className="pt-2 border-t border-border/50 mt-1">
             <div className="flex items-center gap-2 text-muted-foreground">
               <Info className="h-3.5 w-3.5" />
-              <span>Marker klicken zum Zoomen</span>
+              <span>Pulsierend = offene Prüfung · Marker klicken zum Zoomen</span>
             </div>
           </div>
         </div>

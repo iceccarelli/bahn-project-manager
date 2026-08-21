@@ -307,11 +307,92 @@
     min-width: 44px;
   }
 
+  /* Text entry was left out of the first pass: measured at 36px tall on an
+     iPhone SE and an iPad mini. A field is a tap target before it is a field. */
+  input:not([type="checkbox"]):not([type="radio"]),
+  textarea,
+  select {
+    min-height: 44px;
+  }
+
+  /* The Ja/Nein answers in the wizard are <label> elements wrapping a visually
+     hidden radio, so none of the rules above reached them — they measured
+     28px. This is the control the user touches 22 times per Anmeldung. */
+  label:has(> input[type="radio"]),
+  label[for] {
+    min-height: 44px;
+  }
+
   /* table cells stay dense — the 44px floor is for things you tap, and a
      tap-through row would otherwise double the height of a 1,298-row table */
   td button,
   td [role="button"],
   th button {
     min-height: 32px;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Map markers.
+
+   The dot used to be coloured purely by geocoding precision, so the map told
+   you how confident the station match was and nothing at all about whether
+   there was work to do. Colour now carries the work state and the border
+   carries the precision, so both survive.
+
+   The pulse marks stations with an open or in-progress Fachprüfung. It is a
+   separate ring element rather than an animation on the dot itself: animating
+   box-shadow or width forces layout on every frame across up to 900 markers,
+   while transform and opacity stay on the compositor.
+   --------------------------------------------------------------------------- */
+.db-dot-marker .db-dot {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: #fff;
+  font-weight: 800;
+  font-family: "Inter Variable", Inter, system-ui, sans-serif;
+}
+
+.db-dot-marker .db-pulse::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  animation: db-marker-pulse 2.4s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+  pointer-events: none;
+}
+
+/* Overdue or blocked work pulses faster and wider — the difference is
+   noticeable in peripheral vision, which is the point of a map. */
+.db-dot-marker .db-pulse-urgent::after {
+  animation-duration: 1.4s;
+}
+
+@keyframes db-marker-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.75;
+  }
+  70% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+/* A pulsing dot per open station is decoration, not information the user
+   cannot get elsewhere — the count and the legend both state it in text. */
+@media (prefers-reduced-motion: reduce) {
+  .db-dot-marker .db-pulse::after {
+    animation: none;
+    opacity: 0.35;
+    transform: scale(1.35);
   }
 }
