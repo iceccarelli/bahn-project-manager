@@ -28,7 +28,7 @@ export default function PsvItk() {
       {/* HEADER SECTION */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold tracking-tight">PSV-ITK Projektvorstellungen</h1>
+          <h1 className="page-title">PSV-ITK Projektvorstellungen</h1>
           <p className="text-muted-foreground mt-2">
             Verwaltung der ITK-Projektvorstellungen &bull; {itkProjects.length} Einträge
           </p>

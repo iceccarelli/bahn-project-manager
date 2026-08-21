@@ -1,5 +1,5 @@
 import type React from "react";
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useEffect, useId, useMemo, useRef, useState, useCallback } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { Project } from "@/hooks/useDataQuery";
@@ -7,7 +7,7 @@ import { useStations } from "@/hooks/useStations";
 import { buildStationGeo, type MatchPrecision, type ResolvedStation } from "@/lib/stationGeo";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { MapPin, Info, Maximize, Minimize, LocateFixed } from "lucide-react";
+import { MapPin, Info, Maximize, Minimize, LocateFixed, ChevronDown } from "lucide-react";
 import { DB_RED, DB_RED_RING, DB_RED_SUBTLE } from "@shared/brand";
 import { TONE_APPEARANCE } from "@shared/status-appearance";
 import { BLOCKING_STATUSES, normalizeReviewStatus, OPEN_STATUSES } from "@shared/review-status";
@@ -119,7 +119,7 @@ interface MapViewProps {
  * overdue Prüfungen looked exactly like one with none as long as both had been
  * matched exactly. Precision still matters — a region-centroid marker is not
  * standing where it claims — so it moved to the border: solid white for a real
- * station, dashed and translucent for a regional fallback.
+ * station, a hollow ring in the work-state colour for a regional fallback.
  */
 const createDotIcon = (g: StationGroup) => {
   const count = g.projects.length;
@@ -137,16 +137,24 @@ const createDotIcon = (g: StationGroup) => {
 
   // A region-centroid dot is deliberately quieter: it is an approximation and
   // should not read as a precise, confident pin.
-  const border = g.precision === "region" ? "2px dashed rgba(255,255,255,0.85)" : "2.5px solid #fff";
-  const opacity = g.precision === "region" ? 0.72 : 1;
+  //
+  // Hollow, not dashed. A 2px dashed border on a 26px circle rasterises into a
+  // cog — the dashes are wider than the arc between them at that radius, which
+  // looked like a rendering fault rather than a signal. An unfilled ring reads
+  // as "not pinned down" at any size and keeps the work-state colour intact.
+  const isApprox = g.precision === "region";
+  const border = isApprox ? `3px solid ${bg}` : "2.5px solid #fff";
+  const fill = isApprox ? "rgba(255,255,255,0.92)" : bg;
+  const opacity = isApprox ? 0.9 : 1;
+  const labelColor = isApprox ? bg : "#fff";
 
   const pulseClass = active > 0 ? `db-pulse${urgent ? " db-pulse-urgent" : ""}` : "";
 
   return L.divIcon({
     className: "db-dot-marker",
     html:
-      `<div class="db-dot ${pulseClass}" style="width:${size}px;height:${size}px;background:${bg};border:${border};opacity:${opacity};color:${bg};box-shadow:0 2px 8px rgba(0,0,0,.25);font-size:${(size / 2.2).toFixed(0)}px;">` +
-      `<span style="color:#fff;">${count > 1 ? count : ""}</span></div>`,
+      `<div class="db-dot ${pulseClass}" style="width:${size}px;height:${size}px;background:${fill};border:${border};opacity:${opacity};color:${bg};box-shadow:0 2px 8px rgba(0,0,0,.25);font-size:${(size / 2.2).toFixed(0)}px;">` +
+      `<span style="color:${labelColor};">${count > 1 ? count : ""}</span></div>`,
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2], // dot sits exactly ON the station coordinate
     popupAnchor: [0, -(size / 2) - 2],
@@ -192,6 +200,33 @@ export const MapView: React.FC<MapViewProps> = ({
   const layerRef = useRef<L.LayerGroup | null>(null);
   const didFitRef = useRef(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+
+  /**
+   * Legend disclosure.
+   *
+   * Read the breakpoint during the initial state computation rather than in an
+   * effect: an effect would render the legend open and then close it, which is
+   * a visible jump on exactly the small screens this exists to protect. SSR and
+   * jsdom have no matchMedia, so fall back to open — the desktop default.
+   */
+  const legendId = useId();
+  const [legendOpen, setLegendOpen] = useState(
+    () => typeof window === "undefined" || !window.matchMedia
+      ? true
+      : window.matchMedia("(min-width: 640px)").matches,
+  );
+  const legendTouched = useRef(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia("(min-width: 640px)");
+    const onChange = (e: MediaQueryListEvent) => {
+      // A rotated tablet should get the default for its new width — but never
+      // overrule a choice the user made by hand.
+      if (!legendTouched.current) setLegendOpen(e.matches);
+    };
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
 
   const { rows } = useStations();
   const geo = useMemo(() => buildStationGeo(rows), [rows]);
@@ -428,18 +463,29 @@ export const MapView: React.FC<MapViewProps> = ({
     <div className={containerClass}>
       <div ref={containerRef} className="h-full w-full z-0" />
 
-      <div className="absolute top-6 left-6 z-[1000] pointer-events-none">
-        <Card className="p-4 bg-background/95 backdrop-blur-xl shadow-2xl border-primary/30 pointer-events-auto rounded-2xl">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-primary rounded-2xl flex items-center justify-center shadow-xl shadow-primary/30">
-              <MapPin className="text-white h-7 w-7" />
+      {/*
+        Overlay chrome.
+
+        Measured before this change on a 375 px phone: the three overlays plus
+        a fourth card that Projects.tsx positioned on top of them covered 58.9 %
+        of a 289x596 map, and the legend was 41 % hidden underneath that card at
+        every viewport including 1440 px. Chrome that hides the thing it
+        annotates is not chrome, so: the summary compacts below `sm`, the legend
+        is a disclosure that starts closed on small screens, and the duplicate
+        card is gone from Projects.tsx entirely.
+      */}
+      <div className="map-summary z-[1000] pointer-events-none">
+        <Card className="p-2.5 sm:p-4 bg-background/95 backdrop-blur-xl shadow-2xl border-primary/30 pointer-events-auto rounded-xl sm:rounded-2xl">
+          <div className="flex items-center gap-2.5 sm:gap-4">
+            <div className="h-8 w-8 sm:h-12 sm:w-12 shrink-0 bg-primary rounded-lg sm:rounded-2xl flex items-center justify-center shadow-xl shadow-primary/30">
+              <MapPin className="text-white h-4.5 w-4.5 sm:h-7 sm:w-7" />
             </div>
-            <div>
-              <h4 className="text-base font-black leading-none tracking-tight">Netz-Explorer</h4>
-              <p className="text-2xs text-muted-foreground uppercase tracking-widest font-black mt-1.5">
+            <div className="min-w-0">
+              <h4 className="text-sm sm:text-base font-black leading-none tracking-tight">Netz-Explorer</h4>
+              <p className="text-2xs text-muted-foreground uppercase tracking-wide sm:tracking-widest font-black mt-1 sm:mt-1.5">
                 {stationGroups.length.toLocaleString("de-DE")} Stationen ·{" "}
-                {exactCount.toLocaleString("de-DE")} exakt · {placedCount.toLocaleString("de-DE")}/
-                {projects.length.toLocaleString("de-DE")} verortet
+                <span className="hidden sm:inline">{exactCount.toLocaleString("de-DE")} exakt · </span>
+                {placedCount.toLocaleString("de-DE")}/{projects.length.toLocaleString("de-DE")} verortet
               </p>
               {unplacedCount > 0 && (
                 <p className="text-2xs text-amber-600 dark:text-amber-500 font-black mt-0.5">
@@ -451,47 +497,81 @@ export const MapView: React.FC<MapViewProps> = ({
         </Card>
       </div>
 
-      <div className="absolute bottom-6 left-6 z-[1000] pointer-events-none">
-        <div className="flex flex-col gap-3 bg-background/90 backdrop-blur-lg p-4 rounded-2xl border-2 border-border/50 text-2xs font-bold pointer-events-auto shadow-xl">
-          {/* The legend used to describe the geocoding precision, because that
-              was what colour meant. Colour now means work state, so it says so. */}
-          {[
-            { hex: TONE_APPEARANCE.pending.hex, label: "offen", pulse: true },
-            { hex: TONE_APPEARANCE.active.hex, label: "in Bearbeitung", pulse: true },
-            { hex: TONE_APPEARANCE.blocked.hex, label: "abgelehnt / gestoppt", pulse: true },
-            { hex: TONE_APPEARANCE.done.hex, label: "alle Prüfungen erledigt", pulse: false },
-          ].map((row) => (
-            <div key={row.label} className="flex items-center gap-3">
-              <span
-                className={`db-dot h-4 w-4 shrink-0 border-2 border-white shadow-md ${row.pulse ? "db-pulse" : ""}`}
-                style={{ background: row.hex, color: row.hex }}
-              />
-              <span className="text-foreground/80">{row.label}</span>
-            </div>
-          ))}
-          <div className="flex items-center gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 border-white bg-primary text-2xs font-black text-white shadow-md">
-              12
-            </span>
-            <span className="text-foreground/80">Projekte je Station</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <span
-              className="db-dot h-4 w-4 shrink-0 shadow-md"
-              style={{ background: TONE_APPEARANCE.pending.hex, border: "2px dashed rgba(255,255,255,.85)", opacity: 0.72 }}
+      <div className="map-legend z-[1000]">
+        <div className="bg-background/90 backdrop-blur-lg rounded-xl sm:rounded-2xl border-2 border-border/50 shadow-xl overflow-hidden">
+          <button
+            type="button"
+            onClick={() => { legendTouched.current = true; setLegendOpen((v) => !v); }}
+            aria-expanded={legendOpen}
+            aria-controls={legendId}
+            className="flex w-full items-center gap-2 px-3 py-2 text-2xs font-black uppercase tracking-widest text-foreground/80 hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <Info className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            <span>Legende</span>
+            <ChevronDown
+              className={`h-3.5 w-3.5 shrink-0 transition-transform duration-200 motion-reduce:transition-none ${legendOpen ? "rotate-180" : ""}`}
+              aria-hidden="true"
             />
-            <span className="text-foreground/80">ungenau verortet (Region)</span>
-          </div>
-          <div className="pt-2 border-t border-border/50 mt-1">
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Info className="h-3.5 w-3.5" />
-              <span>Pulsierend = offene Prüfung · Marker klicken zum Zoomen</span>
+          </button>
+          {legendOpen && (
+            /* Two columns below sm. Opened on a 289x430 phone map the single
+               column measured 250x540 — taller than the map it annotates, and
+               it ran straight through the control cluster. */
+            <div id={legendId} className="grid grid-cols-2 gap-x-3 gap-y-2.5 px-3 pb-3 text-2xs font-bold sm:grid-cols-1">
+              {/* The legend used to describe the geocoding precision, because that
+                  was what colour meant. Colour now means work state, so it says so. */}
+              {[
+                { hex: TONE_APPEARANCE.pending.hex, label: "offen", pulse: true },
+                { hex: TONE_APPEARANCE.active.hex, label: "in Bearbeitung", pulse: true },
+                { hex: TONE_APPEARANCE.blocked.hex, label: "abgelehnt / gestoppt", pulse: true },
+                { hex: TONE_APPEARANCE.done.hex, label: "alle Prüfungen erledigt", pulse: false },
+              ].map((row) => (
+                <div key={row.label} className="flex items-center gap-3">
+                  <span
+                    className={`db-dot h-4 w-4 shrink-0 border-2 border-white shadow-md ${row.pulse ? "db-pulse" : ""}`}
+                    style={{ background: row.hex, color: row.hex }}
+                  />
+                  <span className="text-foreground/80">{row.label}</span>
+                </div>
+              ))}
+              <div className="flex items-center gap-3">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 border-white bg-primary text-2xs font-black text-white shadow-md">
+                  12
+                </span>
+                <span className="text-foreground/80">Projekte je Station</span>
+              </div>
+              <div className="flex items-center gap-3">
+                {/* Matches createDotIcon's approximate marker exactly: hollow
+                    ring in the work-state colour, not a dashed circle. */}
+                <span
+                  className="db-dot h-5 w-5 shrink-0 shadow-md"
+                  style={{
+                    background: "rgba(255,255,255,.92)",
+                    border: `3px solid ${TONE_APPEARANCE.pending.hex}`,
+                    opacity: 0.9,
+                  }}
+                />
+                <span className="text-foreground/80">ungenau verortet (Region)</span>
+              </div>
+              <div className="col-span-2 border-t border-border/50 pt-2 text-muted-foreground sm:col-span-1">
+                Pulsierend = offene Prüfung · Marker klicken zum Zoomen
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
-      <div className="absolute top-6 right-6 z-[1000] flex gap-2">
+      {/*
+        Bottom-right at every width, stacked above Leaflet's own zoom control
+        and attribution (see .map-control-stack in index.css for the geometry).
+
+        Top-right was wrong twice over: it overlapped the summary card by a
+        measured 96x44 px on a phone, and the top-right corner of an 852 px-tall
+        phone is the one place a thumb cannot reach. Bottom-right is where every
+        map app puts zoom, and the collapsed legend is 131 px wide at
+        bottom-left, so the two never meet.
+      */}
+      <div className="map-control-stack z-[1000] flex gap-2">
         <Button
           variant="outline"
           size="icon"

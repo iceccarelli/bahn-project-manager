@@ -316,7 +316,7 @@ export default function Dashboard() {
       {/* HEADER */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold tracking-tight">Dashboard</h1>
+          <h1 className="page-title">Dashboard</h1>
           <p className="text-muted-foreground mt-2">
             Live Übersicht über alle {totalProjects.toLocaleString('de-DE')} Projekte • {new Date().toLocaleDateString('de-DE')}
           </p>
@@ -454,11 +454,14 @@ export default function Dashboard() {
           {/* Detailed Gewerke View */}
           <Card className="border-2 border-primary/20">
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>
+              {/* Was `flex items-center justify-between` with a fixed w-64 select:
+                  the title and a 256px control cannot share a 327px content box,
+                  so <main> measured 406px in a 375px viewport. Stacks below sm. */}
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <CardTitle className="min-w-0 break-words">
                   {selectedGewerke ? `Status-Verteilung für ${selectedGewerke}` : "Detaillierte Ansicht per Gewerke"}
                 </CardTitle>
-                <div className="w-64">
+                <div className="w-full sm:w-64 sm:shrink-0">
                   <Select 
                     value={selectedGewerke || "all"} 
                     onValueChange={(value) => setSelectedGewerke(value === "all" ? null : value)}

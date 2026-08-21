@@ -32,7 +32,14 @@ const ROUTES = [
   { path:"/audit", name:"Änderungshistorie" },
 ];
 const VIEWPORTS = [
-  { label:"mobile  375", width:375, height:812 }, { label:"tablet  768", width:768, height:1024 },
+  { label:"mobile  375", width:375, height:812 },
+  { label:"tablet  744", width:744, height:1133 },   // iPad mini portrait
+  { label:"tablet  768", width:768, height:1024 },
+  // 834 and 820 are iPad Pro 11 and iPad Air in portrait. They sat in the dead
+  // band where the sidebar had not mounted and the trigger was already hidden,
+  // so they are pinned here permanently.
+  { label:"tablet  820", width:820, height:1180 },
+  { label:"tablet  834", width:834, height:1194 },
   { label:"laptop 1024", width:1024, height:768 }, { label:"desktop 1440", width:1440, height:900 },
 ];
 const DEMO_USER = { id:1, name:"Admin", email:"admin@bahn.de", role:"admin", openId:"demo-admin",
@@ -41,7 +48,17 @@ const base = `http://localhost:${PORT}`;
 let failures = 0;
 const log = (ok, msg) => { console.log(`${ok ? "✅" : "❌"} ${msg}`); if (!ok) failures++; };
 await new Promise((r) => server.listen(PORT, r));
-const browser = await chromium.launch();
+/*
+ * Same container problem e2e-smoke.mjs already solves: as root in an
+ * unprivileged container Chrome's setuid sandbox cannot initialise and the
+ * default 64 MB /dev/shm exhausts the renderer, so a bare launch() dies with
+ * "Target page, context or browser has been closed". These flags are safe —
+ * this harness only ever loads the bundle it just built.
+ */
+const browser = await chromium.launch({
+  ...(process.env.PLAYWRIGHT_CHROMIUM_PATH ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH } : {}),
+  args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
+});
 try {
   for (const vp of VIEWPORTS) {
     const ctx = await browser.newContext({ viewport: { width: vp.width, height: vp.height } });
@@ -57,7 +74,14 @@ try {
       });
       log(m.s <= m.c + 2, `${vp.label}px  ${route.name.padEnd(18)} main ${m.s}/${m.c}px`);
     }
-    if (vp.width < 768) {
+    /*
+     * 1024, not 768 — this must track MOBILE_BREAKPOINT in
+     * client/src/hooks/useMobile.tsx. When they disagreed, 768–1023px had the
+     * sheet-based sidebar but no trigger to open it: no navigation at all on
+     * iPad Pro 11 and iPad Air in portrait. The `navigation is reachable`
+     * assertion below is the one that fails when they drift apart again.
+     */
+    if (vp.width < 1024) {
       await page.goto(`${base}/`, { waitUntil: "networkidle" });
       await page.waitForSelector("header");
       const btn = page.getByRole("button", { name: "Navigation öffnen" });
@@ -73,6 +97,26 @@ try {
       await page.getByText("Projekte", { exact: true }).first().click();
       await page.waitForTimeout(300);
       log(/\/projects$/.test(page.url()), `${vp.label}px  sidebar nav -> /projects`);
+    }
+
+    // Breakpoint-agnostic: however this width is meant to navigate, it must be
+    // possible to reach /projects from the dashboard without a keyboard trick.
+    {
+      await page.goto(`${base}/`, { waitUntil: "networkidle" });
+      await page.waitForSelector("header");
+      const trigger = page.getByRole("button", { name: "Navigation öffnen" });
+      if (await trigger.isVisible().catch(() => false)) {
+        await trigger.click();
+        await page.waitForTimeout(400);
+      }
+      const link = page.getByText("Projekte", { exact: true }).first();
+      const reachable = await link.isVisible().catch(() => false);
+      log(reachable, `${vp.label}px  navigation is reachable`);
+      if (reachable) {
+        await link.click();
+        await page.waitForTimeout(400);
+        log(/\/projects$/.test(page.url()), `${vp.label}px  navigation lands on /projects`);
+      }
     }
     await ctx.close();
   }

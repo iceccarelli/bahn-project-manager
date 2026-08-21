@@ -49,13 +49,22 @@ export default function Header() {
           properties, so their content edges line up at every viewport width. */}
       <div className="app-shell flex h-full items-center justify-between gap-2">
         <div className="flex shrink-0 items-center gap-x-2 sm:gap-x-3">
-          {/* Mobile-only navigation trigger — opens the off-canvas sidebar sheet */}
+          {/*
+            Navigation trigger — opens the off-canvas sidebar sheet.
+
+            `lg:hidden`, not `md:hidden`. useMobile.tsx moved MOBILE_BREAKPOINT
+            from 768 to 1024 but this class stayed behind, so from 768px to
+            1023px the sidebar had not mounted yet AND the trigger was already
+            hidden: iPad Pro 11 portrait (834), iPad Air portrait (820) and any
+            split-screen window in that band had no navigation at all. The class
+            and the constant now name the same width — keep them in step.
+          */}
           <Button
             variant="ghost"
             size="icon"
             onClick={toggleSidebar}
             aria-label="Navigation öffnen"
-            className="h-9 w-9 rounded-lg text-foreground hover:bg-accent md:hidden"
+            className="h-9 w-9 rounded-lg text-foreground hover:bg-accent lg:hidden"
           >
             <Menu className="h-5 w-5" />
           </Button>

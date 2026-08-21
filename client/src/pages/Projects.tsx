@@ -775,25 +775,29 @@ export default function Projects() {
 
             {/* MAP VIEW */}
             {viewMode === "map" && (
-              <>
-                <MapView
-                  projects={data?.projects || []}
-                  initialCenter={{ lat: 51.1657, lng: 10.4515 }}
-                  initialZoom={6}
-                  className="h-[600px] w-full relative"
-                  onBoundsChange={setMapBounds}
-                  onProjectSelect={handleMapProjectSelect}
-                />
-                <div className="absolute bottom-6 left-6 bg-background/95 backdrop-blur p-4 rounded-xl border shadow-2xl z-[1000] max-w-xs border-primary/20">
-                  <div className="flex items-center gap-2 mb-2">
-                    <MapPin className="h-5 w-5 text-primary-strong" />
-                    <h4 className="text-sm font-bold">Interaktive Projektkarte</h4>
-                  </div>
-                  <p className="text-2xs text-muted-foreground leading-relaxed">
-                    Zeigt alle {data?.projects.length} gefilterten Projekte basierend auf ihren Standorten an. Klicken Sie auf einen Marker für detaillierte Informationen.
-                  </p>
-                </div>
-              </>
+              /*
+                There used to be an "Interaktive Projektkarte" card here,
+                positioned `absolute bottom-6 left-6` — but outside the map,
+                so it anchored to this page's positioned ancestor rather than
+                to the map, and landed on top of the map's own legend: a
+                measured 36,252 px² overlap at every viewport from 375 px to
+                1440 px, hiding 41 % of the legend. It also claimed to show
+                "alle N gefilterten Projekte" while the map itself reports how
+                many of those have no station and no BM and cannot be drawn.
+                The map's Netz-Explorer card carries the honest counts, so the
+                duplicate is gone rather than merely moved.
+
+                Height is now viewport-relative: 600 px of fixed map on a
+                667 px-tall phone left no page around it.
+              */
+              <MapView
+                projects={data?.projects || []}
+                initialCenter={{ lat: 51.1657, lng: 10.4515 }}
+                initialZoom={6}
+                className="h-[65vh] min-h-[380px] sm:h-[560px] lg:h-[600px] w-full relative"
+                onBoundsChange={setMapBounds}
+                onProjectSelect={handleMapProjectSelect}
+              />
             )}
           </>
         )}

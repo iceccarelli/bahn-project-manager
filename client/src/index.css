@@ -193,6 +193,32 @@
   padding-inline: var(--app-gutter);
 }
 
+/* ---------------------------------------------------------------------------
+   page-title — one size rule for every page's <h1>.
+
+   Before this there were two: text-4xl on Dashboard, BVB-EEA and PSV-ITK,
+   text-3xl on Projektanmeldung and Änderungshistorie, and none of them
+   responsive. At 375px "PSV-ITK Projektvorstellungen" at 36px pushed <main>
+   to 390px in a 375px viewport, because "Projektvorstellungen" is a single
+   unbreakable 20-character word. A shared utility rather than a repeated class
+   string: five copies of a breakpoint is how the header's md/lg drift happened.
+   --------------------------------------------------------------------------- */
+@utility page-title {
+  font-size: 1.5rem;      /* text-2xl */
+  line-height: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+  overflow-wrap: break-word;
+  hyphens: auto;
+}
+@media (min-width: 640px) {
+  .page-title { font-size: 1.875rem; line-height: 2.25rem; }  /* text-3xl */
+}
+@media (min-width: 1024px) {
+  .page-title { font-size: 2.25rem; line-height: 2.5rem; }    /* text-4xl */
+}
+
 /* The gutter widens with the viewport; because it is a custom property the
    three landmarks widen together rather than each on its own breakpoint. */
 @media (min-width: 640px) {
@@ -323,12 +349,130 @@
     min-height: 44px;
   }
 
-  /* table cells stay dense — the 44px floor is for things you tap, and a
-     tap-through row would otherwise double the height of a 1,298-row table */
+  /* Table cells stay dense — the 44px floor is for things you tap, and a
+     tap-through row would otherwise double the height of a 1,298-row table.
+
+     But "dense" and "hard to hit" are not the same requirement. The box stays
+     32px; the *hit area* does not. ::after paints a 44x44 strip centred on the
+     control, so a finger gets the WCAG 2.5.5 target while the grid keeps its
+     measured 57px row pitch: 44 centred in 57 leaves 6.5px of clearance above
+     and below, so adjacent rows never steal each other's taps. Nothing about
+     layout changes — the pseudo-element is out of flow and fully transparent.
+
+     Measured before: 7,795 controls at 32px on every touch profile from
+     iPhone SE to iPad Pro. */
   td button,
   td [role="button"],
   th button {
     min-height: 32px;
+    position: relative;
+  }
+
+  td button::after,
+  td [role="button"]::after,
+  th button::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    height: 44px;
+    width: 44px;
+    min-width: 100%;
+    /* hit area only — never paints, never captures the pointer for anything
+       other than its own button */
+    pointer-events: auto;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Map chrome.
+
+   Leaflet renders its zoom control and its attribution into the map's own DOM,
+   below the React overlays — which is why an overlay probe that only walked the
+   React siblings of .leaflet-container reported "no overlap" while the app's
+   control cluster sat directly on top of Leaflet's +/- buttons. Both are
+   measured together now.
+
+   Placement switches on POINTER, not width, because the constraint is a thumb
+   and not a viewport:
+
+     fine   (mouse)  cluster top-right, Leaflet's zoom bottom-right
+     coarse (touch)  Leaflet's zoom is hidden — pinch and double-tap are the
+                     native gestures and every mobile map app drops the +/-
+                     buttons — and the cluster takes the bottom-right corner,
+                     which is the one corner a thumb reaches on an 852px phone.
+
+   Everything clears the attribution line, which Leaflet parks bottom-right and
+   which is 17px tall.
+   --------------------------------------------------------------------------- */
+/* On :root, not on .leaflet-container. The three overlays are SIBLINGS of the
+   Leaflet container, so a variable scoped to it does not reach them — and an
+   unresolvable var() makes `top`/`left` invalid at computed-value time, which
+   silently drops an absolutely positioned card back to its static position at
+   the bottom of the map. Measured that exact failure before moving it here. */
+:root {
+  --map-chrome-gutter: 0.75rem;
+}
+
+@media (min-width: 640px) {
+  :root {
+    --map-chrome-gutter: 1.5rem;
+  }
+}
+
+/* The summary card only has to leave room for the cluster while the cluster is
+   in the top row — i.e. on a fine pointer. On touch it gets the whole width. */
+.map-summary {
+  position: absolute;
+  top: var(--map-chrome-gutter);
+  left: var(--map-chrome-gutter);
+  max-width: calc(100% - 9rem);
+}
+
+.map-control-stack {
+  position: absolute;
+  top: var(--map-chrome-gutter);
+  right: var(--map-chrome-gutter);
+}
+
+/* 1.25rem above the gutter clears Leaflet's 17px attribution line at any
+   width, so the legend never sits on top of the OpenStreetMap credit. */
+.map-legend {
+  position: absolute;
+  bottom: calc(var(--map-chrome-gutter) + 1.25rem);
+  left: var(--map-chrome-gutter);
+  /* 22rem, or the map's width if that is narrower. An absolutely positioned box
+     shrink-wraps to max-content, and the footnote line is one long sentence —
+     without the cap the panel stretched to 630px on a tablet and swallowed the
+     middle of the map. Capped, the footnote wraps and the panel stays 352px. */
+  max-width: min(calc(100% - 2 * var(--map-chrome-gutter)), 22rem);
+}
+
+@media (pointer: coarse) {
+  .leaflet-control-zoom {
+    display: none;
+  }
+
+  .map-summary {
+    max-width: calc(100% - 2 * var(--map-chrome-gutter));
+  }
+
+  .map-control-stack {
+    top: auto;
+    bottom: calc(var(--map-chrome-gutter) + 1.25rem);
+  }
+}
+
+/* On a phone-sized map the opened legend is a bottom sheet: two columns wide,
+   which is the full 265px of a 289px map. The control cluster shares that
+   corner and measured a 96x44 px overlap with it, so it stands down while the
+   legend is open and returns the moment it collapses — the legend is a
+   transient reference panel and the cluster is one tap away behind it.
+   Tablets keep both: at 642px and up the measured overlap is already zero. */
+@media (pointer: coarse) and (max-width: 639px) {
+  .map-legend:has([aria-expanded="true"]) ~ .map-control-stack {
+    display: none;
   }
 }
 
@@ -345,7 +489,11 @@
    box-shadow or width forces layout on every frame across up to 900 markers,
    while transform and opacity stay on the compositor.
    --------------------------------------------------------------------------- */
-.db-dot-marker .db-dot {
+/* Scoped to .db-dot itself, not to `.db-dot-marker .db-dot`. The legend reuses
+   these swatches outside a marker, and under the descendant selector they
+   rendered as squares — a legend that does not look like the thing it explains
+   explains nothing. */
+.db-dot {
   position: relative;
   display: flex;
   align-items: center;
@@ -356,7 +504,7 @@
   font-family: "Inter Variable", Inter, system-ui, sans-serif;
 }
 
-.db-dot-marker .db-pulse::after {
+.db-pulse::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -368,7 +516,7 @@
 
 /* Overdue or blocked work pulses faster and wider — the difference is
    noticeable in peripheral vision, which is the point of a map. */
-.db-dot-marker .db-pulse-urgent::after {
+.db-pulse-urgent::after {
   animation-duration: 1.4s;
 }
 
@@ -390,7 +538,7 @@
 /* A pulsing dot per open station is decoration, not information the user
    cannot get elsewhere — the count and the legend both state it in text. */
 @media (prefers-reduced-motion: reduce) {
-  .db-dot-marker .db-pulse::after {
+  .db-pulse::after {
     animation: none;
     opacity: 0.35;
     transform: scale(1.35);

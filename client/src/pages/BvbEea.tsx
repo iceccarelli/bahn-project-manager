@@ -28,7 +28,7 @@ export default function BvbEea() {
       {/* HEADER SECTION */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold tracking-tight">BVB-EEA Freigaben</h1>
+          <h1 className="page-title">BVB-EEA Freigaben</h1>
           <p className="text-muted-foreground mt-2">
             Verwaltung der EEA-Freigabeerklärungen &bull; {eaaProjects.length} Einträge
           </p>

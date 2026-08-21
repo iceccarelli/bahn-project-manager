@@ -127,6 +127,14 @@ jobs:
       - run: pnpm exec playwright install --with-deps chromium
       - run: NODE_ENV=production pnpm build:client
       - run: pnpm e2e
+      # Layout gates run on the same build and the same browser install.
+      # check:responsive asserts no route overflows its viewport at seven
+      # widths and that navigation is reachable at each — the assertion that
+      # catches the header trigger and MOBILE_BREAKPOINT drifting apart.
+      # check:map asserts the map's own chrome never overlaps, spills or drops
+      # below 44px on a touch pointer, in both legend states.
+      - run: pnpm check:responsive
+      - run: pnpm check:map
 
   # ---------------------------------------------------------------------------
   # Containerisation gate. Builds the production image and proves the container
