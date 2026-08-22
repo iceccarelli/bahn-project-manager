@@ -23,6 +23,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { projectLinkUrl } from "@shared/project-link";
+import { statusBadgeClass } from "@shared/status-appearance";
+import { REVIEW_STATUSES } from "@shared/types";
 
 /** Every icon button in a row: same size, same ring, same hover. */
 const ROW_BUTTON =
@@ -78,7 +80,16 @@ export function InlineEditCell({
         setEditing(true);
       }}
       aria-label={`${label} bearbeiten${value ? `, aktuell ${value}` : ", derzeit leer"}`}
-      className={`-mx-1 w-full cursor-pointer rounded px-1 py-0.5 text-left transition-colors hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${className}`}
+      /*
+        No negative margin.
+        
+        It used to be `-mx-1 w-full`, so the button measured four pixels wider
+        than the cell holding it — invisible until the identity columns were
+        given a fixed width, at which point every one of them reported a 4px
+        spill at every viewport. The hover highlight now stops at the cell edge,
+        which is the correct place for it to stop.
+      */
+      className={`w-full cursor-pointer rounded px-1 py-0.5 text-left transition-colors hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${className}`}
     >
       {value || "-"}
     </button>
@@ -261,5 +272,98 @@ export function RowActions({
       </button>
       <ProjectCommentDialog project={project} onEdit={onEdit} />
     </div>
+  );
+}
+
+/**
+ * The status control: a badge you click to change.
+ *
+ * Every status cell used to render a coloured badge and, next to it, a select
+ * holding the same value — the same fact twice, in the widest column of a
+ * 14-column table. The pair overflowed its cell, the select's text spilled past
+ * its own border and the row's action buttons landed on top of it. On the
+ * Projekte page the 14 Gewerk columns were worse: a badge with no control at
+ * all, so the one thing a Prüfer opens this table to change was the one thing
+ * they could not.
+ *
+ * The obvious fix — make all of them <select> — was measured and rejected. The
+ * Projekte table is 1,298 rows x 14 Gewerke: 18,172 selects carrying about
+ * 236,000 <option> nodes. The table took seconds to paint and the smoke suite
+ * found it empty where it had previously found 1,298 rows. So this is the same
+ * click-to-edit shape InlineEditCell already uses for six other columns: a
+ * button that reads as the badge, and a real <select> the moment it is
+ * activated. One control in the DOM per cell, the full vocabulary one click or
+ * one Enter away, and the grid stays as readable as it was.
+ *
+ * The vocabulary always contains the value currently stored, even when that
+ * value is outside REVIEW_STATUSES — the data holds "Projektkonfiguration"
+ * against "Projektkonfig." and 80 TBQ rows carry a parenthesised annotation. A
+ * select that cannot represent its own value renders blank, and the next change
+ * silently rewrites a status nobody meant to touch.
+ */
+export function StatusSelect({
+  status,
+  label,
+  onChange,
+  className = "",
+}: {
+  status: string | null | undefined;
+  /** Accessible name — must say which project and which Gewerk. */
+  label: string;
+  onChange: (next: string) => void;
+  className?: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const current = (status ?? "").trim();
+  const options = REVIEW_STATUSES as readonly string[];
+  const vocabulary = current && !options.includes(current) ? [current, ...options] : options;
+
+  if (editing) {
+    return (
+      <select
+        // biome-ignore lint/a11y/noAutofocus: it replaced the control the user just activated
+        autoFocus
+        aria-label={label}
+        value={current}
+        onChange={(e) => {
+          onChange(e.target.value);
+          setEditing(false);
+        }}
+        onBlur={() => setEditing(false)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") setEditing(false);
+        }}
+        className={`w-full min-w-[8rem] max-w-[12rem] cursor-pointer rounded-md border bg-background px-2 py-1 text-2xs outline-none focus:ring-2 focus:ring-primary ${className}`}
+      >
+        <option value="">—</option>
+        {vocabulary.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+    );
+  }
+
+  /*
+   * One element, deliberately.
+   *
+   * The first version wrapped the text in a <span> and appended a lucide
+   * <ChevronDown>, which is a <svg> plus a <path>. Three extra nodes per cell
+   * sounds free until it is multiplied by 1,298 rows x 14 Gewerke: it added
+   * 54,000 elements to the Projekte table and took first paint from 4.6 s to
+   * 10.0 s, measured. The affordance is a CSS ::after instead, which costs no
+   * DOM at all, and the text sits directly in the button.
+   */
+  return (
+    <button
+      type="button"
+      onClick={() => setEditing(true)}
+      aria-label={`${label} ändern${current ? `, aktuell ${current}` : ", derzeit leer"}`}
+      title={current || "kein Status"}
+      className={`block max-w-full truncate rounded-full px-2.5 py-0.5 text-2xs font-medium leading-tight transition-shadow after:ml-1 after:opacity-40 after:content-['▾'] hover:ring-2 hover:ring-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${statusBadgeClass(current || null)} ${className}`}
+    >
+      {current || "—"}
+    </button>
   );
 }

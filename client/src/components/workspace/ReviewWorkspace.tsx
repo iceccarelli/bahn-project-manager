@@ -25,7 +25,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useSearch as useRouteSearch } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
   Select,
@@ -43,7 +42,6 @@ import {
   MapPin,
   Plus,
   MessageSquare,
-  Search,
   Table as TableIcon,
   X,
 } from "lucide-react";
@@ -51,8 +49,13 @@ import { useAllData, useProjectEdits, type Project, type Review } from "@/hooks/
 import { MapView, type StationSelection } from "@/components/Map";
 import { ProjectDetailDialog } from "@/components/ProjectDetailDialog";
 import { useAuditTrail } from "@/hooks/useAuditTrail";
-import { InlineEditCell, RowActions, SortHeader } from "@/components/workspace/table-parts";
-import { REVIEW_STATUSES } from "@shared/types";
+import { FilterSearch } from "@/components/workspace/FilterSearch";
+import {
+  InlineEditCell,
+  RowActions,
+  SortHeader,
+  StatusSelect,
+} from "@/components/workspace/table-parts";
 import { statusBadgeClass } from "@shared/status-appearance";
 import { normalizeReviewStatus } from "@shared/review-status";
 import { deriveProjectMetrics, percent } from "@shared/project-metrics";
@@ -183,12 +186,17 @@ export function ReviewWorkspace({
   }, [searchInput]);
 
   useEffect(() => {
-    const q = (new URLSearchParams(routeSearch).get("q") ?? "").trim();
+    const params = new URLSearchParams(routeSearch);
+    const q = (params.get("q") ?? "").trim();
     if (q) {
       setSearchInput(q);
       setSearch(q);
       setStationFocus(null);
     }
+    // The search palette can send a reader straight to a view. Without this the
+    // link landed on the table and the reader had to find the toggle again.
+    const view = params.get("view");
+    if (view === "map" || view === "cards" || view === "table") setViewMode(view);
   }, [routeSearch]);
 
   /**
@@ -482,19 +490,13 @@ export function ReviewWorkspace({
 
       <Card className="shadow-sm">
         <CardContent className="flex flex-wrap items-center gap-3 p-4">
-          <div className="relative min-w-[16rem] flex-1">
-            <Search
-              className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-              aria-hidden="true"
-            />
-            <Input
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              aria-label={`${title} durchsuchen`}
-              placeholder="Ort, Projektleitung, Prüfer …"
-              className="h-10 pl-9"
-            />
-          </div>
+          <FilterSearch
+            id={`${department}-search`}
+            value={searchInput}
+            onChange={setSearchInput}
+            onSubmit={setSearch}
+            ariaLabel={`${title} durchsuchen`}
+          />
           <Button
             onClick={() => setSearch(searchInput)}
             className="h-10 bg-primary text-white hover:bg-primary/90"
@@ -668,7 +670,7 @@ export function ReviewWorkspace({
             </p>
           ) : viewMode === "table" ? (
             <div className="max-h-[75vh] overflow-x-auto overflow-y-auto">
-              <table className="w-full border-collapse text-xs">
+              <table className="w-full border-collapse text-2xs">
                 <caption className="sr-only">
                   {title} – {visible.length} Einträge mit Projektdaten, {prueferLabel},
                   Prüfdatum und Status. Spaltenüberschriften sortieren.
@@ -683,11 +685,18 @@ export function ReviewWorkspace({
                   <tr>
                     <th
                       scope="col"
-                      className="sticky left-0 z-30 min-w-[50px] whitespace-nowrap border-b bg-card px-3 py-3 text-left font-semibold text-muted-foreground"
+                      className="sticky left-0 z-30 w-[52px] min-w-[52px] whitespace-nowrap border-b bg-card px-3 py-3 text-left font-semibold text-muted-foreground"
                     >
                       Nr.
                     </th>
-                    <SortHeader column="projektnummer" label="Projektnummer" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+                    <SortHeader
+                      column="projektnummer"
+                      label="Projektnummer"
+                      sortBy={sortBy}
+                      sortDir={sortDir}
+                      onSort={handleSort}
+                      className="sticky left-[52px] z-30 w-[168px] min-w-[168px] border-r bg-card"
+                    />
                     <SortHeader column="bahnhofsmanagement" label="Region" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
                     <SortHeader column="station" label="Station" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
                     <SortHeader column="bahnhofsnummer" label="Bhf-Nr." sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
@@ -712,92 +721,72 @@ export function ReviewWorkspace({
                   </tr>
                 </thead>
                 <tbody>
-                  {visible.map(({ project, review, status: s }, index) => (
+                  {visible.map(({ project, review }, index) => (
                     <tr key={project.id} className="border-b transition-colors hover:bg-muted/30">
-                      <td className="sticky left-0 z-10 whitespace-nowrap bg-card px-3 py-3 text-2xs tabular-nums text-muted-foreground">
+                      <td className="sticky left-0 z-10 w-[52px] min-w-[52px] whitespace-nowrap bg-card px-3 py-3 tabular-nums text-muted-foreground">
                         {index + 1}
                       </td>
-                      <td className="max-w-[13rem] break-words px-3 py-3 font-mono text-xs font-medium">
+                      <td className="sticky left-[52px] z-10 w-[168px] min-w-[168px] max-w-[168px] break-words border-r bg-card px-3 py-3 font-mono font-medium">
                         <InlineEditCell
                           value={project.projektnummer}
                           label={`Projektnummer von Projekt ${project.projektnummer ?? project.id}`}
                           onSave={(v) => applyEdit(project.id, "projektnummer", v)}
                         />
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-xs">
+                      <td className="whitespace-nowrap px-4 py-3">
                         {project.bahnhofsmanagement || "—"}
                       </td>
-                      <td className="max-w-[14rem] break-words px-4 py-3 text-xs font-medium">
+                      <td className="max-w-[14rem] break-words px-4 py-3 font-medium">
                         <InlineEditCell
                           value={project.station}
                           label={`Station von Projekt ${project.projektnummer ?? project.id}`}
                           onSave={(v) => applyEdit(project.id, "station", v)}
                         />
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-xs tabular-nums">
+                      <td className="whitespace-nowrap px-4 py-3 tabular-nums">
                         {project.bahnhofsnummer || "—"}
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-xs tabular-nums">
+                      <td className="whitespace-nowrap px-4 py-3 tabular-nums">
                         {project.streckennummer || "—"}
                       </td>
-                      <td className="max-w-[20rem] px-4 py-3 text-xs">
+                      <td className="max-w-[20rem] px-4 py-3">
                         <span className="line-clamp-2">{project.projektbeschreibung || "—"}</span>
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-xs">
+                      <td className="whitespace-nowrap px-4 py-3">
                         <InlineEditCell
                           value={project.projektstand}
                           label={`Projektstand von Projekt ${project.projektnummer ?? project.id}`}
                           onSave={(v) => applyEdit(project.id, "projektstand", v)}
                         />
                       </td>
-                      <td className="max-w-[12rem] break-words px-4 py-3 text-xs">
+                      <td className="max-w-[12rem] break-words px-4 py-3">
                         <InlineEditCell
                           value={project.projektleiter}
                           label={`Projektleiter von Projekt ${project.projektnummer ?? project.id}`}
                           onSave={(v) => applyEdit(project.id, "projektleiter", v)}
                         />
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-xs tabular-nums">
+                      <td className="whitespace-nowrap px-4 py-3 tabular-nums">
                         {formatGerman(project.terminProjektvorstellung) || "—"}
                       </td>
-                      <td className="max-w-[11rem] break-words border-l px-4 py-3 text-xs">
+                      <td className="max-w-[11rem] break-words border-l px-4 py-3">
                         <InlineEditCell
                           value={review.prueferName}
                           label={`${prueferLabel} für Projekt ${project.projektnummer ?? project.id}`}
                           onSave={(v) => applyReviewEdit(project.id, department, "prueferName", v)}
                         />
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-xs tabular-nums">
+                      <td className="whitespace-nowrap px-4 py-3 tabular-nums">
                         {formatGerman(review.pruefDatum) || "—"}
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-xs">
-                        {/*
-                          Editable, and labelled. The Projekte page carries the
-                          same control; an unlabelled one announced "offen,
-                          combo box" with no way to know which project it wrote
-                          to. The badge colour is the read-at-a-glance signal,
-                          so the select keeps it.
-                        */}
-                        <span
-                          className={`mr-2 inline-flex items-center rounded-full px-2.5 py-0.5 text-2xs font-medium ${statusBadgeClass(s)}`}
-                        >
-                          {s ?? review.status ?? "—"}
-                        </span>
-                        <select
-                          aria-label={`Status ${department} für Projekt ${project.projektnummer ?? project.id}`}
-                          value={review.status || ""}
-                          onChange={(e) =>
-                            applyReviewEdit(project.id, department, "status", e.target.value)
+                      <td className="whitespace-nowrap px-4 py-3">
+                        <StatusSelect
+                          status={review.status}
+                          label={`Status ${department} für Projekt ${project.projektnummer ?? project.id}`}
+                          onChange={(next) =>
+                            applyReviewEdit(project.id, department, "status", next)
                           }
-                          className="mt-1 w-full rounded-md border bg-transparent px-2 py-1 text-2xs outline-none focus:ring-1 focus:ring-primary"
-                        >
-                          <option value="">-</option>
-                          {REVIEW_STATUSES.map((option) => (
-                            <option key={option} value={option}>
-                              {option}
-                            </option>
-                          ))}
-                        </select>
+                        />
                       </td>
                       <td className="px-3 py-3">
                         <RowActions

@@ -272,27 +272,6 @@ export const apiClient = {
       }));
     },
 
-    async searchSuggestions(term: string): Promise<string[]> {
-      const projects = await this.list();
-      if (!term || term.length < 2) return [];
-      const lower = term.toLowerCase();
-      const suggestions = new Set<string>();
-
-      for (const p of projects) {
-        if (String(p.station ?? "").toLowerCase().includes(lower)) suggestions.add(String(p.station));
-        if (String(p.projektnummer ?? "").toLowerCase().includes(lower)) suggestions.add(String(p.projektnummer));
-        if (String(p.projektleiter ?? "").toLowerCase().includes(lower)) suggestions.add(String(p.projektleiter));
-        if (String(p.bahnhofsmanagement ?? "").toLowerCase().includes(lower)) suggestions.add(String(p.bahnhofsmanagement));
-        if (String(p.projektstand ?? "").toLowerCase().includes(lower)) suggestions.add(String(p.projektstand));
-        for (const r of p.reviews || []) {
-          if (String(r.prueferName ?? "").toLowerCase().includes(lower)) suggestions.add(String(r.prueferName));
-          if (String(r.department ?? "").toLowerCase().includes(lower)) suggestions.add(String(r.department));
-        }
-        if (suggestions.size >= 10) break;
-      }
-
-      return Array.from(suggestions).slice(0, 10);
-    },
   },
 
   reviews: {

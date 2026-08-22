@@ -460,14 +460,6 @@ export function useFilters() {
   return { data, isLoading, isError };
 }
 
-export function useSearchSuggestions(term: string) {
-  return useQuery({
-    queryKey: ["searchSuggestions", term],
-    queryFn: () => apiClient.projects.searchSuggestions(term),
-    enabled: !!term && term.length > 1,
-    staleTime: 5 * 60 * 1000,
-  });
-}
 
 /**
  * The three queries the pages need, folded into one result.

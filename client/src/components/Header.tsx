@@ -1,7 +1,7 @@
-import { useState, useMemo, useCallback } from "react";
-import { Search, Bell, Sun, Moon, X, Menu } from "lucide-react";
+import { useMemo } from "react";
+import { CommandSearch } from "@/components/CommandSearch";
+import { Bell, Sun, Moon, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { useLocation } from "wouter";
 import { useSidebar } from "@/components/ui/sidebar";
 import PresenceIndicator from "./PresenceIndicator";
@@ -16,38 +16,22 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useTheme } from "@/contexts/ThemeContext";
-import { useSearchSuggestions } from "@/hooks/useDataQuery";
 import { useAuditLog } from "@/hooks/useDataQuery";
 
 export default function Header() {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [, setLocation] = useLocation();
-
   /**
-   * The one search box present on every route used to search nothing.
+   * The search moved out of this file entirely.
    *
-   * `searchTerm` fed the suggestion query and the reset X and went nowhere
-   * else: no onKeyDown, no submit, no navigation, no callback out of the
-   * component. Typing a station and pressing Enter did nothing, and picking a
-   * suggestion only wrote the text back into the same dead field.
-   *
-   * It now hands the term to the Projekte page through the query string, which
-   * is also what makes a search result linkable and survivable across a reload.
+   * What lived here was a text field, a suggestion list of bare strings and a
+   * runSearch that always did the same thing: push the raw text into the
+   * Projekte filter. It could not find a Gewerk, a page, a view or a status,
+   * it had no combobox semantics, and its suggestion rows were unreachable
+   * without a mouse. CommandSearch replaces all of it — see that file.
    */
-  const runSearch = useCallback(
-    (term: string) => {
-      const q = term.trim();
-      setShowSuggestions(false);
-      if (!q) return;
-      setLocation(`/projects?q=${encodeURIComponent(q)}`);
-    },
-    [setLocation],
-  );
+  const [, setLocation] = useLocation();
   const { theme, toggleTheme } = useTheme();
   const { toggleSidebar } = useSidebar();
   const { user } = useAuth();
-  const { data: suggestions } = useSearchSuggestions(searchTerm);
   /**
    * The bell shows the audit trail, because that is the app's only real event
    * stream.
@@ -118,55 +102,11 @@ export default function Header() {
         {/* min-w-0 lets the search shrink instead of pushing the control cluster
           off-screen; below sm it is hidden entirely and the page's own search
           takes over. */}
-        <div className="relative mx-2 hidden min-w-0 flex-1 sm:mx-4 sm:block sm:max-w-3xl">
-          <div className="relative group">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-primary-strong" />
-            <Input
-              value={searchTerm}
-              onChange={e => {
-                setSearchTerm(e.target.value);
-                setShowSuggestions(true);
-              }}
-              onFocus={() => setShowSuggestions(true)}
-              onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") runSearch(searchTerm);
-                if (e.key === "Escape") setShowSuggestions(false);
-              }}
-              aria-label="Projekte, Stationen und Prüfer durchsuchen"
-            placeholder="Projekte, Stationen, Prüfer durchsuchen…"
-              className="pl-11 h-9 bg-muted/50 border-border focus:bg-background focus:border-primary w-full text-sm rounded-lg transition-all"
-            />
-            {searchTerm && (
-              <button
-                type="button"
-                aria-label="Suche zurücksetzen"
-                onClick={() => setSearchTerm("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              >
-                <X className="h-3.5 w-3.5" aria-hidden="true" />
-              </button>
-            )}
-          </div>
-          {showSuggestions && suggestions && suggestions.length > 0 && (
-            <div className="absolute top-full left-0 right-0 mt-1 bg-background border border-border rounded-lg shadow-lg z-50 max-h-60 overflow-y-auto">
-              {suggestions.map((s) => (
-                <button type="button"
-                  key={s}
-                  className="w-full text-left px-4 py-2 text-sm hover:bg-muted/80 transition-colors"
-                  /* onClick, not onMouseDown: mousedown never fires from
-                     Enter or Space, so a keyboard user could tab onto a
-                     suggestion and pressing Enter did nothing. */
-                  onClick={() => {
-                    setSearchTerm(s);
-                    runSearch(s);
-                  }}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          )}
+        {/* min-w-0 lets the search shrink instead of pushing the control cluster
+          off-screen; below sm it is hidden entirely and the page's own search
+          takes over. */}
+        <div className="mx-2 hidden min-w-0 flex-1 sm:mx-4 sm:block sm:max-w-3xl">
+          <CommandSearch />
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">

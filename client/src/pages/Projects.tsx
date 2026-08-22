@@ -4,13 +4,12 @@ import { useLocation, useSearch as useRouteSearch } from "wouter";
 import {
   TableBody,
 } from "@/components/ui/table";
-import { useProjects, useFilters, useAllData, useSearchSuggestions, type Project, type Review } from "@/hooks/useDataQuery";
+import { useProjects, useFilters, useAllData, type Project, type Review } from "@/hooks/useDataQuery";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Download, Table, LayoutGrid, MapPin, Filter, X, MessageSquare, Search, Loader2 } from "lucide-react";
+import { Plus, Download, Table, LayoutGrid, MapPin, Filter, X, MessageSquare, Loader2 } from "lucide-react";
 import { DEPARTMENTS, REVIEW_STATUSES } from "@shared/types";
 import { deriveProjectMetrics, percent } from "@shared/project-metrics";
 import { statusBadgeClass } from "@shared/status-appearance";
@@ -19,10 +18,12 @@ import { MapView, type StationSelection } from "@/components/Map";
 import { ProjectDetailDialog } from "@/components/ProjectDetailDialog";
 import { documentFilename } from "@shared/generated-stamp";
 import { useAuditTrail } from "@/hooks/useAuditTrail";
+import { FilterSearch } from "@/components/workspace/FilterSearch";
 import {
   InlineEditCell,
   RowActions,
   SortHeader,
+  StatusSelect,
 } from "@/components/workspace/table-parts";
 // DB Corporate Status Colors (perfect harmony with Dashboard.tsx)
 
@@ -90,7 +91,6 @@ export default function Projects() {
   }, []);
   const [searchInput, setSearchInput] = useState(initialQuery);
   const [search, setSearch] = useState(initialQuery);
-  const { data: searchSuggestions } = useSearchSuggestions(searchInput);
   /*
    * Removed: `mapBounds` state fed by the map's onBoundsChange and spread into
    * useProjects. The hook declares minLat/maxLat/minLng/maxLng in its parameter
@@ -162,7 +162,10 @@ export default function Projects() {
   // query string; wouter keeps the component mounted, so the initial-state read
   // above never runs a second time.
   useEffect(() => {
-    const q = (new URLSearchParams(routeSearch).get("q") ?? "").trim();
+    const params = new URLSearchParams(routeSearch);
+    const view = params.get("view");
+    if (view === "map" || view === "cards" || view === "table") setViewMode(view);
+    const q = (params.get("q") ?? "").trim();
     if (q) {
       setSearchInput(q);
       setSearch(q);
@@ -386,36 +389,18 @@ export default function Projects() {
       <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-center justify-between bg-card p-4 rounded-xl border shadow-sm">
         <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto min-w-0">
           <div className="relative flex-1 min-w-[180px] sm:flex-none sm:w-80">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <div className="relative flex-1 sm:w-80">
-              <Input
-                aria-label="Projekte durchsuchen — Ort, Projektleitung oder Gewerk"
-                placeholder="Ort, Projektleitung, Gewerk …"
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                className="pl-9 h-10 "
-              />
-              {searchInput.length > 1 && searchSuggestions && searchSuggestions.length > 0 && (
-                <div className="absolute z-10 w-full bg-popover border rounded-md shadow-lg mt-1 max-h-60 overflow-auto">
-                  {searchSuggestions.map((suggestion: string) => (
-                    <button
-                      key={suggestion}
-                      type="button"
-                      className="w-full cursor-pointer px-4 py-2 text-left hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:outline-none"
-                      /* onClick, not onMouseDown — mousedown never fires from
-                         Enter or Space, so this list was mouse-only. */
-                      onClick={() => {
-                        setSearchInput(suggestion);
-                        setSearch(suggestion);
-                      }}
-                    >
-                      {suggestion}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            {/* Was a bespoke input with its own suggestion list, fed by an
+                endpoint that matched raw substrings and returned whichever ten
+                rows came first in file order. Same control, same index and the
+                same German folding as the header palette now. */}
+            <FilterSearch
+              id="projects-search"
+              value={searchInput}
+              onChange={setSearchInput}
+              onSubmit={setSearch}
+              ariaLabel="Projekte durchsuchen — Ort, Projektleitung oder Gewerk"
+              placeholder="Ort, Projektleitung, Gewerk …"
+            />
           </div>
           <Button onClick={handleSearch} className="h-10 bg-primary hover:bg-primary/90 text-white">Suchen</Button>
           <Button
@@ -642,8 +627,19 @@ export default function Projects() {
                 <table className="w-full border-collapse text-2xs">
                   <thead className="bg-white dark:bg-zinc-950 sticky top-0 z-20 border-b">
                     <tr>
-                      <th className="text-left py-3 px-3 font-semibold text-muted-foreground whitespace-nowrap sticky left-0 bg-white dark:bg-zinc-950 z-30 border-b min-w-[50px]">Nr.</th>
-                      <SortHeader column="projektnummer" label="Projektnummer" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+                      <th className="sticky left-0 z-30 w-[52px] min-w-[52px] whitespace-nowrap border-b bg-white px-3 py-3 text-left font-semibold text-muted-foreground dark:bg-zinc-950">Nr.</th>
+                      {/* The row's identity pins to the left. With 14 Gewerk
+                          columns to the right, scrolling to reach one took the
+                          Projektnummer off screen and left a wall of statuses
+                          belonging to nothing a reader could name. */}
+                      <SortHeader
+                        column="projektnummer"
+                        label="Projektnummer"
+                        sortBy={sortBy}
+                        sortDir={sortDir}
+                        onSort={handleSort}
+                        className="sticky left-[52px] z-30 w-[168px] min-w-[168px] border-r bg-white dark:bg-zinc-950"
+                      />
                       <SortHeader column="bahnhofsmanagement" label="Region" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
                       <SortHeader column="station" label="Station" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
                       <SortHeader column="bahnhofsnummer" label="Bhf-Nr." sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
@@ -671,8 +667,9 @@ export default function Projects() {
                     </tr>
                     {expandedDepts.length > 0 && (
                       <tr className="border-b bg-muted/20">
-                        <th className="sticky left-0 bg-white dark:bg-zinc-950 z-30" />
-                        <th /><th /><th /><th /><th /><th /><th /><th /><th /><th />
+                        <th className="sticky left-0 z-30 bg-white dark:bg-zinc-950" />
+                        <th className="sticky left-[52px] z-30 border-r bg-white dark:bg-zinc-950" />
+                        <th /><th /><th /><th /><th /><th /><th /><th /><th />
                         {expandedDepts.map((dept) => (
                           <React.Fragment key={`sub-${dept}`}>
                             <th className="text-left py-2 px-3 text-2xs font-bold uppercase text-muted-foreground border-l">Prüfer</th>
@@ -688,10 +685,10 @@ export default function Projects() {
                       const reviews = project.reviews || [];
                       return (
                         <tr key={project.id} className="border-b hover:bg-muted/30 transition-colors group">
-                          <td className="py-3 px-3 text-muted-foreground font-medium sticky left-0 bg-white dark:bg-zinc-950 z-10 border-r font-mono">
+                          <td className="sticky left-0 z-10 w-[52px] min-w-[52px] bg-white px-3 py-3 font-mono font-medium text-muted-foreground dark:bg-zinc-950">
                             {project.id}
                           </td>
-                          <td className="py-3 px-4 font-mono font-bold whitespace-nowrap">
+                          <td className="sticky left-[52px] z-10 w-[168px] min-w-[168px] max-w-[168px] break-words border-r bg-white px-4 py-3 font-mono font-bold dark:bg-zinc-950">
                             <InlineEditCell
                               value={project.projektnummer}
                               label={`Projektnummer von Projekt ${project.id}`}
@@ -759,31 +756,25 @@ export default function Projects() {
                                         label={`Prüfer ${dept} für Projekt ${project.projektnummer ?? project.id}`}
                                         onSave={(val) => applyReviewEdit(project.id, dept, "prueferName", val)}
                                       />
-                                    ) : <span className="text-muted-foreground">-</span>}
+                                    ) : (
+                                      <span className="text-muted-foreground">-</span>
+                                    )}
                                   </td>
                                   <td className="py-3 px-3 whitespace-nowrap text-2xs">
                                     {review?.pruefDatum ? new Date(review.pruefDatum).toLocaleDateString("de-DE") : "-"}
                                   </td>
                                   <td className="py-3 px-3">
                                     {review ? (
-                                      /* The only unlabeled form control in the
-                                         app — and it writes. A screen reader
-                                         announced "offen, combo box" with no
-                                         way to know which Gewerk or project it
-                                         belonged to, once per project per
-                                         department. */
-                                      <select
-                                        aria-label={`Status ${dept} für Projekt ${project.projektnummer ?? project.id}`}
-                                        value={review.status || ""}
-                                        onChange={(e) => applyReviewEdit(project.id, dept, "status", e.target.value)}
-                                        className="text-2xs bg-transparent border rounded-md px-2 py-1 w-full focus:ring-1 focus:ring-primary outline-none"
-                                      >
-                                        <option value="">-</option>
-                                        {REVIEW_STATUSES.map((s) => (
-                                          <option key={s} value={s}>{s}</option>
-                                        ))}
-                                      </select>
-                                    ) : <span className="text-muted-foreground">-</span>}
+                                      <StatusSelect
+                                        status={review.status}
+                                        label={`Status ${dept} für Projekt ${project.projektnummer ?? project.id}`}
+                                        onChange={(next) =>
+                                          applyReviewEdit(project.id, dept, "status", next)
+                                        }
+                                      />
+                                    ) : (
+                                      <span className="text-muted-foreground">-</span>
+                                    )}
                                   </td>
                                 </React.Fragment>
                               );
@@ -792,8 +783,24 @@ export default function Projects() {
                             departmentButtons.map((dept) => {
                               const review = reviews.find((r: Review) => r.department === dept);
                               return (
-                                <td key={`${project.id}-${dept}`} className="py-3 px-2 text-center border-l border-border/30">
-                                  <StatusBadge status={review?.status || null} />
+                                <td key={`${project.id}-${dept}`} className="border-l border-border/30 px-2 py-3 text-center">
+                                  {/*
+                                    Was a read-only badge. Fourteen columns of
+                                    the one value a Prüfer opens this table to
+                                    change, and no way to change it without
+                                    first expanding the Gewerk.
+                                  */}
+                                  {review ? (
+                                    <StatusSelect
+                                      status={review.status}
+                                      label={`Status ${dept} für Projekt ${project.projektnummer ?? project.id}`}
+                                      onChange={(next) =>
+                                        applyReviewEdit(project.id, dept, "status", next)
+                                      }
+                                    />
+                                  ) : (
+                                    <span className="text-muted-foreground">-</span>
+                                  )}
                                 </td>
                               );
                             })

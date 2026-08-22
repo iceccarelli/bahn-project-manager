@@ -173,6 +173,7 @@ const STAMP = `E2E-${Date.now().toString(36)}`;
 
 await check("inline edit writes through and survives a reload", async () => {
   await go("/projects");
+  await page.waitForSelector("table tbody tr", { timeout: 30000 });
   const cell = page.locator('button[aria-label^="Projektstand von Projekt"]').first();
   await cell.click();
   const input = page.locator('input[aria-label^="Projektstand"]').first();
@@ -180,6 +181,7 @@ await check("inline edit writes through and survives a reload", async () => {
   await input.press("Enter");
   await page.waitForTimeout(700);
   await go("/projects");
+  await page.waitForSelector("table tbody tr", { timeout: 30000 });
   const found = await page.locator(`text=${STAMP}`).count();
   assert(found > 0, "edited value not present after reload");
 });
@@ -204,6 +206,7 @@ await check("localStorage is the persistence layer and holds the edit", async ()
 console.log("\n== filtering and sorting ==");
 await check("search narrows the table", async () => {
   await go("/projects");
+  await page.waitForSelector("table tbody tr", { timeout: 30000 });
   const before = await page.locator("tbody tr").count();
   await page.locator('input[aria-label^="Projekte durchsuchen"]').fill("Frankfurt");
   await page.waitForTimeout(900);
@@ -213,6 +216,7 @@ await check("search narrows the table", async () => {
 
 await check("sort headers reorder and announce aria-sort", async () => {
   await go("/projects");
+  await page.waitForSelector("table tbody tr", { timeout: 30000 });
   const th = page.locator("th", { hasText: "Projektnummer" }).first();
   await th.locator("button").click();
   await page.waitForTimeout(600);
@@ -234,8 +238,9 @@ console.log("\n== Projektanmeldung wizard ==");
 
 await check("wizard exports a real PDF with the corrected ITK recipients", async () => {
   await go("/anmeldung");
-  await page.getByLabel("Projektnummer", { exact: false }).first().fill("E2E.0001");
-  await page.getByLabel("Projektleitung", { exact: false }).first().fill("E2E Prüfer");
+  const form = page.locator("main");
+  await form.getByRole("textbox", { name: /Projektnummer/i }).first().fill("E2E.0001");
+  await form.getByRole("textbox", { name: /Projektleitung/i }).first().fill("E2E Prüfer");
   await page.getByRole("button", { name: /^Schritt 2:/ }).click();
   await page.waitForTimeout(600);
 
@@ -280,12 +285,13 @@ console.log("\n== full submit: wizard -> project -> reviews -> audit ==");
 let createdNumber = "";
 await check("submitting the wizard creates a project with exactly the right reviews", async () => {
   await go("/anmeldung");
+  const form = page.locator("main");
   createdNumber = `E2E.${Date.now().toString(36).toUpperCase()}`;
-  await page.getByLabel("Projektnummer", { exact: false }).first().fill(createdNumber);
-  await page.getByLabel("Projektleitung", { exact: false }).first().fill("E2E Prüfer");
+  await form.getByRole("textbox", { name: /Projektnummer/i }).first().fill(createdNumber);
+  await form.getByRole("textbox", { name: /Projektleitung/i }).first().fill("E2E Prüfer");
 
   // Step 1 also needs a station; take the first option the cascade offers.
-  const station = page.getByLabel("Station", { exact: false }).first();
+  const station = form.getByRole("textbox", { name: /Station/i }).first();
   if (await station.count()) await station.fill("Frankfurt (Main) Süd");
 
   await page.getByRole("button", { name: /^Schritt 2:/ }).click();
@@ -665,6 +671,9 @@ await check("the status pie plots every review row, not a hardcoded subset", asy
 
 await check("truncated lists say how much they are hiding", async () => {
   await go("/");
+  // The Dashboard's charts mount after the data resolves, so snapshotting
+  // innerText on arrival is a race the harness sometimes lost.
+  await page.waitForSelector("text=/Status pro Gewerke/", { timeout: 20000 });
   const body = await page.locator("body").innerText();
   assert(/Status pro Gewerke — \d+ von \d+/.test(body), "the Gewerke grid does not state its own coverage");
   assert(/Regionale Verteilung — Top \d+ von \d+/.test(body), "the region list does not state its own coverage");
@@ -691,15 +700,33 @@ await check("BVB-EEA and PSV-ITK render German dates and honest headings", async
 
 await check("the header search reaches the Projekte page", async () => {
   await go("/");
-  const box = page.getByLabel("Projekte, Stationen und Prüfer durchsuchen");
+  const box = page.getByLabel("Website durchsuchen — Projekte, Orte, Personen und Seiten");
   await box.fill("Bensheim");
+  // Wait for the list rather than racing it: the index builds lazily on first
+  // use, and pressing Enter before it exists falls back to the raw term, which
+  // is a different code path from the one this test is about.
+  await page.waitForSelector('[role="option"]', { timeout: 10000 });
+  const top = await page.$eval('[role="option"]', (e) => ({
+    kind: e.getAttribute("data-search-kind"),
+    text: e.textContent.trim(),
+  }));
+  assert(
+    top.kind === "station" && top.text.startsWith("Bensheim"),
+    `"Bensheim" ranked ${top.kind} "${top.text}" first, not the station`,
+  );
   await box.press("Enter");
   await page.waitForTimeout(900);
   assert(/\/projects/.test(page.url()), `search went to ${page.url()}`);
   assert(new URL(page.url()).searchParams.get("q") === "Bensheim", "the term did not survive the navigation");
-  const count = await page.$$eval("table tbody tr", (r) => r.length);
+  // A station opens the card view — that is what choosing a station means now.
+  // Assert the result set narrowed, whichever view it landed in.
+  await page.waitForTimeout(1500);
   const total = JSON.parse(fs.readFileSync("client/public/data.json", "utf8")).projects.length;
-  assert(count > 0 && count < total, `search returned ${count} of ${total} rows — it did not filter`);
+  const count = await page.evaluate(() => {
+    const cards = document.querySelectorAll("[data-project-card]").length;
+    return cards > 0 ? cards : document.querySelectorAll("table tbody tr").length;
+  });
+  assert(count > 0 && count < total, `search returned ${count} of ${total} — it did not filter`);
 });
 
 await check("the bell shows real events, not an empty store", async () => {
@@ -1172,6 +1199,293 @@ await check("every logged action is a known one, rendered with its own tone", as
   assert(rows.length > 0, "the Änderungshistorie rendered no entries");
   const untoned = rows.filter((r) => !r.tone);
   assert(untoned.length === 0, `${untoned.length} entries rendered without a tone`);
+});
+
+
+console.log("\n== the search finds everything, from anywhere ==");
+
+const palette = () => page.getByLabel("Website durchsuchen — Projekte, Orte, Personen und Seiten");
+
+await check("the palette finds pages and views the old search could not", async () => {
+  await go("/");
+  for (const [term, expected] of [
+    ["Karte", "/projects?view=map"],
+    ["Historie", "/audit"],
+    ["Anmeldung", "/anmeldung"],
+  ]) {
+    await palette().fill(term);
+    await page.waitForSelector('[role="option"]', { timeout: 5000 });
+    const first = await page.$eval('[role="option"]', (e) => ({
+      kind: e.getAttribute("data-search-kind"),
+      text: e.textContent.trim(),
+    }));
+    assert(first.kind === "seite", `"${term}" ranked a ${first.kind} first, not a page`);
+    // The first row is highlighted already; Enter opens it.
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(1200);
+    const url = new URL(page.url());
+    const got = url.pathname + url.search;
+    assert(got === expected, `"${term}" went to ${got}, expected ${expected}`);
+    await go("/");
+  }
+});
+
+await check("a Gewerk goes to that Gewerk's own tab", async () => {
+  await go("/");
+  await palette().fill("EEA");
+  await page.waitForSelector('[role="option"]', { timeout: 5000 });
+  const rows = await page.$$eval('[role="option"]', (els) =>
+    els.map((e) => ({ kind: e.getAttribute("data-search-kind"), text: e.textContent.trim() })),
+  );
+  const gewerk = rows.findIndex((r) => r.kind === "gewerk" || /BVB-EEA/.test(r.text));
+  assert(gewerk >= 0, `no Gewerk or BVB-EEA row for "EEA": ${JSON.stringify(rows.slice(0, 3))}`);
+  for (let i = 0; i < gewerk; i++) await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(1200);
+  assert(/\/bvb-eea/.test(page.url()), `"EEA" went to ${page.url()}`);
+});
+
+await check("umlauts, their expansions and their strippings all find the same station", async () => {
+  await go("/");
+  const seen = [];
+  for (const spelling of ["Gießen", "Giessen", "Giesen"]) {
+    await palette().fill(spelling);
+    await page.waitForTimeout(500);
+    const labels = await page.$$eval('[role="option"]', (els) =>
+      els.map((e) => e.textContent.trim()),
+    );
+    assert(labels.length > 0, `"${spelling}" found nothing at all`);
+    seen.push(labels.join("|"));
+  }
+  assert(
+    seen.some((l) => /Gie[sß]/i.test(l)),
+    "no spelling of Gießen reached the station",
+  );
+});
+
+await check("a typo is offered a correction, and a good query never is", async () => {
+  await go("/");
+  await palette().fill("Bensheimm");
+  await page.waitForTimeout(600);
+  const body = await page.locator("body").innerText();
+  const corrected = /Meinten Sie/.test(body);
+  const found = (await page.$$('[role="option"]')).length > 0;
+  assert(corrected || found, "a one-letter typo produced neither results nor a correction");
+
+  await palette().fill("Kassel");
+  await page.waitForTimeout(600);
+  const good = await page.locator("body").innerText();
+  assert(!/Meinten Sie/.test(good), "a query that worked was still offered a correction");
+});
+
+await check("the palette is a real combobox and opens with Ctrl+K from any page", async () => {
+  await go("/psv-itk");
+  await page.keyboard.press("Control+k");
+  await page.waitForTimeout(300);
+  const focused = await page.evaluate(() => document.activeElement?.getAttribute("role"));
+  assert(focused === "combobox", `Ctrl+K focused a ${focused}, not the combobox`);
+
+  await page.keyboard.type("Frankfurt");
+  await page.waitForSelector('[role="option"]', { timeout: 5000 });
+  const box = palette();
+  assert((await box.getAttribute("aria-expanded")) === "true", "aria-expanded stayed false");
+  await page.keyboard.press("ArrowDown");
+  const activeId = await box.getAttribute("aria-activedescendant");
+  assert(activeId, "arrowing down set no aria-activedescendant");
+  const selected = await page.$eval(`#${activeId}`, (e) => e.getAttribute("aria-selected"));
+  assert(selected === "true", "the active option does not report aria-selected");
+
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(300);
+  assert((await box.getAttribute("aria-expanded")) === "false", "Escape did not close the list");
+});
+
+await check("the page filter box suggests from the same index and never navigates away", async () => {
+  await go("/bvb-eea");
+  await page.waitForSelector("table tbody tr", { timeout: 20000 });
+  const box = page.getByLabel("BVB-EEA Prüfungen durchsuchen");
+  await box.fill("Frank");
+  await page.waitForSelector('[role="option"]', { timeout: 5000 });
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(900);
+  assert(/\/bvb-eea/.test(page.url()), `choosing a suggestion left the page: ${page.url()}`);
+  const rows = await page.$$eval("table tbody tr", (r) => r.length);
+  assert(rows > 0, "the suggestion filtered the table down to nothing");
+});
+
+console.log("\n== every status is a dropdown, everywhere ==");
+
+/**
+ * The control is a badge you activate, not a permanently mounted <select>.
+ * 18,172 selects carrying 236,000 options took the Projekte table from 4.6 s to
+ * 10.0 s to first paint, measured — so the badge is a button and the select
+ * appears on activation. These assert the interaction, which is the thing a
+ * reader actually performs.
+ */
+await check("the Gewerk status cell opens a labelled dropdown with the full vocabulary", async () => {
+  await go("/psv-itk");
+  await page.waitForSelector("table tbody tr", { timeout: 30000 });
+  const badge = page.locator('table tbody tr:first-child td:nth-child(13) button').first();
+  const label = await badge.getAttribute("aria-label");
+  assert(
+    /^Status ITK für Projekt .* ändern/.test(label ?? ""),
+    `unhelpful accessible name on the status control: ${label}`,
+  );
+  await badge.click();
+  const select = page.locator('table tbody tr:first-child td:nth-child(13) select').first();
+  await select.waitFor({ timeout: 5000 });
+  const options = await select.locator("option").allTextContents();
+  for (const s of ["offen", "Zustimmung erteilt", "abgelehnt", "Nachforderung"]) {
+    assert(options.includes(s), `the dropdown cannot offer "${s}"`);
+  }
+  await page.keyboard.press("Escape");
+});
+
+await check("Projekte's 14 Gewerk columns are all changeable, not read-only badges", async () => {
+  await go("/projects");
+  await page.waitForSelector("table tbody tr", { timeout: 30000 });
+  const labels = await page.$$eval("table tbody tr:first-child button", (els) =>
+    els.map((e) => e.getAttribute("aria-label") ?? ""),
+  );
+  const statusControls = labels.filter((l) => /^Status .* ändern/.test(l));
+  assert(
+    statusControls.length >= 14,
+    `only ${statusControls.length} changeable Gewerk statuses in the first row`,
+  );
+  for (const dept of ["EEA", "ITK", "LST", "BIM", "Vermessung"]) {
+    assert(
+      statusControls.some((l) => l.startsWith(`Status ${dept} für Projekt`)),
+      `no status control for ${dept}`,
+    );
+  }
+  // And it really opens.
+  await page.click(`[aria-label^="Status EEA für Projekt"]`);
+  await page.waitForSelector("table tbody select", { timeout: 5000 });
+  await page.keyboard.press("Escape");
+});
+
+await check("changing a status persists a reload and reaches the Änderungshistorie", async () => {
+  await go("/psv-itk");
+  await page.waitForSelector("table tbody tr", { timeout: 30000 });
+  const cell = 'table tbody tr:first-child td:nth-child(13)';
+  await page.locator(`${cell} button`).first().click();
+  const select = page.locator(`${cell} select`).first();
+  await select.waitFor({ timeout: 5000 });
+  const before = await select.inputValue();
+  const options = await select.locator("option").allTextContents();
+  // Not "nicht erforderlich": that value removes the row from this Gewerk's
+  // scope, which is correct behaviour and is asserted separately below — but it
+  // would make this test compare two different projects.
+  const next = options.find(
+    (o) => o && o !== before && o !== "—" && o !== "nicht erforderlich",
+  );
+  assert(next, "the dropdown offered no other value to select");
+
+  await select.selectOption(next);
+  await page.waitForTimeout(1200);
+
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForSelector("table tbody tr", { timeout: 30000 });
+  const shown = await page.locator(`${cell} button`).first().innerText();
+  assert(shown.includes(next), `after a reload the cell reads "${shown}", not "${next}"`);
+
+  await go("/audit");
+  const body = await page.locator("body").innerText();
+  assert(body.includes("Prüfung aktualisiert"), "the status change never reached the log");
+  assert(body.includes(next), `the entry does not name the new status "${next}"`);
+  assert(body.includes("ITK"), "the entry does not say which Gewerk changed");
+
+  // Put it back so a re-run starts from the same place.
+  await go("/psv-itk");
+  await page.waitForSelector("table tbody tr", { timeout: 30000 });
+  await page.locator(`${cell} button`).first().click();
+  await page.locator(`${cell} select`).first().waitFor({ timeout: 5000 });
+  await page.locator(`${cell} select`).first().selectOption(before);
+  await page.waitForTimeout(600);
+});
+
+await check("setting a status to \"nicht erforderlich\" removes the row from that Gewerk", async () => {
+  // The scoping rule is that a Gewerk tab lists the reviews that are actually
+  // required. Marking one not required must therefore take the row out — and
+  // must take it out of the KPI row at the same time, or the count and the
+  // table disagree.
+  await go("/psv-itk");
+  await page.waitForSelector("table tbody tr", { timeout: 30000 });
+  const rowsBefore = await page.$$eval("table tbody tr", (r) => r.length);
+  const kpiBefore = await page.$$eval(".grid .text-4xl", (els) =>
+    Number(els[0].textContent.replace(/\./g, "")),
+  );
+  assert(kpiBefore === rowsBefore, `KPI ${kpiBefore} already disagrees with ${rowsBefore} rows`);
+
+  const cell = 'table tbody tr:first-child td:nth-child(13)';
+  const wasNumber = await page.locator("table tbody tr:first-child td:nth-child(2)").innerText();
+  await page.locator(`${cell} button`).first().click();
+  await page.locator(`${cell} select`).first().waitFor({ timeout: 5000 });
+  const previous = await page.locator(`${cell} select`).first().inputValue();
+  await page.locator(`${cell} select`).first().selectOption("nicht erforderlich");
+  await page.waitForTimeout(1200);
+
+  const rowsAfter = await page.$$eval("table tbody tr", (r) => r.length);
+  const kpiAfter = await page.$$eval(".grid .text-4xl", (els) =>
+    Number(els[0].textContent.replace(/\./g, "")),
+  );
+  assert(rowsAfter === rowsBefore - 1, `rows went ${rowsBefore} -> ${rowsAfter}, expected -1`);
+  assert(kpiAfter === rowsAfter, `KPI says ${kpiAfter}, the table shows ${rowsAfter}`);
+  const nowFirst = await page.locator("table tbody tr:first-child td:nth-child(2)").innerText();
+  assert(nowFirst !== wasNumber, "the row is still at the top of its own Gewerk");
+
+  // Restore, and confirm it comes back.
+  await go(`/projects?q=${encodeURIComponent(wasNumber.trim())}`);
+  await page.waitForSelector("table tbody tr", { timeout: 30000 });
+  await page.click('[aria-label^="Status ITK für Projekt"]');
+  await page.waitForSelector("table tbody select", { timeout: 5000 });
+  await page.locator("table tbody select").first().selectOption(previous);
+  await page.waitForTimeout(900);
+  await go("/psv-itk");
+  await page.waitForSelector("table tbody tr", { timeout: 30000 });
+  const restored = await page.$$eval("table tbody tr", (r) => r.length);
+  assert(restored === rowsBefore, `after restoring, rows are ${restored}, expected ${rowsBefore}`);
+});
+
+await check("a stored status outside the vocabulary is offered back, not silently rewritten", async () => {
+  // The data holds "Projektkonfiguration" against "Projektkonfig." and 80 TBQ
+  // rows carry a parenthesised annotation. A select that cannot represent its
+  // own value renders blank, and the next change rewrites a status nobody meant
+  // to touch.
+  const { projects } = JSON.parse(fs.readFileSync("client/public/data.json", "utf8"));
+  const KNOWN = new Set([
+    "offen", "in Bearbeitung", "prüffähig", "Nachforderung", "zurückgestellt",
+    "Zustimmung erteilt", "Niederschrift erstellt", "abgelehnt", "gestoppt",
+    "nicht erforderlich", "Projektkonfig.", "entfällt",
+  ]);
+  let odd = null;
+  for (const p of projects) {
+    for (const r of p.reviews ?? []) {
+      if (r.status && !KNOWN.has(r.status)) {
+        odd = { projektnummer: p.projektnummer, department: r.department, status: r.status };
+        break;
+      }
+    }
+    if (odd) break;
+  }
+  if (!odd) {
+    // Nothing to prove against; say so rather than passing silently.
+    console.log("       (no out-of-vocabulary status in the shipped data)");
+    return;
+  }
+  await go(`/projects?q=${encodeURIComponent(odd.projektnummer)}`);
+  await page.waitForSelector("table tbody tr", { timeout: 30000 });
+  const control = page.locator(`[aria-label^="Status ${odd.department} für Projekt"]`).first();
+  await control.click();
+  const select = page.locator("table tbody select").first();
+  await select.waitFor({ timeout: 5000 });
+  const value = await select.inputValue();
+  assert(
+    value === odd.status,
+    `the dropdown shows "${value}" where the record holds "${odd.status}" — a change would rewrite it`,
+  );
+  await page.keyboard.press("Escape");
 });
 
 console.log("\n== summary ==");

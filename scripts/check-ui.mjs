@@ -159,6 +159,48 @@ const SCENARIOS = [
       await page.waitForTimeout(1200);
     },
   },
+  /*
+   * The table, scrolled sideways.
+   *
+   * Every scenario until now measured the table at scrollLeft 0, so the columns
+   * past the fold were never audited — and that is exactly where the status
+   * cell rendered a badge and a select on top of each other with the row's
+   * action buttons over the pair. A gate that only ever looks at the first
+   * screenful of a twelve-column table is not auditing the table.
+   */
+  {
+    name: "BVB-EEA · Tabelle gescrollt",
+    route: "/bvb-eea",
+    async run(page) {
+      await page.waitForSelector("table tbody tr", { timeout: 20000 });
+      await page.evaluate(() => {
+        const scroller = document.querySelector("table")?.closest("[class*='overflow-x-auto']");
+        if (scroller) scroller.scrollLeft = scroller.scrollWidth;
+      });
+      await page.waitForTimeout(600);
+    },
+  },
+  {
+    name: "Projekte · Tabelle gescrollt",
+    route: "/projects",
+    async run(page) {
+      await page.waitForSelector("table tbody tr", { timeout: 20000 });
+      await page.evaluate(() => {
+        const scroller = document.querySelector("table")?.closest("[class*='overflow-x-auto']");
+        if (scroller) scroller.scrollLeft = scroller.scrollWidth;
+      });
+      await page.waitForTimeout(600);
+    },
+  },
+  {
+    name: "Suche · Ergebnisliste",
+    route: "/",
+    async run(page) {
+      await page.fill('[role="combobox"]', "Frankfurt");
+      await page.waitForSelector('[role="option"]', { timeout: 8000 });
+      await page.waitForTimeout(400);
+    },
+  },
   {
     name: "Anmeldung · Prüfungen",
     route: "/anmeldung",
@@ -373,6 +415,64 @@ const AUDIT = () => {
   //   - anything mid-animation. The context runs with reduced motion, but a
   //     transformed ancestor is still excluded on principle.
   const overlaps = [];
+
+  /*
+   * Two more kinds of legitimate cover, added after the sticky identity columns
+   * and the search palette landed.
+   *
+   *   - a `position: sticky` element with an opaque background. A pinned column
+   *     or a pinned table header is *designed* to be painted over the rows
+   *     scrolling beneath it; reporting that as text-on-text produced 40
+   *     findings on one scrolled table, none of them visible to anyone.
+   *   - a popup layer: dialog, listbox or menu. The search palette floats over
+   *     the Dashboard by definition.
+   *
+   * Deliberately narrow. `position: absolute` is NOT exempt, because that is
+   * exactly what the map's old "Interaktive Projektkarte" card was when it
+   * covered 41% of the map legend — a 36,252px² defect this check found. An
+   * absolutely-positioned box sitting on top of content is still a finding.
+   */
+  const OVERLAY = "[role='dialog'],[role='listbox'],[role='menu'],[data-radix-popper-content-wrapper]";
+  /*
+   * Is this background actually painted?
+   *
+   * The first version only understood rgb()/rgba(). Tailwind v4 emits oklch()
+   * for most of its palette, so `dark:bg-zinc-950` came back as
+   * "oklch(0.141 0.005 285.823)", failed the rgb match, and the sticky column
+   * was judged transparent — which reported 23 phantom overlaps in dark mode
+   * and none in light, where `bg-white` happens to serialise as rgb.
+   *
+   * Anything that is not `transparent` and carries no alpha below 1 is paint,
+   * whatever colour space it is expressed in.
+   */
+  const opaque = (color) => {
+    if (!color) return false;
+    const c = color.trim().toLowerCase();
+    if (c === "transparent" || c === "rgba(0, 0, 0, 0)") return false;
+    const rgba = c.match(/rgba?\(([^)]+)\)/);
+    if (rgba) {
+      const parts = rgba[1].split(",").map((v) => Number.parseFloat(v));
+      return parts.length < 4 || parts[3] >= 0.99;
+    }
+    // oklch(L C H / A), lab(... / A), color(srgb r g b / A) — alpha after "/".
+    const slash = c.match(/\/\s*([\d.]+%?)\s*\)/);
+    if (slash) {
+      const raw = slash[1];
+      const value = raw.endsWith("%") ? Number.parseFloat(raw) / 100 : Number.parseFloat(raw);
+      return value >= 0.99;
+    }
+    return true;
+  };
+  const stickyCover = (el) => {
+    let n = el;
+    while (n && n !== document.body) {
+      const cs = getComputedStyle(n);
+      if (cs.position === "sticky" && opaque(cs.backgroundColor)) return n;
+      n = n.parentElement;
+    }
+    return null;
+  };
+
   const transformed = (el) => {
     let n = el;
     while (n && n !== document.body) {
@@ -391,6 +491,10 @@ const AUDIT = () => {
       const b = sorted[j];
       if (b.y >= a.y + a.h) break; // sorted by y: nothing further can overlap
       if (a.el.contains(b.el) || b.el.contains(a.el)) continue;
+      if (a.el.closest(OVERLAY) !== b.el.closest(OVERLAY)) continue;
+      const aSticky = stickyCover(a.el);
+      const bSticky = stickyCover(b.el);
+      if (aSticky !== bSticky) continue;
       const ox = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
       const oy = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
       if (ox > 2 && oy > 2) {
