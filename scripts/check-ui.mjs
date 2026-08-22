@@ -202,6 +202,32 @@ const SCENARIOS = [
     },
   },
   {
+    name: "Dashboard · Relief",
+    route: "/",
+    async run(page) {
+      await page.waitForSelector(".relief-cell", { timeout: 20000 });
+      await page.waitForTimeout(600);
+    },
+  },
+  {
+    name: "Dashboard · Relief flach",
+    route: "/",
+    async run(page) {
+      await page.waitForSelector(".relief-cell", { timeout: 20000 });
+      await page.getByRole("button", { name: "Flach" }).click();
+      await page.waitForTimeout(600);
+    },
+  },
+  {
+    name: "Dashboard · Präsentationsmodus",
+    route: "/",
+    async run(page) {
+      await page.waitForSelector("[data-gewerk]", { timeout: 20000 });
+      await page.getByRole("button", { name: /Präsentationsmodus/ }).click();
+      await page.waitForTimeout(900);
+    },
+  },
+  {
     name: "Anmeldung · Prüfungen",
     route: "/anmeldung",
     async run(page) {
@@ -249,11 +275,82 @@ const AUDIT = () => {
     return t.replace(/\s+/g, " ").trim();
   };
 
+  /*
+   * Any CSS colour, resolved to sRGB — including the ones Tailwind v4 emits.
+   *
+   * This used to match rgb()/rgba() and return null for anything else. Chrome
+   * serialises `bg-primary/90` as `oklab(0.59 0.21 0.11 / 0.9)`, so the button
+   * behind a piece of white text came back as "no colour", the walk fell
+   * through to the page background, and the audit reported white text on white
+   * — 1:1 — for a control that is in fact white on red. It is the same failure
+   * the sticky-column opacity test had, in the other half of the file.
+   *
+   * Rather than implement oklab→sRGB by hand, the browser converts it: a 1×1
+   * canvas is painted with the colour and the pixel read back. The canvas is
+   * created once and reused, and the result is memoised, because this runs for
+   * every ancestor of every text node on the page.
+   */
+  const COLOUR_CACHE = new Map();
+  let colourCtx = null;
+  const paintOn = (value, backdrop) => {
+    colourCtx.globalCompositeOperation = "source-over";
+    colourCtx.fillStyle = backdrop;
+    colourCtx.fillRect(0, 0, 1, 1);
+    colourCtx.fillStyle = "#7f7f7f";
+    colourCtx.fillStyle = value;
+    colourCtx.fillRect(0, 0, 1, 1);
+    return colourCtx.getImageData(0, 0, 1, 1).data;
+  };
   const parseRgb = (s) => {
-    const m = String(s).match(/rgba?\(([^)]+)\)/);
-    if (!m) return null;
-    const p = m[1].split(",").map((x) => Number.parseFloat(x.trim()));
-    return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 };
+    const key = String(s);
+    if (COLOUR_CACHE.has(key)) return COLOUR_CACHE.get(key);
+    let out = null;
+    const m = key.match(/rgba?\(([^)]+)\)/);
+    if (m) {
+      const p = m[1].split(",").map((x) => Number.parseFloat(x.trim()));
+      out = { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 };
+    } else if (key && key !== "none" && key !== "transparent") {
+      if (!colourCtx) {
+        const canvas = document.createElement("canvas");
+        canvas.width = 1;
+        canvas.height = 1;
+        colourCtx = canvas.getContext("2d", { willReadFrequently: true });
+      }
+      try {
+        /*
+         * Two known backdrops, solved exactly.
+         *
+         * Reading a single painted pixel and dividing by its alpha to recover
+         * the colour amplifies the 1/255 quantisation by 1/a: at a = 0.05 —
+         * which is what `bg-primary/5` on the wizard's step button is — it
+         * turned a barely-tinted white into solid red, and produced channel
+         * values above 255. Painting over white and over black instead gives
+         *   white:  Cw = C·a + 255(1−a)
+         *   black:  Cb = C·a
+         * so a = 1 − (Cw − Cb)/255 from a full-range difference, and any error
+         * left in C is multiplied by a when it is composited back — which is
+         * exactly where it does not matter.
+         */
+        const w = paintOn(key, "#ffffff");
+        const b = paintOn(key, "#000000");
+        const alphas = [0, 1, 2].map((i) => 1 - (w[i] - b[i]) / 255);
+        alphas.sort((x, y) => x - y);
+        const a = Math.min(1, Math.max(0, alphas[1]));
+        out =
+          a <= 0.002
+            ? { r: 0, g: 0, b: 0, a: 0 }
+            : {
+                r: Math.min(255, Math.max(0, b[0] / a)),
+                g: Math.min(255, Math.max(0, b[1] / a)),
+                b: Math.min(255, Math.max(0, b[2] / a)),
+                a,
+              };
+      } catch {
+        out = null;
+      }
+    }
+    COLOUR_CACHE.set(key, out);
+    return out;
   };
 
   /** Flatten a colour onto an opaque backdrop. */

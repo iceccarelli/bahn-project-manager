@@ -354,7 +354,7 @@ export default function Projects() {
           </CardHeader>
           <CardContent>
             <div className="text-4xl font-bold">{metrics.active.toLocaleString("de-DE")}</div>
-            <p className="text-xs text-blue-600 mt-1">
+            <p className="text-xs text-blue-700 dark:text-blue-400 mt-1">
               {percent(metrics.active, totalProjects)}% der Projekte in Bearbeitung
             </p>
           </CardContent>
@@ -364,10 +364,10 @@ export default function Projects() {
             <CardTitle className="text-sm font-medium text-muted-foreground">Abgeschlossen</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-4xl font-bold text-emerald-600">
+            <div className="text-4xl font-bold text-emerald-700 dark:text-emerald-400">
               {metrics.completed.toLocaleString("de-DE")}
             </div>
-            <p className="text-xs text-emerald-600 mt-1">
+            <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-1">
               alle erforderlichen Prüfungen zugestimmt
             </p>
           </CardContent>
@@ -377,10 +377,10 @@ export default function Projects() {
             <CardTitle className="text-sm font-medium text-muted-foreground">Blockiert</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-4xl font-bold text-red-600">
+            <div className="text-4xl font-bold text-red-600 dark:text-red-400">
               {metrics.blocked.toLocaleString("de-DE")}
             </div>
-            <p className="text-xs text-red-600 mt-1">abgelehnt oder gestoppt</p>
+            <p className="text-xs text-red-600 dark:text-red-400 mt-1">abgelehnt oder gestoppt</p>
           </CardContent>
         </Card>
       </div>

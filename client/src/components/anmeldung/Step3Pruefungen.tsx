@@ -72,7 +72,7 @@ export function Step3Pruefungen({ draft }: { draft: ChecklistDraft }) {
 
           {notified.length > 0 && (
             <div>
-              <div className="mb-1.5 text-2xs font-bold uppercase tracking-widest text-amber-600 dark:text-amber-500">
+              <div className="mb-1.5 text-2xs font-bold uppercase tracking-widest text-amber-700 dark:text-amber-400 dark:text-amber-500">
                 Zusätzlich zu informieren ({notified.length})
               </div>
               <ul className="space-y-1 text-2xs">

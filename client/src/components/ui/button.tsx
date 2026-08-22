@@ -9,7 +9,19 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        /*
+         * hover DARKENS. It used to be `hover:bg-primary/90`, which lightens the
+         * red towards the page behind it: white on the resting colour measures
+         * 4.53:1 and white on the hovered one 4.40:1 — under the 4.5 floor, on
+         * every primary button in the app, for as long as a pointer rests on
+         * it. A fixed dark brand red rather than --primary-text: that token is
+         * deliberately LIGHT in dark mode — it is meant for red text on a dark
+         * ground — so using it here traded a light-mode failure for a dark-mode
+         * one, white on a pale red. This shade is dark in both themes and puts
+         * white text at about 7:1 in each.
+         */
+        default:
+          "bg-primary text-primary-foreground hover:bg-[hsl(354_100%_32%)]",
         destructive:
           "bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60",
         outline:

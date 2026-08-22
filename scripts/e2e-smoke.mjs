@@ -673,9 +673,16 @@ await check("truncated lists say how much they are hiding", async () => {
   await go("/");
   // The Dashboard's charts mount after the data resolves, so snapshotting
   // innerText on arrival is a race the harness sometimes lost.
-  await page.waitForSelector("text=/Status pro Gewerke/", { timeout: 20000 });
+  await page.waitForSelector("text=/Gewerke-Portfolio/", { timeout: 20000 });
   const body = await page.locator("body").innerText();
-  assert(/Status pro Gewerke — \d+ von \d+/.test(body), "the Gewerke grid does not state its own coverage");
+  // The Gewerke panel no longer truncates — it shows all fourteen — so the rule
+  // it has to satisfy changed from "say how much you hide" to "hide nothing,
+  // and say so". The heading still has to state its own coverage.
+  assert(/Gewerke-Portfolio — alle 14/.test(body), "the Gewerke panel does not state its coverage");
+  assert(
+    !/Status pro Gewerke — \d+ von \d+/.test(body),
+    "the old truncated Gewerke grid is still on the page",
+  );
   assert(/Regionale Verteilung — Top \d+ von \d+/.test(body), "the region list does not state its own coverage");
 });
 
@@ -1486,6 +1493,321 @@ await check("a stored status outside the vocabulary is offered back, not silentl
     `the dropdown shows "${value}" where the record holds "${odd.status}" — a change would rewrite it`,
   );
   await page.keyboard.press("Escape");
+});
+
+
+console.log("\n== the trail identifies, grades and forgives ==");
+
+await check("a change records which project it changed, and on which screen", async () => {
+  // The entry this replaces read, in full:
+  //   "ITK: status von Zustimmung erteilt auf offen gesetzt."
+  // — a withdrawn approval on one of 1,298 projects, with no way to tell which.
+  await go("/psv-itk");
+  await page.waitForSelector("table tbody tr", { timeout: 30000 });
+  const projektnummer = (
+    await page.locator("table tbody tr:first-child td:nth-child(2)").innerText()
+  ).trim();
+  const station = (
+    await page.locator("table tbody tr:first-child td:nth-child(4)").innerText()
+  ).trim();
+
+  const cell = "table tbody tr:first-child td:nth-child(13)";
+  await page.locator(`${cell} button`).first().click();
+  const select = page.locator(`${cell} select`).first();
+  await select.waitFor({ timeout: 5000 });
+  const before = await select.inputValue();
+  const options = await select.locator("option").allTextContents();
+  const next = options.find(
+    (o) => o && o !== before && o !== "—" && o !== "nicht erforderlich",
+  );
+  assert(next, "no other status to choose");
+  await select.selectOption(next);
+  await page.waitForTimeout(1200);
+
+  await go("/audit");
+  const row = page.locator("[data-audit-action='Prüfung aktualisiert']").first();
+  await row.waitFor({ timeout: 10000 });
+  const text = await row.innerText();
+  assert(text.includes(projektnummer), `the entry does not name the project: ${text}`);
+  assert(text.includes(station), `the entry does not name the station: ${text}`);
+  assert(text.includes("ITK"), `the entry does not name the Gewerk: ${text}`);
+  assert(text.includes(before) && text.includes(next), `the entry lost a value: ${text}`);
+  assert(text.includes("PSV-ITK"), `the entry does not say where it was done: ${text}`);
+});
+
+await check("withdrawing an approval is graded critical; ordinary progress is not", async () => {
+  await go("/psv-itk");
+  await page.waitForSelector("table tbody tr", { timeout: 30000 });
+
+  // Find a row that currently holds an approval, so the next change withdraws it.
+  const cells = page.locator("table tbody td:nth-child(13) button");
+  const count = Math.min(await cells.count(), 40);
+  let target = -1;
+  for (let i = 0; i < count; i++) {
+    const label = (await cells.nth(i).getAttribute("aria-label")) ?? "";
+    if (/aktuell (Zustimmung erteilt|Niederschrift erstellt)/.test(label)) {
+      target = i;
+      break;
+    }
+  }
+  assert(target >= 0, "no approved ITK row in the first 40 to withdraw");
+
+  await cells.nth(target).click();
+  const select = page.locator("table tbody select").first();
+  await select.waitFor({ timeout: 5000 });
+  const before = await select.inputValue();
+  await select.selectOption("offen");
+  await page.waitForTimeout(1200);
+
+  await go("/audit");
+  const top = page.locator("tbody tr").first();
+  await top.waitFor({ timeout: 10000 });
+  assert(
+    (await top.getAttribute("data-audit-severity")) === "kritisch",
+    `withdrawing "${before}" was not graded critical`,
+  );
+
+  // And the filter actually isolates it.
+  await page.getByRole("button", { name: /Nur kritische/ }).click();
+  await page.waitForTimeout(600);
+  const severities = await page.$$eval("tbody tr", (rows) =>
+    rows.map((r) => r.getAttribute("data-audit-severity")),
+  );
+  assert(severities.length > 0, "the critical filter emptied the page");
+  assert(
+    severities.every((s) => s === "kritisch"),
+    `the critical filter let through: ${[...new Set(severities)].join(", ")}`,
+  );
+});
+
+await check("a change corrected moments later is marked, not deleted", async () => {
+  await go("/psv-itk");
+  await page.waitForSelector("table tbody tr", { timeout: 30000 });
+  const cell = "table tbody tr:first-child td:nth-child(13)";
+
+  await page.locator(`${cell} button`).first().click();
+  let select = page.locator(`${cell} select`).first();
+  await select.waitFor({ timeout: 5000 });
+  const original = await select.inputValue();
+  const options = await select.locator("option").allTextContents();
+  const wrong = options.find(
+    (o) => o && o !== original && o !== "—" && o !== "nicht erforderlich",
+  );
+  assert(wrong, "no other status to choose");
+  await select.selectOption(wrong);
+  await page.waitForTimeout(900);
+
+  // Immediately put it back — the mis-click a person makes and fixes.
+  await page.locator(`${cell} button`).first().click();
+  select = page.locator(`${cell} select`).first();
+  await select.waitFor({ timeout: 5000 });
+  await select.selectOption(original);
+  await page.waitForTimeout(1200);
+
+  await go("/audit");
+  await page.waitForSelector("tbody tr", { timeout: 10000 });
+
+  // With corrections hidden (the default) the wrong value does not lead the page…
+  const shownByDefault = await page.$$eval("tbody tr", (rows) =>
+    rows.map((r) => r.getAttribute("data-audit-superseded")),
+  );
+  assert(
+    shownByDefault.every((v) => v !== "true"),
+    "a corrected entry is still shown while corrections are hidden",
+  );
+
+  // …but it is still in the record, which is the whole point.
+  await page.getByRole("button", { name: /Korrekturen ausblenden/ }).click();
+  await page.waitForTimeout(600);
+  const all = await page.$$eval("tbody tr", (rows) =>
+    rows.map((r) => r.getAttribute("data-audit-superseded")),
+  );
+  assert(
+    all.some((v) => v === "true"),
+    "the corrected entry was lost rather than marked",
+  );
+  assert(all.length > shownByDefault.length, "showing corrections revealed nothing");
+});
+
+await check("Rückgängig restores the old value and is itself recorded", async () => {
+  await go("/psv-itk");
+  await page.waitForSelector("table tbody tr", { timeout: 30000 });
+  const cell = "table tbody tr:first-child td:nth-child(13)";
+  const projektnummer = (
+    await page.locator("table tbody tr:first-child td:nth-child(2)").innerText()
+  ).trim();
+
+  await page.locator(`${cell} button`).first().click();
+  const select = page.locator(`${cell} select`).first();
+  await select.waitFor({ timeout: 5000 });
+  const original = await select.inputValue();
+  const options = await select.locator("option").allTextContents();
+  const changed = options.find(
+    (o) => o && o !== original && o !== "—" && o !== "nicht erforderlich",
+  );
+  assert(changed, "no other status to choose");
+  await select.selectOption(changed);
+  await page.waitForTimeout(1200);
+
+  await go("/audit");
+  const undoBtn = page.getByRole("button", { name: /^Änderung zurücknehmen/ }).first();
+  await undoBtn.waitFor({ timeout: 10000 });
+  await undoBtn.click();
+  await page.waitForTimeout(1500);
+
+  await go("/psv-itk");
+  await page.waitForSelector("table tbody tr", { timeout: 30000 });
+  const nowNumber = (
+    await page.locator("table tbody tr:first-child td:nth-child(2)").innerText()
+  ).trim();
+  assert(nowNumber === projektnummer, "the row moved; the undo cannot be verified here");
+  const restored = await page.locator(`${cell} button`).first().innerText();
+  assert(
+    restored.includes(original),
+    `after the undo the cell reads "${restored}", expected "${original}"`,
+  );
+
+  // The undo is a new entry, not an erasure of the old one.
+  await go("/audit");
+  await page.getByRole("button", { name: /Korrekturen ausblenden/ }).click();
+  await page.waitForTimeout(600);
+  const rows = await page.$$eval("tbody tr", (r) => r.length);
+  assert(rows >= 2, `only ${rows} entries after a change and its undo`);
+});
+
+
+console.log("\n== the Dashboard reports the workload, not the row count ==");
+
+await check("every Gewerk shows its own figure, and it matches its own tab", async () => {
+  // Seven of eight tiles used to read 1.298 — the project count. /bvb-eea says
+  // 814 EEA checks and /psv-itk says 510, and the Dashboard has to agree.
+  await go("/");
+  await page.waitForSelector("[data-gewerk]", { timeout: 25000 });
+  const cards = await page.$$eval("[data-gewerk]", (els) =>
+    els.map((e) => ({
+      dept: e.getAttribute("data-gewerk"),
+      label: e.getAttribute("aria-label") ?? "",
+    })),
+  );
+  assert(cards.length === 14, `${cards.length} Gewerke shown, expected all 14`);
+
+  const required = Object.fromEntries(
+    cards.map((c) => [c.dept, Number((c.label.match(/— ([\d.]+) Prüfungen/) ?? ["", "0"])[1].replace(/\./g, ""))]),
+  );
+  assert(required.EEA === 814, `Dashboard says EEA has ${required.EEA}, the tab says 814`);
+  assert(required.ITK === 510, `Dashboard says ITK has ${required.ITK}, the tab says 510`);
+
+  // And the figures actually differ — the old tile was a constant.
+  const distinct = new Set(Object.values(required));
+  assert(distinct.size > 8, `only ${distinct.size} distinct figures across 14 Gewerke`);
+  assert(!Object.values(required).includes(1298), "a Gewerk still reports the project count");
+});
+
+await check("a Gewerk card opens that Gewerk", async () => {
+  await go("/");
+  await page.waitForSelector("[data-gewerk]", { timeout: 25000 });
+  await page.click('[data-gewerk="EEA"]');
+  await page.waitForTimeout(1200);
+  assert(/\/bvb-eea/.test(page.url()), `the EEA card went to ${page.url()}`);
+});
+
+await check("the relief prints every value it draws, and flattens on request", async () => {
+  await go("/");
+  await page.waitForSelector(".relief-cell", { timeout: 25000 });
+
+  // 14 Gewerke x 4 lifecycle lanes, every one carrying its number as text.
+  const cells = await page.$$eval(".relief-cell", (els) =>
+    els.map((e) => ({ attr: e.getAttribute("data-value"), text: e.textContent.trim() })),
+  );
+  assert(cells.length === 56, `${cells.length} relief cells, expected 56`);
+  for (const c of cells) {
+    assert(c.text === c.attr, `a cell draws ${c.attr} but prints "${c.text}"`);
+  }
+
+  // The lanes have to sum to the Gewerk's required total, or the picture is
+  // describing a different set from the cards above it.
+  const rows = await page.$$eval(".relief-grid tbody tr", (trs) =>
+    trs.map((tr) => {
+      const values = [...tr.querySelectorAll(".relief-cell")].map((c) =>
+        Number(c.getAttribute("data-value")),
+      );
+      const total = Number((tr.lastElementChild?.textContent ?? "0").replace(/\./g, ""));
+      return { values, total };
+    }),
+  );
+  assert(rows.length === 14, `${rows.length} relief rows, expected 14`);
+  for (const r of rows) {
+    const sum = r.values.reduce((a, b) => a + b, 0);
+    assert(sum === r.total, `relief lanes sum to ${sum} against a stated total of ${r.total}`);
+  }
+
+  const tilted = await page.$eval(".relief-stage", (e) => e.getAttribute("data-flat"));
+  assert(tilted === "false", "the relief did not start in its 3D state");
+  await page.getByRole("button", { name: "Flach" }).click();
+  await page.waitForTimeout(400);
+  const flat = await page.$eval(".relief-stage", (e) => e.getAttribute("data-flat"));
+  assert(flat === "true", "Flach did not flatten the relief");
+
+  // Flat must withhold nothing: same cells, same numbers.
+  const flatCells = await page.$$eval(".relief-cell", (els) =>
+    els.map((e) => e.textContent.trim()),
+  );
+  assert(
+    JSON.stringify(flatCells) === JSON.stringify(cells.map((c) => c.text)),
+    "the flat view shows different numbers from the relief",
+  );
+});
+
+await check("Präsentationsmodus is opt-in, advances, and pauses when read", async () => {
+  await go("/");
+  await page.waitForSelector("[data-gewerk]", { timeout: 25000 });
+  assert(
+    (await page.$$eval("[data-gewerk]", (e) => e.length)) === 14,
+    "rotation is on before anyone asked for it",
+  );
+
+  const toggle = page.getByRole("button", { name: /Präsentationsmodus/ });
+  await toggle.click();
+  await page.waitForTimeout(500);
+  const windowed = await page.$$eval("[data-gewerk]", (e) => e.length);
+  assert(windowed < 14, `Präsentationsmodus still shows ${windowed} cards`);
+
+  const before = await page.$$eval("[data-gewerk]", (els) =>
+    els.map((e) => e.getAttribute("data-gewerk")).join(","),
+  );
+  await page.getByRole("button", { name: "Nächstes Gewerk" }).click();
+  await page.waitForTimeout(400);
+  const after = await page.$$eval("[data-gewerk]", (els) =>
+    els.map((e) => e.getAttribute("data-gewerk")).join(","),
+  );
+  assert(before !== after, "the next-Gewerk control changed nothing");
+
+  // Reading it must stop it moving.
+  await page.hover("[data-gewerk]");
+  await page.waitForTimeout(400);
+  const body = await page.locator("body").innerText();
+  assert(body.includes("pausiert"), "hovering a card did not pause the rotation");
+});
+
+await check("the diagnostics say what they cannot measure", async () => {
+  await go("/");
+  await page.waitForSelector("text=/Alter der offenen Prüfungen/", { timeout: 25000 });
+  const body = await page.locator("body").innerText();
+
+  // An open row with no date cannot be aged; the panel must say so rather than
+  // quietly excluding it from the buckets.
+  assert(/tragen kein Prüfdatum/.test(body), "the aging panel hides its undated rows");
+  // "Prüfung erfolgt" is in no lifecycle bucket, so the buckets do not add up
+  // to the workload, and the panel has to name the difference.
+  assert(
+    /Nicht in offen \/ zugestimmt \/ blockiert enthalten/.test(body),
+    "the quality panel does not name the unclassified statuses",
+  );
+  // A Projektnummer is a programme id — stated as a fact, not an error count.
+  assert(
+    /bezeichnet ein Programm, kein einzelnes Projekt/.test(body),
+    "the shared Projektnummer is not explained",
+  );
 });
 
 console.log("\n== summary ==");

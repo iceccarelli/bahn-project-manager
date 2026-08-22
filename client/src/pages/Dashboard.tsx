@@ -1,4 +1,13 @@
 import React, { useMemo, useState } from 'react';
+import { GewerkePortfolio } from "@/components/dashboard/GewerkePortfolio";
+import { PortfolioRelief } from "@/components/dashboard/PortfolioRelief";
+import { PortfolioDiagnostics } from "@/components/dashboard/PortfolioDiagnostics";
+import {
+  agingOfOpenReviews,
+  dataQuality,
+  gewerkStandings,
+  reviewerConcentration,
+} from "@shared/portfolio-metrics";
 import { deriveProjectMetrics, percent } from '@shared/project-metrics';
 import { statusBadgeClass, statusHex, STATUS_TONE, TONE_APPEARANCE } from '@shared/status-appearance';
 import { APPROVED_STATUSES, BLOCKING_STATUSES, normalizeReviewStatus, OPEN_STATUSES, type ReviewStatus } from '@shared/review-status';
@@ -39,9 +48,14 @@ import { toast } from 'sonner';
 // DB Corporate Status Colors (perfect harmony with Projects.tsx)
 
 // Exact department order from Übersichtsliste_Dashboard_1.xlsm (perfect consistency)
-/** How many Gewerke tiles the grid shows. Named so the heading and the slice
- *  cannot drift apart. */
-const GEWERKE_TILES = 8;
+/*
+ * GEWERKE_TILES is gone with the grid it limited.
+ *
+ * It existed so a heading reading "8 von 14" could not drift from a slice of 8 —
+ * an honest fix to a dishonest design. The design was the problem: six Gewerke
+ * were never shown, and the eight that were all reported the same number.
+ * GewerkePortfolio shows all fourteen.
+ */
 
 const GEWERKE = [
   "EEA", "ITK", "BS", "GA", "Energie", "HFT", "HKLS", 
@@ -197,6 +211,22 @@ export default function Dashboard() {
       breakdown: counts
     };
   });
+
+  /*
+   * The honest per-Gewerk figures.
+   *
+   * `today` is pinned per render rather than read inside the derivation: an
+   * aging bucket that shifts between two calls in the same paint makes the
+   * panels disagree with each other for no reason a reader could ever explain.
+   */
+  const nowMs = useMemo(() => Date.now(), []);
+  const standings = useMemo(
+    () => gewerkStandings(projects, GEWERKE, nowMs),
+    [projects, nowMs],
+  );
+  const aging = useMemo(() => agingOfOpenReviews(projects, nowMs), [projects, nowMs]);
+  const concentration = useMemo(() => reviewerConcentration(projects), [projects]);
+  const quality = useMemo(() => dataQuality(projects), [projects]);
 
   const selectedGewerkeData = selectedGewerke 
     ? gewerkeStatusData.find(g => g.name === selectedGewerke) 
@@ -531,7 +561,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-5xl font-bold">{openReviews}</div>
-            <p className="text-xs text-amber-600 mt-1">Sofortiger Handlungsbedarf</p>
+            <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">Sofortiger Handlungsbedarf</p>
           </CardContent>
         </Card>
 
@@ -542,10 +572,10 @@ export default function Dashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-5xl font-bold text-emerald-600">
+            <div className="text-5xl font-bold text-emerald-700 dark:text-emerald-400">
               {completedProjects.toLocaleString("de-DE")}
             </div>
-            <p className="text-xs text-emerald-600 mt-1">
+            <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-1">
               {percent(completedProjects, totalProjects)}% aller Projekte
             </p>
           </CardContent>
@@ -558,8 +588,8 @@ export default function Dashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-5xl font-bold text-rose-600">{criticalProjects}</div>
-            <p className="text-xs text-rose-600 mt-1">Abgelehnt / gestoppt</p>
+            <div className="text-5xl font-bold text-rose-700 dark:text-rose-400">{criticalProjects}</div>
+            <p className="text-xs text-rose-700 dark:text-rose-400 mt-1">Abgelehnt / gestoppt</p>
           </CardContent>
         </Card>
       </div>
@@ -614,53 +644,21 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {/* Per Gewerke Grid */}
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                Status pro Gewerke — {Math.min(GEWERKE_TILES, gewerkeStatusData.length)} von{" "}
-                {gewerkeStatusData.length}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {/* 8 of 14. Silently dropping UM, BIM, LST, Vermessung and both
-                    Baubetrieb departments under a heading that reads "pro
-                    Gewerke" claims coverage the grid does not have — the
-                    heading now says how many. */}
-                {gewerkeStatusData.slice(0, GEWERKE_TILES).map((gew) => (
-                  <button
-                    type="button"
-                    key={gew.name}
-                    className="w-full min-w-0 cursor-pointer rounded-xl border p-4 text-left transition-all hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                    onClick={() => setSelectedGewerke(gew.name)}
-                  >
-                    <div className="mb-2 break-words text-lg font-semibold">{gew.name}</div>
-                    <div className="mb-3 text-3xl font-bold tabular-nums">{gew.value.toLocaleString("de-DE")}</div>
-                    {/* `justify-between` with an unshrinkable label pushed the
-                        count past the tile edge — measured 6 to 12px out on
-                        seven tiles at 375px. The label truncates, the number
-                        never does: it is the datum. */}
-                    <div className="space-y-1 text-xs">
-                      {Object.entries(gew.breakdown)
-                        .sort((a, b) => b[1] - a[1])
-                        .slice(0, 3)
-                        .map(([status, count]) => (
-                          <div key={status} className="flex min-w-0 items-baseline justify-between gap-2">
-                            <span className="truncate text-muted-foreground" title={status}>
-                              {status}
-                            </span>
-                            <span className="shrink-0 font-medium tabular-nums">
-                              {count.toLocaleString("de-DE")}
-                            </span>
-                          </div>
-                        ))}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+          {/*
+            Was "Status pro Gewerke — 8 von 14", eight tiles of which seven read
+            1.298. That figure is the project count, not the workload: EEA needs
+            814 checks, ITK 510, HFT 100. Six Gewerke were not shown at all, and
+            the two with no approval in their vocabulary — UM and BIM — were
+            among the six. Every number below is derived in
+            shared/portfolio-metrics.ts and agrees with the Gewerk tabs.
+          */}
+          <GewerkePortfolio standings={standings} />
+
+          <PortfolioRelief standings={standings} />
+
+          {/* Aging, concentration and the trustworthiness of the rows every
+              other panel is built on. */}
+          <PortfolioDiagnostics aging={aging} concentration={concentration} quality={quality} />
 
           {/* Detailed Gewerke View */}
           <Card className="border-2 border-primary/20">
@@ -796,11 +794,11 @@ export default function Dashboard() {
                       >
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
                           <div className="text-center">
-                            <div className="text-2xl font-bold text-amber-600">{fach.incoming.toLocaleString("de-DE")}</div>
+                            <div className="text-2xl font-bold text-amber-700 dark:text-amber-400">{fach.incoming.toLocaleString("de-DE")}</div>
                             <div className="text-xs">Eingehend</div>
                           </div>
                           <div className="text-center">
-                            <div className="text-2xl font-bold text-emerald-600">{fach.completed.toLocaleString("de-DE")}</div>
+                            <div className="text-2xl font-bold text-emerald-700 dark:text-emerald-400">{fach.completed.toLocaleString("de-DE")}</div>
                             <div className="text-xs">Erledigt</div>
                           </div>
                           <div className="text-center">
@@ -1030,11 +1028,11 @@ export default function Dashboard() {
               </div>
               <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
                 <div>Projekte mit Verzögerung</div>
-                <div className="font-mono font-bold text-rose-600">{delayedProjects.toLocaleString("de-DE")}</div>
+                <div className="font-mono font-bold text-rose-700 dark:text-rose-400">{delayedProjects.toLocaleString("de-DE")}</div>
               </div>
               <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
                 <div>Erfolgsquote (erteilte Zustimmungen)</div>
-                <div className="font-mono font-bold text-emerald-600">{successRate.toFixed(1)}%</div>
+                <div className="font-mono font-bold text-emerald-700 dark:text-emerald-400">{successRate.toFixed(1)}%</div>
               </div>
               <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
                 <div>Projekte gesamt</div>
@@ -1073,13 +1071,14 @@ export default function Dashboard() {
               {fachWorkload.slice(0, 6).map((f) => (
                 <div key={f.name} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center">
-                      <span className="font-mono text-xs text-emerald-600">{f.name.slice(0, 2)}</span>
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900">
+                      {/* On an emerald-100 disc: the 700 shade measures 3.4:1 there, the 900 shade 8.9:1. */}
+                      <span className="font-mono text-xs text-emerald-900 dark:text-emerald-100">{f.name.slice(0, 2)}</span>
                     </div>
                     <div>{f.name}</div>
                   </div>
                   <div className="text-right">
-                    <div className="font-bold text-emerald-600">{f.completed}</div>
+                    <div className="font-bold text-emerald-700 dark:text-emerald-400">{f.completed}</div>
                     <div className="text-2xs text-muted-foreground">erledigt</div>
                   </div>
                 </div>

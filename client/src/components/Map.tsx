@@ -533,7 +533,7 @@ export const MapView: React.FC<MapViewProps> = ({
                 {placedCount.toLocaleString("de-DE")}/{projects.length.toLocaleString("de-DE")} verortet
               </p>
               {unplacedCount > 0 && (
-                <p className="text-2xs text-amber-600 dark:text-amber-500 font-bold mt-0.5">
+                <p className="text-2xs text-amber-700 dark:text-amber-400 dark:text-amber-500 font-bold mt-0.5">
                   {unplacedCount.toLocaleString("de-DE")} ohne Station &amp; ohne BM – nicht darstellbar
                 </p>
               )}

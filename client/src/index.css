@@ -684,3 +684,81 @@
     transform: scale(1.35);
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Portfolio-Relief
+   ---------------------------------------------------------------------------
+   CSS 3D rather than a third rendering stack. The stage tilts; each cell lifts
+   along Z by an amount that mirrors the number printed on it, so the shape is
+   readable across a room and the value is readable from the tile.
+
+   The counter-rotation on .relief-value is the part that matters: without it
+   the numbers tilt with the stage and become unreadable at exactly the angle
+   that makes the relief worth looking at. Depth that costs legibility is
+   decoration, and this panel refuses that trade.
+   --------------------------------------------------------------------------- */
+:root {
+  --relief-open: 245 158 11;
+  --relief-blocked: 220 38 38;
+  --relief-other: 113 113 122;
+  --relief-approved: 16 185 129;
+}
+
+.relief-stage {
+  perspective: 1400px;
+  perspective-origin: 50% 30%;
+}
+
+.relief-stage[data-flat="false"] .relief-grid {
+  transform: rotateX(var(--relief-tilt, 52deg)) rotateZ(var(--relief-spin, -24deg));
+  transform-style: preserve-3d;
+  transition: transform 200ms ease-out;
+}
+
+.relief-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  border-radius: 6px;
+  background-color: rgb(var(--relief-fill) / var(--relief-alpha));
+  transform-style: preserve-3d;
+  transition: transform 200ms ease-out;
+}
+
+.relief-stage[data-flat="false"] .relief-cell {
+  transform: translateZ(var(--relief-lift, 0px));
+  box-shadow: 0 6px 14px rgb(0 0 0 / 0.18);
+}
+
+/*
+ * The number sits on its own ground, not on the tile.
+ *
+ * With the value painted straight onto the fill, "583" was near-white on
+ * emerald-500 in dark mode — 2.43:1, against a 4.5 requirement — and the same
+ * text would have needed the opposite colour on the pale tiles two rows down.
+ * Picking an ink per fill means fourteen colour decisions that all have to stay
+ * right; giving the label the card background means one, already validated
+ * everywhere else in the app.
+ */
+.relief-value {
+  font-weight: 700;
+  font-size: 11px;
+  line-height: 1.2;
+  color: hsl(var(--foreground));
+  background-color: hsl(var(--card));
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+.relief-stage[data-flat="false"] .relief-value {
+  transform: rotateZ(calc(var(--relief-spin, -24deg) * -1))
+    rotateX(calc(var(--relief-tilt, 52deg) * -1));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .relief-grid,
+  .relief-cell {
+    transition: none;
+  }
+}

@@ -470,20 +470,20 @@ export function ReviewWorkspace({
           label="Aktiv"
           value={kpis.active}
           caption={`${percent(kpis.active, kpis.total)}% der ${department}-Prüfungen in Bearbeitung`}
-          captionTone="text-blue-600 dark:text-blue-400"
+          captionTone="text-blue-700 dark:text-blue-400"
         />
         <KpiCard
           label="Abgeschlossen"
           value={kpis.completed}
           caption={`${department}-Prüfung zugestimmt`}
-          valueTone="text-emerald-600"
-          captionTone="text-emerald-600 dark:text-emerald-400"
+          valueTone="text-emerald-700 dark:text-emerald-400"
+          captionTone="text-emerald-700 dark:text-emerald-400"
         />
         <KpiCard
           label="Blockiert"
           value={kpis.blocked}
           caption="abgelehnt oder gestoppt"
-          valueTone="text-red-600"
+          valueTone="text-red-600 dark:text-red-400"
           captionTone="text-red-600 dark:text-red-400"
         />
       </div>

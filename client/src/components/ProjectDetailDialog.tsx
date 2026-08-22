@@ -390,7 +390,13 @@ export function ProjectDetailDialog({
             the X occupied the same 40px. */}
         <DialogHeader className="space-y-3 border-b bg-muted/30 p-5 pr-14 text-left">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-md bg-primary/10 px-2 py-0.5 font-mono text-xs font-bold text-primary-strong">
+            {/*
+              text-primary-strong on bg-primary/10 measures 4.24:1 in dark mode —
+              the token is tuned for red text on the card background, not on a
+              red-tinted chip. The chip carries its own dark-mode ink rather than
+              retuning a token that reads correctly everywhere else.
+            */}
+            <span className="rounded-md bg-primary/10 px-2 py-0.5 font-mono text-xs font-bold text-primary-strong dark:text-red-300">
               {project.projektnummer || "ohne Projektnummer"}
             </span>
             {project.projektstand && (
