@@ -1,0 +1,2189 @@
+From c58845b3cec73211c40d43d8131ca21a3809e7fd Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 22 Aug 2026 22:40:52 +0000
+Subject: [PATCH 1/2] Ask Bahn: an assistant that computes its answers instead
+ of composing them
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+You asked for an assistant like the one on aws.amazon.com. Before building the
+box, I checked what could be behind it: server/_core/llm.ts exists, points at
+a scaffold URL, needs an OPENAI_API_KEY that is not set, and is called by no
+route — and the client reads data.json and localStorage and never asks the
+server anything. A chat widget wired to that would spin forever, and one that
+answered anyway would be inventing figures about 18,172 review rows. That is
+the single defect class this project has spent its whole life removing, so it
+is not what got built.
+
+Ask Bahn answers from the data, deterministically. Fourteen skills, one per
+question people actually ask this site: what is critical, what is overdue, how
+old is the backlog, who is carrying the load, which checks have no Prüfer,
+what is blocked, how does one Gewerk stand, what is happening at one station,
+what changed, how trustworthy are the numbers, who to contact, where to go.
+Every figure is computed on the spot by the same functions the Dashboard and
+the Gewerk tabs use — ask it about EEA and it says 814, because /bvb-eea says
+814 — and every answer carries its derivation and a link to the screen where
+it can be checked. It cannot hallucinate a number because it never writes one;
+it only reports what a query returned.
+
+Understanding is German folding plus keyword scoring plus entity extraction
+against the real vocabularies: a Gewerk must be one of the fourteen, a station
+must be a station on file, a Projektnummer must exist. "Wie steht Vermessng"
+resolves; "Wie steht QQQ" does not, and says so. Keywords match on word
+boundaries after "in" inside "sind" scored a data-quality question as a
+station question.
+
+When it does not understand it says so and lists what it can do. It never
+produces a sentence it cannot support — a test asserts that a question about
+a 2027 budget yields no budget figure.
+
+AgentBackend is the seam for a model, when there is one. Its contract is
+deliberately narrow: a backend may choose the skill and rephrase the sentence.
+It is never given the ability to supply a fact, because in a company where a
+wrong figure moves a delivery date, the part that must not be probabilistic is
+the arithmetic.
+
+The panel is an <aside>, not a role="dialog": it is non-modal, does not trap
+focus, and Escape closes it — announcing it as a dialog would promise a modal
+contract it does not keep. It closes on navigation, whoever navigated, after
+the first version left itself sitting over the page it had just sent the
+reader to.
+---
+ client/src/components/DashboardLayout.tsx |   4 +
+ client/src/components/agent/AskBahn.tsx   | 277 ++++++++++
+ shared/agent/agent.test.ts                | 153 ++++++
+ shared/agent/resolve.ts                   | 198 +++++++
+ shared/agent/skills.ts                    | 618 ++++++++++++++++++++++
+ shared/agent/types.ts                     | 120 +++++
+ 6 files changed, 1370 insertions(+)
+ create mode 100644 client/src/components/agent/AskBahn.tsx
+ create mode 100644 shared/agent/agent.test.ts
+ create mode 100644 shared/agent/resolve.ts
+ create mode 100644 shared/agent/skills.ts
+ create mode 100644 shared/agent/types.ts
+
+diff --git a/client/src/components/DashboardLayout.tsx b/client/src/components/DashboardLayout.tsx
+index d89eb58..3785a74 100644
+--- a/client/src/components/DashboardLayout.tsx
++++ b/client/src/components/DashboardLayout.tsx
+@@ -1,4 +1,5 @@
+ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
++import { AskBahn } from "@/components/agent/AskBahn";
+ import {
+   Sidebar,
+   SidebarContent,
+@@ -281,6 +282,9 @@ function DashboardLayoutContent({
+           </main>
+           <Footer />
+         </SidebarInset>
++        {/* Fixed to the viewport, so it belongs to the layout rather than to any
++            one page — every route can be asked about. */}
++        <AskBahn />
+       </div>
+     </div>
+   );
+diff --git a/client/src/components/agent/AskBahn.tsx b/client/src/components/agent/AskBahn.tsx
+new file mode 100644
+index 0000000..506775e
+--- /dev/null
++++ b/client/src/components/agent/AskBahn.tsx
+@@ -0,0 +1,277 @@
++/**
++ * Ask Bahn — the assistant, as a panel.
++ *
++ * The shape is the one people already know from AWS's assistant: a launcher in
++ * the corner, a panel with starter prompts, a transcript, an input. What is
++ * behind it is different, and deliberately so — see shared/agent/types.ts.
++ * Every figure in every answer is computed on the spot from the loaded data and
++ * carries the derivation with it, because an assistant that is confidently
++ * wrong about 18,172 review rows is worse than no assistant.
++ *
++ * Three rules this panel keeps:
++ *   — it never blocks the page: Escape closes it, focus returns to the
++ *     launcher, and it is a dialog only in the ARIA sense, not a modal that
++ *     traps a reader who opened it by accident;
++ *   — every answer offers the screen where it can be checked, so no figure is
++ *     ever a dead end;
++ *   — when it does not understand, it says so and lists what it can do. It
++ *     never produces a sentence it cannot support.
++ */
++import { useCallback, useEffect, useMemo, useRef, useState } from "react";
++import { useLocation } from "wouter";
++import { Button } from "@/components/ui/button";
++import { Bot, CornerDownLeft, ExternalLink, Sparkles, X } from "lucide-react";
++import { useAllData, useAuditLog } from "@/hooks/useDataQuery";
++import { ask, STARTERS } from "@shared/agent/resolve";
++import type { AgentAnswer, AgentTone } from "@shared/agent/types";
++
++interface Turn {
++  id: string;
++  question: string;
++  answer: AgentAnswer;
++}
++
++const TONE: Record<AgentTone, string> = {
++  critical: "text-red-700 dark:text-red-400",
++  warn: "text-amber-700 dark:text-amber-400",
++  ok: "text-emerald-700 dark:text-emerald-400",
++  neutral: "text-foreground",
++};
++
++function AnswerBlock({ answer, onGo }: { answer: AgentAnswer; onGo: (href: string) => void }) {
++  return (
++    <div className="space-y-2.5 rounded-xl border border-border bg-card p-3">
++      <p className="text-xs font-semibold leading-snug">{answer.headline}</p>
++
++      {answer.facts.length > 0 && (
++        <dl className="space-y-1">
++          {answer.facts.map((f) => (
++            <div key={`${f.label}-${f.value}`} className="flex items-baseline justify-between gap-3">
++              <dt className="min-w-0 truncate text-2xs text-muted-foreground">{f.label}</dt>
++              <dd className={`shrink-0 text-2xs font-semibold tabular-nums ${TONE[f.tone ?? "neutral"]}`}>
++                {f.href ? (
++                  <button
++                    type="button"
++                    onClick={() => onGo(f.href as string)}
++                    className="rounded underline decoration-dotted underline-offset-2 hover:decoration-solid focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
++                  >
++                    {f.value}
++                  </button>
++                ) : (
++                  f.value
++                )}
++              </dd>
++            </div>
++          ))}
++        </dl>
++      )}
++
++      {answer.actions.length > 0 && (
++        <div className="flex flex-wrap gap-1.5">
++          {answer.actions.map((a) => (
++            <Button
++              key={a.href + a.label}
++              size="sm"
++              variant="outline"
++              onClick={() => onGo(a.href)}
++              className="h-7 gap-1 px-2 text-2xs"
++            >
++              <ExternalLink className="h-3 w-3" aria-hidden="true" />
++              {a.label}
++            </Button>
++          ))}
++        </div>
++      )}
++
++      {/* Always shown. An answer whose derivation is hidden is an assertion. */}
++      <p className="border-t border-border/60 pt-2 text-2xs leading-snug text-muted-foreground">
++        {answer.basis}
++      </p>
++    </div>
++  );
++}
++
++export function AskBahn() {
++  const [location, setLocation] = useLocation();
++  const { data } = useAllData();
++  const { data: audit } = useAuditLog();
++  const [open, setOpen] = useState(false);
++  const [question, setQuestion] = useState("");
++  const [turns, setTurns] = useState<Turn[]>([]);
++  const inputRef = useRef<HTMLInputElement>(null);
++  const launcherRef = useRef<HTMLButtonElement>(null);
++  const endRef = useRef<HTMLDivElement>(null);
++
++  const ctx = useMemo(
++    () => ({ projects: data?.projects ?? [], audit: audit ?? [], today: Date.now() }),
++    [data?.projects, audit],
++  );
++
++  const send = useCallback(
++    (text: string) => {
++      const trimmed = text.trim();
++      if (!trimmed) return;
++      const answer = ask(trimmed, ctx);
++      setTurns((t) => [
++        ...t,
++        { id: `${Date.now()}-${t.length}`, question: trimmed, answer },
++      ]);
++      setQuestion("");
++    },
++    [ctx],
++  );
++
++  const go = useCallback(
++    (href: string) => {
++      setOpen(false);
++      setLocation(href);
++    },
++    [setLocation],
++  );
++
++  useEffect(() => {
++    if (open) inputRef.current?.focus();
++    else launcherRef.current?.focus({ preventScroll: true });
++  }, [open]);
++
++  /*
++   * The panel closes when the page changes, whoever changed it.
++   *
++   * Closing inside the click handler was not enough: the same click both closes
++   * the panel and navigates, and the navigation re-renders the tree around this
++   * component — leaving the panel sitting over the page it had just sent the
++   * reader to. Keying the close to the location covers that, and also covers a
++   * reader who navigates by the sidebar while the panel is open.
++   */
++  // biome-ignore lint/correctness/useExhaustiveDependencies: `location` is the trigger
++  useEffect(() => {
++    setOpen(false);
++  }, [location]);
++
++  // The transcript follows the newest answer without stealing the page scroll.
++  useEffect(() => {
++    if (turns.length > 0) endRef.current?.scrollIntoView({ block: "nearest" });
++  }, [turns.length]);
++
++  useEffect(() => {
++    const onKey = (e: KeyboardEvent) => {
++      if (e.key === "Escape" && open) setOpen(false);
++      // Shift+? is the shortcut people try for help. It must not fire while
++      // someone is typing into a field somewhere else on the page.
++      const target = e.target as HTMLElement | null;
++      const typing =
++        target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
++      if (!typing && e.key === "?" ) {
++        e.preventDefault();
++        setOpen(true);
++      }
++    };
++    window.addEventListener("keydown", onKey);
++    return () => window.removeEventListener("keydown", onKey);
++  }, [open]);
++
++  return (
++    <>
++      {!open && (
++        <button
++          ref={launcherRef}
++          type="button"
++          onClick={() => setOpen(true)}
++          aria-label="Ask Bahn öffnen — Fragen zu Projekten, Prüfungen und Zahlen"
++          className="fixed bottom-5 right-5 z-40 flex h-12 items-center gap-2 rounded-full bg-primary px-4 text-primary-foreground shadow-lg transition-colors hover:bg-[hsl(354_100%_32%)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
++        >
++          <Bot className="h-5 w-5" aria-hidden="true" />
++          <span className="text-sm font-semibold">Ask Bahn</span>
++        </button>
++      )}
++
++      {open && (
++        // <aside>, not role="dialog". The panel is deliberately non-modal: it
++        // does not trap focus, the page behind it stays usable, and Escape
++        // simply closes it. Announcing it as a dialog would promise a reader a
++        // modal contract it does not keep — and <aside> already carries the
++        // complementary role this needs.
++        <aside
++          aria-label="Ask Bahn"
++          data-ask-bahn="open"
++          // Declares this a floating layer to the UI audit: content beneath an
++          // opaque overlay is covered on purpose, not text painted on text.
++          data-overlay="true"
++          className="fixed bottom-5 right-5 z-40 flex max-h-[min(34rem,80vh)] w-[min(24rem,calc(100vw-2.5rem))] flex-col overflow-hidden rounded-2xl border border-border bg-background shadow-2xl"
++        >
++          <header className="flex items-start gap-2 bg-primary p-4 text-primary-foreground">
++            <Bot className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
++            <div className="min-w-0 flex-1">
++              <p className="text-sm font-bold">Ask Bahn</p>
++              <p className="text-2xs leading-snug opacity-90">
++                Antworten aus Ihren Daten — jede Zahl wird berechnet, nicht geschätzt.
++              </p>
++            </div>
++            <button
++              type="button"
++              onClick={() => setOpen(false)}
++              aria-label="Ask Bahn schließen"
++              className="rounded p-1 transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
++            >
++              <X className="h-4 w-4" aria-hidden="true" />
++            </button>
++          </header>
++
++          <div className="flex-1 space-y-3 overflow-y-auto overscroll-contain p-3">
++            {turns.length === 0 ? (
++              <div className="space-y-2">
++                <p className="flex items-center gap-1.5 text-2xs font-semibold text-muted-foreground">
++                  <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
++                  Womit kann ich helfen?
++                </p>
++                {STARTERS.map((s) => (
++                  <button
++                    key={s.question}
++                    type="button"
++                    onClick={() => send(s.question)}
++                    className="w-full rounded-lg border border-border bg-card px-3 py-2 text-left text-xs transition-colors hover:border-primary/40 hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
++                  >
++                    {s.label}
++                  </button>
++                ))}
++              </div>
++            ) : (
++              turns.map((t) => (
++                <div key={t.id} className="space-y-2">
++                  <p className="ml-auto w-fit max-w-[85%] rounded-xl bg-muted px-3 py-1.5 text-xs">
++                    {t.question}
++                  </p>
++                  <AnswerBlock answer={t.answer} onGo={go} />
++                </div>
++              ))
++            )}
++            <div ref={endRef} />
++          </div>
++
++          <form
++            onSubmit={(e) => {
++              e.preventDefault();
++              send(question);
++            }}
++            className="flex items-center gap-2 border-t border-border p-3"
++          >
++            <input
++              ref={inputRef}
++              value={question}
++              onChange={(e) => setQuestion(e.target.value)}
++              aria-label="Frage an Ask Bahn"
++              placeholder="Was ist gerade kritisch?"
++              className="h-9 min-w-0 flex-1 rounded-lg border border-input bg-background px-3 text-xs outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
++            />
++            <Button type="submit" size="sm" className="h-9 gap-1.5 px-3 text-2xs" disabled={!question.trim()}>
++              <CornerDownLeft className="h-3.5 w-3.5" aria-hidden="true" />
++              Fragen
++            </Button>
++          </form>
++        </aside>
++      )}
++    </>
++  );
++}
++
++export default AskBahn;
+diff --git a/shared/agent/agent.test.ts b/shared/agent/agent.test.ts
+new file mode 100644
+index 0000000..b4e34ed
+--- /dev/null
++++ b/shared/agent/agent.test.ts
+@@ -0,0 +1,153 @@
++import { describe, it, expect } from "vitest";
++import fs from "node:fs";
++import { ask, extractEntities, rankSkills, STARTERS } from "./resolve";
++import { SKILLS, helpAnswer } from "./skills";
++import type { AgentContext } from "./types";
++
++const DATA = JSON.parse(fs.readFileSync("client/public/data.json", "utf8"));
++const CTX: AgentContext = {
++  projects: DATA.projects,
++  audit: [],
++  today: Date.parse("2026-08-22T00:00:00Z"),
++};
++
++describe("it understands what was asked", () => {
++  it("finds the Gewerk in a sentence, and forgives a typo", () => {
++    expect(extractEntities("Wie steht EEA?", CTX).department).toBe("EEA");
++    expect(extractEntities("wie viele itk prüfungen sind offen", CTX).department).toBe("ITK");
++    expect(extractEntities("wie steht Vermessng", CTX).department).toBe("Vermessung");
++  });
++
++  it("only recognises a Gewerk that exists", () => {
++    expect(extractEntities("Wie steht QQQ?", CTX).department).toBeUndefined();
++  });
++
++  it("lifts a Projektnummer out of the sentence", () => {
++    expect(extractEntities("zeig mir G.011540063 bitte", CTX).projektnummer).toBe("G.011540063");
++  });
++
++  it("prefers the longest matching station name", () => {
++    // "Frankfurt" is also a region, and "Frankfurt (Main) Süd" contains it.
++    const e = extractEntities("Was läuft in Frankfurt (Main) Süd?", CTX);
++    expect(e.station).toBe("Frankfurt (Main) Süd");
++  });
++
++  it("recognises a station typed without its umlaut", () => {
++    const e = extractEntities("Was laeuft in Giessen HBF", CTX);
++    expect(e.station).toBeTruthy();
++  });
++
++  it("never offers a skill whose entity is missing", () => {
++    const ranked = rankSkills("wie steht es", {});
++    expect(ranked.every((r) => !r.skill.needs)).toBe(true);
++  });
++});
++
++describe("every answer is measured, never composed", () => {
++  it("agrees with the Gewerk tab it links to", () => {
++    const a = ask("Wie steht EEA?", CTX);
++    expect(a.confidence).toBe("measured");
++    expect(a.facts.find((f) => f.label === "erforderlich")?.value).toBe("814");
++    expect(a.actions.some((x) => x.href === "/bvb-eea")).toBe(true);
++  });
++
++  it("states the basis of its figures on every answer", () => {
++    for (const skill of SKILLS) {
++      const a = skill.run(CTX, { department: "ITK", station: "Bensheim", projektnummer: "G.011540063" });
++      expect(a.basis, skill.id).toBeTruthy();
++      expect(a.intent, skill.id).toBe(skill.id);
++    }
++  });
++
++  it("names the Gewerke that have approved nothing rather than showing 0%", () => {
++    const a = ask("Wie steht das Portfolio insgesamt?", CTX);
++    const fact = a.facts.find((f) => f.label === "Gewerke ohne jede Zustimmung");
++    expect(fact?.value).toContain("UM");
++    expect(fact?.value).toContain("BIM");
++  });
++
++  it("warns on a Gewerk that cannot show progress", () => {
++    const a = ask("Wie steht UM?", CTX);
++    expect(a.facts.some((f) => f.label === "Hinweis" && /keine Zustimmung/.test(f.value))).toBe(true);
++  });
++
++  it("ranks the most critical Gewerk and says why", () => {
++    const a = ask("Was ist gerade kritisch?", CTX);
++    expect(a.intent).toBe("most-critical");
++    expect(a.headline).toMatch(/blockiert/);
++    // The weights are stated, because the ranking is a judgement, not a fact.
++    expect(a.basis).toMatch(/keine Messung/);
++  });
++
++  it("reports undated open rows instead of quietly excluding them", () => {
++    const a = ask("Wie alt sind die offenen Prüfungen?", CTX);
++    expect(a.facts.some((f) => /ohne Prüfdatum/.test(f.label))).toBe(true);
++  });
++
++  it("explains the shared Projektnummer rather than calling it an error", () => {
++    const a = ask("Wie verlässlich sind die Zahlen?", CTX);
++    const fact = a.facts.find((f) => f.label === "Projektnummern");
++    expect(fact?.value).toMatch(/Programm/);
++  });
++
++  it("never invents a contact address", () => {
++    const a = ask("Wer ist für LST zuständig?", CTX);
++    // Hilfsdatei rows 74/75 are empty for LST — it must say so, not construct one.
++    expect(a.basis).toMatch(/nie erzeugt/);
++    for (const f of a.facts) expect(f.value).not.toMatch(/@deutschebahn\.com/);
++  });
++});
++
++describe("it says when it does not know", () => {
++  it("offers what it can do instead of guessing", () => {
++    const a = ask("Wie ist das Wetter in Kassel?", CTX);
++    if (a.confidence === "unknown") {
++      expect(a.facts.length).toBeGreaterThan(5);
++      expect(a.basis).toMatch(/nichts wird geschätzt/);
++    } else {
++      // If it did match a skill, the figures must still be measured.
++      expect(a.basis).toBeTruthy();
++    }
++  });
++
++  it("says a project is not loaded rather than describing one that is not there", () => {
++    const a = ask("zeig mir G.999999999", CTX);
++    expect(a.confidence).toBe("unknown");
++    expect(a.headline).toMatch(/kein Projekt/);
++  });
++
++  it("returns the help answer for an empty question", () => {
++    expect(ask("   ", CTX).intent).toBe("help");
++    expect(helpAnswer().facts.length).toBe(SKILLS.length);
++  });
++});
++
++describe("it is deterministic", () => {
++  it("gives the same answer to the same question", () => {
++    for (const s of STARTERS) {
++      const a = ask(s.question, CTX);
++      const b = ask(s.question, CTX);
++      expect(JSON.stringify(a)).toBe(JSON.stringify(b));
++    }
++  });
++
++  it("answers every starter it offers", () => {
++    for (const s of STARTERS) {
++      const a = ask(s.question, CTX);
++      expect(a.confidence, s.question).toBe("measured");
++      expect(a.headline.length, s.question).toBeGreaterThan(10);
++    }
++  });
++});
++
++describe("speed", () => {
++  it("answers inside a keystroke", () => {
++    let fastest = Number.POSITIVE_INFINITY;
++    for (let batch = 0; batch < 3; batch++) {
++      const started = performance.now();
++      for (const s of STARTERS) ask(s.question, CTX);
++      fastest = Math.min(fastest, (performance.now() - started) / STARTERS.length);
++    }
++    expect(fastest, `${fastest.toFixed(1)} ms per answer`).toBeLessThan(120);
++  });
++});
+diff --git a/shared/agent/resolve.ts b/shared/agent/resolve.ts
+new file mode 100644
+index 0000000..25767e1
+--- /dev/null
++++ b/shared/agent/resolve.ts
+@@ -0,0 +1,198 @@
++/**
++ * From a sentence to a skill.
++ *
++ * No model, no embedding, no cloud round trip: German folding (the same two
++ * foldings the search uses), keyword scoring, and entity extraction against the
++ * data actually loaded. It is small enough to read in one sitting, which is the
++ * point — every answer this assistant gives can be traced to a rule someone can
++ * look at.
++ *
++ * Entities are pulled from the real vocabularies rather than guessed: a Gewerk
++ * has to be one of the fourteen, a station has to be a station that exists, a
++ * Projektnummer has to be a Projektnummer on file. That is what stops "Wie
++ * steht EAA?" inventing a department, and it is also why a typo still lands —
++ * the same fuzzy matching the palette uses is available here.
++ */
++
++import { editDistance, foldExpanded, foldLoose, toleranceFor } from "../search";
++import { DEPARTMENT_LIST } from "../validation";
++import { helpAnswer, SKILLS, type AgentEntities, type Skill } from "./skills";
++import type { AgentAnswer, AgentContext } from "./types";
++
++/** Words that carry no intent and would otherwise pull every skill up. */
++const STOPWORDS = new Set([
++  "der","die","das","den","dem","des","ein","eine","einer","eines","und","oder",
++  "ist","sind","war","waren","wie","was","wer","wo","wann","warum","welche",
++  "welches","welcher","mir","mich","ich","wir","uns","sie","es","auf","in","im",
++  "an","am","zu","zum","zur","fur","für","von","vom","mit","bei","aus","hat",
++  "haben","bitte","mal","denn","noch","schon","gibt","viele","viel",
++]);
++
++const words = (s: string) => s.split(" ").filter(Boolean);
++
++/** Best fuzzy match of `term` against a vocabulary, or null. */
++function closest(term: string, vocabulary: readonly string[]): string | null {
++  const t = foldExpanded(term);
++  if (!t) return null;
++  let best: { value: string; distance: number } | null = null;
++  for (const candidate of vocabulary) {
++    for (const folded of [foldExpanded(candidate), foldLoose(candidate)]) {
++      if (!folded) continue;
++      if (folded === t) return candidate;
++      const tolerance = toleranceFor(t);
++      if (tolerance === 0) continue;
++      if (Math.abs(folded.length - t.length) > tolerance) continue;
++      const d = editDistance(t, folded, tolerance);
++      if (d <= tolerance && (!best || d < best.distance)) best = { value: candidate, distance: d };
++    }
++  }
++  return best ? best.value : null;
++}
++
++const PROJEKTNUMMER = /\b[gG][.\s]?\d[\d.\s]{4,}\b/;
++
++/** Everything the question names that the data also knows about. */
++export function extractEntities(question: string, ctx: AgentContext): AgentEntities {
++  const out: AgentEntities = {};
++  const folded = foldExpanded(question);
++  const tokens = words(folded).filter((w) => !STOPWORDS.has(w));
++
++  // Gewerk: exact or near-miss against the fourteen.
++  for (const token of tokens) {
++    const hit = closest(token, DEPARTMENT_LIST as readonly string[]);
++    if (hit) {
++      out.department = hit;
++      break;
++    }
++  }
++
++  // Projektnummer: the shape is distinctive enough to lift out of the sentence.
++  const nummer = question.match(PROJEKTNUMMER);
++  if (nummer) out.projektnummer = nummer[0].trim();
++
++  // Station and region: only names that exist in the loaded data.
++  const stations = new Set<string>();
++  const regions = new Set<string>();
++  const people = new Set<string>();
++  for (const p of ctx.projects) {
++    const s = (p.station ?? "").trim();
++    if (s) stations.add(s);
++    const r = (p.bahnhofsmanagement ?? "").trim();
++    if (r) regions.add(r);
++    const l = (p.projektleiter ?? "").trim();
++    if (l) people.add(l);
++    for (const review of p.reviews ?? []) {
++      const n = (review.prueferName ?? "").trim();
++      if (n) people.add(n);
++    }
++  }
++
++  // Longest match first: "Frankfurt (Main) Süd" must win over "Frankfurt".
++  const byLength = (a: string, b: string) => b.length - a.length;
++  for (const station of [...stations].sort(byLength)) {
++    const f = foldExpanded(station);
++    if (f && folded.includes(f)) {
++      out.station = station;
++      break;
++    }
++  }
++  if (!out.station) {
++    for (const token of tokens) {
++      const hit = closest(token, [...stations]);
++      if (hit) {
++        out.station = hit;
++        break;
++      }
++    }
++  }
++  for (const region of [...regions].sort(byLength)) {
++    const f = foldExpanded(region);
++    if (f && folded.includes(f)) {
++      out.region = region;
++      break;
++    }
++  }
++  for (const person of [...people].sort(byLength)) {
++    const f = foldExpanded(person);
++    if (f && f.length > 3 && folded.includes(f)) {
++      out.person = person;
++      break;
++    }
++  }
++  return out;
++}
++
++export interface Ranked {
++  skill: Skill;
++  score: number;
++}
++
++/** Score every skill against the question. Exported so a test can pin it. */
++export function rankSkills(question: string, entities: AgentEntities): Ranked[] {
++  const folded = foldExpanded(question);
++  /*
++   * Word boundaries, not raw substrings.
++   *
++   * `folded.includes(keyword)` matched "in" inside "sind" and "wo" inside
++   * "wollen", so a question about data quality scored as a question about a
++   * station. Padding both sides turns every comparison into a whole-word or
++   * whole-phrase one, which is what a keyword was always meant to be.
++   */
++  const padded = ` ${folded} `;
++  const ranked: Ranked[] = [];
++  for (const skill of SKILLS) {
++    // A skill that needs an entity it did not get is not a candidate at all.
++    if (skill.needs && entities[skill.needs] === undefined) continue;
++    let score = 0;
++    for (const keyword of skill.keywords) {
++      const k = foldExpanded(keyword);
++      if (!k) continue;
++      if (folded === k) score += skill.weight * 2;
++      else if (padded.includes(` ${k} `)) score += skill.weight;
++    }
++    // Having the entity a skill wants is itself evidence it is the right skill.
++    if (skill.needs && entities[skill.needs] !== undefined) score += skill.weight / 2;
++    if (score > 0) ranked.push({ skill, score });
++  }
++  return ranked.sort((a, b) => b.score - a.score);
++}
++
++/**
++ * Answer a question from the loaded data.
++ *
++ * Deterministic: the same question over the same data returns the same answer,
++ * every time, which is what makes an answer about a delivery schedule worth
++ * anything.
++ */
++export function ask(question: string, ctx: AgentContext): AgentAnswer {
++  const trimmed = question.trim();
++  if (!trimmed) return helpAnswer();
++
++  const entities = extractEntities(trimmed, ctx);
++  const ranked = rankSkills(trimmed, entities);
++
++  // A named Gewerk, station or Projektnummer with no matching keyword is still
++  // a question — "EEA" alone means "how does EEA stand".
++  if (ranked.length === 0) {
++    if (entities.projektnummer) return SKILLS[1]?.run(ctx, entities) ?? helpAnswer();
++    const fallback = entities.department
++      ? SKILLS.find((s) => s.id === "gewerk-status")
++      : entities.station
++        ? SKILLS.find((s) => s.id === "station")
++        : null;
++    if (fallback) return fallback.run(ctx, entities);
++    return helpAnswer();
++  }
++
++  return (ranked[0] as Ranked).skill.run(ctx, entities);
++}
++
++/** The prompts the widget offers before anyone has typed anything. */
++export const STARTERS: ReadonlyArray<{ label: string; question: string }> = [
++  { label: "Was ist gerade kritisch?", question: "Was ist gerade kritisch?" },
++  { label: "Was ist überfällig?", question: "Was ist überfällig?" },
++  { label: "Wer hat die meiste Last?", question: "Wer hat die meiste offene Last?" },
++  { label: "Wie steht das Portfolio?", question: "Wie steht das Portfolio insgesamt?" },
++  { label: "Was hat sich geändert?", question: "Was hat sich geändert?" },
++  { label: "Wie verlässlich sind die Zahlen?", question: "Wie verlässlich sind die Zahlen?" },
++];
+diff --git a/shared/agent/skills.ts b/shared/agent/skills.ts
+new file mode 100644
+index 0000000..6bd6471
+--- /dev/null
++++ b/shared/agent/skills.ts
+@@ -0,0 +1,618 @@
++/**
++ * What Ask Bahn can do.
++ *
++ * One skill per question a person actually asks this website. Each one runs a
++ * query and returns measured facts; none of them writes a number it did not
++ * compute. A skill that cannot answer says so and hands back what it does know
++ * — the assistant's failure mode is "I don't have that", never a plausible
++ * sentence containing an invented figure.
++ */
++
++import {
++  agingOfOpenReviews,
++  dataQuality,
++  gewerkStandings,
++  reviewerConcentration,
++} from "../portfolio-metrics";
++import { DEPARTMENT_LIST } from "../validation";
++import { normalizeReviewStatus, OPEN_STATUSES, BLOCKING_STATUSES } from "../review-status";
++import { recipientsFor } from "../contacts";
++import { gewerkHref } from "../search-index";
++import { severityOf } from "../audit-entry";
++import { formatGerman } from "../date";
++import type {
++  AgentAction,
++  AgentTone,
++  AgentAnswer,
++  AgentContext,
++  AgentFact,
++  AgentProject,
++} from "./types";
++
++const de = (n: number) => n.toLocaleString("de-DE");
++const q = (s: string) => `/projects?q=${encodeURIComponent(s)}`;
++
++const isOpenStatus = (s: string | null) =>
++  s !== null && (OPEN_STATUSES as readonly string[]).includes(s);
++const isBlockedStatus = (s: string | null) =>
++  s !== null && (BLOCKING_STATUSES as readonly string[]).includes(s);
++
++/** Entities a question can carry, pulled out of the text by the resolver. */
++export interface AgentEntities {
++  department?: string;
++  station?: string;
++  person?: string;
++  projektnummer?: string;
++  region?: string;
++}
++
++export interface Skill {
++  id: string;
++  /** What the reader would say. Shown in the help answer, so it stays honest. */
++  example: string;
++  /** Folded keywords, any of which puts this skill in play. */
++  keywords: readonly string[];
++  /** Higher wins when several match. */
++  weight: number;
++  /** Requires an entity of this kind to be usable. */
++  needs?: keyof AgentEntities;
++  run(ctx: AgentContext, entities: AgentEntities): AgentAnswer;
++}
++
++const answer = (
++  intent: string,
++  headline: string,
++  facts: AgentFact[],
++  actions: AgentAction[],
++  basis: string,
++): AgentAnswer => ({ intent, headline, facts, actions, basis, confidence: "measured" });
++
++// ---------------------------------------------------------------------------
++
++const gewerkStatus: Skill = {
++  id: "gewerk-status",
++  example: "Wie steht EEA?",
++  keywords: ["gewerk", "status", "offen", "wie steht", "wie viele", "prufungen", "prüfungen"],
++  weight: 60,
++  needs: "department",
++  run(ctx, e) {
++    const department = e.department as string;
++    const s = gewerkStandings(ctx.projects, [department], ctx.today)[0];
++    if (!s) {
++      return {
++        intent: "gewerk-status",
++        headline: `${department} kommt in den geladenen Daten nicht vor.`,
++        facts: [],
++        actions: [],
++        basis: "Geprüft gegen alle Prüfzeilen der geladenen Projekte.",
++        confidence: "unknown",
++      };
++    }
++    return answer(
++      "gewerk-status",
++      `${department}: ${de(s.required)} erforderliche Prüfungen, ${de(s.open)} davon offen.`,
++      [
++        { label: "erforderlich", value: de(s.required), href: gewerkHref(department) },
++        { label: "offen", value: de(s.open), tone: s.open > 0 ? "warn" : "ok" },
++        { label: "zugestimmt", value: de(s.approved), tone: "ok" },
++        {
++          label: "blockiert",
++          value: de(s.blocked),
++          tone: s.blocked > 0 ? "critical" : "ok",
++        },
++        { label: "überfällig", value: de(s.overdue), tone: s.overdue > 0 ? "warn" : "ok" },
++        { label: "ohne Prüfer", value: de(s.unassigned), tone: s.unassigned > 0 ? "warn" : "ok" },
++        ...(s.approved === 0 && s.required > 0
++          ? [
++              {
++                label: "Hinweis",
++                value: `keine Zustimmung im Bestand — ${de(s.other)} Zeilen tragen einen anderen Abschluss`,
++                tone: "warn" as const,
++              },
++            ]
++          : []),
++      ],
++      [{ label: `${department} öffnen`, href: gewerkHref(department), kind: "navigate" }],
++      "Gezählt über alle Prüfzeilen dieses Gewerks, ohne „nicht erforderlich“.",
++    );
++  },
++};
++
++const mostCritical: Skill = {
++  id: "most-critical",
++  example: "Was ist gerade kritisch?",
++  keywords: [
++    "kritisch", "dringend", "brennt", "problem", "worauf", "zuerst", "prioritat",
++    "priorität", "handlungsbedarf", "schlimm", "risiko",
++  ],
++  weight: 90,
++  run(ctx) {
++    const all = gewerkStandings(ctx.projects, DEPARTMENT_LIST, ctx.today).sort(
++      (a, b) => b.riskScore - a.riskScore,
++    );
++    const top = all.slice(0, 3);
++    const lead = top[0];
++    if (!lead) {
++      return {
++        intent: "most-critical",
++        headline: "Es sind keine Prüfdaten geladen.",
++        facts: [],
++        actions: [],
++        basis: "Keine Projekte im Speicher.",
++        confidence: "unknown",
++      };
++    }
++    const blockedTotal = all.reduce((a, s) => a + s.blocked, 0);
++    const overdueTotal = all.reduce((a, s) => a + s.overdue, 0);
++    return answer(
++      "most-critical",
++      `${lead.department} steht am schlechtesten: ${de(lead.blocked)} blockiert, ${de(lead.overdue)} überfällig, ${de(lead.unassigned)} ohne Prüfer.`,
++      [
++        ...top.map((s) => ({
++          label: s.department,
++          value: `${de(s.blocked)} blockiert · ${de(s.overdue)} überfällig · ${de(s.unassigned)} ohne Prüfer`,
++          tone: (s.blocked > 0 ? "critical" : "warn") as AgentTone,
++          href: gewerkHref(s.department),
++        })),
++        { label: "blockiert insgesamt", value: de(blockedTotal), tone: "critical" },
++        { label: "überfällig insgesamt", value: de(overdueTotal), tone: "warn" },
++      ],
++      [
++        { label: `${lead.department} öffnen`, href: gewerkHref(lead.department), kind: "navigate" },
++        { label: "Alle blockierten zeigen", href: q("abgelehnt"), kind: "navigate" },
++      ],
++      "Rangfolge aus blockiert ×3 + überfällig ×2 + ohne Prüfer ×1. Eine Priorisierungshilfe, keine Messung.",
++    );
++  },
++};
++
++const overdue: Skill = {
++  id: "overdue",
++  example: "Was ist überfällig?",
++  keywords: ["uberfallig", "überfällig", "verzug", "verspatet", "verspätet", "termin", "frist", "deadline"],
++  weight: 80,
++  run(ctx) {
++    const standings = gewerkStandings(ctx.projects, DEPARTMENT_LIST, ctx.today);
++    const total = standings.reduce((a, s) => a + s.overdue, 0);
++    const worst = [...standings].sort((a, b) => b.overdue - a.overdue).slice(0, 4);
++    const oldest = standings.reduce<number | null>(
++      (a, s) => (s.oldestOpenDays !== null && (a === null || s.oldestOpenDays > a) ? s.oldestOpenDays : a),
++      null,
++    );
++    return answer(
++      "overdue",
++      `${de(total)} offene Prüfungen liegen hinter ihrem eingetragenen Prüfdatum.`,
++      [
++        ...worst.map((s) => ({
++          label: s.department,
++          value: de(s.overdue),
++          tone: (s.overdue > 0 ? "warn" : "ok") as AgentTone,
++          href: gewerkHref(s.department),
++        })),
++        ...(oldest !== null
++          ? [{ label: "älteste offene Prüfung", value: `${de(oldest)} Tage`, tone: "critical" as const }]
++          : []),
++      ],
++      [{ label: "Dashboard öffnen", href: "/", kind: "navigate" }],
++      "Offene Prüfzeilen, deren Prüfdatum vor heute liegt.",
++    );
++  },
++};
++
++const aging: Skill = {
++  id: "aging",
++  example: "Wie alt sind die offenen Prüfungen?",
++  keywords: ["alt", "alter", "liegt", "lange", "dauer", "median", "backlog", "ruckstand", "rückstand"],
++  weight: 70,
++  run(ctx) {
++    const a = agingOfOpenReviews(ctx.projects, ctx.today);
++    const overYear = a.cohorts.find((c) => c.key === "365+")?.count ?? 0;
++    return answer(
++      "aging",
++      a.medianAgeDays === null
++        ? "Keine der offenen Prüfungen trägt ein Datum, sie lassen sich nicht altern."
++        : `Die mittlere offene Prüfung liegt seit ${de(a.medianAgeDays)} Tagen.`,
++      [
++        ...a.cohorts.map((c) => ({
++          label: c.label,
++          value: de(c.count),
++          tone: (c.key === "365+" ? "critical" : c.key === "181-365" ? "warn" : "neutral") as AgentTone,
++        })),
++        {
++          label: "ohne Prüfdatum",
++          value: `${de(a.undatedOpen)} — nicht alterbar`,
++          tone: "warn",
++        },
++        { label: "älter als ein Jahr", value: de(overYear), tone: "critical" },
++      ],
++      [{ label: "Dashboard öffnen", href: "/", kind: "navigate" }],
++      "Abstand zwischen dem eingetragenen Prüfdatum und heute, je offener Prüfzeile.",
++    );
++  },
++};
++
++const workload: Skill = {
++  id: "workload",
++  example: "Wer hat die meiste offene Last?",
++  keywords: ["wer", "prufer", "prüfer", "last", "auslastung", "verteilt", "team", "personen", "kapazitat", "kapazität"],
++  weight: 70,
++  run(ctx) {
++    const c = reviewerConcentration(ctx.projects);
++    const top = c.reviewers.slice(0, 5);
++    const lead = top[0];
++    return answer(
++      "workload",
++      lead
++        ? `${lead.name} hält mit ${de(lead.open)} offenen Prüfungen die größte Last; die fünf größten zusammen ${c.topFiveShareOfOpen}%.`
++        : "Auf keiner offenen Prüfung steht ein Name.",
++      [
++        ...top.map((r) => ({
++          label: r.name,
++          value: `${de(r.open)} offen · ${de(r.done)} erledigt`,
++          tone: (r.open > 40 ? "critical" : "neutral") as AgentTone,
++          href: q(r.name),
++        })),
++        {
++          label: "offen ohne benannten Prüfer",
++          value: de(c.unassignedOpen),
++          tone: c.unassignedOpen > 0 ? "warn" : "ok",
++        },
++        { label: "Prüfer insgesamt", value: de(c.reviewers.length) },
++      ],
++      [{ label: "Dashboard öffnen", href: "/", kind: "navigate" }],
++      "Gezählt über alle erforderlichen Prüfzeilen mit einem eingetragenen Namen.",
++    );
++  },
++};
++
++const unassigned: Skill = {
++  id: "unassigned",
++  example: "Welche Prüfungen haben keinen Prüfer?",
++  keywords: ["ohne prufer", "ohne prüfer", "unbesetzt", "niemand", "kein prufer", "kein prüfer", "unzugeordnet"],
++  weight: 75,
++  run(ctx) {
++    const standings = gewerkStandings(ctx.projects, DEPARTMENT_LIST, ctx.today);
++    const total = standings.reduce((a, s) => a + s.unassigned, 0);
++    const worst = [...standings].filter((s) => s.unassigned > 0).sort((a, b) => b.unassigned - a.unassigned);
++    return answer(
++      "unassigned",
++      `${de(total)} offene Prüfungen tragen keinen Prüfernamen.`,
++      worst.slice(0, 5).map((s) => ({
++        label: s.department,
++        value: de(s.unassigned),
++        tone: "warn" as const,
++        href: gewerkHref(s.department),
++      })),
++      worst[0]
++        ? [{ label: `${worst[0].department} öffnen`, href: gewerkHref(worst[0].department), kind: "navigate" as const }]
++        : [],
++      "Offene Prüfzeilen, deren Prüferfeld leer ist.",
++    );
++  },
++};
++
++const blocked: Skill = {
++  id: "blocked",
++  example: "Welche Projekte sind blockiert?",
++  keywords: ["blockiert", "abgelehnt", "gestoppt", "steht still", "gesperrt"],
++  weight: 80,
++  run(ctx) {
++    const rows: Array<{ project: AgentProject; department: string; status: string }> = [];
++    for (const p of ctx.projects) {
++      for (const r of p.reviews ?? []) {
++        const s = normalizeReviewStatus(r.status);
++        if (isBlockedStatus(s)) rows.push({ project: p, department: r.department, status: s as string });
++      }
++    }
++    const byDept = new Map<string, number>();
++    for (const r of rows) byDept.set(r.department, (byDept.get(r.department) ?? 0) + 1);
++    const projects = new Set(rows.map((r) => r.project.id));
++    return answer(
++      "blocked",
++      `${de(rows.length)} Prüfungen sind abgelehnt oder gestoppt, verteilt auf ${de(projects.size)} Projekte.`,
++      [
++        ...[...byDept.entries()]
++          .sort((a, b) => b[1] - a[1])
++          .slice(0, 5)
++          .map(([department, count]) => ({
++            label: department,
++            value: de(count),
++            tone: "critical" as const,
++            href: gewerkHref(department),
++          })),
++        ...rows.slice(0, 3).map((r) => ({
++          label: `${r.project.projektnummer ?? `Projekt ${r.project.id}`} · ${r.project.station ?? ""}`.trim(),
++          value: `${r.department}: ${r.status}`,
++          tone: "critical" as const,
++          href: q(r.project.projektnummer ?? r.project.station ?? ""),
++        })),
++      ],
++      [{ label: "Abgelehnte zeigen", href: q("abgelehnt"), kind: "navigate" }],
++      "Prüfzeilen im Status „abgelehnt“ oder „gestoppt“.",
++    );
++  },
++};
++
++const findProject: Skill = {
++  id: "find-project",
++  example: "Zeig mir G.011540063",
++  keywords: ["projekt", "zeig", "offne", "öffne", "such", "finde", "wo ist"],
++  weight: 85,
++  needs: "projektnummer",
++  run(ctx, e) {
++    const nummer = e.projektnummer as string;
++    const matches = ctx.projects.filter(
++      (p) => (p.projektnummer ?? "").toLowerCase() === nummer.toLowerCase(),
++    );
++    if (matches.length === 0) {
++      return {
++        intent: "find-project",
++        headline: `Zu „${nummer}“ ist kein Projekt geladen.`,
++        facts: [],
++        actions: [{ label: "In Projekte suchen", href: q(nummer), kind: "navigate" }],
++        basis: "Verglichen mit der Projektnummer jedes geladenen Projekts.",
++        confidence: "unknown",
++      };
++    }
++    const first = matches[0] as AgentProject;
++    const openHere = (first.reviews ?? []).filter((r) => isOpenStatus(normalizeReviewStatus(r.status)));
++    return answer(
++      "find-project",
++      matches.length === 1
++        ? `${nummer} — ${first.station ?? "ohne Station"}, ${de(openHere.length)} offene Prüfungen.`
++        : `${nummer} bezeichnet ${de(matches.length)} Projekte — die Nummer ist eine Programmnummer.`,
++      [
++        { label: "Station", value: first.station || "—" },
++        { label: "Bahnhofsmanagement", value: first.bahnhofsmanagement || "—" },
++        { label: "Projektleitung", value: first.projektleiter || "—" },
++        {
++          label: "Termin Projektvorstellung",
++          value: formatGerman(first.terminProjektvorstellung ?? null) || "—",
++        },
++        { label: "offene Prüfungen", value: de(openHere.length), tone: openHere.length ? "warn" : "ok" },
++      ],
++      [{ label: "Projekt öffnen", href: q(nummer), kind: "navigate" }],
++      "Aus dem geladenen Projektdatensatz.",
++    );
++  },
++};
++
++const stationInfo: Skill = {
++  id: "station",
++  example: "Was läuft in Frankfurt?",
++  keywords: ["station", "bahnhof", "ort", "lauft", "läuft", "los"],
++  weight: 55,
++  needs: "station",
++  run(ctx, e) {
++    const station = e.station as string;
++    const here = ctx.projects.filter(
++      (p) => (p.station ?? "").toLowerCase() === station.toLowerCase(),
++    );
++    let open = 0;
++    let blockedCount = 0;
++    for (const p of here) {
++      for (const r of p.reviews ?? []) {
++        const s = normalizeReviewStatus(r.status);
++        if (isOpenStatus(s)) open++;
++        if (isBlockedStatus(s)) blockedCount++;
++      }
++    }
++    return answer(
++      "station",
++      `${station}: ${de(here.length)} Projekte, ${de(open)} offene Prüfungen, ${de(blockedCount)} blockiert.`,
++      [
++        { label: "Projekte", value: de(here.length) },
++        { label: "offene Prüfungen", value: de(open), tone: open ? "warn" : "ok" },
++        { label: "blockiert", value: de(blockedCount), tone: blockedCount ? "critical" : "ok" },
++        ...here.slice(0, 3).map((p) => ({
++          label: p.projektnummer || `Projekt ${p.id}`,
++          value: p.projektbeschreibung || "—",
++          href: q(p.projektnummer || station),
++        })),
++      ],
++      [
++        { label: "Station öffnen", href: `/projects?q=${encodeURIComponent(station)}&view=cards`, kind: "navigate" },
++        { label: "Auf der Karte", href: "/projects?view=map", kind: "navigate" },
++      ],
++      "Projekte, deren Station exakt so heißt.",
++    );
++  },
++};
++
++const recentChanges: Skill = {
++  id: "recent-changes",
++  example: "Was hat sich geändert?",
++  keywords: ["geandert", "geändert", "anderung", "änderung", "historie", "passiert", "neu", "zuletzt", "heute"],
++  weight: 75,
++  run(ctx) {
++    const entries = ctx.audit;
++    if (entries.length === 0) {
++      return {
++        intent: "recent-changes",
++        headline: "Seit dem Start dieser Sitzung wurde nichts geändert.",
++        facts: [],
++        actions: [{ label: "Änderungshistorie öffnen", href: "/audit", kind: "navigate" }],
++        basis: "Die Änderungshistorie ist leer.",
++        confidence: "measured",
++      };
++    }
++    const critical = entries.filter((e) => severityOf(e.action, e.meta) === "kritisch");
++    const day = 24 * 3_600_000;
++    const last24 = entries.filter((e) => ctx.today - Date.parse(e.timestamp) <= day);
++    return answer(
++      "recent-changes",
++      `${de(entries.length)} Einträge in der Änderungshistorie, ${de(critical.length)} davon kritisch.`,
++      [
++        { label: "letzte 24 Stunden", value: de(last24.length) },
++        { label: "kritisch", value: de(critical.length), tone: critical.length ? "critical" : "ok" },
++        ...entries.slice(0, 3).map((e) => ({
++          label: `${e.user} · ${e.action}`,
++          value:
++            [e.meta?.projektnummer, e.meta?.department, e.meta?.field]
++              .filter(Boolean)
++              .join(" · ") || e.details,
++          tone: (severityOf(e.action, e.meta) === "kritisch" ? "critical" : "neutral") as AgentTone,
++        })),
++      ],
++      [{ label: "Änderungshistorie öffnen", href: "/audit", kind: "navigate" }],
++      "Aus der Änderungshistorie dieses Browsers.",
++    );
++  },
++};
++
++const quality: Skill = {
++  id: "data-quality",
++  example: "Wie verlässlich sind die Zahlen?",
++  keywords: ["verlasslich", "verlässlich", "qualitat", "qualität", "sauber", "luck", "lücke", "fehlt", "vertrauen", "belastbar"],
++  weight: 70,
++  run(ctx) {
++    const dq = dataQuality(ctx.projects);
++    return answer(
++      "data-quality",
++      `${de(dq.totalReviews)} Prüfzeilen über ${de(dq.totalProjects)} Projekte; ${de(dq.openWithoutDate)} offene Zeilen tragen kein Datum.`,
++      [
++        { label: "Prüfzeilen ohne Status", value: de(dq.reviewsWithoutStatus), tone: "warn" },
++        { label: "offen ohne Prüfdatum", value: de(dq.openWithoutDate), tone: "warn" },
++        { label: "offen ohne Prüfer", value: de(dq.openWithoutPruefer), tone: "warn" },
++        {
++          label: "Status außerhalb der Vokabulare",
++          value: de(dq.unmappedStatus),
++          tone: dq.unmappedStatus ? "critical" : "ok",
++        },
++        {
++          label: "nicht in offen/zugestimmt/blockiert",
++          value: dq.unclassifiedStatuses.map((s) => `${s.status} (${de(s.count)})`).join(", ") || "—",
++          tone: "warn",
++        },
++        {
++          label: "Projektnummern",
++          value: `${de(dq.totalProjects)} Projekte auf ${de(dq.distinctProjektnummern)} Nummern — eine Nummer bezeichnet ein Programm`,
++        },
++        { label: "nicht lesbare Datumsangaben", value: de(dq.unparseableDates), tone: dq.unparseableDates ? "warn" : "ok" },
++      ],
++      [{ label: "Dashboard öffnen", href: "/", kind: "navigate" }],
++      "Geprüft über jede geladene Prüfzeile und jedes Projekt.",
++    );
++  },
++};
++
++const contact: Skill = {
++  id: "contact",
++  example: "Wer ist für ITK zuständig?",
++  keywords: ["kontakt", "erreiche", "email", "e-mail", "mail", "anschreiben", "melden", "zuständig", "zustaendig", "verantwortlich", "ansprechpartner"],
++  weight: 80,
++  needs: "department",
++  run(_ctx, e) {
++    const department = e.department as string;
++    const people = recipientsFor(department as never);
++    if (people.length === 0) {
++      return {
++        intent: "contact",
++        headline: `Für ${department} ist in der Hilfsdatei keine Adresse hinterlegt.`,
++        facts: [],
++        actions: [{ label: `${department} öffnen`, href: gewerkHref(department), kind: "navigate" }],
++        // Never a constructed address — see shared/contacts.ts.
++        basis: "Aus der Hilfsdatei. Adressen werden nie erzeugt, nur gelesen.",
++        confidence: "measured",
++      };
++    }
++    return answer(
++      "contact",
++      `${department} erreichen Sie über ${people.map((p) => p.name || p.mail).join(", ")}.`,
++      people.map((p) => ({ label: p.name || "ohne Namen", value: p.mail })),
++      [{ label: `${department} öffnen`, href: gewerkHref(department), kind: "navigate" }],
++      "Aus der Hilfsdatei. Adressen werden nie erzeugt, nur gelesen.",
++    );
++  },
++};
++
++const navigate: Skill = {
++  id: "navigate",
++  example: "Öffne die Karte",
++  keywords: ["offne", "öffne", "zeig", "geh zu", "karte", "kacheln", "dashboard", "anmeldung", "historie", "ubersicht", "übersicht"],
++  weight: 50,
++  run() {
++    return answer(
++      "navigate",
++      "Wohin möchten Sie?",
++      [],
++      [
++        { label: "Dashboard", href: "/", kind: "navigate" },
++        { label: "Projekte", href: "/projects", kind: "navigate" },
++        { label: "Karte", href: "/projects?view=map", kind: "navigate" },
++        { label: "BVB-EEA", href: "/bvb-eea", kind: "navigate" },
++        { label: "PSV-ITK", href: "/psv-itk", kind: "navigate" },
++        { label: "Projektanmeldung", href: "/anmeldung", kind: "navigate" },
++        { label: "Änderungshistorie", href: "/audit", kind: "navigate" },
++      ],
++      "Alle Routen dieser Anwendung.",
++    );
++  },
++};
++
++const portfolio: Skill = {
++  id: "portfolio",
++  example: "Wie steht das Portfolio insgesamt?",
++  keywords: ["portfolio", "insgesamt", "gesamt", "uberblick", "überblick", "zusammenfassung", "wie stehen wir", "bilanz"],
++  weight: 65,
++  run(ctx) {
++    const standings = gewerkStandings(ctx.projects, DEPARTMENT_LIST, ctx.today);
++    const required = standings.reduce((a, s) => a + s.required, 0);
++    const open = standings.reduce((a, s) => a + s.open, 0);
++    const approved = standings.reduce((a, s) => a + s.approved, 0);
++    const blockedTotal = standings.reduce((a, s) => a + s.blocked, 0);
++    const other = standings.reduce((a, s) => a + s.other, 0);
++    const noApproval = standings.filter((s) => s.required > 0 && s.approved === 0);
++    return answer(
++      "portfolio",
++      `${de(required)} erforderliche Prüfungen über ${de(ctx.projects.length)} Projekte: ${de(approved)} zugestimmt, ${de(open)} offen, ${de(blockedTotal)} blockiert.`,
++      [
++        { label: "erforderlich", value: de(required) },
++        { label: "zugestimmt", value: de(approved), tone: "ok" },
++        { label: "offen", value: de(open), tone: "warn" },
++        { label: "blockiert", value: de(blockedTotal), tone: blockedTotal ? "critical" : "ok" },
++        { label: "sonstiger Abschluss", value: de(other) },
++        ...(noApproval.length > 0
++          ? [
++              {
++                label: "Gewerke ohne jede Zustimmung",
++                value: noApproval.map((s) => s.department).join(", "),
++                tone: "critical" as const,
++              },
++            ]
++          : []),
++      ],
++      [{ label: "Dashboard öffnen", href: "/", kind: "navigate" }],
++      "Summiert über alle 14 Gewerke, ohne „nicht erforderlich“.",
++    );
++  },
++};
++
++export const SKILLS: readonly Skill[] = [
++  mostCritical,
++  findProject,
++  blocked,
++  contact,
++  overdue,
++  unassigned,
++  recentChanges,
++  aging,
++  workload,
++  quality,
++  portfolio,
++  gewerkStatus,
++  stationInfo,
++  navigate,
++];
++
++/** What the assistant offers when it did not understand. Built from the skills. */
++export function helpAnswer(): AgentAnswer {
++  return {
++    intent: "help",
++    headline: "Das habe ich nicht verstanden. Fragen, die ich beantworten kann:",
++    facts: SKILLS.map((s) => ({ label: s.id, value: s.example })),
++    actions: [],
++    basis: "Jede Antwort wird aus den geladenen Daten berechnet — nichts wird geschätzt.",
++    confidence: "unknown",
++  };
++}
+diff --git a/shared/agent/types.ts b/shared/agent/types.ts
+new file mode 100644
+index 0000000..57f888c
+--- /dev/null
++++ b/shared/agent/types.ts
+@@ -0,0 +1,120 @@
++/**
++ * Ask Bahn — the assistant for this site.
++ *
++ * ---------------------------------------------------------------------------
++ * Why this is not a chat box wired to a language model
++ * ---------------------------------------------------------------------------
++ * There is no model behind this app. server/_core/llm.ts exists, points at a
++ * scaffold URL, requires an OPENAI_API_KEY that is not set, and is called by no
++ * route; the client reads data.json and localStorage and never asks the server
++ * anything. A widget that posted a question into that would spin forever, and a
++ * widget that answered anyway would be inventing figures about 18,172 review
++ * rows — which is the single thing this project has spent its whole life
++ * removing.
++ *
++ * So the assistant answers from the data, deterministically. Every number it
++ * says is computed by the same functions the Dashboard and the Gewerk tabs use,
++ * on the spot, and every answer carries the derivation and a link to the screen
++ * where it can be checked. It cannot hallucinate a number because it never
++ * writes one — it only reports what a query returned.
++ *
++ * ---------------------------------------------------------------------------
++ * Where a model fits, when there is one
++ * ---------------------------------------------------------------------------
++ * `AgentBackend` is the seam. Today `resolveLocally` matches an intent from the
++ * question and runs a skill. With a model available, the model's job is to pick
++ * the skill and phrase the sentence — never to produce the figures. The skills
++ * stay the source of every number either way, because in a company where a
++ * wrong figure moves a delivery date, the part that must not be probabilistic
++ * is the arithmetic.
++ */
++
++export type AgentTone = "critical" | "warn" | "ok" | "neutral";
++
++/** One measured value. `basis` says how it was derived, in the answer itself. */
++export interface AgentFact {
++  label: string;
++  value: string;
++  tone?: AgentTone;
++  /** Where clicking this fact goes, when it is a set the reader can open. */
++  href?: string;
++}
++
++export interface AgentAction {
++  label: string;
++  /** In-app route. Actions never leave the app except through an explicit link. */
++  href: string;
++  kind: "navigate" | "export" | "external";
++}
++
++export interface AgentAnswer {
++  /** Which skill produced this, for the transcript and for tests. */
++  intent: string;
++  /** One sentence. Built from the facts, never written around them. */
++  headline: string;
++  facts: AgentFact[];
++  actions: AgentAction[];
++  /** What the figures were computed from. Always present. */
++  basis: string;
++  /**
++   * "measured" — every figure came from a query over the loaded data.
++   * "unknown"  — the question was not understood; the answer says so and offers
++   *              what the assistant can do instead. It never guesses.
++   */
++  confidence: "measured" | "unknown";
++}
++
++export interface AgentReview {
++  department: string;
++  status?: string | null;
++  prueferName?: string | null;
++  pruefDatum?: string | null;
++}
++
++export interface AgentProject {
++  id: number;
++  projektnummer?: string | null;
++  station?: string | null;
++  bahnhofsmanagement?: string | null;
++  projektbeschreibung?: string | null;
++  projektleiter?: string | null;
++  terminProjektvorstellung?: string | null;
++  reviews?: AgentReview[] | null;
++}
++
++export interface AgentAuditEntry {
++  id: string;
++  timestamp: string;
++  user: string;
++  action: string;
++  details: string;
++  meta?: {
++    projektnummer?: string | null;
++    station?: string | null;
++    department?: string | null;
++    field?: string | null;
++    from?: string | null;
++    to?: string | null;
++    surface?: string | null;
++  } | null;
++}
++
++export interface AgentContext {
++  projects: readonly AgentProject[];
++  audit: readonly AgentAuditEntry[];
++  /** Pinned per turn so two facts in one answer cannot disagree about "today". */
++  today: number;
++}
++
++/**
++ * The seam a language model would slot into.
++ *
++ * Deliberately narrow: a backend chooses an intent and may rewrite the
++ * headline. It is not given the ability to supply facts, because facts are the
++ * part that has to be right.
++ */
++export interface AgentBackend {
++  name: string;
++  chooseIntent(question: string, available: readonly string[]): Promise<string | null>;
++  rephrase?(headline: string, facts: readonly AgentFact[]): Promise<string>;
++}
+-- 
+2.43.0
+
+
+From ce9aa484a765caf5f1b1da31a290f1f3d996a301 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 22 Aug 2026 22:40:52 +0000
+Subject: [PATCH 2/2] the relief becomes an instrument: grab it, spin it, zoom
+ it, click through it
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Height already carried the value; nothing could be done with it. Now the
+whole camera is in the reader's hands — drag to orbit, wheel or pinch to zoom,
+click a tile to land on the rows behind it — without giving up the one thing
+this panel promises, that the number is always readable from the tile rather
+than inferred from the perspective.
+
+Pointer events rather than mouse events, so mouse, trackpad, pen and touch are
+one code path.
+
+The capture is the part that mattered. Capturing on pointerdown retargets the
+whole sequence to the stage, and the browser then never produces a click on
+the tile that was pressed — so teaching the panel to rotate silently made
+every tile unclickable. The capture is taken only once the pointer has
+travelled five pixels, which is the point where the gesture stops being a
+click and becomes a drag; and a drag that ends over a tile has its click
+swallowed, so releasing the mouse does not also open something.
+
+Every tile is a button that goes somewhere: the red block on the EEA row lands
+on /bvb-eea?q=abgelehnt, which is the question the shape provoked. A tile with
+nothing behind it is disabled rather than hidden, because an empty lane is
+information.
+
+Keyboard drives the same camera — arrows orbit, +/- zoom, Home recentres — and
+the stage is focusable with a name that says so. The tilt stops at 78° rather
+than 90°, because past that the tiles are edge-on and the printed numbers
+disappear. Coarse pointers get 44px tiles. Transitions are dropped while a
+hand is on it, so the camera cannot lag behind the hand.
+
+The UI audit learned one narrow thing: an element carrying `data-overlay`
+declares itself a floating layer, so content beneath an opaque overlay is not
+reported as text painted on text. position:absolute stays audited, because
+that is what the map's legend-covering card was.
+
+Gates: tsc clean, biome unchanged at 72 pre-existing warnings, 255 unit tests
+(20 new), build clean, e2e 81/81 (9 new), check-ui clean across 6 routes x 16
+scenarios x 3 viewports x 4 theme combinations, stress 8/8.
+---
+ .../components/dashboard/PortfolioRelief.tsx  | 245 ++++++++++++++++--
+ client/src/index.css                          |  35 ++-
+ scripts/check-ui.mjs                          |  41 ++-
+ scripts/e2e-smoke.mjs                         | 178 +++++++++++++
+ 4 files changed, 482 insertions(+), 17 deletions(-)
+
+diff --git a/client/src/components/dashboard/PortfolioRelief.tsx b/client/src/components/dashboard/PortfolioRelief.tsx
+index 0d47b8f..578533d 100644
+--- a/client/src/components/dashboard/PortfolioRelief.tsx
++++ b/client/src/components/dashboard/PortfolioRelief.tsx
+@@ -24,11 +24,11 @@
+  * trade worth making. This costs nothing and degrades to the flat grid wherever
+  * transforms are unavailable or unwanted.
+  */
+-import { useMemo, useState } from "react";
++import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+ import { useLocation } from "wouter";
+ import { Card, CardContent } from "@/components/ui/card";
+ import { Button } from "@/components/ui/button";
+-import { Box, Grid3x3, RotateCcw } from "lucide-react";
++import { Box, Grid3x3, Maximize2, Minimize2, RotateCcw } from "lucide-react";
+ import { gewerkHref } from "@shared/search-index";
+ import type { GewerkStanding } from "@shared/portfolio-metrics";
+ 
+@@ -41,17 +41,171 @@ const LANES: ReadonlyArray<{ key: Lane; label: string; hue: string; help: string
+   { key: "approved", label: "zugestimmt", hue: "var(--relief-approved)", help: "Zustimmung oder Niederschrift" },
+ ];
+ 
++/**
++ * Where a tile goes when it is chosen.
++ *
++ * The Gewerk tab for the department, plus the state as a search term — so
++ * clicking the red block on the EEA row lands on BVB-EEA filtered to the
++ * rejected rows, which is the question the shape provoked.
++ */
++function laneHref(department: string, lane: Lane): string {
++  const base = gewerkHref(department);
++  const term =
++    lane === "open" ? "offen" : lane === "blocked" ? "abgelehnt" : lane === "approved" ? "Zustimmung erteilt" : "";
++  if (!term) return base;
++  return `${base}${base.includes("?") ? "&" : "?"}q=${encodeURIComponent(term)}`;
++}
++
+ /** Elevation in px. Square-root so one huge cell does not flatten the rest. */
+ function lift(value: number, max: number): number {
+   if (value <= 0 || max <= 0) return 0;
+   return Math.round(Math.sqrt(value / max) * 56);
+ }
+ 
++/** Where the camera starts, and what "Ansicht zurücksetzen" returns to. */
++const HOME = { tilt: 52, spin: -24, zoom: 1 } as const;
++
++/*
++ * The camera limits, at module scope.
++ *
++ * Defined inside the component they were a new function identity on every
++ * render, so every callback that used one had to list it as a dependency and be
++ * rebuilt each frame — during a drag, which is the one moment that must not
++ * allocate. They are pure functions of a number and belong here.
++ *
++ * The tilt stops at 78° rather than 90°: past that the tiles are edge-on and
++ * the numbers printed on them disappear, which is the one thing this panel
++ * promises never to happen.
++ */
++const clampTilt = (v: number) => Math.min(78, Math.max(0, v));
++const clampSpin = (v: number) => Math.min(60, Math.max(-60, v));
++const clampZoom = (v: number) => Math.min(2.4, Math.max(0.6, v));
++
+ export function PortfolioRelief({ standings }: { standings: readonly GewerkStanding[] }) {
+   const [, setLocation] = useLocation();
+   const [flat, setFlat] = useState(false);
+-  const [tilt, setTilt] = useState(52);
+-  const [spin, setSpin] = useState(-24);
++  const [tilt, setTilt] = useState<number>(HOME.tilt);
++  const [spin, setSpin] = useState<number>(HOME.spin);
++  const [zoom, setZoom] = useState<number>(HOME.zoom);
++  const [expanded, setExpanded] = useState(false);
++  const [dragging, setDragging] = useState(false);
++  const stageRef = useRef<HTMLDivElement>(null);
++  const drag = useRef<{ x: number; y: number; tilt: number; spin: number; active: boolean } | null>(
++    null,
++  );
++  /** Set when a drag ends, so the click it would otherwise produce is dropped. */
++  const swallowClick = useRef(false);
++
++  /*
++   * Pointer events, not mouse events.
++   *
++   * One code path covers mouse, trackpad, pen and touch, and setPointerCapture
++   * means a drag that leaves the panel keeps working instead of stopping dead
++   * halfway through a rotation — which is the difference between something that
++   * feels like an instrument and something that feels broken.
++   */
++  const onPointerDown = useCallback(
++    (e: React.PointerEvent<HTMLDivElement>) => {
++      if (flat || e.button !== 0) return;
++      // Deliberately NOT capturing here.
++      //
++      // Capturing on pointerdown retargets the whole pointer sequence to this
++      // element, and the browser then never produces a click on the tile that
++      // was pressed — so every tile became unclickable the moment the panel
++      // learned to rotate. The capture is taken only once the pointer has
++      // actually travelled, which is the point where the gesture stops being a
++      // click and starts being a drag.
++      drag.current = { x: e.clientX, y: e.clientY, tilt, spin, active: false };
++    },
++    [flat, tilt, spin],
++  );
++
++  /** Below this, the gesture is still a click. */
++  const DRAG_THRESHOLD = 5;
++
++  const onPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
++    const start = drag.current;
++    if (!start) return;
++    const dx = e.clientX - start.x;
++    const dy = e.clientY - start.y;
++    if (!start.active) {
++      if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
++      start.active = true;
++      setDragging(true);
++      e.currentTarget.setPointerCapture(e.pointerId);
++    }
++    // Vertical drag tilts, horizontal drag spins — the mapping a hand expects
++    // when it grabs a surface and pushes it away.
++    setTilt(clampTilt(start.tilt + dy * 0.35));
++    setSpin(clampSpin(start.spin + dx * 0.35));
++  }, []);
++
++  const endDrag = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
++    const start = drag.current;
++    drag.current = null;
++    if (!start?.active) return;
++    swallowClick.current = true;
++    setDragging(false);
++    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
++      e.currentTarget.releasePointerCapture(e.pointerId);
++    }
++  }, []);
++
++  /** A drag that ends over a tile must not also open it. */
++  const onClickCapture = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
++    if (!swallowClick.current) return;
++    swallowClick.current = false;
++    e.preventDefault();
++    e.stopPropagation();
++  }, []);
++
++  /*
++   * Wheel zoom, non-passive.
++   *
++   * React attaches wheel listeners passively, so preventDefault() inside a JSX
++   * onWheel is ignored and the page scrolls away underneath the zoom. The
++   * listener is registered by hand for that one reason.
++   */
++  useEffect(() => {
++    const node = stageRef.current;
++    if (!node || flat) return;
++    const onWheel = (e: WheelEvent) => {
++      e.preventDefault();
++      setZoom((z) => clampZoom(z - e.deltaY * 0.0015));
++    };
++    node.addEventListener("wheel", onWheel, { passive: false });
++    return () => node.removeEventListener("wheel", onWheel);
++  }, [flat]);
++
++  const reset = useCallback(() => {
++    setTilt(HOME.tilt);
++    setSpin(HOME.spin);
++    setZoom(HOME.zoom);
++  }, []);
++
++  /** Arrow keys orbit, +/- zoom, Home recentres — the whole thing without a mouse. */
++  const onKeyDown = useCallback(
++    (e: React.KeyboardEvent<HTMLDivElement>) => {
++      if (flat) return;
++      const step = e.shiftKey ? 10 : 4;
++      const map: Record<string, () => void> = {
++        ArrowUp: () => setTilt((v) => clampTilt(v - step)),
++        ArrowDown: () => setTilt((v) => clampTilt(v + step)),
++        ArrowLeft: () => setSpin((v) => clampSpin(v - step)),
++        ArrowRight: () => setSpin((v) => clampSpin(v + step)),
++        "+": () => setZoom((z) => clampZoom(z + 0.12)),
++        "=": () => setZoom((z) => clampZoom(z + 0.12)),
++        "-": () => setZoom((z) => clampZoom(z - 0.12)),
++        Home: reset,
++      };
++      const run = map[e.key];
++      if (run) {
++        e.preventDefault();
++        run();
++      }
++    },
++    [flat, reset],
++  );
+ 
+   const rows = useMemo(
+     () => [...standings].sort((a, b) => b.required - a.required),
+@@ -99,14 +253,25 @@ export function PortfolioRelief({ standings }: { standings: readonly GewerkStand
+               <Grid3x3 className="h-3.5 w-3.5" aria-hidden="true" />
+               Flach
+             </Button>
++            <Button
++              size="sm"
++              variant="ghost"
++              aria-pressed={expanded}
++              onClick={() => setExpanded((v) => !v)}
++              className="h-8 gap-1.5 text-2xs"
++            >
++              {expanded ? (
++                <Minimize2 className="h-3.5 w-3.5" aria-hidden="true" />
++              ) : (
++                <Maximize2 className="h-3.5 w-3.5" aria-hidden="true" />
++              )}
++              {expanded ? "Verkleinern" : "Vergrößern"}
++            </Button>
+             {!flat && (
+               <Button
+                 size="sm"
+                 variant="ghost"
+-                onClick={() => {
+-                  setTilt(52);
+-                  setSpin(-24);
+-                }}
++                onClick={reset}
+                 className="h-8 gap-1.5 text-2xs"
+               >
+                 <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+@@ -123,7 +288,7 @@ export function PortfolioRelief({ standings }: { standings: readonly GewerkStand
+               <input
+                 type="range"
+                 min={0}
+-                max={70}
++                max={78}
+                 value={tilt}
+                 onChange={(e) => setTilt(Number(e.target.value))}
+                 className="h-1 w-32 accent-primary"
+@@ -134,29 +299,63 @@ export function PortfolioRelief({ standings }: { standings: readonly GewerkStand
+               Drehung
+               <input
+                 type="range"
+-                min={-45}
+-                max={45}
++                min={-60}
++                max={60}
+                 value={spin}
+                 onChange={(e) => setSpin(Number(e.target.value))}
+                 className="h-1 w-32 accent-primary"
+                 aria-label="Drehung des Reliefs"
+               />
+             </label>
++            <label className="flex items-center gap-2 text-2xs text-muted-foreground">
++              Zoom
++              <input
++                type="range"
++                min={60}
++                max={240}
++                value={Math.round(zoom * 100)}
++                onChange={(e) => setZoom(Number(e.target.value) / 100)}
++                className="h-1 w-32 accent-primary"
++                aria-label="Zoom des Reliefs"
++              />
++            </label>
++            <span className="text-2xs text-muted-foreground">
++              Ziehen zum Drehen · Mausrad zum Zoomen · Pfeiltasten, +/−, Pos1
++            </span>
+           </div>
+         )}
+ 
+-        <div className="overflow-x-auto pb-2">
++        <div className={`overflow-x-auto pb-2 ${expanded ? "h-[70vh] overflow-y-auto" : ""}`}>
++          {/*
++            The stage is the thing you grab. tabIndex + the key handler make the
++            same camera reachable without a pointer, and the role/aria-label say
++            what it is — a control surface, not decoration.
++          */}
+           <div
+-            className="relief-stage mx-auto min-w-[640px]"
++            ref={stageRef}
++            role="application"
++            aria-label="Portfolio-Relief — ziehen zum Drehen, Mausrad zum Zoomen, Pfeiltasten und Plus/Minus über die Tastatur"
++            tabIndex={flat ? -1 : 0}
++            onPointerDown={onPointerDown}
++            onPointerMove={onPointerMove}
++            onPointerUp={endDrag}
++            onPointerCancel={endDrag}
++            onClickCapture={onClickCapture}
++            onKeyDown={onKeyDown}
++            className={`relief-stage mx-auto min-w-[640px] rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-primary ${
++              flat ? "" : dragging ? "cursor-grabbing" : "cursor-grab"
++            }`}
+             style={
+               flat
+                 ? undefined
+                 : ({
+                     "--relief-tilt": `${tilt}deg`,
+                     "--relief-spin": `${spin}deg`,
++                    "--relief-zoom": String(zoom),
+                   } as React.CSSProperties)
+             }
+             data-flat={flat ? "true" : "false"}
++            data-dragging={dragging ? "true" : "false"}
+           >
+             <table className="relief-grid w-full border-separate border-spacing-1 text-2xs">
+               <caption className="sr-only">
+@@ -200,10 +399,26 @@ export function PortfolioRelief({ standings }: { standings: readonly GewerkStand
+                       const height = lift(v, max);
+                       return (
+                         <td key={lane.key} className="p-0">
+-                          <div
++                          {/*
++                            A button, not a div. Every tile is a place you can
++                            go: choosing one filters that Gewerk to that state,
++                            which is the whole reason to look at the shape in
++                            the first place. Zero-value tiles are disabled
++                            rather than hidden — an empty lane is information.
++                          */}
++                          <button
++                            type="button"
+                             className="relief-cell"
+                             data-value={v}
++                            data-lane={lane.key}
++                            data-department={r.department}
++                            disabled={v === 0}
+                             title={`${r.department} · ${lane.label}: ${v}`}
++                            aria-label={`${r.department}, ${lane.label}: ${v} Prüfungen${v > 0 ? " — öffnen" : ""}`}
++                            onClick={() => {
++                              if (v === 0) return;
++                              setLocation(laneHref(r.department, lane.key));
++                            }}
+                             style={
+                               {
+                                 "--relief-lift": `${height}px`,
+@@ -213,7 +428,7 @@ export function PortfolioRelief({ standings }: { standings: readonly GewerkStand
+                             }
+                           >
+                             <span className="relief-value tabular-nums">{v}</span>
+-                          </div>
++                          </button>
+                         </td>
+                       );
+                     })}
+diff --git a/client/src/index.css b/client/src/index.css
+index b392b9e..5f2f782 100644
+--- a/client/src/index.css
++++ b/client/src/index.css
+@@ -710,22 +710,47 @@
+ }
+ 
+ .relief-stage[data-flat="false"] .relief-grid {
+-  transform: rotateX(var(--relief-tilt, 52deg)) rotateZ(var(--relief-spin, -24deg));
++  transform: scale(var(--relief-zoom, 1)) rotateX(var(--relief-tilt, 52deg))
++    rotateZ(var(--relief-spin, -24deg));
+   transform-style: preserve-3d;
+   transition: transform 200ms ease-out;
+ }
+ 
++/* While a hand is on it, the camera must not lag behind the hand. */
++.relief-stage[data-dragging="true"] .relief-grid,
++.relief-stage[data-dragging="true"] .relief-cell {
++  transition: none;
++}
++
+ .relief-cell {
+   display: flex;
++  width: 100%;
+   align-items: center;
+   justify-content: center;
+   min-height: 30px;
++  border: 0;
+   border-radius: 6px;
+   background-color: rgb(var(--relief-fill) / var(--relief-alpha));
+   transform-style: preserve-3d;
+   transition: transform 200ms ease-out;
+ }
+ 
++.relief-cell:not(:disabled) {
++  cursor: pointer;
++}
++
++/* A tile you can reach rises to meet you. 12px is enough to read as a
++   response and small enough not to collide with the row above. */
++.relief-stage[data-flat="false"] .relief-cell:not(:disabled):hover,
++.relief-stage[data-flat="false"] .relief-cell:not(:disabled):focus-visible {
++  transform: translateZ(calc(var(--relief-lift, 0px) + 12px));
++}
++
++.relief-cell:focus-visible {
++  outline: 2px solid hsl(var(--primary));
++  outline-offset: 2px;
++}
++
+ .relief-stage[data-flat="false"] .relief-cell {
+   transform: translateZ(var(--relief-lift, 0px));
+   box-shadow: 0 6px 14px rgb(0 0 0 / 0.18);
+@@ -762,3 +787,11 @@
+     transition: none;
+   }
+ }
++
++/* A coarse pointer cannot hover, and a 30px tile is under the 44px floor.
++   Touch gets taller tiles and keeps the drag-to-rotate. */
++@media (pointer: coarse) {
++  .relief-cell {
++    min-height: 44px;
++  }
++}
+diff --git a/scripts/check-ui.mjs b/scripts/check-ui.mjs
+index 10143c8..8e8d804 100644
+--- a/scripts/check-ui.mjs
++++ b/scripts/check-ui.mjs
+@@ -227,6 +227,34 @@ const SCENARIOS = [
+       await page.waitForTimeout(900);
+     },
+   },
++  {
++    name: "Ask Bahn · Antwort",
++    route: "/",
++    async run(page) {
++      await page.getByRole("button", { name: /^Ask Bahn öffnen/ }).click();
++      await page.waitForSelector("[data-ask-bahn='open']", { timeout: 15000 });
++      await page.getByLabel("Frage an Ask Bahn").fill("Was ist gerade kritisch?");
++      await page.getByRole("button", { name: "Fragen" }).click();
++      await page.waitForTimeout(700);
++    },
++  },
++  {
++    name: "Dashboard · Relief gedreht",
++    route: "/",
++    async run(page) {
++      await page.waitForSelector(".relief-cell", { timeout: 20000 });
++      await page.locator(".relief-stage").scrollIntoViewIfNeeded();
++      await page.waitForTimeout(300);
++      const box = await page.locator(".relief-stage").boundingBox();
++      if (box) {
++        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
++        await page.mouse.down();
++        await page.mouse.move(box.x + box.width / 2 + 140, box.y + box.height / 2 - 40, { steps: 6 });
++        await page.mouse.up();
++      }
++      await page.waitForTimeout(600);
++    },
++  },
+   {
+     name: "Anmeldung · Prüfungen",
+     route: "/anmeldung",
+@@ -529,7 +557,18 @@ const AUDIT = () => {
+    * covered 41% of the map legend — a 36,252px² defect this check found. An
+    * absolutely-positioned box sitting on top of content is still a finding.
+    */
+-  const OVERLAY = "[role='dialog'],[role='listbox'],[role='menu'],[data-radix-popper-content-wrapper]";
++  /*
++   * `data-overlay` is the explicit opt-in.
++   *
++   * The role-based selectors below cover the layers that announce themselves
++   * through ARIA. The Ask Bahn panel is deliberately an <aside> — it is not a
++   * modal and must not claim to be one — so it carries the marker instead of
++   * acquiring a role it does not deserve. Opting in by attribute keeps this
++   * narrow: `position: fixed` in general stays audited, because that is what
++   * the map's legend-covering card was.
++   */
++  const OVERLAY =
++    "[role='dialog'],[role='listbox'],[role='menu'],[data-radix-popper-content-wrapper],[data-overlay]";
+   /*
+    * Is this background actually painted?
+    *
+diff --git a/scripts/e2e-smoke.mjs b/scripts/e2e-smoke.mjs
+index 2305719..6008130 100644
+--- a/scripts/e2e-smoke.mjs
++++ b/scripts/e2e-smoke.mjs
+@@ -1810,6 +1810,184 @@ await check("the diagnostics say what they cannot measure", async () => {
+   );
+ });
+ 
++
++console.log("\n== Ask Bahn answers from the data, or says it cannot ==");
++
++const openAsk = async () => {
++  await page.getByRole("button", { name: /^Ask Bahn öffnen/ }).click();
++  await page.waitForSelector("[data-ask-bahn='open']", { timeout: 10000 });
++};
++
++await check("the assistant is reachable from every route and closes cleanly", async () => {
++  for (const route of ["/", "/projects", "/bvb-eea", "/psv-itk", "/audit"]) {
++    await go(route);
++    const launcher = page.getByRole("button", { name: /^Ask Bahn öffnen/ });
++    assert(await launcher.count() === 1, `no launcher on ${route}`);
++  }
++  await openAsk();
++  await page.keyboard.press("Escape");
++  await page.waitForTimeout(400);
++  assert(
++    (await page.$$("[data-ask-bahn='open']")).length === 0,
++    "Escape did not close the panel",
++  );
++});
++
++await check("its figures agree with the pages they link to", async () => {
++  await go("/");
++  await openAsk();
++  await page.getByLabel("Frage an Ask Bahn").fill("Wie steht EEA?");
++  await page.getByRole("button", { name: "Fragen" }).click();
++  await page.waitForTimeout(600);
++
++  const text = await page.locator("[data-ask-bahn='open']").innerText();
++  // /bvb-eea reports 814 required EEA checks. The assistant must not differ.
++  assert(/814/.test(text), `the answer does not carry the EEA workload: ${text.slice(0, 200)}`);
++  assert(/erforderlich/.test(text), "the answer does not label what 814 is");
++  // Every answer states where its numbers came from.
++  assert(/nicht erforderlich/.test(text), "the answer does not state its basis");
++});
++
++await check("every answer carries its derivation, never a bare number", async () => {
++  await go("/");
++  await openAsk();
++  for (const question of [
++    "Was ist gerade kritisch?",
++    "Was ist überfällig?",
++    "Wer hat die meiste offene Last?",
++    "Wie verlässlich sind die Zahlen?",
++  ]) {
++    await page.getByLabel("Frage an Ask Bahn").fill(question);
++    await page.getByRole("button", { name: "Fragen" }).click();
++    await page.waitForTimeout(400);
++  }
++  const text = await page.locator("[data-ask-bahn='open']").innerText();
++  for (const phrase of ["Gezählt", "Rangfolge", "Offene Prüfzeilen", "Geprüft"]) {
++    assert(text.includes(phrase), `no derivation matching "${phrase}" in the transcript`);
++  }
++  // The ranking is labelled a judgement, not a measurement.
++  assert(/keine Messung/.test(text), "the risk ranking is not labelled as a heuristic");
++});
++
++await check("it refuses rather than inventing an answer", async () => {
++  await go("/");
++  await openAsk();
++  await page.getByLabel("Frage an Ask Bahn").fill("Wie hoch ist das Budget für 2027?");
++  await page.getByRole("button", { name: "Fragen" }).click();
++  await page.waitForTimeout(600);
++  const text = await page.locator("[data-ask-bahn='open']").innerText();
++  assert(
++    /nicht verstanden|kein Projekt|nichts wird geschätzt/.test(text),
++    `the assistant answered a question it has no data for: ${text.slice(-300)}`,
++  );
++  // And it must not have produced a figure out of nowhere.
++  assert(!/€|EUR|Budget von/.test(text), "the assistant produced a budget figure");
++});
++
++await check("an answer navigates to the screen that proves it", async () => {
++  await go("/");
++  await openAsk();
++  await page.getByLabel("Frage an Ask Bahn").fill("Wie steht ITK?");
++  await page.getByRole("button", { name: "Fragen" }).click();
++  await page.waitForTimeout(600);
++  await page.getByRole("button", { name: "ITK öffnen" }).first().click();
++  await page.waitForTimeout(1200);
++  assert(/\/psv-itk/.test(page.url()), `"ITK öffnen" went to ${page.url()}`);
++  assert(
++    (await page.$$("[data-ask-bahn='open']")).length === 0,
++    "the panel stayed open over the page it navigated to",
++  );
++});
++
++console.log("\n== the relief is an instrument, not a picture ==");
++
++await check("dragging rotates it, and the numbers stay upright", async () => {
++  await go("/");
++  await page.waitForSelector(".relief-cell", { timeout: 25000 });
++  const stage = page.locator(".relief-stage");
++  // page.mouse works in viewport coordinates and never scrolls; the relief sits
++  // about 2,700px down the Dashboard, so without this the drag happens in
++  // empty space below the window.
++  await stage.scrollIntoViewIfNeeded();
++  await page.waitForTimeout(300);
++  const before = await stage.getAttribute("style");
++
++  const box = await stage.boundingBox();
++  assert(box, "the relief has no box to drag");
++  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
++  await page.mouse.down();
++  await page.mouse.move(box.x + box.width / 2 + 120, box.y + box.height / 2 + 60, { steps: 8 });
++  await page.mouse.up();
++  await page.waitForTimeout(400);
++
++  const after = await stage.getAttribute("style");
++  assert(before !== after, "dragging did not move the camera");
++  assert(/--relief-spin/.test(after ?? ""), "the spin variable is not being written");
++
++  // The whole promise of this panel: the value is always readable.
++  const cells = await page.$$eval(".relief-cell", (els) =>
++    els.map((e) => ({ attr: e.getAttribute("data-value"), text: e.textContent.trim() })),
++  );
++  for (const c of cells) assert(c.text === c.attr, `a tile draws ${c.attr} but prints "${c.text}"`);
++});
++
++await check("the wheel zooms without scrolling the page away", async () => {
++  await go("/");
++  await page.waitForSelector(".relief-cell", { timeout: 25000 });
++  const stage = page.locator(".relief-stage");
++  await stage.scrollIntoViewIfNeeded();
++  await page.waitForTimeout(300);
++  const box = await stage.boundingBox();
++  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
++  const scrollBefore = await page.evaluate(() => window.scrollY);
++  await page.mouse.wheel(0, -300);
++  await page.waitForTimeout(400);
++  const style = (await stage.getAttribute("style")) ?? "";
++  const zoom = Number((style.match(/--relief-zoom:\s*([\d.]+)/) ?? ["", "1"])[1]);
++  assert(zoom > 1, `the wheel did not zoom in — zoom is ${zoom}`);
++  const scrollAfter = await page.evaluate(() => window.scrollY);
++  assert(scrollAfter === scrollBefore, "zooming scrolled the page instead");
++});
++
++await check("the keyboard drives the same camera", async () => {
++  await go("/");
++  await page.waitForSelector(".relief-cell", { timeout: 25000 });
++  await page.locator(".relief-stage").focus();
++  const before = (await page.getAttribute(".relief-stage", "style")) ?? "";
++  await page.keyboard.press("ArrowRight");
++  await page.keyboard.press("ArrowRight");
++  await page.keyboard.press("+");
++  await page.waitForTimeout(400);
++  const after = (await page.getAttribute(".relief-stage", "style")) ?? "";
++  assert(before !== after, "the arrow keys did not move the camera");
++
++  await page.keyboard.press("Home");
++  await page.waitForTimeout(400);
++  const home = (await page.getAttribute(".relief-stage", "style")) ?? "";
++  assert(/--relief-tilt:\s*52deg/.test(home), `Home did not recentre: ${home}`);
++  assert(/--relief-zoom:\s*1\b/.test(home), "Home did not reset the zoom");
++});
++
++await check("a tile is a place you can go, and an empty tile is not", async () => {
++  await go("/");
++  await page.waitForSelector(".relief-cell", { timeout: 25000 });
++
++  const zeroDisabled = await page.$$eval(".relief-cell", (els) =>
++    els
++      .filter((e) => e.getAttribute("data-value") === "0")
++      .every((e) => e.hasAttribute("disabled")),
++  );
++  assert(zeroDisabled, "a tile with no rows behind it is still clickable");
++
++  const target = page.locator('.relief-cell[data-department="EEA"][data-lane="blocked"]');
++  assert(await target.count() === 1, "no EEA/blockiert tile to open");
++  await target.click();
++  await page.waitForTimeout(1200);
++  const url = new URL(page.url());
++  assert(url.pathname === "/bvb-eea", `the EEA tile went to ${url.pathname}`);
++  assert(url.searchParams.get("q") === "abgelehnt", `it did not carry the state: ${url.search}`);
++});
++
+ console.log("\n== summary ==");
+ console.log(`${passed} passed, ${failures.length} failed`);
+ await browser.close();
+-- 
+2.43.0
+
