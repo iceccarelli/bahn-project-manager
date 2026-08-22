@@ -1,0 +1,3379 @@
+From 25b72a3767fa550d15b55eaec9f1702151ca31a6 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 22 Aug 2026 20:52:23 +0000
+Subject: [PATCH 1/2] the audit trail says which project it changed, how bad it
+ is, and whether anyone meant it
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The trail recorded this, in full:
+
+    ITK: status von Zustimmung erteilt auf offen gesetzt.
+
+A granted approval was withdrawn and the record does not say on which of
+1,298 projects. Nobody can act on it, nobody can audit it, and it cannot be
+undone, because the entry does not know what it changed. Everything here
+follows from that one sentence.
+
+WHAT. shared/audit-entry.ts carries structure beside the prose: project id,
+Projektnummer, Station, Gewerk, field, from, to, and the screen the change
+was made on. The surface is read from the URL at write time rather than
+threaded through applyEdit, applyReviewEdit, the wizard and the detail
+dialog, which would be four chances to pass the wrong one. Entries written
+before this file keep their prose and render exactly as they did.
+
+HOW BAD. Withdrawing an approval and filling in a Prüfer's name used to be
+identical rows, so finding the first meant reading all of the second.
+Severity is now a function of consequence: an approval taken away, a
+required check switched to "nicht erforderlich", or a project deleted are
+kritisch; a renamed identity field or a newly blocked check is wichtig;
+normal progress is routine. Status is read through the canonical
+vocabulary, so "Niederschrift erstellt (LP05-05-01-F31)" grades the same as
+its plain form. "Nur kritische" isolates them.
+
+WAS IT MEANT. People mis-click. A change reversed ninety seconds later is
+one person correcting themselves, not two decisions, so markCorrections
+marks the earlier entry superseded inside a ten-minute window and the
+default view stops it leading the page. It does not delete it: one click
+shows every corrected entry, because a trail that can lose rows is not
+evidence of anything. Inside the same window an entry offers Rückgängig,
+which writes the old value back through the ordinary validated, optimistic,
+audited mutation — the undo is a new entry, never an erasure.
+
+Also: a stationary cursor no longer steals the search palette's keyboard
+highlight. mouseenter fires when a list opens under a pointer that has not
+moved, so Enter opened the row under the mouse rather than the row the
+reader was looking at — which is also why one smoke assertion had been
+failing intermittently across three runs. mousemove instead.
+---
+ client/src/_core/api/client.ts                |  59 ++++-
+ client/src/components/CommandSearch.tsx       |  17 +-
+ .../src/components/workspace/FilterSearch.tsx |  15 +-
+ client/src/hooks/useAuditUndo.ts              |  46 ++++
+ client/src/hooks/useDataQuery.ts              |  15 +-
+ client/src/pages/AuditLog.tsx                 | 197 ++++++++++++++-
+ shared/audit-entry.test.ts                    | 224 ++++++++++++++++++
+ shared/audit-entry.ts                         | 214 +++++++++++++++++
+ 8 files changed, 766 insertions(+), 21 deletions(-)
+ create mode 100644 client/src/hooks/useAuditUndo.ts
+ create mode 100644 shared/audit-entry.test.ts
+ create mode 100644 shared/audit-entry.ts
+
+diff --git a/client/src/_core/api/client.ts b/client/src/_core/api/client.ts
+index 815d619..488684b 100644
+--- a/client/src/_core/api/client.ts
++++ b/client/src/_core/api/client.ts
+@@ -9,6 +9,7 @@
+ 
+ import { DEPARTMENTS } from "@shared/validation";
+ import { AUDIT_ACTIONS } from "@shared/audit-actions";
++import { surfaceForPath, type AuditMeta } from "@shared/audit-entry";
+ import type { ProjectChecklist } from "@shared/validation";
+ import type { Project, Review, Stats, AuditLogEntry } from "@/hooks/useDataQuery";
+ import { describeIngest, ingestProjects } from "@shared/ingest";
+@@ -157,21 +158,38 @@ async function initializeStorage() {
+   }
+ }
+ 
+-function recordAudit(action: string, details: string) {
++function recordAudit(action: string, details: string, meta?: AuditMeta) {
+   const user = JSON.parse(localStorage.getItem("bahn-demo-user") || '{"name":"System"}');
+   const audit = JSON.parse(localStorage.getItem(STORAGE_KEY_AUDIT) || "[]");
+   const entry: AuditLogEntry = {
+-    id: Math.random().toString(36).substring(7),
++    id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`,
+     timestamp: new Date().toISOString(),
+     user: user.name,
+     action,
+     details,
++    // Structure, not prose. `details` stays the human sentence; everything a
++    // reader or a filter needs to act on lives here — including which of the
++    // 1,298 projects this was, which the old entry never said.
++    ...(meta ? { meta } : {}),
+   };
+   audit.unshift(entry);
+   localStorage.setItem(STORAGE_KEY_AUDIT, JSON.stringify(audit.slice(0, 1000)));
+   return entry;
+ }
+ 
++/**
++ * Which screen the change was made on.
++ *
++ * Read from the URL at write time rather than passed in: the write always
++ * happens on the page the user is looking at, and threading a `surface`
++ * argument through applyEdit, applyReviewEdit, the wizard and the detail dialog
++ * would be four chances to pass the wrong one.
++ */
++function currentSurface(): string {
++  if (typeof window === "undefined") return "App";
++  return surfaceForPath(window.location.pathname);
++}
++
+ export const apiClient = {
+   projects: {
+     async list(): Promise<Project[]> {
+@@ -218,6 +236,12 @@ export const apiClient = {
+       recordAudit(
+         AUDIT_ACTIONS.projektAngelegt,
+         `Projekt ${newProject.projektnummer} (${newProject.station}) angelegt.`,
++        {
++          projectId: newProject.id,
++          projektnummer: newProject.projektnummer,
++          station: newProject.station,
++          surface: currentSurface(),
++        },
+       );
+ 
+       window.dispatchEvent(new StorageEvent("storage", {
+@@ -255,6 +279,15 @@ export const apiClient = {
+     recordAudit(
+       AUDIT_ACTIONS.projektAktualisiert,
+       `Feld ${input.field} von ${oldVal} auf ${input.value} geändert.`,
++      {
++        projectId: project.id,
++        projektnummer: project.projektnummer,
++        station: project.station,
++        field: input.field,
++        from: oldVal == null ? null : String(oldVal),
++        to: input.value,
++        surface: currentSurface(),
++      },
+     );
+     window.dispatchEvent(new StorageEvent("storage", { key: STORAGE_KEY_PROJECTS, newValue: JSON.stringify(projects) }));
+     return project;
+@@ -264,7 +297,13 @@ export const apiClient = {
+       const projects = await this.list();
+       const filtered = projects.filter((p) => p.id !== id);
+       localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(filtered));
+-      recordAudit(AUDIT_ACTIONS.projektGeloescht, `Projekt ID ${id} entfernt.`);
++      const removed = projects.find((p) => p.id === id);
++      recordAudit(AUDIT_ACTIONS.projektGeloescht, `Projekt ID ${id} entfernt.`, {
++        projectId: id,
++        projektnummer: removed?.projektnummer ?? null,
++        station: removed?.station ?? null,
++        surface: currentSurface(),
++      });
+ 
+       window.dispatchEvent(new StorageEvent("storage", {
+         key: STORAGE_KEY_PROJECTS,
+@@ -303,6 +342,16 @@ export const apiClient = {
+     recordAudit(
+       AUDIT_ACTIONS.pruefungAktualisiert,
+       `${input.department}: ${input.field} von ${oldVal} auf ${input.value} gesetzt.`,
++      {
++        projectId: project.id,
++        projektnummer: project.projektnummer,
++        station: project.station,
++        department: input.department,
++        field: input.field,
++        from: oldVal == null ? null : String(oldVal),
++        to: input.value,
++        surface: currentSurface(),
++      },
+     );
+     window.dispatchEvent(new StorageEvent("storage", { key: STORAGE_KEY_PROJECTS, newValue: JSON.stringify(projects) }));
+     return project;
+@@ -397,8 +446,8 @@ export const apiClient = {
+       return JSON.parse(localStorage.getItem(STORAGE_KEY_AUDIT) || "[]");
+     },
+ 
+-    async record(action: string, details: string): Promise<AuditLogEntry> {
+-      const entry = recordAudit(action, details);
++    async record(action: string, details: string, meta?: AuditMeta): Promise<AuditLogEntry> {
++      const entry = recordAudit(action, details, meta);
+       window.dispatchEvent(new StorageEvent("storage", { key: STORAGE_KEY_AUDIT }));
+       return entry;
+     },
+diff --git a/client/src/components/CommandSearch.tsx b/client/src/components/CommandSearch.tsx
+index a8c4baa..e983313 100644
+--- a/client/src/components/CommandSearch.tsx
++++ b/client/src/components/CommandSearch.tsx
+@@ -314,7 +314,12 @@ export function CommandSearch({ id = "app-search" }: { id?: string }) {
+                           aria-selected={i === active}
+                           data-index={i}
+                           data-search-kind={hit.kind}
+-                          onMouseEnter={() => setActive(i)}
++                          // mousemove, not mouseenter: a cursor that happens to be resting
++                          // where the list opens fires mouseenter without the
++                          // user moving it, and silently steals the keyboard
++                          // highlight — so Enter opened the row under the mouse
++                          // instead of the row the reader was looking at.
++                          onMouseMove={() => setActive(i)}
+                           onClick={() => go(hit)}
+                           className={`flex w-full items-center gap-3 px-4 py-2 text-left transition-colors ${
+                             i === active ? "bg-primary/10" : "hover:bg-muted/70"
+@@ -327,7 +332,15 @@ export function CommandSearch({ id = "app-search" }: { id?: string }) {
+                           <span className="min-w-0 flex-1">
+                             <span className="block truncate text-sm font-medium">{hit.label}</span>
+                             {hit.sublabel && (
+-                              <span className="block truncate text-2xs text-muted-foreground">
++                              // The highlight tints the row red at 10%, and
++                              // muted-foreground on that tint measures 4.3:1 —
++                              // under the floor. The secondary line darkens with
++                              // the highlight instead of staying put.
++                              <span
++                                className={`block truncate text-2xs ${
++                                  i === active ? "text-foreground/75" : "text-muted-foreground"
++                                }`}
++                              >
+                                 {hit.sublabel}
+                               </span>
+                             )}
+diff --git a/client/src/components/workspace/FilterSearch.tsx b/client/src/components/workspace/FilterSearch.tsx
+index 01920d2..facd8d4 100644
+--- a/client/src/components/workspace/FilterSearch.tsx
++++ b/client/src/components/workspace/FilterSearch.tsx
+@@ -127,7 +127,12 @@ export function FilterSearch({
+               id={`${id}-opt-${i}`}
+               role="option"
+               aria-selected={i === active}
+-              onMouseEnter={() => setActive(i)}
++              // mousemove, not mouseenter: a cursor that happens to be resting
++                          // where the list opens fires mouseenter without the
++                          // user moving it, and silently steals the keyboard
++                          // highlight — so Enter opened the row under the mouse
++                          // instead of the row the reader was looking at.
++                          onMouseMove={() => setActive(i)}
+               onClick={() => choose(s.label)}
+               className={`flex w-full items-center justify-between gap-3 px-4 py-2 text-left text-sm transition-colors ${
+                 i === active ? "bg-primary/10" : "hover:bg-muted/70"
+@@ -135,7 +140,13 @@ export function FilterSearch({
+             >
+               <span className="truncate">{s.label}</span>
+               {s.sublabel && (
+-                <span className="shrink-0 text-2xs text-muted-foreground">{s.sublabel}</span>
++                <span
++                  className={`shrink-0 text-2xs ${
++                    i === active ? "text-foreground/75" : "text-muted-foreground"
++                  }`}
++                >
++                  {s.sublabel}
++                </span>
+               )}
+             </button>
+           ))}
+diff --git a/client/src/hooks/useAuditUndo.ts b/client/src/hooks/useAuditUndo.ts
+new file mode 100644
+index 0000000..01bbf11
+--- /dev/null
++++ b/client/src/hooks/useAuditUndo.ts
+@@ -0,0 +1,46 @@
++import { useCallback } from "react";
++import { toast } from "sonner";
++import { useProjectEdits, type AuditLogEntry } from "@/hooks/useDataQuery";
++
++/**
++ * Taking back a change inside the grace window.
++ *
++ * People mis-click. A Prüfer opens the wrong row's status, picks the wrong
++ * value, and the record now says an approval was withdrawn. Without a way back
++ * they either leave it wrong or fix it by hand and the trail carries two
++ * unexplained changes.
++ *
++ * This writes the old value back through the ordinary mutation, so the undo is
++ * itself validated, optimistic, rolled back on refusal — and recorded. It does
++ * NOT delete the entry it reverses. An audit trail that can lose rows is not
++ * evidence of anything; the pair (change, undo) is the honest record of what
++ * happened, and markCorrections is what stops that pair from reading as two
++ * separate decisions.
++ */
++export function useAuditUndo() {
++  const { applyEdit, applyReviewEdit } = useProjectEdits();
++
++  return useCallback(
++    (entry: AuditLogEntry) => {
++      const meta = entry.meta;
++      if (!meta || meta.projectId === undefined || !meta.field) {
++        toast.error("Diese Änderung trägt keine Angaben, die sich zurücknehmen lassen.");
++        return;
++      }
++      const previous = meta.from ?? "";
++      if (meta.department) {
++        applyReviewEdit(
++          meta.projectId,
++          meta.department,
++          meta.field as "status" | "prueferName" | "pruefDatum",
++          previous,
++        );
++      } else {
++        applyEdit(meta.projectId, meta.field as never, previous);
++      }
++      const who = [meta.projektnummer, meta.station].filter(Boolean).join(" · ") || `Projekt ${meta.projectId}`;
++      toast.success(`Zurückgenommen: ${who} · ${meta.field} wieder „${previous || "leer"}"`);
++    },
++    [applyEdit, applyReviewEdit],
++  );
++}
+diff --git a/client/src/hooks/useDataQuery.ts b/client/src/hooks/useDataQuery.ts
+index ed5a8cf..2073c59 100644
+--- a/client/src/hooks/useDataQuery.ts
++++ b/client/src/hooks/useDataQuery.ts
+@@ -1,4 +1,5 @@
+ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
++import type { AuditMeta } from "@shared/audit-entry";
+ import { useCallback, useMemo } from "react";
+ import { toast } from "sonner";
+ import { apiClient } from "@/_core/api/client";
+@@ -56,6 +57,12 @@ export interface AuditLogEntry {
+   user: string;
+   action: string;
+   details: string;
++  /**
++   * The structured half. Optional because entries written before
++   * shared/audit-entry.ts existed keep their prose and nothing else — the store
++   * is append-only and there is no migration step.
++   */
++  meta?: AuditMeta;
+ }
+ 
+ // ============================================================================
+@@ -117,8 +124,12 @@ export function useAuditLog() {
+ export function useRecordAudit() {
+   const queryClient = useQueryClient();
+   return useMutation({
+-    mutationFn: ({ action, details }: { action: string; details: string }) =>
+-      apiClient.audit.record(action, details),
++    mutationFn: ({
++      action,
++      details,
++      meta,
++    }: { action: string; details: string; meta?: AuditMeta }) =>
++      apiClient.audit.record(action, details, meta),
+     onSuccess: () => {
+       queryClient.invalidateQueries({ queryKey: queryKeys.audit.all });
+     },
+diff --git a/client/src/pages/AuditLog.tsx b/client/src/pages/AuditLog.tsx
+index 481d810..6402c0a 100644
+--- a/client/src/pages/AuditLog.tsx
++++ b/client/src/pages/AuditLog.tsx
+@@ -1,9 +1,21 @@
+-import { useMemo, useState } from "react";
++import { useEffect, useMemo, useState } from "react";
+ import { Card, CardContent } from "@/components/ui/card";
+ import { Input } from "@/components/ui/input";
+-import { History, Search, Trash2, FilePlus2, PencilLine, ClipboardCheck, FileDown, Send } from "lucide-react";
++import { Button } from "@/components/ui/button";
++import {
++  History, Search, Trash2, FilePlus2, PencilLine, ClipboardCheck, FileDown, Send,
++  AlertOctagon, Undo2, CornerUpLeft,
++} from "lucide-react";
+ import { useAuditLog } from "@/hooks/useDataQuery";
++import { useAuditUndo } from "@/hooks/useAuditUndo";
+ import { auditTone, type AuditTone } from "@shared/audit-actions";
++import {
++  CORRECTION_WINDOW_MINUTES,
++  markCorrections,
++  SEVERITY_LABEL,
++  describeChange,
++  type Severity,
++} from "@shared/audit-entry";
+ 
+ /**
+  * Änderungshistorie.
+@@ -66,20 +78,79 @@ function formatStamp(iso: string): string {
+   return Number.isNaN(d.getTime()) ? iso : dateFmt.format(d);
+ }
+ 
++const SEVERITY_STYLE: Record<Severity, string> = {
++  kritisch: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200",
++  wichtig: "bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-200",
++  routine: "bg-muted text-muted-foreground",
++};
++
++/** How far back the page looks. "Alles" is the honest default for an audit. */
++const WINDOWS: ReadonlyArray<{ key: string; label: string; hours: number | null }> = [
++  { key: "24h", label: "24 Stunden", hours: 24 },
++  { key: "7d", label: "7 Tage", hours: 24 * 7 },
++  { key: "30d", label: "30 Tage", hours: 24 * 30 },
++  { key: "all", label: "Alles", hours: null },
++];
++
+ export default function AuditLogPage() {
+   const { data: entries, isLoading } = useAuditLog();
++  const undo = useAuditUndo();
+   const [query, setQuery] = useState("");
++  const [onlyCritical, setOnlyCritical] = useState(false);
++  const [hideCorrected, setHideCorrected] = useState(true);
++  const [windowKey, setWindowKey] = useState("all");
++
++  /*
++   * A ticking clock, on purpose.
++   *
++   * Whether an entry is still inside the correction window is a function of the
++   * current time, so the undo button has to disappear on its own. Recomputing
++   * once a minute is enough for a ten-minute window and costs nothing; deriving
++   * it inside the render from Date.now() would make the page classify
++   * differently on every unrelated re-render.
++   */
++  const [now, setNow] = useState(() => Date.now());
++  useEffect(() => {
++    const t = setInterval(() => setNow(Date.now()), 30_000);
++    return () => clearInterval(t);
++  }, []);
++
++  const verdicts = useMemo(
++    () => markCorrections(entries ?? [], now, CORRECTION_WINDOW_MINUTES),
++    [entries, now],
++  );
++
++  const cutoff = useMemo(() => {
++    const w = WINDOWS.find((x) => x.key === windowKey);
++    return w?.hours == null ? null : now - w.hours * 3_600_000;
++  }, [windowKey, now]);
+ 
+   const filtered = useMemo(() => {
+     const all = entries ?? [];
+     const q = query.trim().toLowerCase();
+-    if (!q) return all;
+-    return all.filter((e) =>
+-      `${e.action} ${e.details} ${e.user}`.toLowerCase().includes(q),
+-    );
+-  }, [entries, query]);
++    return all.filter((e) => {
++      const v = verdicts.get(e.id);
++      if (cutoff !== null && Date.parse(e.timestamp) < cutoff) return false;
++      if (onlyCritical && v?.severity !== "kritisch") return false;
++      // A change that was corrected inside the window is one person fixing
++      // themselves. It stays in the record; it just does not lead the page.
++      if (hideCorrected && v?.superseded) return false;
++      if (!q) return true;
++      return `${e.action} ${e.details} ${e.user} ${describeChange(e.meta)}`
++        .toLowerCase()
++        .includes(q);
++    });
++  }, [entries, query, verdicts, onlyCritical, hideCorrected, cutoff]);
+ 
+   const total = entries?.length ?? 0;
++  const criticalCount = useMemo(
++    () => (entries ?? []).filter((e) => verdicts.get(e.id)?.severity === "kritisch").length,
++    [entries, verdicts],
++  );
++  const correctedCount = useMemo(
++    () => (entries ?? []).filter((e) => verdicts.get(e.id)?.superseded).length,
++    [entries, verdicts],
++  );
+ 
+   return (
+     <div className="space-y-6">
+@@ -105,6 +176,63 @@ export default function AuditLogPage() {
+         </div>
+       </header>
+ 
++      {/*
++        The controls a reader actually needs on a change log.
++
++        "Nur kritische" is the one that matters: an approval being withdrawn and
++        a Prüfer's name being filled in used to render as identical rows, so
++        finding the first meant reading all of the second.
++      */}
++      <div className="flex flex-wrap items-center gap-2">
++        <Button
++          size="sm"
++          variant={onlyCritical ? "default" : "outline"}
++          aria-pressed={onlyCritical}
++          onClick={() => setOnlyCritical((v) => !v)}
++          className="h-9 gap-2"
++        >
++          <AlertOctagon className="h-4 w-4" aria-hidden="true" />
++          Nur kritische
++          <span className="rounded-full bg-black/10 px-1.5 text-2xs font-bold dark:bg-white/20">
++            {criticalCount}
++          </span>
++        </Button>
++
++        <Button
++          size="sm"
++          variant={hideCorrected ? "default" : "outline"}
++          aria-pressed={hideCorrected}
++          onClick={() => setHideCorrected((v) => !v)}
++          className="h-9 gap-2"
++          title={`Änderungen, die innerhalb von ${CORRECTION_WINDOW_MINUTES} Minuten erneut geändert wurden`}
++        >
++          <CornerUpLeft className="h-4 w-4" aria-hidden="true" />
++          Korrekturen ausblenden
++          <span className="rounded-full bg-black/10 px-1.5 text-2xs font-bold dark:bg-white/20">
++            {correctedCount}
++          </span>
++        </Button>
++
++        {/* A <fieldset>, not a div with role="group": it is the element the
++            grouping role exists to describe, and the legend names it for a
++            screen reader without adding a visible heading. */}
++        <fieldset className="ml-auto flex items-center gap-1 rounded-lg bg-muted p-1">
++          <legend className="sr-only">Zeitraum</legend>
++          {WINDOWS.map((w) => (
++            <Button
++              key={w.key}
++              size="sm"
++              variant={windowKey === w.key ? "secondary" : "ghost"}
++              aria-pressed={windowKey === w.key}
++              onClick={() => setWindowKey(w.key)}
++              className="h-8 px-3 text-2xs"
++            >
++              {w.label}
++            </Button>
++          ))}
++        </fieldset>
++      </div>
++
+       {/* <output> carries an implicit role=status, so the count is announced
+           when the filter changes without an explicit ARIA role. */}
+       <output className="block text-xs text-muted-foreground">
+@@ -140,20 +268,27 @@ export default function AuditLogPage() {
+           <div className="overflow-x-auto">
+             <table className="w-full border-collapse text-sm">
+               <caption className="sr-only">
+-                Änderungshistorie — Zeitpunkt, Person, Aktion und Details je Vorgang
++                Änderungshistorie — Zeitpunkt, Person, Aktion, Schwere und Details je Vorgang
+               </caption>
+               <thead>
+                 <tr className="border-b bg-muted/40 text-2xs uppercase tracking-wider text-muted-foreground">
+                   <th scope="col" className="px-4 py-2.5 text-left font-bold">Zeitpunkt</th>
+                   <th scope="col" className="px-4 py-2.5 text-left font-bold">Person</th>
+                   <th scope="col" className="px-4 py-2.5 text-left font-bold">Aktion</th>
++                  <th scope="col" className="px-4 py-2.5 text-left font-bold">Schwere</th>
+                   <th scope="col" className="px-4 py-2.5 text-left font-bold">Details</th>
++                  <th scope="col" className="px-4 py-2.5 text-right font-bold">
++                    <span className="sr-only">Rückgängig</span>
++                  </th>
+                 </tr>
+               </thead>
+               <tbody>
+                 {filtered.map((e) => {
+                   const { Icon, tone } = actionStyle(e.action);
+                   const toneName = auditTone(e.action);
++                  const v = verdicts.get(e.id);
++                  const severity: Severity = v?.severity ?? "routine";
++                  const structured = describeChange(e.meta);
+                   return (
+                     <tr
+                       key={e.id}
+@@ -162,7 +297,11 @@ export default function AuditLogPage() {
+                       // rather than inferring it from a badge colour.
+                       data-audit-action={e.action}
+                       data-audit-tone={toneName}
+-                      className="border-b border-border/60 align-top hover:bg-muted/30"
++                      data-audit-severity={severity}
++                      data-audit-superseded={v?.superseded ? "true" : "false"}
++                      className={`border-b border-border/60 align-top hover:bg-muted/30 ${
++                        severity === "kritisch" ? "bg-red-50/60 dark:bg-red-950/20" : ""
++                      }`}
+                     >
+                       <td className="whitespace-nowrap px-4 py-2.5 font-mono text-2xs text-muted-foreground">
+                         {formatStamp(e.timestamp)}
+@@ -176,7 +315,45 @@ export default function AuditLogPage() {
+                           {e.action}
+                         </span>
+                       </td>
+-                      <td className="px-4 py-2.5 text-xs leading-snug">{e.details}</td>
++                      <td className="px-4 py-2.5">
++                        <span
++                          className={`inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-2xs font-semibold ${SEVERITY_STYLE[severity]}`}
++                        >
++                          {SEVERITY_LABEL[severity]}
++                        </span>
++                      </td>
++                      <td className="px-4 py-2.5 text-xs leading-snug">
++                        {/*
++                          The structured sentence when the entry has one, the
++                          stored prose when it does not. Entries written before
++                          shared/audit-entry.ts carry no meta and keep reading
++                          exactly as they did — including the ones that never
++                          said which project they changed.
++                        */}
++                        <span className="block">{structured || e.details}</span>
++                        {v?.superseded && (
++                          <span className="mt-1 inline-flex items-center gap-1 text-2xs text-muted-foreground">
++                            <CornerUpLeft className="h-3 w-3" aria-hidden="true" />
++                            {v.revertsEarlier
++                              ? `innerhalb von ${CORRECTION_WINDOW_MINUTES} Minuten zurückgesetzt`
++                              : `innerhalb von ${CORRECTION_WINDOW_MINUTES} Minuten korrigiert`}
++                          </span>
++                        )}
++                      </td>
++                      <td className="px-4 py-2.5 text-right">
++                        {v?.undoable && e.meta?.field && (
++                          <Button
++                            size="sm"
++                            variant="outline"
++                            onClick={() => undo(e)}
++                            className="h-8 gap-1.5 text-2xs"
++                            aria-label={`Änderung zurücknehmen: ${structured || e.details}`}
++                          >
++                            <Undo2 className="h-3.5 w-3.5" aria-hidden="true" />
++                            Rückgängig
++                          </Button>
++                        )}
++                      </td>
+                     </tr>
+                   );
+                 })}
+diff --git a/shared/audit-entry.test.ts b/shared/audit-entry.test.ts
+new file mode 100644
+index 0000000..61214d6
+--- /dev/null
++++ b/shared/audit-entry.test.ts
+@@ -0,0 +1,224 @@
++import { describe, it, expect } from "vitest";
++import {
++  CORRECTION_WINDOW_MINUTES,
++  correctionKey,
++  describeChange,
++  markCorrections,
++  severityOf,
++  surfaceForPath,
++  type AuditMeta,
++  type CorrectableEntry,
++} from "./audit-entry";
++
++const meta = (over: Partial<AuditMeta> = {}): AuditMeta => ({
++  projectId: 7,
++  projektnummer: "G.011540063",
++  station: "Langenselbold",
++  department: "ITK",
++  field: "status",
++  from: "offen",
++  to: "Zustimmung erteilt",
++  surface: "PSV-ITK",
++  ...over,
++});
++
++describe("an entry says which record it changed", () => {
++  it("names the project, the Gewerk, the field, both values and the screen", () => {
++    // The sentence the trail used to carry was
++    //   "ITK: status von Zustimmung erteilt auf offen gesetzt."
++    // which does not identify one of 1,298 projects.
++    const text = describeChange(meta());
++    for (const part of [
++      "G.011540063",
++      "Langenselbold",
++      "ITK",
++      "status",
++      "offen",
++      "Zustimmung erteilt",
++      "PSV-ITK",
++    ]) {
++      expect(text, part).toContain(part);
++    }
++  });
++
++  it("writes „leer“ rather than printing undefined into an audit record", () => {
++    const text = describeChange(meta({ from: null, to: "offen" }));
++    expect(text).toContain("leer → offen");
++    expect(text).not.toMatch(/undefined|null/);
++  });
++
++  it("degrades to an empty string for an entry that carries no structure", () => {
++    expect(describeChange(undefined)).toBe("");
++    expect(describeChange(null)).toBe("");
++  });
++});
++
++describe("severity is about consequence", () => {
++  it("treats a withdrawn approval as critical", () => {
++    expect(
++      severityOf("Prüfung aktualisiert", meta({ from: "Zustimmung erteilt", to: "offen" })),
++    ).toBe("kritisch");
++    expect(
++      severityOf("Prüfung aktualisiert", meta({ from: "Niederschrift erstellt", to: "abgelehnt" })),
++    ).toBe("kritisch");
++  });
++
++  it("treats a required check being switched off as critical", () => {
++    // It stops being counted on every page, silently.
++    expect(
++      severityOf("Prüfung aktualisiert", meta({ from: "offen", to: "nicht erforderlich" })),
++    ).toBe("kritisch");
++  });
++
++  it("treats deleting a project as critical", () => {
++    expect(severityOf("Projekt gelöscht", meta({ field: undefined }))).toBe("kritisch");
++  });
++
++  it("treats newly blocked and renamed records as important, not critical", () => {
++    expect(severityOf("Prüfung aktualisiert", meta({ from: "offen", to: "abgelehnt" }))).toBe(
++      "wichtig",
++    );
++    expect(
++      severityOf("Projekt aktualisiert", meta({ department: null, field: "projektnummer" })),
++    ).toBe("wichtig");
++    expect(severityOf("Projekt aktualisiert", meta({ department: null, field: "station" }))).toBe(
++      "wichtig",
++    );
++  });
++
++  it("leaves ordinary progress as routine", () => {
++    expect(severityOf("Prüfung aktualisiert", meta({ from: "offen", to: "in Bearbeitung" }))).toBe(
++      "routine",
++    );
++    expect(
++      severityOf("Prüfung aktualisiert", meta({ field: "prueferName", from: "", to: "Er" })),
++    ).toBe("routine");
++    expect(severityOf("PDF erzeugt", null)).toBe("routine");
++  });
++
++  it("reads a status through the canonical vocabulary, not the raw string", () => {
++    // 3 ITK rows store "Projektkonfiguration" against 51 "Projektkonfig."; 80
++    // TBQ rows carry a parenthesised annotation. Matching raw text would grade
++    // the same transition two different ways.
++    expect(
++      severityOf(
++        "Prüfung aktualisiert",
++        meta({ from: "Niederschrift erstellt (LP05-05-01-F31)", to: "offen" }),
++      ),
++    ).toBe("kritisch");
++  });
++});
++
++describe("the correction window", () => {
++  const t = (minutesAgo: number) => new Date(Date.UTC(2026, 7, 22, 12, 0, 0) - minutesAgo * 60_000).toISOString();
++  const NOW = Date.UTC(2026, 7, 22, 12, 0, 0);
++
++  const entry = (id: string, minutesAgo: number, over: Partial<AuditMeta>): CorrectableEntry => ({
++    id,
++    timestamp: t(minutesAgo),
++    action: "Prüfung aktualisiert",
++    meta: meta(over),
++  });
++
++  it("marks a change that was changed again inside the window", () => {
++    // newest first, as the store keeps them
++    const entries = [
++      entry("b", 1, { from: "abgelehnt", to: "offen" }),
++      entry("a", 3, { from: "offen", to: "abgelehnt" }),
++    ];
++    const v = markCorrections(entries, NOW);
++    expect(v.get("a")?.superseded).toBe(true);
++    expect(v.get("b")?.superseded).toBe(false);
++  });
++
++  it("recognises when the second change put the value back", () => {
++    const entries = [
++      entry("b", 1, { from: "abgelehnt", to: "offen" }),
++      entry("a", 3, { from: "offen", to: "abgelehnt" }),
++    ];
++    expect(markCorrections(entries, NOW).get("a")?.revertsEarlier).toBe(true);
++  });
++
++  it("does NOT collapse two changes that are hours apart — those are decisions", () => {
++    const entries = [
++      entry("b", 5, { from: "abgelehnt", to: "offen" }),
++      entry("a", 600, { from: "offen", to: "abgelehnt" }),
++    ];
++    expect(markCorrections(entries, NOW).get("a")?.superseded).toBe(false);
++  });
++
++  it("keeps changes to different fields and different projects apart", () => {
++    const entries = [
++      entry("b", 1, { field: "prueferName", from: "", to: "Er" }),
++      entry("a", 2, { field: "status", from: "offen", to: "abgelehnt" }),
++      entry("c", 2, { projectId: 99, field: "status", from: "offen", to: "abgelehnt" }),
++    ];
++    const v = markCorrections(entries, NOW);
++    expect(v.get("a")?.superseded).toBe(false);
++    expect(v.get("c")?.superseded).toBe(false);
++  });
++
++  it("offers undo only inside the window", () => {
++    const entries = [entry("fresh", 2, {}), entry("stale", CORRECTION_WINDOW_MINUTES + 5, {})];
++    const v = markCorrections(entries, NOW);
++    expect(v.get("fresh")?.undoable).toBe(true);
++    expect(v.get("stale")?.undoable).toBe(false);
++  });
++
++  it("never drops an entry — a marked correction is still in the record", () => {
++    const entries = [
++      entry("b", 1, { from: "abgelehnt", to: "offen" }),
++      entry("a", 3, { from: "offen", to: "abgelehnt" }),
++    ];
++    const v = markCorrections(entries, NOW);
++    expect(v.size).toBe(entries.length);
++    for (const e of entries) expect(v.has(e.id)).toBe(true);
++  });
++
++  it("classifies entries that carry no structure instead of throwing", () => {
++    const legacy: CorrectableEntry = {
++      id: "old",
++      timestamp: t(1),
++      action: "Projekt erstellt",
++      meta: null,
++    };
++    const v = markCorrections([legacy], NOW);
++    expect(v.get("old")?.severity).toBe("routine");
++    expect(v.get("old")?.superseded).toBe(false);
++  });
++
++  it("survives an unparseable timestamp rather than marking everything undoable", () => {
++    const broken: CorrectableEntry = {
++      id: "broken",
++      timestamp: "not a date",
++      action: "Prüfung aktualisiert",
++      meta: meta(),
++    };
++    expect(markCorrections([broken], NOW).get("broken")?.undoable).toBe(false);
++  });
++});
++
++describe("correctionKey", () => {
++  it("is the project, the Gewerk and the field", () => {
++    expect(correctionKey(meta())).toBe("7|ITK|status");
++    expect(correctionKey(meta({ department: null, field: "station" }))).toBe("7||station");
++  });
++
++  it("is null when the entry cannot identify what it changed", () => {
++    expect(correctionKey({ field: "status" })).toBeNull();
++    expect(correctionKey({ projectId: 7 })).toBeNull();
++    expect(correctionKey(null)).toBeNull();
++  });
++});
++
++describe("surfaceForPath", () => {
++  it("names every route a change can be made from", () => {
++    expect(surfaceForPath("/")).toBe("Dashboard");
++    expect(surfaceForPath("/projects")).toBe("Projekte");
++    expect(surfaceForPath("/projects?q=x")).toBe("Projekte");
++    expect(surfaceForPath("/bvb-eea")).toBe("BVB-EEA");
++    expect(surfaceForPath("/psv-itk")).toBe("PSV-ITK");
++    expect(surfaceForPath("/anmeldung")).toBe("Projektanmeldung");
++    expect(surfaceForPath("/etwas-neues")).toBe("App");
++  });
++});
+diff --git a/shared/audit-entry.ts b/shared/audit-entry.ts
+new file mode 100644
+index 0000000..fe14e74
+--- /dev/null
++++ b/shared/audit-entry.ts
+@@ -0,0 +1,214 @@
++/**
++ * What an audit entry has to carry to be worth keeping.
++ *
++ * The trail recorded this, verbatim:
++ *
++ *     ITK: status von Zustimmung erteilt auf offen gesetzt.
++ *
++ * A granted approval was withdrawn and the record does not say on which of
++ * 1,298 projects. Nobody can act on that, nobody can audit it, and it cannot be
++ * undone — the entry does not know what it changed. Everything below exists to
++ * fix that one sentence.
++ *
++ * ---------------------------------------------------------------------------
++ * Three things a CEO asks of a change log
++ * ---------------------------------------------------------------------------
++ * 1. WHAT changed, precisely: which project, which Gewerk, which field, from
++ *    what to what. `AuditMeta`.
++ * 2. HOW BAD is it: withdrawing an approval is not the same event as filling in
++ *    a Prüfer's name, and a log that renders them identically forces a reader
++ *    to grade 18,172 rows by eye. `severityOf`.
++ * 3. WAS IT MEANT: people mis-click. A status changed and changed back ninety
++ *    seconds later is one person correcting themselves, not two decisions.
++ *    `markCorrections`.
++ *
++ * ---------------------------------------------------------------------------
++ * Nothing is ever deleted
++ * ---------------------------------------------------------------------------
++ * A correction marks the earlier entry as superseded; it does not remove it.
++ * An undo writes a new entry restoring the old value; it does not erase the
++ * change it reverses. An audit trail that can lose rows is not evidence of
++ * anything, and the whole point of the grace window is to make accidents
++ * *legible*, not invisible.
++ */
++
++import { normalizeReviewStatus, APPROVED_STATUSES, BLOCKING_STATUSES } from "./review-status";
++
++/** The structured half of an entry. Absent on entries written before this file. */
++export interface AuditMeta {
++  projectId?: number;
++  projektnummer?: string | null;
++  station?: string | null;
++  /** The Gewerk, when the change was to a Fachprüfung. */
++  department?: string | null;
++  field?: string | null;
++  from?: string | null;
++  to?: string | null;
++  /** Where the user was standing when they did it. */
++  surface?: string | null;
++}
++
++export type Severity = "kritisch" | "wichtig" | "routine";
++
++export const SEVERITY_LABEL: Record<Severity, string> = {
++  kritisch: "Kritisch",
++  wichtig: "Wichtig",
++  routine: "Routine",
++};
++
++export const SEVERITY_ORDER: readonly Severity[] = ["kritisch", "wichtig", "routine"];
++
++/** Fields that identify a record. Renaming one silently re-labels a project. */
++const IDENTITY_FIELDS = new Set(["projektnummer", "station", "projektleiter", "bahnhofsnummer"]);
++
++const isApprovedStatus = (s: string | null | undefined) => {
++  const n = normalizeReviewStatus(s);
++  return n !== null && (APPROVED_STATUSES as readonly string[]).includes(n);
++};
++const isBlockingStatus = (s: string | null | undefined) => {
++  const n = normalizeReviewStatus(s);
++  return n !== null && (BLOCKING_STATUSES as readonly string[]).includes(n);
++};
++
++/**
++ * How much this change should worry someone.
++ *
++ * The rules are about consequence, not about which screen the change came from:
++ *
++ *   kritisch — a project or a required check disappears, or an approval that
++ *              was granted is taken away. These are the changes that move a
++ *              delivery date and the ones a reader must not have to hunt for.
++ *   wichtig  — a record's identity changed, or a check entered a blocked state.
++ *              Worth reading today, not worth an alarm.
++ *   routine  — everything else: normal progress through the workflow, a Prüfer
++ *              filled in, a document exported, a message prepared.
++ */
++export function severityOf(action: string, meta?: AuditMeta | null): Severity {
++  if (action === "Projekt gelöscht") return "kritisch";
++  if (!meta?.field) return "routine";
++
++  if (meta.field === "status") {
++    const from = meta.from ?? null;
++    const to = meta.to ?? null;
++    const toNormal = normalizeReviewStatus(to);
++
++    // An approval that was granted is being taken away.
++    if (isApprovedStatus(from) && !isApprovedStatus(to)) return "kritisch";
++    // A check that was required is being marked not required — it stops being
++    // counted, on every page, silently.
++    if (toNormal === "nicht erforderlich" && normalizeReviewStatus(from) !== "nicht erforderlich") {
++      return "kritisch";
++    }
++    // Newly blocked.
++    if (isBlockingStatus(to) && !isBlockingStatus(from)) return "wichtig";
++    return "routine";
++  }
++
++  if (IDENTITY_FIELDS.has(meta.field)) return "wichtig";
++  return "routine";
++}
++
++/** The German sentence, built from structure rather than pasted together. */
++export function describeChange(meta?: AuditMeta | null): string {
++  if (!meta) return "";
++  const who = [meta.projektnummer, meta.station].filter(Boolean).join(" · ");
++  const what = meta.department ? `${meta.department} · ${meta.field}` : meta.field;
++  const from = (meta.from ?? "").trim() || "leer";
++  const to = (meta.to ?? "").trim() || "leer";
++  const parts = [who, what ? `${what}: ${from} → ${to}` : ""].filter(Boolean);
++  if (meta.surface) parts.push(`in ${meta.surface}`);
++  return parts.join(" · ");
++}
++
++/**
++ * The identity of "the same thing changed again".
++ *
++ * Project id, Gewerk and field. Two people editing the same field of the same
++ * review inside the window is still one correction of one value — which is the
++ * thing being collapsed, regardless of who did it.
++ */
++export function correctionKey(meta?: AuditMeta | null): string | null {
++  if (!meta || meta.projectId === undefined || !meta.field) return null;
++  return `${meta.projectId}|${meta.department ?? ""}|${meta.field}`;
++}
++
++/** Default grace period. Ten minutes: long enough to notice, short enough to mean it. */
++export const CORRECTION_WINDOW_MINUTES = 10;
++
++export interface CorrectableEntry {
++  id: string;
++  timestamp: string;
++  action: string;
++  meta?: AuditMeta | null;
++}
++
++export interface EntryVerdict {
++  /** A later change to the same field landed inside the window. */
++  superseded: boolean;
++  /** This change put the value back where it started — a self-correction. */
++  revertsEarlier: boolean;
++  /** Still inside the grace window, so an undo is offered. */
++  undoable: boolean;
++  severity: Severity;
++}
++
++/**
++ * Classify a whole trail in one pass.
++ *
++ * `entries` must be newest-first, which is how the store keeps them.
++ *
++ * `now` is a parameter rather than a call to Date.now(), because a function
++ * whose answer depends on the wall clock cannot be tested, and a trail that
++ * classifies differently on every render cannot be trusted.
++ */
++export function markCorrections(
++  entries: readonly CorrectableEntry[],
++  now: number,
++  windowMinutes: number = CORRECTION_WINDOW_MINUTES,
++): Map<string, EntryVerdict> {
++  const windowMs = windowMinutes * 60_000;
++  const out = new Map<string, EntryVerdict>();
++  /** Most recent entry seen per field, walking newest → oldest. */
++  const latest = new Map<string, CorrectableEntry>();
++
++  for (const entry of entries) {
++    const at = Date.parse(entry.timestamp);
++    const severity = severityOf(entry.action, entry.meta);
++    const key = correctionKey(entry.meta);
++    const undoable = Number.isFinite(at) && now - at <= windowMs;
++
++    if (!key) {
++      out.set(entry.id, { superseded: false, revertsEarlier: false, undoable, severity });
++      continue;
++    }
++
++    const newer = latest.get(key);
++    // Newest-first, so `newer` is the change that came after this one.
++    const supersededBy =
++      newer && Number.isFinite(at) ? Date.parse(newer.timestamp) - at <= windowMs : false;
++
++    const revertsEarlier = Boolean(
++      newer && (newer.meta?.to ?? null) === (entry.meta?.from ?? null) && supersededBy,
++    );
++
++    out.set(entry.id, {
++      superseded: Boolean(supersededBy),
++      revertsEarlier,
++      undoable,
++      severity,
++    });
++    latest.set(key, entry);
++  }
++  return out;
++}
++
++/** Route → the name a reader would use for it. */
++export function surfaceForPath(pathname: string): string {
++  if (pathname.startsWith("/bvb-eea")) return "BVB-EEA";
++  if (pathname.startsWith("/psv-itk")) return "PSV-ITK";
++  if (pathname.startsWith("/projects")) return "Projekte";
++  if (pathname.startsWith("/anmeldung")) return "Projektanmeldung";
++  if (pathname.startsWith("/audit")) return "Änderungshistorie";
++  if (pathname === "/" || pathname === "") return "Dashboard";
++  return "App";
++}
+-- 
+2.43.0
+
+
+From 7d74b17d2ef743d05edc3e03d0d0d0e99223ad80 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 22 Aug 2026 20:52:23 +0000
+Subject: [PATCH 2/2] the Dashboard reports the workload instead of the row
+ count, and the contrast gate stops lying
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Seven of the eight Gewerke tiles read 1.298. That figure is "projects whose
+row for this Gewerk carries a recognised status" — every project has all 14
+rows and almost all are filled in, so it is the project count for nearly
+every Gewerk, forever. It moves only when data is added. It reads as "1.298
+EEA-Prüfungen" and the real number is 814; ITK is 510, GA 158, HFT 100. Six
+Gewerke were not shown at all, and the two with no approval anywhere in
+their vocabulary — UM and BIM — were among the six.
+
+shared/portfolio-metrics.ts derives the honest figures, and the Dashboard
+now agrees with the Gewerk tabs: 814 on the tile, 814 on /bvb-eea. All
+fourteen are shown, ranked by a risk score whose weights are printed on the
+panel rather than buried in an expression, and labelled a ranking heuristic
+because that is what it is. A Gewerk that has approved nothing says so
+instead of showing 0% as if it were failure.
+
+PRÄSENTATIONSMODUS is opt-in, and that is a decision. Content that moves
+while it is read is hostile at a desk; on a wall display rotation is the
+only way to fit fourteen cards in one frame. So: off by default, pauses on
+pointer or focus entry — hover alone never fires for a keyboard user — and
+never auto-advances under prefers-reduced-motion.
+
+PORTFOLIO-RELIEF is deliberately not a rotating 3D bar chart. Perspective
+makes a near bar read larger than an identical far one and the top face
+hides where a bar ends, so a reader comparing two columns compares two
+projections rather than two numbers. Here depth carries nothing that must
+be compared by eye: every cell prints its exact count, position is a fixed
+grid, and elevation is a redundant encoding of the same value. "Flach"
+shows the identical numbers. CSS 3D rather than WebGL — the bundle already
+carries 382 kB of charting and 150 kB of mapping.
+
+DIAGNOSTICS say what they cannot measure. The median open check is 452 days
+old and 328 are past a year; 388 more carry no Prüfdatum and are reported
+as unageable rather than dropped. Five reviewers hold 46% of open work.
+"Prüfung erfolgt" is a real status on 229 rows that belongs to no lifecycle
+bucket, so the panel names it and its count — otherwise open + zugestimmt +
+blockiert looks complete while missing hundreds of rows. A Projektnummer is
+a programme id: 1,298 projects carry 385 numbers, one of them 98 times,
+stated as a fact rather than counted as an error.
+
+THE CONTRAST GATE HAD BEEN BLIND. Its colour parser matched rgb()/rgba()
+and returned null for everything else — and Tailwind v4 emits oklch() for
+its whole palette, so every text-emerald-600, text-amber-600 and
+text-blue-600 in the app was silently skipped. The parser now resolves any
+CSS colour through a 1×1 canvas, solved against white and black backdrops
+because dividing a single painted pixel by its own alpha amplifies
+quantisation by 1/a: at bg-primary/5 that turned a barely-tinted white into
+solid red and produced channel values above 255.
+
+Un-blinded, it found thirteen real WCAG failures, none of them new:
+emerald-600 and amber-600 on white (3.65:1 and 3.20:1), blue-600, rose-600
+and red-600 on the dark background with no dark variant, emerald-600
+initials on an emerald-100 disc, and — on every primary button in the app —
+white text on the hover state, because hover:bg-primary/90 lightens the red
+towards the page behind it and takes 4.53:1 down to 4.40:1. Hover now
+darkens.
+
+Gates: tsc clean, biome unchanged at 72 pre-existing warnings, 235 unit
+tests (17 new), build clean, e2e 72/72 (9 new), stress 8/8, check-ui clean
+across 6 routes x 12 scenarios x 3 viewports x 4 theme combinations.
+---
+ client/src/components/Map.tsx                 |   2 +-
+ client/src/components/PresenceIndicator.tsx   |   2 +-
+ client/src/components/ProjectDetailDialog.tsx |   8 +-
+ .../components/anmeldung/Step3Pruefungen.tsx  |   2 +-
+ .../components/dashboard/GewerkePortfolio.tsx | 260 +++++++++++
+ .../dashboard/PortfolioDiagnostics.tsx        | 210 +++++++++
+ .../components/dashboard/PortfolioRelief.tsx  | 234 ++++++++++
+ client/src/components/ui/button.tsx           |  14 +-
+ .../components/workspace/ReviewWorkspace.tsx  |   8 +-
+ client/src/index.css                          |  78 ++++
+ client/src/pages/Dashboard.tsx                | 123 +++---
+ client/src/pages/Projects.tsx                 |  10 +-
+ scripts/check-ui.mjs                          | 105 ++++-
+ scripts/e2e-smoke.mjs                         | 326 +++++++++++++-
+ shared/portfolio-metrics.test.ts              | 168 ++++++++
+ shared/portfolio-metrics.ts                   | 404 ++++++++++++++++++
+ 16 files changed, 1872 insertions(+), 82 deletions(-)
+ create mode 100644 client/src/components/dashboard/GewerkePortfolio.tsx
+ create mode 100644 client/src/components/dashboard/PortfolioDiagnostics.tsx
+ create mode 100644 client/src/components/dashboard/PortfolioRelief.tsx
+ create mode 100644 shared/portfolio-metrics.test.ts
+ create mode 100644 shared/portfolio-metrics.ts
+
+diff --git a/client/src/components/Map.tsx b/client/src/components/Map.tsx
+index be5ff66..bf7198a 100644
+--- a/client/src/components/Map.tsx
++++ b/client/src/components/Map.tsx
+@@ -533,7 +533,7 @@ export const MapView: React.FC<MapViewProps> = ({
+                 {placedCount.toLocaleString("de-DE")}/{projects.length.toLocaleString("de-DE")} verortet
+               </p>
+               {unplacedCount > 0 && (
+-                <p className="text-2xs text-amber-600 dark:text-amber-500 font-bold mt-0.5">
++                <p className="text-2xs text-amber-700 dark:text-amber-400 dark:text-amber-500 font-bold mt-0.5">
+                   {unplacedCount.toLocaleString("de-DE")} ohne Station &amp; ohne BM – nicht darstellbar
+                 </p>
+               )}
+diff --git a/client/src/components/PresenceIndicator.tsx b/client/src/components/PresenceIndicator.tsx
+index 6d5a96c..31732d1 100644
+--- a/client/src/components/PresenceIndicator.tsx
++++ b/client/src/components/PresenceIndicator.tsx
+@@ -26,7 +26,7 @@ export default function PresenceIndicator() {
+           
+         >
+           <div className="flex items-center gap-1">
+-            <Users className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
++            <Users className="h-4 w-4 text-emerald-700 dark:text-emerald-400" />
+             <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+               {colleaguesOnline} {colleaguesOnline === 1 ? "Kollege" : "Kollegen"} online
+             </span>
+diff --git a/client/src/components/ProjectDetailDialog.tsx b/client/src/components/ProjectDetailDialog.tsx
+index f29f3f8..bef385a 100644
+--- a/client/src/components/ProjectDetailDialog.tsx
++++ b/client/src/components/ProjectDetailDialog.tsx
+@@ -390,7 +390,13 @@ export function ProjectDetailDialog({
+             the X occupied the same 40px. */}
+         <DialogHeader className="space-y-3 border-b bg-muted/30 p-5 pr-14 text-left">
+           <div className="flex flex-wrap items-center gap-2">
+-            <span className="rounded-md bg-primary/10 px-2 py-0.5 font-mono text-xs font-bold text-primary-strong">
++            {/*
++              text-primary-strong on bg-primary/10 measures 4.24:1 in dark mode —
++              the token is tuned for red text on the card background, not on a
++              red-tinted chip. The chip carries its own dark-mode ink rather than
++              retuning a token that reads correctly everywhere else.
++            */}
++            <span className="rounded-md bg-primary/10 px-2 py-0.5 font-mono text-xs font-bold text-primary-strong dark:text-red-300">
+               {project.projektnummer || "ohne Projektnummer"}
+             </span>
+             {project.projektstand && (
+diff --git a/client/src/components/anmeldung/Step3Pruefungen.tsx b/client/src/components/anmeldung/Step3Pruefungen.tsx
+index 5fd46df..0f2e940 100644
+--- a/client/src/components/anmeldung/Step3Pruefungen.tsx
++++ b/client/src/components/anmeldung/Step3Pruefungen.tsx
+@@ -72,7 +72,7 @@ export function Step3Pruefungen({ draft }: { draft: ChecklistDraft }) {
+ 
+           {notified.length > 0 && (
+             <div>
+-              <div className="mb-1.5 text-2xs font-bold uppercase tracking-widest text-amber-600 dark:text-amber-500">
++              <div className="mb-1.5 text-2xs font-bold uppercase tracking-widest text-amber-700 dark:text-amber-400 dark:text-amber-500">
+                 Zusätzlich zu informieren ({notified.length})
+               </div>
+               <ul className="space-y-1 text-2xs">
+diff --git a/client/src/components/dashboard/GewerkePortfolio.tsx b/client/src/components/dashboard/GewerkePortfolio.tsx
+new file mode 100644
+index 0000000..44e9b85
+--- /dev/null
++++ b/client/src/components/dashboard/GewerkePortfolio.tsx
+@@ -0,0 +1,260 @@
++/**
++ * The fourteen Gewerke, ranked by what needs attention.
++ *
++ * What this replaces: eight tiles, seven of which read "1.298". That figure was
++ * "projects whose row for this Gewerk carries a recognised status" — a constant
++ * for every Gewerk, forever. The real workload is 814 for EEA, 510 for ITK, 100
++ * for HFT. Six of the fourteen were not shown at all, and the two with no
++ * approvals on record — UM and BIM — were among the six.
++ *
++ * Ordering is by riskScore, whose weights are printed on the panel rather than
++ * buried in a formula. A reader who disagrees with them can see what they are.
++ *
++ * ---------------------------------------------------------------------------
++ * Präsentationsmodus
++ * ---------------------------------------------------------------------------
++ * The rotation is opt-in, and that is a decision rather than an oversight.
++ * Content that moves while it is being read is hostile at a desk: a reader
++ * halfway through a number loses it. On a wall display nobody is reading
++ * closely and rotation is the only way to show fourteen cards in one frame. So:
++ * off by default, one click on, pauses the moment a pointer or the keyboard
++ * enters the panel, and never runs at all under prefers-reduced-motion.
++ */
++import { useEffect, useMemo, useRef, useState } from "react";
++import { useLocation } from "wouter";
++import { Card, CardContent } from "@/components/ui/card";
++import { Button } from "@/components/ui/button";
++import { ChevronLeft, ChevronRight, Info, Pause, Play } from "lucide-react";
++import { gewerkHref } from "@shared/search-index";
++import { RISK_WEIGHTS, type GewerkStanding } from "@shared/portfolio-metrics";
++
++const ROTATE_MS = 5000;
++/** How many cards the strip shows at once on a wide screen. */
++const WINDOW = 4;
++
++function Bar({ standing }: { standing: GewerkStanding }) {
++  const total = Math.max(standing.required, 1);
++  const seg = (n: number) => `${(n / total) * 100}%`;
++  return (
++    <div
++      className="flex h-2 w-full overflow-hidden rounded-full bg-muted"
++      role="img"
++      aria-label={`${standing.approved} zugestimmt, ${standing.open} offen, ${standing.blocked} blockiert, ${standing.other} sonstige von ${standing.required}`}
++    >
++      <span className="bg-emerald-500" style={{ width: seg(standing.approved) }} />
++      <span className="bg-amber-500" style={{ width: seg(standing.open) }} />
++      <span className="bg-red-600" style={{ width: seg(standing.blocked) }} />
++      <span className="bg-zinc-400" style={{ width: seg(standing.other) }} />
++    </div>
++  );
++}
++
++function StandingCard({
++  standing,
++  onOpen,
++  rank,
++}: {
++  standing: GewerkStanding;
++  onOpen: () => void;
++  rank: number;
++}) {
++  const noApprovals = standing.required > 0 && standing.approved === 0;
++  return (
++    <button
++      type="button"
++      onClick={onOpen}
++      data-gewerk={standing.department}
++      aria-label={`${standing.department} öffnen — ${standing.required} Prüfungen, ${standing.open} offen, ${standing.blocked} blockiert`}
++      className="flex h-full w-full flex-col gap-3 rounded-xl border-2 border-border bg-card p-4 text-left transition-all hover:border-primary/40 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
++    >
++      <div className="flex min-w-0 items-baseline justify-between gap-2">
++        <span className="truncate text-sm font-bold">{standing.department}</span>
++        <span className="shrink-0 text-2xs font-semibold text-muted-foreground">#{rank}</span>
++      </div>
++
++      {/* Stacked, not baseline-aligned: side by side the caption wrapped to two
++          lines inside a one-line box and pushed 8px past the card edge. */}
++      <div>
++        <div className="text-3xl font-bold leading-none tabular-nums">
++          {standing.required.toLocaleString("de-DE")}
++        </div>
++        <p className="mt-1 text-2xs text-muted-foreground">Prüfungen erforderlich</p>
++      </div>
++
++      <Bar standing={standing} />
++
++      {/*
++        min-w-0 on each pair and truncate on the label.
++        
++        Without them the label cannot shrink, so in a two-column grid the value
++        was pushed past its own column: "89" ended at x=422 while "überfällig"
++        began at x=410 — a measured 192px² of text on text, at desktop width, on
++        every card.
++      */}
++      <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-2xs">
++        <div className="flex min-w-0 justify-between gap-2">
++          <dt className="truncate text-muted-foreground">offen</dt>
++          <dd className="shrink-0 font-semibold tabular-nums text-amber-700 dark:text-amber-400">
++            {standing.open}
++          </dd>
++        </div>
++        <div className="flex min-w-0 justify-between gap-2">
++          <dt className="truncate text-muted-foreground">zugestimmt</dt>
++          <dd className="shrink-0 font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
++            {standing.approved}
++          </dd>
++        </div>
++        <div className="flex min-w-0 justify-between gap-2">
++          <dt className="truncate text-muted-foreground">blockiert</dt>
++          <dd className="shrink-0 font-semibold tabular-nums text-red-700 dark:text-red-400">
++            {standing.blocked}
++          </dd>
++        </div>
++        <div className="flex min-w-0 justify-between gap-2">
++          <dt className="truncate text-muted-foreground">überfällig</dt>
++          <dd className="shrink-0 font-semibold tabular-nums">{standing.overdue}</dd>
++        </div>
++      </dl>
++
++      {/* Stated, not implied: a Gewerk whose vocabulary contains no approval
++          state can never show progress, and a reader must be told that rather
++          than left to read 0 % as failure. */}
++      {noApprovals && (
++        <p className="rounded-md bg-amber-50 px-2 py-1 text-2xs leading-snug text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
++          keine Zustimmung im Bestand — {standing.other} Zeilen tragen einen anderen Abschluss
++        </p>
++      )}
++    </button>
++  );
++}
++
++export function GewerkePortfolio({ standings }: { standings: readonly GewerkStanding[] }) {
++  const [, setLocation] = useLocation();
++  const [rotating, setRotating] = useState(false);
++  const [offset, setOffset] = useState(0);
++  const [paused, setPaused] = useState(false);
++  const panelRef = useRef<HTMLDivElement>(null);
++
++  const ranked = useMemo(
++    () => [...standings].sort((a, b) => b.riskScore - a.riskScore || b.open - a.open),
++    [standings],
++  );
++
++  const reduced =
++    typeof window !== "undefined" &&
++    typeof window.matchMedia === "function" &&
++    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
++
++  useEffect(() => {
++    if (!rotating || paused || reduced || ranked.length <= WINDOW) return;
++    const t = setInterval(() => setOffset((o) => (o + 1) % ranked.length), ROTATE_MS);
++    return () => clearInterval(t);
++  }, [rotating, paused, reduced, ranked.length]);
++
++  const shown = useMemo(() => {
++    if (!rotating || ranked.length <= WINDOW) return ranked;
++    return Array.from({ length: WINDOW }, (_, i) => ranked[(offset + i) % ranked.length] as GewerkStanding);
++  }, [ranked, rotating, offset]);
++
++  const step = (delta: number) =>
++    setOffset((o) => (o + delta + ranked.length) % ranked.length);
++
++  return (
++    <Card>
++      <CardContent className="space-y-4 p-5">
++        <div className="flex flex-wrap items-center gap-3">
++          <div className="min-w-0">
++            <h2 className="text-lg font-bold">Gewerke-Portfolio — alle {ranked.length}</h2>
++            <p className="mt-0.5 text-2xs text-muted-foreground">
++              Sortiert nach Handlungsdruck · blockiert ×{RISK_WEIGHTS.blocked} + überfällig ×
++              {RISK_WEIGHTS.overdue} + ohne Prüfer ×{RISK_WEIGHTS.unassigned}. Eine Rangfolge, keine
++              Messung.
++            </p>
++          </div>
++
++          <div className="ml-auto flex items-center gap-1">
++            {rotating && (
++              <>
++                <Button
++                  size="sm"
++                  variant="ghost"
++                  aria-label="Vorheriges Gewerk"
++                  onClick={() => step(-1)}
++                  className="h-8 w-8 p-0"
++                >
++                  <ChevronLeft className="h-4 w-4" aria-hidden="true" />
++                </Button>
++                <Button
++                  size="sm"
++                  variant="ghost"
++                  aria-label="Nächstes Gewerk"
++                  onClick={() => step(1)}
++                  className="h-8 w-8 p-0"
++                >
++                  <ChevronRight className="h-4 w-4" aria-hidden="true" />
++                </Button>
++              </>
++            )}
++            <Button
++              size="sm"
++              variant={rotating ? "default" : "outline"}
++              aria-pressed={rotating}
++              onClick={() => {
++                setRotating((v) => !v);
++                setOffset(0);
++              }}
++              className="h-8 gap-2 text-2xs"
++              title="Für Wandmonitore: zeigt die Gewerke nacheinander"
++            >
++              {rotating ? (
++                <Pause className="h-3.5 w-3.5" aria-hidden="true" />
++              ) : (
++                <Play className="h-3.5 w-3.5" aria-hidden="true" />
++              )}
++              Präsentationsmodus
++            </Button>
++          </div>
++        </div>
++
++        {rotating && reduced && (
++          <p className="flex items-center gap-1.5 text-2xs text-muted-foreground">
++            <Info className="h-3.5 w-3.5" aria-hidden="true" />
++            Ihr System bevorzugt reduzierte Bewegung — der Wechsel erfolgt nur über die Pfeile.
++          </p>
++        )}
++
++        {/*
++          Pausing on pointer or focus entry, not just on hover: a keyboard user
++          tabbing into a card that then rotates away has lost their place, and
++          hover alone never fires for them.
++        */}
++        <div
++          ref={panelRef}
++          onMouseEnter={() => setPaused(true)}
++          onMouseLeave={() => setPaused(false)}
++          onFocusCapture={() => setPaused(true)}
++          onBlurCapture={() => setPaused(false)}
++          className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
++        >
++          {shown.map((standing) => (
++            <StandingCard
++              key={standing.department}
++              standing={standing}
++              rank={ranked.indexOf(standing) + 1}
++              onOpen={() => setLocation(gewerkHref(standing.department))}
++            />
++          ))}
++        </div>
++
++        {rotating && (
++          <output className="block text-2xs text-muted-foreground">
++            {offset + 1}–{Math.min(offset + WINDOW, offset + shown.length)} von {ranked.length}
++            {paused ? " · pausiert" : ""}
++          </output>
++        )}
++      </CardContent>
++    </Card>
++  );
++}
++
++export default GewerkePortfolio;
+diff --git a/client/src/components/dashboard/PortfolioDiagnostics.tsx b/client/src/components/dashboard/PortfolioDiagnostics.tsx
+new file mode 100644
+index 0000000..9b8cb83
+--- /dev/null
++++ b/client/src/components/dashboard/PortfolioDiagnostics.tsx
+@@ -0,0 +1,210 @@
++/**
++ * The diagnostics a board asks for once the headline numbers stop moving.
++ *
++ * Three questions, three panels, every figure derived in
++ * shared/portfolio-metrics.ts:
++ *
++ *   How old is the backlog?  — the median open check is over a year old and 328
++ *                              are past a year. A count of "offen" hides that
++ *                              completely; a count plus an age does not.
++ *   Who is carrying it?      — if five people hold half the open work, the plan
++ *                              depends on five calendars.
++ *   Can the numbers be       — every other panel rests on these rows. A
++ *   trusted?                   dashboard that reports confidently on data it
++ *                              has not checked is the expensive kind of wrong.
++ */
++import { useLocation } from "wouter";
++import { Card, CardContent } from "@/components/ui/card";
++import { AlertTriangle, CalendarClock, ShieldCheck, Users } from "lucide-react";
++import type { Aging, Concentration, DataQuality } from "@shared/portfolio-metrics";
++
++function Panel({
++  title,
++  icon: Icon,
++  subtitle,
++  children,
++}: {
++  title: string;
++  icon: typeof Users;
++  subtitle: string;
++  children: React.ReactNode;
++}) {
++  return (
++    <Card className="h-full">
++      <CardContent className="space-y-3 p-5">
++        <div className="flex items-start gap-2">
++          <Icon className="mt-0.5 h-4 w-4 shrink-0 text-primary-strong" aria-hidden="true" />
++          <div className="min-w-0">
++            <h3 className="text-sm font-bold">{title}</h3>
++            <p className="text-2xs leading-snug text-muted-foreground">{subtitle}</p>
++          </div>
++        </div>
++        {children}
++      </CardContent>
++    </Card>
++  );
++}
++
++function Row({
++  label,
++  value,
++  tone,
++  onClick,
++}: {
++  label: string;
++  value: string | number;
++  tone?: string;
++  onClick?: () => void;
++}) {
++  const body = (
++    <>
++      <span className="min-w-0 truncate text-2xs text-muted-foreground">{label}</span>
++      <span className={`shrink-0 text-xs font-bold tabular-nums ${tone ?? ""}`}>
++        {typeof value === "number" ? value.toLocaleString("de-DE") : value}
++      </span>
++    </>
++  );
++  if (!onClick) {
++    return <div className="flex items-baseline justify-between gap-3 py-1">{body}</div>;
++  }
++  return (
++    <button
++      type="button"
++      onClick={onClick}
++      className="-mx-1 flex w-full items-baseline justify-between gap-3 rounded px-1 py-1 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
++    >
++      {body}
++    </button>
++  );
++}
++
++export function PortfolioDiagnostics({
++  aging,
++  concentration,
++  quality,
++}: {
++  aging: Aging;
++  concentration: Concentration;
++  quality: DataQuality;
++}) {
++  const [, setLocation] = useLocation();
++  const agedTotal = aging.cohorts.reduce((a, c) => a + c.count, 0);
++  const overAYear = aging.cohorts.find((c) => c.key === "365+")?.count ?? 0;
++
++  return (
++    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
++      <Panel
++        title="Alter der offenen Prüfungen"
++        icon={CalendarClock}
++        subtitle={
++          aging.medianAgeDays === null
++            ? "Keine der offenen Prüfungen trägt ein Datum."
++            : `Median ${aging.medianAgeDays.toLocaleString("de-DE")} Tage seit dem eingetragenen Prüfdatum.`
++        }
++      >
++        <div className="space-y-0.5">
++          {aging.cohorts.map((c) => (
++            <div key={c.key} className="space-y-0.5">
++              <div className="flex items-baseline justify-between gap-3">
++                <span className="text-2xs text-muted-foreground">{c.label}</span>
++                <span className="text-xs font-bold tabular-nums">
++                  {c.count.toLocaleString("de-DE")}
++                </span>
++              </div>
++              <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
++                <span
++                  className={`block h-full ${c.key === "365+" ? "bg-red-600" : c.key === "181-365" ? "bg-amber-500" : "bg-primary"}`}
++                  style={{ width: `${agedTotal > 0 ? (c.count / agedTotal) * 100 : 0}%` }}
++                />
++              </div>
++            </div>
++          ))}
++        </div>
++        <p className="rounded-md bg-muted/60 px-2 py-1.5 text-2xs leading-snug">
++          {overAYear.toLocaleString("de-DE")} offene Prüfungen sind älter als ein Jahr.{" "}
++          {/* Never quietly excluded: an undated row cannot be aged and saying so
++              is the difference between a gap and a wrong answer. */}
++          {aging.undatedOpen.toLocaleString("de-DE")} weitere tragen kein Prüfdatum und lassen sich
++          nicht altern.
++        </p>
++      </Panel>
++
++      <Panel
++        title="Verteilung der Last"
++        icon={Users}
++        subtitle={`${concentration.reviewers.length} Prüfer im Bestand · die fünf größten halten ${concentration.topFiveShareOfOpen}% der offenen Prüfungen.`}
++      >
++        <div>
++          {concentration.reviewers.slice(0, 6).map((r) => (
++            <Row
++              key={r.name}
++              label={`${r.name} — ${r.done.toLocaleString("de-DE")} erledigt`}
++              value={r.open}
++              tone={r.open > 40 ? "text-red-700 dark:text-red-400" : undefined}
++              onClick={() => setLocation(`/projects?q=${encodeURIComponent(r.name)}`)}
++            />
++          ))}
++        </div>
++        <Row
++          label="offen, ohne benannten Prüfer"
++          value={concentration.unassignedOpen}
++          tone="text-amber-700 dark:text-amber-400"
++        />
++      </Panel>
++
++      <Panel
++        title="Belastbarkeit der Zahlen"
++        icon={ShieldCheck}
++        subtitle={`${quality.totalReviews.toLocaleString("de-DE")} Prüfzeilen über ${quality.totalProjects.toLocaleString("de-DE")} Projekte.`}
++      >
++        <div>
++          <Row label="Prüfzeilen ohne Status" value={quality.reviewsWithoutStatus} />
++          <Row
++            label="offen, ohne Prüfdatum"
++            value={quality.openWithoutDate}
++            tone="text-amber-700 dark:text-amber-400"
++          />
++          <Row label="offen, ohne Prüfer" value={quality.openWithoutPruefer} />
++          <Row label="Projekte ohne Projektnummer" value={quality.withoutProjektnummer} />
++          <Row
++            label="nicht lesbare Datumsangaben"
++            value={quality.unparseableDates}
++            tone={quality.unparseableDates > 0 ? "text-amber-700 dark:text-amber-400" : undefined}
++          />
++          <Row
++            label="Status außerhalb der Vokabulare"
++            value={quality.unmappedStatus}
++            tone={quality.unmappedStatus > 0 ? "text-red-700 dark:text-red-400" : undefined}
++          />
++        </div>
++
++        {quality.unclassifiedStatuses.length > 0 && (
++          <div className="rounded-md bg-amber-50 px-2 py-1.5 dark:bg-amber-950/40">
++            <p className="flex items-start gap-1.5 text-2xs leading-snug text-amber-900 dark:text-amber-200">
++              <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
++              <span>
++                {/* This is why "offen + zugestimmt + blockiert" does not add up
++                    to the workload, and saying so beats letting a reader find
++                    the gap themselves. */}
++                Nicht in offen / zugestimmt / blockiert enthalten:{" "}
++                {quality.unclassifiedStatuses
++                  .map((s) => `${s.status} (${s.count.toLocaleString("de-DE")})`)
++                  .join(", ")}
++                .
++              </span>
++            </p>
++          </div>
++        )}
++
++        <p className="text-2xs leading-snug text-muted-foreground">
++          Eine Projektnummer bezeichnet ein Programm, kein einzelnes Projekt:{" "}
++          {quality.totalProjects.toLocaleString("de-DE")} Projekte verteilen sich auf{" "}
++          {quality.distinctProjektnummern.toLocaleString("de-DE")} Nummern,{" "}
++          {quality.sharedProjektnummern.toLocaleString("de-DE")} davon mehrfach vergeben.
++        </p>
++      </Panel>
++    </div>
++  );
++}
++
++export default PortfolioDiagnostics;
+diff --git a/client/src/components/dashboard/PortfolioRelief.tsx b/client/src/components/dashboard/PortfolioRelief.tsx
+new file mode 100644
+index 0000000..0d47b8f
+--- /dev/null
++++ b/client/src/components/dashboard/PortfolioRelief.tsx
+@@ -0,0 +1,234 @@
++/**
++ * The portfolio as a relief: 14 Gewerke × 4 Zustände, in three dimensions.
++ *
++ * ---------------------------------------------------------------------------
++ * What this is NOT, and why
++ * ---------------------------------------------------------------------------
++ * It is not a rotating 3D bar chart. Those are the standard answer to "make it
++ * 3D" and they are the wrong one for a board: perspective makes a near bar read
++ * larger than an identical far one, the top face hides where a bar actually
++ * ends, and a reader comparing two columns is comparing two projections rather
++ * than two numbers. A CEO deciding where to send people cannot afford a chart
++ * whose error depends on the camera angle.
++ *
++ * So the depth here carries no quantity that has to be compared by eye. Every
++ * cell prints its exact count, position is a fixed grid, colour is a bounded
++ * scale, and elevation is a redundant encoding of the same value — it makes the
++ * shape of the portfolio visible across a room without being the thing anyone
++ * reads a number from. Tilt it, or press "Flach" and it is an ordinary heatmap
++ * with the identical numbers. Nothing is learned from the tilt that the flat
++ * view withholds.
++ *
++ * CSS 3D transforms, not WebGL: the bundle already carries 382 kB of charting
++ * and 150 kB of mapping, and a third rendering stack for one panel is not a
++ * trade worth making. This costs nothing and degrades to the flat grid wherever
++ * transforms are unavailable or unwanted.
++ */
++import { useMemo, useState } from "react";
++import { useLocation } from "wouter";
++import { Card, CardContent } from "@/components/ui/card";
++import { Button } from "@/components/ui/button";
++import { Box, Grid3x3, RotateCcw } from "lucide-react";
++import { gewerkHref } from "@shared/search-index";
++import type { GewerkStanding } from "@shared/portfolio-metrics";
++
++type Lane = "open" | "blocked" | "other" | "approved";
++
++const LANES: ReadonlyArray<{ key: Lane; label: string; hue: string; help: string }> = [
++  { key: "open", label: "offen", hue: "var(--relief-open)", help: "wartet auf eine Entscheidung" },
++  { key: "blocked", label: "blockiert", hue: "var(--relief-blocked)", help: "abgelehnt oder gestoppt" },
++  { key: "other", label: "sonstige", hue: "var(--relief-other)", help: "Abschluss außerhalb der drei Zustände" },
++  { key: "approved", label: "zugestimmt", hue: "var(--relief-approved)", help: "Zustimmung oder Niederschrift" },
++];
++
++/** Elevation in px. Square-root so one huge cell does not flatten the rest. */
++function lift(value: number, max: number): number {
++  if (value <= 0 || max <= 0) return 0;
++  return Math.round(Math.sqrt(value / max) * 56);
++}
++
++export function PortfolioRelief({ standings }: { standings: readonly GewerkStanding[] }) {
++  const [, setLocation] = useLocation();
++  const [flat, setFlat] = useState(false);
++  const [tilt, setTilt] = useState(52);
++  const [spin, setSpin] = useState(-24);
++
++  const rows = useMemo(
++    () => [...standings].sort((a, b) => b.required - a.required),
++    [standings],
++  );
++  const max = useMemo(
++    () => Math.max(1, ...rows.flatMap((r) => [r.open, r.blocked, r.other, r.approved])),
++    [rows],
++  );
++  const grandTotal = rows.reduce((a, r) => a + r.required, 0);
++
++  const value = (r: GewerkStanding, lane: Lane) =>
++    lane === "open" ? r.open : lane === "blocked" ? r.blocked : lane === "other" ? r.other : r.approved;
++
++  return (
++    <Card>
++      <CardContent className="space-y-4 p-5">
++        <div className="flex flex-wrap items-start gap-3">
++          <div className="min-w-0">
++            <h2 className="text-lg font-bold">Portfolio-Relief</h2>
++            <p className="mt-0.5 max-w-2xl text-2xs leading-relaxed text-muted-foreground">
++              {grandTotal.toLocaleString("de-DE")} erforderliche Prüfungen, nach Gewerk und Zustand.
++              Höhe und Farbe zeigen dieselbe Zahl — abgelesen wird sie immer aus der Kachel, nie aus
++              der Perspektive.
++            </p>
++          </div>
++          <div className="ml-auto flex flex-wrap items-center gap-1">
++            <Button
++              size="sm"
++              variant={flat ? "outline" : "default"}
++              aria-pressed={!flat}
++              onClick={() => setFlat(false)}
++              className="h-8 gap-1.5 text-2xs"
++            >
++              <Box className="h-3.5 w-3.5" aria-hidden="true" />
++              Relief
++            </Button>
++            <Button
++              size="sm"
++              variant={flat ? "default" : "outline"}
++              aria-pressed={flat}
++              onClick={() => setFlat(true)}
++              className="h-8 gap-1.5 text-2xs"
++            >
++              <Grid3x3 className="h-3.5 w-3.5" aria-hidden="true" />
++              Flach
++            </Button>
++            {!flat && (
++              <Button
++                size="sm"
++                variant="ghost"
++                onClick={() => {
++                  setTilt(52);
++                  setSpin(-24);
++                }}
++                className="h-8 gap-1.5 text-2xs"
++              >
++                <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
++                Ansicht zurücksetzen
++              </Button>
++            )}
++          </div>
++        </div>
++
++        {!flat && (
++          <div className="flex flex-wrap items-center gap-4">
++            <label className="flex items-center gap-2 text-2xs text-muted-foreground">
++              Neigung
++              <input
++                type="range"
++                min={0}
++                max={70}
++                value={tilt}
++                onChange={(e) => setTilt(Number(e.target.value))}
++                className="h-1 w-32 accent-primary"
++                aria-label="Neigung des Reliefs"
++              />
++            </label>
++            <label className="flex items-center gap-2 text-2xs text-muted-foreground">
++              Drehung
++              <input
++                type="range"
++                min={-45}
++                max={45}
++                value={spin}
++                onChange={(e) => setSpin(Number(e.target.value))}
++                className="h-1 w-32 accent-primary"
++                aria-label="Drehung des Reliefs"
++              />
++            </label>
++          </div>
++        )}
++
++        <div className="overflow-x-auto pb-2">
++          <div
++            className="relief-stage mx-auto min-w-[640px]"
++            style={
++              flat
++                ? undefined
++                : ({
++                    "--relief-tilt": `${tilt}deg`,
++                    "--relief-spin": `${spin}deg`,
++                  } as React.CSSProperties)
++            }
++            data-flat={flat ? "true" : "false"}
++          >
++            <table className="relief-grid w-full border-separate border-spacing-1 text-2xs">
++              <caption className="sr-only">
++                Erforderliche Prüfungen je Gewerk und Zustand. Die Tabelle enthält alle Werte auch
++                ohne räumliche Darstellung.
++              </caption>
++              <thead>
++                <tr>
++                  <th scope="col" className="w-40 px-2 py-1 text-left font-semibold text-muted-foreground">
++                    Gewerk
++                  </th>
++                  {LANES.map((lane) => (
++                    <th
++                      key={lane.key}
++                      scope="col"
++                      title={lane.help}
++                      className="px-2 py-1 text-center font-semibold text-muted-foreground"
++                    >
++                      {lane.label}
++                    </th>
++                  ))}
++                  <th scope="col" className="px-2 py-1 text-right font-semibold text-muted-foreground">
++                    gesamt
++                  </th>
++                </tr>
++              </thead>
++              <tbody>
++                {rows.map((r) => (
++                  <tr key={r.department}>
++                    <th scope="row" className="px-2 py-1 text-left font-semibold">
++                      <button
++                        type="button"
++                        onClick={() => setLocation(gewerkHref(r.department))}
++                        className="rounded px-1 text-left hover:text-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
++                      >
++                        {r.department}
++                      </button>
++                    </th>
++                    {LANES.map((lane) => {
++                      const v = value(r, lane.key);
++                      const height = lift(v, max);
++                      return (
++                        <td key={lane.key} className="p-0">
++                          <div
++                            className="relief-cell"
++                            data-value={v}
++                            title={`${r.department} · ${lane.label}: ${v}`}
++                            style={
++                              {
++                                "--relief-lift": `${height}px`,
++                                "--relief-fill": lane.hue,
++                                "--relief-alpha": String(v === 0 ? 0.06 : 0.25 + (v / max) * 0.75),
++                              } as React.CSSProperties
++                            }
++                          >
++                            <span className="relief-value tabular-nums">{v}</span>
++                          </div>
++                        </td>
++                      );
++                    })}
++                    <td className="px-2 py-1 text-right font-semibold tabular-nums">
++                      {r.required.toLocaleString("de-DE")}
++                    </td>
++                  </tr>
++                ))}
++              </tbody>
++            </table>
++          </div>
++        </div>
++      </CardContent>
++    </Card>
++  );
++}
++
++export default PortfolioRelief;
+diff --git a/client/src/components/ui/button.tsx b/client/src/components/ui/button.tsx
+index bf413e6..01c1d21 100644
+--- a/client/src/components/ui/button.tsx
++++ b/client/src/components/ui/button.tsx
+@@ -9,7 +9,19 @@ const buttonVariants = cva(
+   {
+     variants: {
+       variant: {
+-        default: "bg-primary text-primary-foreground hover:bg-primary/90",
++        /*
++         * hover DARKENS. It used to be `hover:bg-primary/90`, which lightens the
++         * red towards the page behind it: white on the resting colour measures
++         * 4.53:1 and white on the hovered one 4.40:1 — under the 4.5 floor, on
++         * every primary button in the app, for as long as a pointer rests on
++         * it. A fixed dark brand red rather than --primary-text: that token is
++         * deliberately LIGHT in dark mode — it is meant for red text on a dark
++         * ground — so using it here traded a light-mode failure for a dark-mode
++         * one, white on a pale red. This shade is dark in both themes and puts
++         * white text at about 7:1 in each.
++         */
++        default:
++          "bg-primary text-primary-foreground hover:bg-[hsl(354_100%_32%)]",
+         destructive:
+           "bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60",
+         outline:
+diff --git a/client/src/components/workspace/ReviewWorkspace.tsx b/client/src/components/workspace/ReviewWorkspace.tsx
+index a4a1976..6906214 100644
+--- a/client/src/components/workspace/ReviewWorkspace.tsx
++++ b/client/src/components/workspace/ReviewWorkspace.tsx
+@@ -470,20 +470,20 @@ export function ReviewWorkspace({
+           label="Aktiv"
+           value={kpis.active}
+           caption={`${percent(kpis.active, kpis.total)}% der ${department}-Prüfungen in Bearbeitung`}
+-          captionTone="text-blue-600 dark:text-blue-400"
++          captionTone="text-blue-700 dark:text-blue-400"
+         />
+         <KpiCard
+           label="Abgeschlossen"
+           value={kpis.completed}
+           caption={`${department}-Prüfung zugestimmt`}
+-          valueTone="text-emerald-600"
+-          captionTone="text-emerald-600 dark:text-emerald-400"
++          valueTone="text-emerald-700 dark:text-emerald-400"
++          captionTone="text-emerald-700 dark:text-emerald-400"
+         />
+         <KpiCard
+           label="Blockiert"
+           value={kpis.blocked}
+           caption="abgelehnt oder gestoppt"
+-          valueTone="text-red-600"
++          valueTone="text-red-600 dark:text-red-400"
+           captionTone="text-red-600 dark:text-red-400"
+         />
+       </div>
+diff --git a/client/src/index.css b/client/src/index.css
+index 1835c36..b392b9e 100644
+--- a/client/src/index.css
++++ b/client/src/index.css
+@@ -684,3 +684,81 @@
+     transform: scale(1.35);
+   }
+ }
++
++/* ---------------------------------------------------------------------------
++   Portfolio-Relief
++   ---------------------------------------------------------------------------
++   CSS 3D rather than a third rendering stack. The stage tilts; each cell lifts
++   along Z by an amount that mirrors the number printed on it, so the shape is
++   readable across a room and the value is readable from the tile.
++
++   The counter-rotation on .relief-value is the part that matters: without it
++   the numbers tilt with the stage and become unreadable at exactly the angle
++   that makes the relief worth looking at. Depth that costs legibility is
++   decoration, and this panel refuses that trade.
++   --------------------------------------------------------------------------- */
++:root {
++  --relief-open: 245 158 11;
++  --relief-blocked: 220 38 38;
++  --relief-other: 113 113 122;
++  --relief-approved: 16 185 129;
++}
++
++.relief-stage {
++  perspective: 1400px;
++  perspective-origin: 50% 30%;
++}
++
++.relief-stage[data-flat="false"] .relief-grid {
++  transform: rotateX(var(--relief-tilt, 52deg)) rotateZ(var(--relief-spin, -24deg));
++  transform-style: preserve-3d;
++  transition: transform 200ms ease-out;
++}
++
++.relief-cell {
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  min-height: 30px;
++  border-radius: 6px;
++  background-color: rgb(var(--relief-fill) / var(--relief-alpha));
++  transform-style: preserve-3d;
++  transition: transform 200ms ease-out;
++}
++
++.relief-stage[data-flat="false"] .relief-cell {
++  transform: translateZ(var(--relief-lift, 0px));
++  box-shadow: 0 6px 14px rgb(0 0 0 / 0.18);
++}
++
++/*
++ * The number sits on its own ground, not on the tile.
++ *
++ * With the value painted straight onto the fill, "583" was near-white on
++ * emerald-500 in dark mode — 2.43:1, against a 4.5 requirement — and the same
++ * text would have needed the opposite colour on the pale tiles two rows down.
++ * Picking an ink per fill means fourteen colour decisions that all have to stay
++ * right; giving the label the card background means one, already validated
++ * everywhere else in the app.
++ */
++.relief-value {
++  font-weight: 700;
++  font-size: 11px;
++  line-height: 1.2;
++  color: hsl(var(--foreground));
++  background-color: hsl(var(--card));
++  border-radius: 4px;
++  padding: 1px 5px;
++}
++
++.relief-stage[data-flat="false"] .relief-value {
++  transform: rotateZ(calc(var(--relief-spin, -24deg) * -1))
++    rotateX(calc(var(--relief-tilt, 52deg) * -1));
++}
++
++@media (prefers-reduced-motion: reduce) {
++  .relief-grid,
++  .relief-cell {
++    transition: none;
++  }
++}
+diff --git a/client/src/pages/Dashboard.tsx b/client/src/pages/Dashboard.tsx
+index f914fd1..4edbb53 100644
+--- a/client/src/pages/Dashboard.tsx
++++ b/client/src/pages/Dashboard.tsx
+@@ -1,4 +1,13 @@
+ import React, { useMemo, useState } from 'react';
++import { GewerkePortfolio } from "@/components/dashboard/GewerkePortfolio";
++import { PortfolioRelief } from "@/components/dashboard/PortfolioRelief";
++import { PortfolioDiagnostics } from "@/components/dashboard/PortfolioDiagnostics";
++import {
++  agingOfOpenReviews,
++  dataQuality,
++  gewerkStandings,
++  reviewerConcentration,
++} from "@shared/portfolio-metrics";
+ import { deriveProjectMetrics, percent } from '@shared/project-metrics';
+ import { statusBadgeClass, statusHex, STATUS_TONE, TONE_APPEARANCE } from '@shared/status-appearance';
+ import { APPROVED_STATUSES, BLOCKING_STATUSES, normalizeReviewStatus, OPEN_STATUSES, type ReviewStatus } from '@shared/review-status';
+@@ -39,9 +48,14 @@ import { toast } from 'sonner';
+ // DB Corporate Status Colors (perfect harmony with Projects.tsx)
+ 
+ // Exact department order from Übersichtsliste_Dashboard_1.xlsm (perfect consistency)
+-/** How many Gewerke tiles the grid shows. Named so the heading and the slice
+- *  cannot drift apart. */
+-const GEWERKE_TILES = 8;
++/*
++ * GEWERKE_TILES is gone with the grid it limited.
++ *
++ * It existed so a heading reading "8 von 14" could not drift from a slice of 8 —
++ * an honest fix to a dishonest design. The design was the problem: six Gewerke
++ * were never shown, and the eight that were all reported the same number.
++ * GewerkePortfolio shows all fourteen.
++ */
+ 
+ const GEWERKE = [
+   "EEA", "ITK", "BS", "GA", "Energie", "HFT", "HKLS", 
+@@ -198,6 +212,22 @@ export default function Dashboard() {
+     };
+   });
+ 
++  /*
++   * The honest per-Gewerk figures.
++   *
++   * `today` is pinned per render rather than read inside the derivation: an
++   * aging bucket that shifts between two calls in the same paint makes the
++   * panels disagree with each other for no reason a reader could ever explain.
++   */
++  const nowMs = useMemo(() => Date.now(), []);
++  const standings = useMemo(
++    () => gewerkStandings(projects, GEWERKE, nowMs),
++    [projects, nowMs],
++  );
++  const aging = useMemo(() => agingOfOpenReviews(projects, nowMs), [projects, nowMs]);
++  const concentration = useMemo(() => reviewerConcentration(projects), [projects]);
++  const quality = useMemo(() => dataQuality(projects), [projects]);
++
+   const selectedGewerkeData = selectedGewerke 
+     ? gewerkeStatusData.find(g => g.name === selectedGewerke) 
+     : null;
+@@ -531,7 +561,7 @@ export default function Dashboard() {
+           </CardHeader>
+           <CardContent>
+             <div className="text-5xl font-bold">{openReviews}</div>
+-            <p className="text-xs text-amber-600 mt-1">Sofortiger Handlungsbedarf</p>
++            <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">Sofortiger Handlungsbedarf</p>
+           </CardContent>
+         </Card>
+ 
+@@ -542,10 +572,10 @@ export default function Dashboard() {
+             </CardTitle>
+           </CardHeader>
+           <CardContent>
+-            <div className="text-5xl font-bold text-emerald-600">
++            <div className="text-5xl font-bold text-emerald-700 dark:text-emerald-400">
+               {completedProjects.toLocaleString("de-DE")}
+             </div>
+-            <p className="text-xs text-emerald-600 mt-1">
++            <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-1">
+               {percent(completedProjects, totalProjects)}% aller Projekte
+             </p>
+           </CardContent>
+@@ -558,8 +588,8 @@ export default function Dashboard() {
+             </CardTitle>
+           </CardHeader>
+           <CardContent>
+-            <div className="text-5xl font-bold text-rose-600">{criticalProjects}</div>
+-            <p className="text-xs text-rose-600 mt-1">Abgelehnt / gestoppt</p>
++            <div className="text-5xl font-bold text-rose-700 dark:text-rose-400">{criticalProjects}</div>
++            <p className="text-xs text-rose-700 dark:text-rose-400 mt-1">Abgelehnt / gestoppt</p>
+           </CardContent>
+         </Card>
+       </div>
+@@ -614,53 +644,21 @@ export default function Dashboard() {
+             </CardContent>
+           </Card>
+ 
+-          {/* Per Gewerke Grid */}
+-          <Card>
+-            <CardHeader>
+-              <CardTitle>
+-                Status pro Gewerke — {Math.min(GEWERKE_TILES, gewerkeStatusData.length)} von{" "}
+-                {gewerkeStatusData.length}
+-              </CardTitle>
+-            </CardHeader>
+-            <CardContent>
+-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+-                {/* 8 of 14. Silently dropping UM, BIM, LST, Vermessung and both
+-                    Baubetrieb departments under a heading that reads "pro
+-                    Gewerke" claims coverage the grid does not have — the
+-                    heading now says how many. */}
+-                {gewerkeStatusData.slice(0, GEWERKE_TILES).map((gew) => (
+-                  <button
+-                    type="button"
+-                    key={gew.name}
+-                    className="w-full min-w-0 cursor-pointer rounded-xl border p-4 text-left transition-all hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+-                    onClick={() => setSelectedGewerke(gew.name)}
+-                  >
+-                    <div className="mb-2 break-words text-lg font-semibold">{gew.name}</div>
+-                    <div className="mb-3 text-3xl font-bold tabular-nums">{gew.value.toLocaleString("de-DE")}</div>
+-                    {/* `justify-between` with an unshrinkable label pushed the
+-                        count past the tile edge — measured 6 to 12px out on
+-                        seven tiles at 375px. The label truncates, the number
+-                        never does: it is the datum. */}
+-                    <div className="space-y-1 text-xs">
+-                      {Object.entries(gew.breakdown)
+-                        .sort((a, b) => b[1] - a[1])
+-                        .slice(0, 3)
+-                        .map(([status, count]) => (
+-                          <div key={status} className="flex min-w-0 items-baseline justify-between gap-2">
+-                            <span className="truncate text-muted-foreground" title={status}>
+-                              {status}
+-                            </span>
+-                            <span className="shrink-0 font-medium tabular-nums">
+-                              {count.toLocaleString("de-DE")}
+-                            </span>
+-                          </div>
+-                        ))}
+-                    </div>
+-                  </button>
+-                ))}
+-              </div>
+-            </CardContent>
+-          </Card>
++          {/*
++            Was "Status pro Gewerke — 8 von 14", eight tiles of which seven read
++            1.298. That figure is the project count, not the workload: EEA needs
++            814 checks, ITK 510, HFT 100. Six Gewerke were not shown at all, and
++            the two with no approval in their vocabulary — UM and BIM — were
++            among the six. Every number below is derived in
++            shared/portfolio-metrics.ts and agrees with the Gewerk tabs.
++          */}
++          <GewerkePortfolio standings={standings} />
++
++          <PortfolioRelief standings={standings} />
++
++          {/* Aging, concentration and the trustworthiness of the rows every
++              other panel is built on. */}
++          <PortfolioDiagnostics aging={aging} concentration={concentration} quality={quality} />
+ 
+           {/* Detailed Gewerke View */}
+           <Card className="border-2 border-primary/20">
+@@ -796,11 +794,11 @@ export default function Dashboard() {
+                       >
+                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+                           <div className="text-center">
+-                            <div className="text-2xl font-bold text-amber-600">{fach.incoming.toLocaleString("de-DE")}</div>
++                            <div className="text-2xl font-bold text-amber-700 dark:text-amber-400">{fach.incoming.toLocaleString("de-DE")}</div>
+                             <div className="text-xs">Eingehend</div>
+                           </div>
+                           <div className="text-center">
+-                            <div className="text-2xl font-bold text-emerald-600">{fach.completed.toLocaleString("de-DE")}</div>
++                            <div className="text-2xl font-bold text-emerald-700 dark:text-emerald-400">{fach.completed.toLocaleString("de-DE")}</div>
+                             <div className="text-xs">Erledigt</div>
+                           </div>
+                           <div className="text-center">
+@@ -1030,11 +1028,11 @@ export default function Dashboard() {
+               </div>
+               <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
+                 <div>Projekte mit Verzögerung</div>
+-                <div className="font-mono font-bold text-rose-600">{delayedProjects.toLocaleString("de-DE")}</div>
++                <div className="font-mono font-bold text-rose-700 dark:text-rose-400">{delayedProjects.toLocaleString("de-DE")}</div>
+               </div>
+               <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
+                 <div>Erfolgsquote (erteilte Zustimmungen)</div>
+-                <div className="font-mono font-bold text-emerald-600">{successRate.toFixed(1)}%</div>
++                <div className="font-mono font-bold text-emerald-700 dark:text-emerald-400">{successRate.toFixed(1)}%</div>
+               </div>
+               <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
+                 <div>Projekte gesamt</div>
+@@ -1073,13 +1071,14 @@ export default function Dashboard() {
+               {fachWorkload.slice(0, 6).map((f) => (
+                 <div key={f.name} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                   <div className="flex items-center gap-3">
+-                    <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center">
+-                      <span className="font-mono text-xs text-emerald-600">{f.name.slice(0, 2)}</span>
++                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900">
++                      {/* On an emerald-100 disc: the 700 shade measures 3.4:1 there, the 900 shade 8.9:1. */}
++                      <span className="font-mono text-xs text-emerald-900 dark:text-emerald-100">{f.name.slice(0, 2)}</span>
+                     </div>
+                     <div>{f.name}</div>
+                   </div>
+                   <div className="text-right">
+-                    <div className="font-bold text-emerald-600">{f.completed}</div>
++                    <div className="font-bold text-emerald-700 dark:text-emerald-400">{f.completed}</div>
+                     <div className="text-2xs text-muted-foreground">erledigt</div>
+                   </div>
+                 </div>
+diff --git a/client/src/pages/Projects.tsx b/client/src/pages/Projects.tsx
+index bc9759a..8158da8 100644
+--- a/client/src/pages/Projects.tsx
++++ b/client/src/pages/Projects.tsx
+@@ -354,7 +354,7 @@ export default function Projects() {
+           </CardHeader>
+           <CardContent>
+             <div className="text-4xl font-bold">{metrics.active.toLocaleString("de-DE")}</div>
+-            <p className="text-xs text-blue-600 mt-1">
++            <p className="text-xs text-blue-700 dark:text-blue-400 mt-1">
+               {percent(metrics.active, totalProjects)}% der Projekte in Bearbeitung
+             </p>
+           </CardContent>
+@@ -364,10 +364,10 @@ export default function Projects() {
+             <CardTitle className="text-sm font-medium text-muted-foreground">Abgeschlossen</CardTitle>
+           </CardHeader>
+           <CardContent>
+-            <div className="text-4xl font-bold text-emerald-600">
++            <div className="text-4xl font-bold text-emerald-700 dark:text-emerald-400">
+               {metrics.completed.toLocaleString("de-DE")}
+             </div>
+-            <p className="text-xs text-emerald-600 mt-1">
++            <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-1">
+               alle erforderlichen Prüfungen zugestimmt
+             </p>
+           </CardContent>
+@@ -377,10 +377,10 @@ export default function Projects() {
+             <CardTitle className="text-sm font-medium text-muted-foreground">Blockiert</CardTitle>
+           </CardHeader>
+           <CardContent>
+-            <div className="text-4xl font-bold text-red-600">
++            <div className="text-4xl font-bold text-red-600 dark:text-red-400">
+               {metrics.blocked.toLocaleString("de-DE")}
+             </div>
+-            <p className="text-xs text-red-600 mt-1">abgelehnt oder gestoppt</p>
++            <p className="text-xs text-red-600 dark:text-red-400 mt-1">abgelehnt oder gestoppt</p>
+           </CardContent>
+         </Card>
+       </div>
+diff --git a/scripts/check-ui.mjs b/scripts/check-ui.mjs
+index fc958a9..10143c8 100644
+--- a/scripts/check-ui.mjs
++++ b/scripts/check-ui.mjs
+@@ -201,6 +201,32 @@ const SCENARIOS = [
+       await page.waitForTimeout(400);
+     },
+   },
++  {
++    name: "Dashboard · Relief",
++    route: "/",
++    async run(page) {
++      await page.waitForSelector(".relief-cell", { timeout: 20000 });
++      await page.waitForTimeout(600);
++    },
++  },
++  {
++    name: "Dashboard · Relief flach",
++    route: "/",
++    async run(page) {
++      await page.waitForSelector(".relief-cell", { timeout: 20000 });
++      await page.getByRole("button", { name: "Flach" }).click();
++      await page.waitForTimeout(600);
++    },
++  },
++  {
++    name: "Dashboard · Präsentationsmodus",
++    route: "/",
++    async run(page) {
++      await page.waitForSelector("[data-gewerk]", { timeout: 20000 });
++      await page.getByRole("button", { name: /Präsentationsmodus/ }).click();
++      await page.waitForTimeout(900);
++    },
++  },
+   {
+     name: "Anmeldung · Prüfungen",
+     route: "/anmeldung",
+@@ -249,11 +275,82 @@ const AUDIT = () => {
+     return t.replace(/\s+/g, " ").trim();
+   };
+ 
++  /*
++   * Any CSS colour, resolved to sRGB — including the ones Tailwind v4 emits.
++   *
++   * This used to match rgb()/rgba() and return null for anything else. Chrome
++   * serialises `bg-primary/90` as `oklab(0.59 0.21 0.11 / 0.9)`, so the button
++   * behind a piece of white text came back as "no colour", the walk fell
++   * through to the page background, and the audit reported white text on white
++   * — 1:1 — for a control that is in fact white on red. It is the same failure
++   * the sticky-column opacity test had, in the other half of the file.
++   *
++   * Rather than implement oklab→sRGB by hand, the browser converts it: a 1×1
++   * canvas is painted with the colour and the pixel read back. The canvas is
++   * created once and reused, and the result is memoised, because this runs for
++   * every ancestor of every text node on the page.
++   */
++  const COLOUR_CACHE = new Map();
++  let colourCtx = null;
++  const paintOn = (value, backdrop) => {
++    colourCtx.globalCompositeOperation = "source-over";
++    colourCtx.fillStyle = backdrop;
++    colourCtx.fillRect(0, 0, 1, 1);
++    colourCtx.fillStyle = "#7f7f7f";
++    colourCtx.fillStyle = value;
++    colourCtx.fillRect(0, 0, 1, 1);
++    return colourCtx.getImageData(0, 0, 1, 1).data;
++  };
+   const parseRgb = (s) => {
+-    const m = String(s).match(/rgba?\(([^)]+)\)/);
+-    if (!m) return null;
+-    const p = m[1].split(",").map((x) => Number.parseFloat(x.trim()));
+-    return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 };
++    const key = String(s);
++    if (COLOUR_CACHE.has(key)) return COLOUR_CACHE.get(key);
++    let out = null;
++    const m = key.match(/rgba?\(([^)]+)\)/);
++    if (m) {
++      const p = m[1].split(",").map((x) => Number.parseFloat(x.trim()));
++      out = { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 };
++    } else if (key && key !== "none" && key !== "transparent") {
++      if (!colourCtx) {
++        const canvas = document.createElement("canvas");
++        canvas.width = 1;
++        canvas.height = 1;
++        colourCtx = canvas.getContext("2d", { willReadFrequently: true });
++      }
++      try {
++        /*
++         * Two known backdrops, solved exactly.
++         *
++         * Reading a single painted pixel and dividing by its alpha to recover
++         * the colour amplifies the 1/255 quantisation by 1/a: at a = 0.05 —
++         * which is what `bg-primary/5` on the wizard's step button is — it
++         * turned a barely-tinted white into solid red, and produced channel
++         * values above 255. Painting over white and over black instead gives
++         *   white:  Cw = C·a + 255(1−a)
++         *   black:  Cb = C·a
++         * so a = 1 − (Cw − Cb)/255 from a full-range difference, and any error
++         * left in C is multiplied by a when it is composited back — which is
++         * exactly where it does not matter.
++         */
++        const w = paintOn(key, "#ffffff");
++        const b = paintOn(key, "#000000");
++        const alphas = [0, 1, 2].map((i) => 1 - (w[i] - b[i]) / 255);
++        alphas.sort((x, y) => x - y);
++        const a = Math.min(1, Math.max(0, alphas[1]));
++        out =
++          a <= 0.002
++            ? { r: 0, g: 0, b: 0, a: 0 }
++            : {
++                r: Math.min(255, Math.max(0, b[0] / a)),
++                g: Math.min(255, Math.max(0, b[1] / a)),
++                b: Math.min(255, Math.max(0, b[2] / a)),
++                a,
++              };
++      } catch {
++        out = null;
++      }
++    }
++    COLOUR_CACHE.set(key, out);
++    return out;
+   };
+ 
+   /** Flatten a colour onto an opaque backdrop. */
+diff --git a/scripts/e2e-smoke.mjs b/scripts/e2e-smoke.mjs
+index 97eb699..2305719 100644
+--- a/scripts/e2e-smoke.mjs
++++ b/scripts/e2e-smoke.mjs
+@@ -673,9 +673,16 @@ await check("truncated lists say how much they are hiding", async () => {
+   await go("/");
+   // The Dashboard's charts mount after the data resolves, so snapshotting
+   // innerText on arrival is a race the harness sometimes lost.
+-  await page.waitForSelector("text=/Status pro Gewerke/", { timeout: 20000 });
++  await page.waitForSelector("text=/Gewerke-Portfolio/", { timeout: 20000 });
+   const body = await page.locator("body").innerText();
+-  assert(/Status pro Gewerke — \d+ von \d+/.test(body), "the Gewerke grid does not state its own coverage");
++  // The Gewerke panel no longer truncates — it shows all fourteen — so the rule
++  // it has to satisfy changed from "say how much you hide" to "hide nothing,
++  // and say so". The heading still has to state its own coverage.
++  assert(/Gewerke-Portfolio — alle 14/.test(body), "the Gewerke panel does not state its coverage");
++  assert(
++    !/Status pro Gewerke — \d+ von \d+/.test(body),
++    "the old truncated Gewerke grid is still on the page",
++  );
+   assert(/Regionale Verteilung — Top \d+ von \d+/.test(body), "the region list does not state its own coverage");
+ });
+ 
+@@ -1488,6 +1495,321 @@ await check("a stored status outside the vocabulary is offered back, not silentl
+   await page.keyboard.press("Escape");
+ });
+ 
++
++console.log("\n== the trail identifies, grades and forgives ==");
++
++await check("a change records which project it changed, and on which screen", async () => {
++  // The entry this replaces read, in full:
++  //   "ITK: status von Zustimmung erteilt auf offen gesetzt."
++  // — a withdrawn approval on one of 1,298 projects, with no way to tell which.
++  await go("/psv-itk");
++  await page.waitForSelector("table tbody tr", { timeout: 30000 });
++  const projektnummer = (
++    await page.locator("table tbody tr:first-child td:nth-child(2)").innerText()
++  ).trim();
++  const station = (
++    await page.locator("table tbody tr:first-child td:nth-child(4)").innerText()
++  ).trim();
++
++  const cell = "table tbody tr:first-child td:nth-child(13)";
++  await page.locator(`${cell} button`).first().click();
++  const select = page.locator(`${cell} select`).first();
++  await select.waitFor({ timeout: 5000 });
++  const before = await select.inputValue();
++  const options = await select.locator("option").allTextContents();
++  const next = options.find(
++    (o) => o && o !== before && o !== "—" && o !== "nicht erforderlich",
++  );
++  assert(next, "no other status to choose");
++  await select.selectOption(next);
++  await page.waitForTimeout(1200);
++
++  await go("/audit");
++  const row = page.locator("[data-audit-action='Prüfung aktualisiert']").first();
++  await row.waitFor({ timeout: 10000 });
++  const text = await row.innerText();
++  assert(text.includes(projektnummer), `the entry does not name the project: ${text}`);
++  assert(text.includes(station), `the entry does not name the station: ${text}`);
++  assert(text.includes("ITK"), `the entry does not name the Gewerk: ${text}`);
++  assert(text.includes(before) && text.includes(next), `the entry lost a value: ${text}`);
++  assert(text.includes("PSV-ITK"), `the entry does not say where it was done: ${text}`);
++});
++
++await check("withdrawing an approval is graded critical; ordinary progress is not", async () => {
++  await go("/psv-itk");
++  await page.waitForSelector("table tbody tr", { timeout: 30000 });
++
++  // Find a row that currently holds an approval, so the next change withdraws it.
++  const cells = page.locator("table tbody td:nth-child(13) button");
++  const count = Math.min(await cells.count(), 40);
++  let target = -1;
++  for (let i = 0; i < count; i++) {
++    const label = (await cells.nth(i).getAttribute("aria-label")) ?? "";
++    if (/aktuell (Zustimmung erteilt|Niederschrift erstellt)/.test(label)) {
++      target = i;
++      break;
++    }
++  }
++  assert(target >= 0, "no approved ITK row in the first 40 to withdraw");
++
++  await cells.nth(target).click();
++  const select = page.locator("table tbody select").first();
++  await select.waitFor({ timeout: 5000 });
++  const before = await select.inputValue();
++  await select.selectOption("offen");
++  await page.waitForTimeout(1200);
++
++  await go("/audit");
++  const top = page.locator("tbody tr").first();
++  await top.waitFor({ timeout: 10000 });
++  assert(
++    (await top.getAttribute("data-audit-severity")) === "kritisch",
++    `withdrawing "${before}" was not graded critical`,
++  );
++
++  // And the filter actually isolates it.
++  await page.getByRole("button", { name: /Nur kritische/ }).click();
++  await page.waitForTimeout(600);
++  const severities = await page.$$eval("tbody tr", (rows) =>
++    rows.map((r) => r.getAttribute("data-audit-severity")),
++  );
++  assert(severities.length > 0, "the critical filter emptied the page");
++  assert(
++    severities.every((s) => s === "kritisch"),
++    `the critical filter let through: ${[...new Set(severities)].join(", ")}`,
++  );
++});
++
++await check("a change corrected moments later is marked, not deleted", async () => {
++  await go("/psv-itk");
++  await page.waitForSelector("table tbody tr", { timeout: 30000 });
++  const cell = "table tbody tr:first-child td:nth-child(13)";
++
++  await page.locator(`${cell} button`).first().click();
++  let select = page.locator(`${cell} select`).first();
++  await select.waitFor({ timeout: 5000 });
++  const original = await select.inputValue();
++  const options = await select.locator("option").allTextContents();
++  const wrong = options.find(
++    (o) => o && o !== original && o !== "—" && o !== "nicht erforderlich",
++  );
++  assert(wrong, "no other status to choose");
++  await select.selectOption(wrong);
++  await page.waitForTimeout(900);
++
++  // Immediately put it back — the mis-click a person makes and fixes.
++  await page.locator(`${cell} button`).first().click();
++  select = page.locator(`${cell} select`).first();
++  await select.waitFor({ timeout: 5000 });
++  await select.selectOption(original);
++  await page.waitForTimeout(1200);
++
++  await go("/audit");
++  await page.waitForSelector("tbody tr", { timeout: 10000 });
++
++  // With corrections hidden (the default) the wrong value does not lead the page…
++  const shownByDefault = await page.$$eval("tbody tr", (rows) =>
++    rows.map((r) => r.getAttribute("data-audit-superseded")),
++  );
++  assert(
++    shownByDefault.every((v) => v !== "true"),
++    "a corrected entry is still shown while corrections are hidden",
++  );
++
++  // …but it is still in the record, which is the whole point.
++  await page.getByRole("button", { name: /Korrekturen ausblenden/ }).click();
++  await page.waitForTimeout(600);
++  const all = await page.$$eval("tbody tr", (rows) =>
++    rows.map((r) => r.getAttribute("data-audit-superseded")),
++  );
++  assert(
++    all.some((v) => v === "true"),
++    "the corrected entry was lost rather than marked",
++  );
++  assert(all.length > shownByDefault.length, "showing corrections revealed nothing");
++});
++
++await check("Rückgängig restores the old value and is itself recorded", async () => {
++  await go("/psv-itk");
++  await page.waitForSelector("table tbody tr", { timeout: 30000 });
++  const cell = "table tbody tr:first-child td:nth-child(13)";
++  const projektnummer = (
++    await page.locator("table tbody tr:first-child td:nth-child(2)").innerText()
++  ).trim();
++
++  await page.locator(`${cell} button`).first().click();
++  const select = page.locator(`${cell} select`).first();
++  await select.waitFor({ timeout: 5000 });
++  const original = await select.inputValue();
++  const options = await select.locator("option").allTextContents();
++  const changed = options.find(
++    (o) => o && o !== original && o !== "—" && o !== "nicht erforderlich",
++  );
++  assert(changed, "no other status to choose");
++  await select.selectOption(changed);
++  await page.waitForTimeout(1200);
++
++  await go("/audit");
++  const undoBtn = page.getByRole("button", { name: /^Änderung zurücknehmen/ }).first();
++  await undoBtn.waitFor({ timeout: 10000 });
++  await undoBtn.click();
++  await page.waitForTimeout(1500);
++
++  await go("/psv-itk");
++  await page.waitForSelector("table tbody tr", { timeout: 30000 });
++  const nowNumber = (
++    await page.locator("table tbody tr:first-child td:nth-child(2)").innerText()
++  ).trim();
++  assert(nowNumber === projektnummer, "the row moved; the undo cannot be verified here");
++  const restored = await page.locator(`${cell} button`).first().innerText();
++  assert(
++    restored.includes(original),
++    `after the undo the cell reads "${restored}", expected "${original}"`,
++  );
++
++  // The undo is a new entry, not an erasure of the old one.
++  await go("/audit");
++  await page.getByRole("button", { name: /Korrekturen ausblenden/ }).click();
++  await page.waitForTimeout(600);
++  const rows = await page.$$eval("tbody tr", (r) => r.length);
++  assert(rows >= 2, `only ${rows} entries after a change and its undo`);
++});
++
++
++console.log("\n== the Dashboard reports the workload, not the row count ==");
++
++await check("every Gewerk shows its own figure, and it matches its own tab", async () => {
++  // Seven of eight tiles used to read 1.298 — the project count. /bvb-eea says
++  // 814 EEA checks and /psv-itk says 510, and the Dashboard has to agree.
++  await go("/");
++  await page.waitForSelector("[data-gewerk]", { timeout: 25000 });
++  const cards = await page.$$eval("[data-gewerk]", (els) =>
++    els.map((e) => ({
++      dept: e.getAttribute("data-gewerk"),
++      label: e.getAttribute("aria-label") ?? "",
++    })),
++  );
++  assert(cards.length === 14, `${cards.length} Gewerke shown, expected all 14`);
++
++  const required = Object.fromEntries(
++    cards.map((c) => [c.dept, Number((c.label.match(/— ([\d.]+) Prüfungen/) ?? ["", "0"])[1].replace(/\./g, ""))]),
++  );
++  assert(required.EEA === 814, `Dashboard says EEA has ${required.EEA}, the tab says 814`);
++  assert(required.ITK === 510, `Dashboard says ITK has ${required.ITK}, the tab says 510`);
++
++  // And the figures actually differ — the old tile was a constant.
++  const distinct = new Set(Object.values(required));
++  assert(distinct.size > 8, `only ${distinct.size} distinct figures across 14 Gewerke`);
++  assert(!Object.values(required).includes(1298), "a Gewerk still reports the project count");
++});
++
++await check("a Gewerk card opens that Gewerk", async () => {
++  await go("/");
++  await page.waitForSelector("[data-gewerk]", { timeout: 25000 });
++  await page.click('[data-gewerk="EEA"]');
++  await page.waitForTimeout(1200);
++  assert(/\/bvb-eea/.test(page.url()), `the EEA card went to ${page.url()}`);
++});
++
++await check("the relief prints every value it draws, and flattens on request", async () => {
++  await go("/");
++  await page.waitForSelector(".relief-cell", { timeout: 25000 });
++
++  // 14 Gewerke x 4 lifecycle lanes, every one carrying its number as text.
++  const cells = await page.$$eval(".relief-cell", (els) =>
++    els.map((e) => ({ attr: e.getAttribute("data-value"), text: e.textContent.trim() })),
++  );
++  assert(cells.length === 56, `${cells.length} relief cells, expected 56`);
++  for (const c of cells) {
++    assert(c.text === c.attr, `a cell draws ${c.attr} but prints "${c.text}"`);
++  }
++
++  // The lanes have to sum to the Gewerk's required total, or the picture is
++  // describing a different set from the cards above it.
++  const rows = await page.$$eval(".relief-grid tbody tr", (trs) =>
++    trs.map((tr) => {
++      const values = [...tr.querySelectorAll(".relief-cell")].map((c) =>
++        Number(c.getAttribute("data-value")),
++      );
++      const total = Number((tr.lastElementChild?.textContent ?? "0").replace(/\./g, ""));
++      return { values, total };
++    }),
++  );
++  assert(rows.length === 14, `${rows.length} relief rows, expected 14`);
++  for (const r of rows) {
++    const sum = r.values.reduce((a, b) => a + b, 0);
++    assert(sum === r.total, `relief lanes sum to ${sum} against a stated total of ${r.total}`);
++  }
++
++  const tilted = await page.$eval(".relief-stage", (e) => e.getAttribute("data-flat"));
++  assert(tilted === "false", "the relief did not start in its 3D state");
++  await page.getByRole("button", { name: "Flach" }).click();
++  await page.waitForTimeout(400);
++  const flat = await page.$eval(".relief-stage", (e) => e.getAttribute("data-flat"));
++  assert(flat === "true", "Flach did not flatten the relief");
++
++  // Flat must withhold nothing: same cells, same numbers.
++  const flatCells = await page.$$eval(".relief-cell", (els) =>
++    els.map((e) => e.textContent.trim()),
++  );
++  assert(
++    JSON.stringify(flatCells) === JSON.stringify(cells.map((c) => c.text)),
++    "the flat view shows different numbers from the relief",
++  );
++});
++
++await check("Präsentationsmodus is opt-in, advances, and pauses when read", async () => {
++  await go("/");
++  await page.waitForSelector("[data-gewerk]", { timeout: 25000 });
++  assert(
++    (await page.$$eval("[data-gewerk]", (e) => e.length)) === 14,
++    "rotation is on before anyone asked for it",
++  );
++
++  const toggle = page.getByRole("button", { name: /Präsentationsmodus/ });
++  await toggle.click();
++  await page.waitForTimeout(500);
++  const windowed = await page.$$eval("[data-gewerk]", (e) => e.length);
++  assert(windowed < 14, `Präsentationsmodus still shows ${windowed} cards`);
++
++  const before = await page.$$eval("[data-gewerk]", (els) =>
++    els.map((e) => e.getAttribute("data-gewerk")).join(","),
++  );
++  await page.getByRole("button", { name: "Nächstes Gewerk" }).click();
++  await page.waitForTimeout(400);
++  const after = await page.$$eval("[data-gewerk]", (els) =>
++    els.map((e) => e.getAttribute("data-gewerk")).join(","),
++  );
++  assert(before !== after, "the next-Gewerk control changed nothing");
++
++  // Reading it must stop it moving.
++  await page.hover("[data-gewerk]");
++  await page.waitForTimeout(400);
++  const body = await page.locator("body").innerText();
++  assert(body.includes("pausiert"), "hovering a card did not pause the rotation");
++});
++
++await check("the diagnostics say what they cannot measure", async () => {
++  await go("/");
++  await page.waitForSelector("text=/Alter der offenen Prüfungen/", { timeout: 25000 });
++  const body = await page.locator("body").innerText();
++
++  // An open row with no date cannot be aged; the panel must say so rather than
++  // quietly excluding it from the buckets.
++  assert(/tragen kein Prüfdatum/.test(body), "the aging panel hides its undated rows");
++  // "Prüfung erfolgt" is in no lifecycle bucket, so the buckets do not add up
++  // to the workload, and the panel has to name the difference.
++  assert(
++    /Nicht in offen \/ zugestimmt \/ blockiert enthalten/.test(body),
++    "the quality panel does not name the unclassified statuses",
++  );
++  // A Projektnummer is a programme id — stated as a fact, not an error count.
++  assert(
++    /bezeichnet ein Programm, kein einzelnes Projekt/.test(body),
++    "the shared Projektnummer is not explained",
++  );
++});
++
+ console.log("\n== summary ==");
+ console.log(`${passed} passed, ${failures.length} failed`);
+ await browser.close();
+diff --git a/shared/portfolio-metrics.test.ts b/shared/portfolio-metrics.test.ts
+new file mode 100644
+index 0000000..c0a7fc4
+--- /dev/null
++++ b/shared/portfolio-metrics.test.ts
+@@ -0,0 +1,168 @@
++import { describe, it, expect } from "vitest";
++import fs from "node:fs";
++import {
++  agingOfOpenReviews,
++  dataQuality,
++  daysBetween,
++  gewerkStandings,
++  reviewerConcentration,
++  RISK_WEIGHTS,
++} from "./portfolio-metrics";
++import { DEPARTMENT_LIST } from "./validation";
++import { normalizeReviewStatus } from "./review-status";
++
++const DATA = JSON.parse(fs.readFileSync("client/public/data.json", "utf8")) as {
++  projects: Array<Record<string, unknown>>;
++};
++const TODAY = Date.parse("2026-08-22T00:00:00Z");
++const STANDINGS = gewerkStandings(DATA.projects as never, DEPARTMENT_LIST, TODAY);
++
++describe("the Gewerke figure is the workload, not the row count", () => {
++  it("counts required rows, which is what the Gewerk tabs already show", () => {
++    // The Dashboard tile read 1.298 for seven of eight Gewerke — the number of
++    // projects, not the number of checks. /bvb-eea says 814 and /psv-itk 510,
++    // and the Dashboard must agree with them.
++    const eea = STANDINGS.find((g) => g.department === "EEA");
++    const itk = STANDINGS.find((g) => g.department === "ITK");
++    expect(eea?.required).toBe(814);
++    expect(itk?.required).toBe(510);
++  });
++
++  it("gives the fourteen Gewerke fourteen different answers", () => {
++    const required = STANDINGS.map((g) => g.required);
++    expect(STANDINGS).toHaveLength(14);
++    // The old tile was a constant. Any measure worth showing varies.
++    expect(new Set(required).size).toBeGreaterThan(8);
++    expect(Math.max(...required)).toBeGreaterThan(Math.min(...required) * 5);
++  });
++
++  it("accounts for every required row it counts", () => {
++    for (const g of STANDINGS) {
++      expect(g.open + g.approved + g.blocked + g.other, g.department).toBe(g.required);
++    }
++  });
++
++  it("derives the same required count as counting the data by hand", () => {
++    for (const g of STANDINGS) {
++      let expected = 0;
++      for (const p of DATA.projects) {
++        const reviews = (p.reviews ?? []) as Array<{ department: string; status?: string }>;
++        const r = reviews.find((x) => x.department === g.department);
++        const s = normalizeReviewStatus(r?.status);
++        if (s !== null && s !== "nicht erforderlich") expected++;
++      }
++      expect(g.required, g.department).toBe(expected);
++    }
++  });
++
++  it("never claims completion on a Gewerk that has approved nothing", () => {
++    // UM's vocabulary contains no approval status at all: 31 rows say
++    // "Prüfung erfolgt", which is neither an approval nor an open state. A
++    // completion percentage must not round that up to progress.
++    const um = STANDINGS.find((g) => g.department === "UM");
++    expect(um?.approved).toBe(0);
++    expect(um?.completion).toBe(0);
++    expect(um?.other).toBeGreaterThan(0);
++  });
++
++  it("weights risk from stated components, never from a magic number", () => {
++    for (const g of STANDINGS) {
++      expect(g.riskScore, g.department).toBe(
++        g.blocked * RISK_WEIGHTS.blocked +
++          g.overdue * RISK_WEIGHTS.overdue +
++          g.unassigned * RISK_WEIGHTS.unassigned,
++      );
++    }
++  });
++});
++
++describe("aging", () => {
++  const aging = agingOfOpenReviews(DATA.projects as never, TODAY);
++
++  it("buckets every dated open review exactly once", () => {
++    const bucketed = aging.cohorts.reduce((a, c) => a + c.count, 0);
++    let openTotal = 0;
++    for (const p of DATA.projects) {
++      for (const r of (p.reviews ?? []) as Array<{ status?: string }>) {
++        const s = normalizeReviewStatus(r.status);
++        if (s && ["offen", "in Bearbeitung", "Nachforderung", "prüffähig"].includes(s)) openTotal++;
++      }
++    }
++    expect(bucketed + aging.undatedOpen).toBe(openTotal);
++  });
++
++  it("reports the open rows it cannot age instead of dropping them", () => {
++    expect(aging.undatedOpen).toBeGreaterThan(0);
++  });
++
++  it("has a median that sits inside the data", () => {
++    expect(aging.medianAgeDays).not.toBeNull();
++    expect(aging.medianAgeDays).toBeGreaterThan(0);
++  });
++});
++
++describe("concentration", () => {
++  const c = reviewerConcentration(DATA.projects as never);
++
++  it("finds every named reviewer, not a hardcoded roster", () => {
++    const names = new Set<string>();
++    for (const p of DATA.projects) {
++      for (const r of (p.reviews ?? []) as Array<{ status?: string; prueferName?: string }>) {
++        const s = normalizeReviewStatus(r.status);
++        if (s === null || s === "nicht erforderlich") continue;
++        const n = (r.prueferName ?? "").trim();
++        if (n) names.add(n);
++      }
++    }
++    expect(c.reviewers.length).toBe(names.size);
++  });
++
++  it("states the share of open work held by the busiest five", () => {
++    expect(c.topFiveShareOfOpen).toBeGreaterThan(0);
++    expect(c.topFiveShareOfOpen).toBeLessThanOrEqual(100);
++  });
++
++  it("counts unassigned open work separately rather than hiding it in a name", () => {
++    expect(c.unassignedOpen).toBeGreaterThan(0);
++    expect(c.reviewers.some((r) => r.name === "")).toBe(false);
++  });
++});
++
++describe("data quality", () => {
++  const q = dataQuality(DATA.projects as never);
++
++  it("names the statuses that belong to no lifecycle bucket", () => {
++    // Otherwise open + approved + blocked silently omits them and the totals
++    // look complete while missing hundreds of rows.
++    expect(q.unclassifiedStatuses.length).toBeGreaterThan(0);
++    expect(q.unclassifiedStatuses.map((s) => s.status)).toContain("Prüfung erfolgt");
++    for (const s of q.unclassifiedStatuses) expect(s.count).toBeGreaterThan(0);
++  });
++
++  it("treats a shared Projektnummer as a fact, not an error", () => {
++    // 1,298 projects carry 385 numbers; one appears 98 times. This is how the
++    // workbook is organised.
++    expect(q.distinctProjektnummern).toBeLessThan(q.totalProjects);
++    expect(q.projectsSharingANumber).toBeGreaterThan(q.sharedProjektnummern);
++  });
++
++  it("counts blank review rows", () => {
++    expect(q.reviewsWithoutStatus).toBeGreaterThan(0);
++  });
++
++  it("reports totals a reader can check against the file", () => {
++    expect(q.totalProjects).toBe(DATA.projects.length);
++    let reviews = 0;
++    for (const p of DATA.projects) reviews += ((p.reviews ?? []) as unknown[]).length;
++    expect(q.totalReviews).toBe(reviews);
++  });
++});
++
++describe("daysBetween", () => {
++  it("is positive in the past and negative in the future", () => {
++    expect(daysBetween("2026-08-12", TODAY)).toBe(10);
++    expect(daysBetween("2026-09-01", TODAY)).toBeLessThan(0);
++    expect(daysBetween(null, TODAY)).toBeNull();
++    expect(daysBetween("kein Datum", TODAY)).toBeNull();
++  });
++});
+diff --git a/shared/portfolio-metrics.ts b/shared/portfolio-metrics.ts
+new file mode 100644
+index 0000000..783047d
+--- /dev/null
++++ b/shared/portfolio-metrics.ts
+@@ -0,0 +1,404 @@
++/**
++ * What a CEO can act on.
++ *
++ * The Dashboard's Gewerke grid showed this, for seven of its eight tiles:
++ *
++ *     EEA   1.298      ITK   1.298      BS   1.298      GA   1.298
++ *
++ * That number is "projects whose row for this Gewerk carries a status the
++ * vocabulary recognises", and since every project has all 14 rows and almost
++ * all of them are filled in, it is 1,298 for nearly every Gewerk, forever. It
++ * moves only when data is added. It reads as "1,298 EEA-Prüfungen" and the real
++ * figure is 814 — the other 484 are "nicht erforderlich". ITK is 510, GA is 158,
++ * HFT is 100. Eight tiles carrying the same constant told a reader nothing and
++ * told them it with confidence.
++ *
++ * Everything here is derived from the stored rows and states its own basis.
++ * Nothing is a multiplier of the row count.
++ *
++ * ---------------------------------------------------------------------------
++ * On the risk score
++ * ---------------------------------------------------------------------------
++ * `riskScore` is a RANKING HEURISTIC, not a measurement, and it is documented
++ * as one wherever it is shown. It exists to answer "which Gewerk do I look at
++ * first" — a question with no ground truth in this dataset — and its weights
++ * are stated in the open so a reader can disagree with them. It is never
++ * presented as a probability, a cost, or a forecast, because the data cannot
++ * support any of those and inventing one is exactly the class of defect this
++ * project has spent its time removing.
++ */
++
++import {
++  APPROVED_STATUSES,
++  BLOCKING_STATUSES,
++  OPEN_STATUSES,
++  normalizeReviewStatus,
++} from "./review-status";
++import { parseStoredDate } from "./date";
++
++export interface PortfolioReview {
++  department: string;
++  status?: string | null;
++  prueferName?: string | null;
++  pruefDatum?: string | null;
++}
++
++export interface PortfolioProject {
++  id: number;
++  projektnummer?: string | null;
++  station?: string | null;
++  bahnhofsmanagement?: string | null;
++  terminProjektvorstellung?: string | null;
++  reviews?: PortfolioReview[] | null;
++}
++
++const isOpen = (s: string | null) => s !== null && (OPEN_STATUSES as readonly string[]).includes(s);
++const isDone = (s: string | null) => s !== null && (APPROVED_STATUSES as readonly string[]).includes(s);
++const isBlocked = (s: string | null) => s !== null && (BLOCKING_STATUSES as readonly string[]).includes(s);
++
++/** Days between an ISO date and a reference day. Negative means still ahead. */
++export function daysBetween(iso: string | null, today: number): number | null {
++  if (!iso) return null;
++  const t = Date.parse(iso);
++  if (!Number.isFinite(t)) return null;
++  return Math.floor((today - t) / 86_400_000);
++}
++
++export interface GewerkStanding {
++  department: string;
++  /** Rows this Gewerk is actually required on — the honest workload. */
++  required: number;
++  open: number;
++  approved: number;
++  blocked: number;
++  /** Required rows whose status maps to none of the three lifecycle buckets. */
++  other: number;
++  /** Required rows carrying no status at all. */
++  notRequired: number;
++  /** Open rows with nobody's name on them. */
++  unassigned: number;
++  /** Open rows whose Prüfdatum has already passed. */
++  overdue: number;
++  /** The oldest still-open row, in days. Null when none has a date. */
++  oldestOpenDays: number | null;
++  /** Share of required rows that are signed off, 0–100. */
++  completion: number;
++  /** See the file header: a ranking heuristic with stated weights. */
++  riskScore: number;
++}
++
++/**
++ * Ranking weights, in the open.
++ *
++ * A blocked check stops work outright; an overdue one has already broken a
++ * promised date; an unassigned one has nobody who could move it. Three, two,
++ * one. Anyone is free to disagree — which is the point of writing them down
++ * instead of burying them in an expression.
++ */
++export const RISK_WEIGHTS = { blocked: 3, overdue: 2, unassigned: 1 } as const;
++
++export function gewerkStandings(
++  projects: readonly PortfolioProject[] | null | undefined,
++  departments: readonly string[],
++  today: number,
++): GewerkStanding[] {
++  const out: GewerkStanding[] = [];
++  for (const department of departments) {
++    let required = 0;
++    let open = 0;
++    let approved = 0;
++    let blocked = 0;
++    let other = 0;
++    let notRequired = 0;
++    let unassigned = 0;
++    let overdue = 0;
++    let oldestOpenDays: number | null = null;
++
++    for (const project of projects ?? []) {
++      const review = (project.reviews ?? []).find((r) => r.department === department);
++      if (!review) continue;
++      const status = normalizeReviewStatus(review.status);
++      if (status === null) continue;
++      if (status === "nicht erforderlich") {
++        notRequired++;
++        continue;
++      }
++      required++;
++      if (isOpen(status)) {
++        open++;
++        if (!(review.prueferName ?? "").trim()) unassigned++;
++        const iso = parseStoredDate(review.pruefDatum ?? null).iso;
++        const age = daysBetween(iso, today);
++        if (age !== null && age > 0) {
++          overdue++;
++          if (oldestOpenDays === null || age > oldestOpenDays) oldestOpenDays = age;
++        }
++      } else if (isDone(status)) approved++;
++      else if (isBlocked(status)) blocked++;
++      else other++;
++    }
++
++    out.push({
++      department,
++      required,
++      open,
++      approved,
++      blocked,
++      other,
++      notRequired,
++      unassigned,
++      overdue,
++      oldestOpenDays,
++      completion: required > 0 ? Math.round((approved / required) * 100) : 0,
++      riskScore:
++        blocked * RISK_WEIGHTS.blocked +
++        overdue * RISK_WEIGHTS.overdue +
++        unassigned * RISK_WEIGHTS.unassigned,
++    });
++  }
++  return out;
++}
++
++/** Age buckets for everything still open. The tail is what hurts. */
++export const AGE_BUCKETS = [
++  { key: "0-30", label: "bis 30 Tage", from: 0, to: 30 },
++  { key: "31-90", label: "31–90 Tage", from: 31, to: 90 },
++  { key: "91-180", label: "91–180 Tage", from: 91, to: 180 },
++  { key: "181-365", label: "181–365 Tage", from: 181, to: 365 },
++  { key: "365+", label: "über ein Jahr", from: 366, to: Number.POSITIVE_INFINITY },
++] as const;
++
++export interface AgingCohort {
++  key: string;
++  label: string;
++  count: number;
++}
++
++export interface Aging {
++  cohorts: AgingCohort[];
++  /** Open rows with no Prüfdatum at all — they cannot be aged, and are reported. */
++  undatedOpen: number;
++  medianAgeDays: number | null;
++}
++
++export function agingOfOpenReviews(
++  projects: readonly PortfolioProject[] | null | undefined,
++  today: number,
++): Aging {
++  const ages: number[] = [];
++  let undatedOpen = 0;
++  for (const project of projects ?? []) {
++    for (const review of project.reviews ?? []) {
++      const status = normalizeReviewStatus(review.status);
++      if (!isOpen(status)) continue;
++      const iso = parseStoredDate(review.pruefDatum ?? null).iso;
++      const age = daysBetween(iso, today);
++      if (age === null) {
++        undatedOpen++;
++        continue;
++      }
++      ages.push(Math.max(age, 0));
++    }
++  }
++  const cohorts = AGE_BUCKETS.map((b) => ({
++    key: b.key,
++    label: b.label,
++    count: ages.filter((a) => a >= b.from && a <= b.to).length,
++  }));
++  ages.sort((a, b) => a - b);
++  const medianAgeDays =
++    ages.length === 0
++      ? null
++      : ages.length % 2 === 1
++        ? (ages[(ages.length - 1) / 2] as number)
++        : Math.round((((ages[ages.length / 2 - 1] as number) + (ages[ages.length / 2] as number)) / 2));
++  return { cohorts, undatedOpen, medianAgeDays };
++}
++
++export interface ReviewerLoad {
++  name: string;
++  open: number;
++  done: number;
++  total: number;
++}
++
++export interface Concentration {
++  reviewers: ReviewerLoad[];
++  /** Share of all open work sitting with the busiest five, 0–100. */
++  topFiveShareOfOpen: number;
++  /** Open rows nobody is named on. */
++  unassignedOpen: number;
++}
++
++/**
++ * Who is carrying the work.
++ *
++ * The concentration figure is the one that matters: if five people hold most of
++ * the open work, the schedule depends on five people's calendars.
++ */
++export function reviewerConcentration(
++  projects: readonly PortfolioProject[] | null | undefined,
++): Concentration {
++  const map = new Map<string, ReviewerLoad>();
++  let unassignedOpen = 0;
++  let totalOpen = 0;
++
++  for (const project of projects ?? []) {
++    for (const review of project.reviews ?? []) {
++      const status = normalizeReviewStatus(review.status);
++      if (status === null || status === "nicht erforderlich") continue;
++      const name = (review.prueferName ?? "").trim();
++      const open = isOpen(status);
++      if (open) totalOpen++;
++      if (!name) {
++        if (open) unassignedOpen++;
++        continue;
++      }
++      const entry = map.get(name) ?? { name, open: 0, done: 0, total: 0 };
++      entry.total++;
++      if (open) entry.open++;
++      else if (isDone(status)) entry.done++;
++      map.set(name, entry);
++    }
++  }
++
++  const reviewers = [...map.values()].sort((a, b) => b.open - a.open || b.total - a.total);
++  const topFiveOpen = reviewers.slice(0, 5).reduce((sum, r) => sum + r.open, 0);
++  return {
++    reviewers,
++    topFiveShareOfOpen: totalOpen > 0 ? Math.round((topFiveOpen / totalOpen) * 100) : 0,
++    unassignedOpen,
++  };
++}
++
++export interface DataQuality {
++  /** Stored statuses the canonical vocabulary cannot map. */
++  unmappedStatus: number;
++  /** Open rows with no Prüfer. */
++  openWithoutPruefer: number;
++  /** Open rows with no Prüfdatum. */
++  openWithoutDate: number;
++  /** Projects that cannot be placed on the map. */
++  withoutStation: number;
++  /**
++   * A Projektnummer is a programme identifier, not a project identifier.
++   *
++   * 1,298 projects carry 385 distinct numbers; one of them appears 98 times.
++   * That is not a defect to be cleaned up — it is how the workbook is
++   * organised — but it decides what a search result means, what a PDF filename
++   * identifies, and whether "the project G.011598624" is a sentence anyone can
++   * act on. Reported as a fact, never as an error count.
++   */
++  distinctProjektnummern: number;
++  sharedProjektnummern: number;
++  projectsSharingANumber: number;
++  /** Review rows carrying no status at all — 432 of them are BIM. */
++  reviewsWithoutStatus: number;
++  /**
++   * Canonical statuses that belong to no lifecycle bucket.
++   *
++   * "Prüfung erfolgt" is a real status on 229 rows and means neither open nor
++   * approved nor blocked, so every count built on those three buckets silently
++   * omits it. Naming the statuses and their counts is the only honest way to
++   * show a total that does not add up.
++   */
++  unclassifiedStatuses: Array<{ status: string; count: number }>;
++  /** Projects with no Projektnummer at all. */
++  withoutProjektnummer: number;
++  /** Stored dates this build refuses to guess at. */
++  unparseableDates: number;
++  totalReviews: number;
++  totalProjects: number;
++}
++
++/**
++ * How much of the record can be trusted.
++ *
++ * Every figure on every other panel rests on these rows. A dashboard that
++ * reports confidently on data it has not checked is the more expensive kind of
++ * wrong, so the checks are shown rather than assumed.
++ */
++export function dataQuality(
++  projects: readonly PortfolioProject[] | null | undefined,
++): DataQuality {
++  let unmappedStatus = 0;
++  let reviewsWithoutStatus = 0;
++  const unclassified = new Map<string, number>();
++  let openWithoutPruefer = 0;
++  let openWithoutDate = 0;
++  let withoutStation = 0;
++  let withoutProjektnummer = 0;
++  let unparseableDates = 0;
++  let totalReviews = 0;
++
++  const numbers = new Map<string, number>();
++  const list = projects ?? [];
++
++  for (const project of list) {
++    const nummer = (project.projektnummer ?? "").trim();
++    if (!nummer) withoutProjektnummer++;
++    else numbers.set(nummer, (numbers.get(nummer) ?? 0) + 1);
++    if (!(project.station ?? "").trim()) withoutStation++;
++
++    if (project.terminProjektvorstellung) {
++      const parsed = parseStoredDate(project.terminProjektvorstellung);
++      if (parsed.iso === null && parsed.reason !== "empty" && parsed.reason !== "placeholder") {
++        unparseableDates++;
++      }
++    }
++
++    for (const review of project.reviews ?? []) {
++      totalReviews++;
++      const raw = (review.status ?? "").trim();
++      const status = normalizeReviewStatus(review.status);
++      if (!raw) reviewsWithoutStatus++;
++      if (raw && status === null) unmappedStatus++;
++      if (
++        status !== null &&
++        status !== "nicht erforderlich" &&
++        !isOpen(status) &&
++        !isDone(status) &&
++        !isBlocked(status)
++      ) {
++        unclassified.set(status, (unclassified.get(status) ?? 0) + 1);
++      }
++      if (isOpen(status)) {
++        if (!(review.prueferName ?? "").trim()) openWithoutPruefer++;
++        if (!parseStoredDate(review.pruefDatum ?? null).iso) openWithoutDate++;
++      }
++      if (review.pruefDatum) {
++        const parsed = parseStoredDate(review.pruefDatum);
++        if (parsed.iso === null && parsed.reason !== "empty" && parsed.reason !== "placeholder") {
++          unparseableDates++;
++        }
++      }
++    }
++  }
++
++  let sharedProjektnummern = 0;
++  let projectsSharingANumber = 0;
++  for (const count of numbers.values()) {
++    if (count > 1) {
++      sharedProjektnummern++;
++      projectsSharingANumber += count;
++    }
++  }
++
++  return {
++    unmappedStatus,
++    reviewsWithoutStatus,
++    unclassifiedStatuses: [...unclassified.entries()]
++      .map(([status, count]) => ({ status, count }))
++      .sort((a, b) => b.count - a.count),
++    openWithoutPruefer,
++    openWithoutDate,
++    withoutStation,
++    distinctProjektnummern: numbers.size,
++    sharedProjektnummern,
++    projectsSharingANumber,
++    withoutProjektnummer,
++    unparseableDates,
++    totalReviews,
++    totalProjects: list.length,
++  };
++}
+-- 
+2.43.0
+
