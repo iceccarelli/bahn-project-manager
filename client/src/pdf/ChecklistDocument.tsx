@@ -18,6 +18,7 @@ import {
 } from "@shared/checklist";
 import { DB_RED } from "@shared/brand";
 import { displayName, recipientsFor } from "@shared/contacts";
+import { generatedLabel } from "@shared/generated-stamp";
 
 /**
  * The Checkliste as a real PDF.
@@ -132,10 +133,10 @@ export function ChecklistDocument({ data }: { data: ChecklistPdfData }) {
   const notes = CHECKLIST_QUESTIONS.find((q) => q.kind === "notes");
   const open = data.reviews.filter((r) => r.status === "offen");
   const byDept = new Map(data.reviews.map((r) => [r.department, r]));
-  const stamp = new Date(data.generatedAt);
-  const stampText = Number.isNaN(stamp.getTime())
-    ? data.generatedAt
-    : new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" }).format(stamp);
+  // Date AND time, from shared/generated-stamp.ts. Date alone meant two
+  // exports of the same project on one day were indistinguishable — same
+  // footer, same filename, the second silently replacing the first.
+  const stampText = generatedLabel(data.generatedAt);
 
   const Header = () => (
     <View style={s.bar} fixed>

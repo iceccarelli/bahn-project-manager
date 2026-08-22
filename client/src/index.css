@@ -1,6 +1,32 @@
 @import "tailwindcss";
 
 /*
+ * The `dark:` variant follows the app's own theme toggle, not the operating
+ * system.
+ *
+ * Tailwind v4's default dark variant is `@media (prefers-color-scheme: dark)`.
+ * ThemeContext writes a `.dark` class on <html>. Nothing connected the two, so
+ * the app was styled by two different sources at once:
+ *
+ *   - the CSS custom properties (--background, --card, --muted-foreground)
+ *     switch on the `.dark` CLASS, i.e. the toggle
+ *   - every `dark:` utility switched on the OS SETTING
+ *
+ * On a machine with the OS in dark mode and the app in light mode — the
+ * default for anyone who has never touched the toggle — you get white rows
+ * carrying dark-mode badge colours. Measured: "offen" rendered
+ * dark:bg-amber-900/30 (30 % opaque) with dark:text-amber-300, i.e. pale
+ * yellow text on a near-white row, and "nicht erforderlich" rendered
+ * dark:bg-slate-800, a near-black pill in a white table. Both are in the
+ * screenshots that prompted this fix. Every `dark:` class in the codebase was
+ * affected, roughly 300 of them.
+ *
+ * check-ui.mjs now runs the whole audit across the four combinations of OS
+ * scheme x app theme, so the two can never drift apart again.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
  * Tailwind v4 detects sources automatically, but only from this file's own
  * project root — which is `client/`. Everything in `shared/` was invisible to
  * the CSS build, including shared/status-appearance.ts, the single file that

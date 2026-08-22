@@ -1,6 +1,7 @@
 import type { DocumentProps } from "@react-pdf/renderer";
 import type { ReactElement } from "react";
 import type { ChecklistPdfData } from "./ChecklistDocument";
+import { documentFilename } from "@shared/generated-stamp";
 
 /**
  * Build the Checkliste PDF and hand it to the browser as a download.
@@ -22,14 +23,13 @@ export async function downloadChecklistPdf(data: ChecklistPdfData): Promise<stri
   const element = React.createElement(ChecklistDocument, { data }) as ReactElement<DocumentProps>;
   const blob = await pdf(element).toBlob();
 
-  const safe = (s: string) => s.replace(/[^\w.\-]+/g, "_").replace(/^_+|_+$/g, "");
-  const parts = [
+  // Date AND time in the name, from the same stamp the document prints, so a
+  // second export on the same day is a second file rather than an overwrite.
+  const filename = documentFilename(
     "Checkliste",
-    safe(data.projektnummer) || "Entwurf",
-    safe(data.stationsname),
-    data.generatedAt.slice(0, 10),
-  ].filter(Boolean);
-  const filename = `${parts.join("_")}.pdf`;
+    [data.projektnummer || "Entwurf", data.stationsname],
+    data.generatedAt,
+  );
 
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");

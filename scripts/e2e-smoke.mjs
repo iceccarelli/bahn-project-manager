@@ -155,6 +155,15 @@ for (const [label, route, marker] of [
     await page.getByRole("button", { name: label, exact: true }).first().click();
     await page.waitForTimeout(900);
     assert(new URL(page.url()).pathname === route, `landed on ${new URL(page.url()).pathname}`);
+    // Wait for the marker rather than assert on it after a fixed 900ms.
+    // /projects parses 1,298 projects and 18,172 review rows out of a 3.6 MB
+    // JSON before the table exists; on a 2-core CI runner that is not done in
+    // 900ms, and the suite failed for slowness rather than for a defect.
+    await page
+      .locator(marker)
+      .first()
+      .waitFor({ state: "visible", timeout: 20000 })
+      .catch(() => {});
     assert(await page.locator(marker).first().isVisible(), `no <${marker}> on ${route}`);
   });
 }
@@ -320,6 +329,9 @@ await check("the created project reaches the projects table", async () => {
   if (await submit.isDisabled()) {
     // Not every required field is reachable headlessly; the draft path still
     // proves persistence, so fall back to it rather than asserting a false pass.
+    // Say so out loud: a check that silently degrades to a weaker assertion
+    // reads as a pass for the thing it stopped testing.
+    console.log("       ! submit disabled — falling back to the draft path");
     await page.getByRole("button", { name: /Als Entwurf speichern/ }).click();
     await page.waitForTimeout(900);
     const stored = await page.evaluate(() => {
@@ -333,10 +345,35 @@ await check("the created project reaches the projects table", async () => {
   }
   await submit.click();
   await page.waitForTimeout(1500);
-  await go("/projects");
-  await page.locator('input[aria-label^="Projekte durchsuchen"]').fill(createdNumber);
-  await page.waitForTimeout(1000);
-  assert((await page.locator("tbody tr").count()) >= 1, "created project not in the table");
+
+  // The confirmation has to close the process, not just announce it: the two
+  // Gewerke this Anmeldung left open each get a prefilled mail, and the button
+  // out lands on the project that was created rather than on all 1,298.
+  const confirmation = await page.locator("body").innerText();
+  assert(
+    /Fachbereiche benachrichtigen/.test(confirmation),
+    "the confirmation offers no way to notify the Fachbereiche it just opened",
+  );
+  const notify = await page.evaluate(() =>
+    [...document.querySelectorAll('a[href^="mailto:"]')].map((a) => a.getAttribute("href")),
+  );
+  assert(notify.length > 0, "no Fachbereich mail on the confirmation screen");
+  for (const href of notify) {
+    const q = new URLSearchParams(href.slice(href.indexOf("?") + 1));
+    assert((q.get("body") ?? "").includes("Projektnummer:"), "notification body carries no context");
+  }
+
+  await page.getByRole("button", { name: /^Projekt öffnen$/ }).click();
+  await page.waitForTimeout(1500);
+  const landed = new URL(page.url());
+  assert(landed.pathname === "/projects", `landed on ${landed.pathname}`);
+  assert(
+    landed.searchParams.get("q") === createdNumber,
+    `landed unfiltered: q=${landed.searchParams.get("q")}`,
+  );
+  const rows = await page.locator("tbody tr").count();
+  assert(rows >= 1, "created project not in the table");
+  assert(rows < 100, `landing did not filter — ${rows} rows`);
 });
 
 console.log("\n== cross-page consistency ==");
@@ -713,6 +750,89 @@ await check("both table row actions are separate 44px targets on touch", async (
   assert(!r.err, r.err);
   assert(r.small === 0, `${r.small} of ${r.count} row actions are under 44px on touch`);
   assert(r.overlap === 0, `row actions overlap by ${r.overlap}px² — one steals the other's taps`);
+});
+
+console.log("\n== documents and notifications ==");
+
+await check("the detail dialog prints a Projektblatt stamped with date AND time", async () => {
+  await go("/projects?q=Langenselbold");
+  await page.click('[aria-label="Kachelansicht"]');
+  await page.waitForTimeout(1200);
+  await page.evaluate(() => {
+    document
+      .querySelector("[data-project-card]")
+      ?.querySelector('button[aria-label^="Details"]')
+      ?.click();
+  });
+  await page.waitForSelector('[role="dialog"]', { timeout: 15000 });
+
+  const btn = page.getByRole("button", { name: /Als PDF/ });
+  assert((await btn.count()) === 1, "no third action beside Station and Bahnhofsmanagement");
+
+  const [download] = await Promise.all([
+    page.waitForEvent("download", { timeout: 90000 }),
+    btn.click(),
+  ]);
+  const name = download.suggestedFilename();
+
+  // Projektblatt_<Nr>_<Station>_<YYYY-MM-DD>_<HHMM>.pdf — the time is what
+  // makes a second export on the same day a second file rather than an
+  // overwrite, and what lets a reader date the sheet in their hand.
+  assert(
+    /^Projektblatt_.+_\d{4}-\d{2}-\d{2}_\d{4}\.pdf$/.test(name),
+    `filename carries no date+time stamp: ${name}`,
+  );
+  assert(name.includes("G.011540063"), `filename does not identify the project: ${name}`);
+
+  const file = await download.path();
+  const head = fs.readFileSync(file);
+  assert(head.subarray(0, 5).toString() === "%PDF-", "the download is not a PDF");
+  assert(head.length > 5000, `PDF is implausibly small: ${head.length} bytes`);
+  await page.keyboard.press("Escape");
+});
+
+await check("mail and Teams carry a written message, not just an address", async () => {
+  await go("/projects?q=Langenselbold");
+  await page.click('[aria-label="Kachelansicht"]');
+  await page.waitForTimeout(1200);
+  await page.evaluate(() => {
+    document
+      .querySelector("[data-project-card]")
+      ?.querySelector('button[aria-label^="Details"]')
+      ?.click();
+  });
+  await page.waitForSelector('[role="dialog"]', { timeout: 15000 });
+
+  const links = await page.evaluate(() => {
+    const d = document.querySelector('[role="dialog"]');
+    return {
+      mail: [...d.querySelectorAll('a[href^="mailto:"]')].map((a) => a.getAttribute("href")),
+      teams: [...d.querySelectorAll('a[href^="https://teams"]')].map((a) => a.getAttribute("href")),
+    };
+  });
+  assert(links.mail.length > 0 && links.teams.length > 0, "no contact routes in the dialog");
+
+  for (const href of links.mail) {
+    const q = new URLSearchParams(href.slice(href.indexOf("?") + 1));
+    const subject = q.get("subject") ?? "";
+    const body = q.get("body") ?? "";
+    assert(subject.includes("G.011540063"), `subject does not name the project: ${subject}`);
+    assert(body.includes("Projektnummer: G.011540063"), "body does not carry the Projektnummer");
+    assert(body.includes("Station: Langenselbold"), "body does not carry the Station");
+    assert(
+      body.includes("Erstellt aus dem Bahn Project Manager"),
+      "body does not say where it came from",
+    );
+    assert(/Projekt öffnen: https?:\/\//.test(body), "body carries no link back to the record");
+  }
+
+  // A Teams chat has no subject field, so the message has to open with it.
+  for (const href of links.teams) {
+    const msg = new URLSearchParams(href.slice(href.indexOf("?") + 1)).get("message") ?? "";
+    assert(msg.startsWith("Projekt G.011540063"), "Teams message does not open with the subject");
+    assert(msg.includes("Bahnhofsmanagement: Kassel"), "Teams message carries no context");
+  }
+  await page.keyboard.press("Escape");
 });
 
 console.log("\n== summary ==");

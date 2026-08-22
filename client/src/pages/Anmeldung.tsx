@@ -12,7 +12,11 @@ import { visibleQuestions } from "@shared/checklist";
 import { useChecklistDraft } from "@/hooks/useChecklistDraft";
 import { bookSlot } from "@/hooks/useSchedule";
 import { CHECKLIST_MODES } from "@shared/checklist";
-import { Check, ChevronLeft, ChevronRight, FileDown, Save } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, FileDown, Mail, Save } from "lucide-react";
+import { recipientsFor } from "@shared/contacts";
+import type { Department } from "@shared/types";
+import { mailtoWithContext, type MessageContext } from "@shared/message";
+import { generatedLabel } from "@shared/generated-stamp";
 
 const STEPS = [
   { n: 1, title: "Projekt", subtitle: "Kopfdaten & Station" },
@@ -96,6 +100,34 @@ export default function Anmeldung() {
     }
   };
 
+  /** The Gewerke this Anmeldung left open, with whoever Hilfsdatei addresses. */
+  const openReviewDepartments = draft.reviews
+    .filter((r) => r.status === "offen")
+    .map((r) => ({
+      dept: r.department,
+      recipients: recipientsFor(r.department as Department),
+    }));
+
+  /** The same message body the detail dialog sends, built from the draft. */
+  const notifyContext = (department: string): MessageContext => ({
+    projektnummer: draft.header.projektnummer,
+    station: draft.header.stationsname,
+    department,
+    bahnhofsmanagement: draft.header.bahnhofsmanagement,
+    projektstand: draft.header.projektstand,
+    projektbeschreibung: draft.header.projektbezeichnung,
+    terminProjektvorstellung: draft.termin
+      ? `${draft.termin.datum} ${draft.termin.von}–${draft.termin.bis}`
+      : "",
+    status: "offen",
+    absender: draft.header.projektleitung,
+    href:
+      typeof window !== "undefined" && draft.header.projektnummer
+        ? `${window.location.origin}/projects?q=${encodeURIComponent(draft.header.projektnummer)}`
+        : "",
+    generatedAt: generatedLabel(),
+  });
+
   if (submitted) {
     return (
       <div className="space-y-6 p-6">
@@ -110,12 +142,74 @@ export default function Anmeldung() {
               angelegt, {draft.requiredCount} von 14 Fachprüfungen stehen offen
               {draft.termin ? ` und der Termin am ${draft.termin.datum} ist gebucht` : ""}.
             </p>
-            <div className="flex justify-center gap-2 pt-2">
+            {/*
+              Notify the Fachbereiche whose Prüfung this Anmeldung just opened.
+            
+              The wizard creates the project and the review rows and then the
+              process stops: nothing tells the departments that a Prüfung is
+              waiting. That was the whole point of the Excel macro this replaces.
+              There is no server to send from — production is a static SPA — so
+              the app opens the user's own Outlook with the message already
+              written, one per Fachbereich, addressed from Hilfsdatei.
+            
+              Only the Gewerke that are actually open, and only those with an
+              address on file. LST has neither of its two rows filled in, so it
+              says so instead of opening an empty mail.
+            */}
+            {openReviewDepartments.length > 0 && (
+              <div className="rounded-xl border bg-muted/30 p-4 text-left">
+                <p className="text-2xs font-bold uppercase tracking-widest text-muted-foreground">
+                  Fachbereiche benachrichtigen
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Öffnet Outlook mit fertig ausgefülltem Betreff und Text — Projektnummer, Station,
+                  Projektstand und Termin stehen bereits darin.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {openReviewDepartments.map(({ dept, recipients }) =>
+                    recipients.length > 0 ? (
+                      <Button key={dept} asChild variant="outline" size="sm" className="h-9 gap-1.5">
+                        <a
+                          href={mailtoWithContext(
+                            recipients.map((r) => r.mail).join(","),
+                            notifyContext(dept),
+                          )}
+                        >
+                          <Mail className="h-3.5 w-3.5" aria-hidden="true" />
+                          {dept}
+                        </a>
+                      </Button>
+                    ) : (
+                      <span
+                        key={dept}
+                        className="inline-flex h-9 items-center rounded-md border border-dashed px-3 text-xs text-amber-700 dark:text-amber-500"
+                        title={`Für ${dept} ist in der Hilfsdatei keine Adresse hinterlegt`}
+                      >
+                        {dept}: keine Adresse
+                      </span>
+                    ),
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="flex flex-wrap justify-center gap-2 pt-2">
+              {/*
+                To the project that was just created, not to all 1,298.
+                The Projekte page seeds its search from `?q=`, so this lands on
+                the record the user has been filling in for five steps.
+              */}
               <Button
-                onClick={() => setLocation("/projects")}
+                onClick={() =>
+                  setLocation(
+                    draft.header.projektnummer
+                      ? `/projects?q=${encodeURIComponent(draft.header.projektnummer)}`
+                      : "/projects",
+                  )
+                }
                 className="bg-primary text-white hover:bg-primary/90"
               >
-                Zur Projektübersicht
+                Projekt öffnen
               </Button>
               <Button variant="outline" onClick={() => window.location.reload()}>
                 Weitere Anmeldung

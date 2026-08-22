@@ -80,6 +80,24 @@ const VIEWPORTS = [
   { name: "desktop", width: 1440, height: 900 },
 ];
 
+/**
+ * OS colour scheme x app theme — all four, because they are separate inputs.
+ *
+ * Tailwind's `dark:` variant and the app's own theme toggle were driven by
+ * different things: the utilities by prefers-color-scheme, the CSS custom
+ * properties by a `.dark` class. An audit that only ever ran the default pair
+ * (OS light, app light) could not see it. On OS dark + app light, "offen"
+ * rendered pale yellow text on a white row.
+ */
+const THEMES = [
+  { name: "hell", os: "light", app: "light" },
+  { name: "dunkel", os: "dark", app: "dark" },
+  // The two mismatched combinations are the ones that were broken, and are the
+  // default for anyone whose OS and app disagree.
+  { name: "hell/OS-dunkel", os: "dark", app: "light" },
+  { name: "dunkel/OS-hell", os: "light", app: "dark" },
+];
+
 /** Extra interactions that reveal surfaces a plain page load does not. */
 const SCENARIOS = [
   {
@@ -380,17 +398,26 @@ const allWeights = new Map();
 const allFamilies = new Map();
 const seen = new Set();
 
-async function audit(label, viewport, route, interact) {
+async function audit(label, viewport, route, interact, theme = THEMES[0]) {
   const ctx = await browser.newContext({
     viewport: { width: viewport.width, height: viewport.height },
     deviceScaleFactor: 1,
     isMobile: viewport.width < 800,
     hasTouch: viewport.width < 900,
+    colorScheme: theme.os,
     // Every entrance animation settled before anything is measured; a
     // framer-motion element mid-flight overlaps things it will not overlap.
     reducedMotion: "reduce",
   });
-  await ctx.addInitScript((u) => localStorage.setItem("bahn-demo-user", JSON.stringify(u)), DEMO_USER);
+  await ctx.addInitScript(
+    ([u, appTheme]) => {
+      localStorage.setItem("bahn-demo-user", JSON.stringify(u));
+      // The same key ThemeContext reads, so the app boots in this theme
+      // rather than flipping after first paint.
+      localStorage.setItem("theme", appTheme);
+    },
+    [DEMO_USER, theme.app],
+  );
   const page = await ctx.newPage();
   await page.goto(`http://localhost:${PORT}${route}`, { waitUntil: "networkidle" });
   await page.waitForTimeout(2200);
@@ -411,13 +438,13 @@ async function audit(label, viewport, route, interact) {
   for (const [k, v] of r.families) allFamilies.set(k, (allFamilies.get(k) ?? 0) + v);
 
   const problems = r.spills.length + r.overlaps.length + r.contrast.length;
-  const tag = `${label} @${viewport.name}`;
+  const tag = `${label} @${viewport.name}·${theme.name}`;
   if (problems === 0) {
-    console.log(`✅ ${tag.padEnd(34)} spill 0  overlap 0  contrast 0`);
+    console.log(`✅ ${tag.padEnd(46)} spill 0  overlap 0  contrast 0`);
   } else {
     failures++;
     console.log(
-      `❌ ${tag.padEnd(34)} spill ${r.spills.length}  overlap ${r.overlaps.length}  contrast ${r.contrast.length}`,
+      `❌ ${tag.padEnd(46)} spill ${r.spills.length}  overlap ${r.overlaps.length}  contrast ${r.contrast.length}`,
     );
     for (const s of r.spills.slice(0, 6)) {
       const key = `spill|${s.cls}|${s.text}`;
@@ -485,6 +512,23 @@ console.log("\n== rendering ==");
 for (const vp of VIEWPORTS) {
   for (const route of ROUTES) await audit(route.name, vp, route.path, null);
   for (const sc of SCENARIOS) await audit(sc.name, vp, sc.route, sc.run);
+}
+
+/*
+ * The other three theme combinations, at one viewport.
+ *
+ * Layout does not change with the theme, so re-running every viewport would
+ * only re-measure the same geometry three more times. Colour does change, and
+ * that is what these catch.
+ */
+console.log("\n== themes ==");
+for (const theme of THEMES.slice(1)) {
+  for (const route of ROUTES) {
+    await audit(route.name, VIEWPORTS[2], route.path, null, theme);
+  }
+  for (const sc of SCENARIOS) {
+    await audit(sc.name, VIEWPORTS[2], sc.route, sc.run, theme);
+  }
 }
 
 console.log("\n== typography ==");

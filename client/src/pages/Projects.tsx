@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { MapView, type StationSelection } from "@/components/Map";
 import { ProjectDetailDialog } from "@/components/ProjectDetailDialog";
 import { projectLinkUrl } from "@shared/project-link";
+import { documentFilename } from "@shared/generated-stamp";
 // DB Corporate Status Colors (perfect harmony with Dashboard.tsx)
 
 function StatusBadge({ status }: { status: string | null }) {
@@ -303,7 +304,9 @@ export default function Projects() {
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
     link.href = url;
-    link.download = `DB_Projektuebersicht_${new Date().toISOString().slice(0, 10)}.csv`;
+    // Date AND time, from the same stamp every PDF uses: two exports on one
+    // day were two files with the same name, and the second replaced the first.
+    link.download = documentFilename("DB_Projektuebersicht", [], new Date(), "csv");
     link.click();
     URL.revokeObjectURL(url);
     toast.success(`${data.projects.length} Projekte exportiert`);

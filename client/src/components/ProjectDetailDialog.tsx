@@ -31,7 +31,7 @@
  * derived from the address already on file, so it opens a chat with the same
  * person the mail button writes to.
  */
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -53,6 +53,8 @@ import {
   Hash,
   Info,
   ArrowRight,
+  Printer,
+  Loader2,
 } from "lucide-react";
 import type { Project } from "@/hooks/useDataQuery";
 import { useAuditLog } from "@/hooks/useDataQuery";
@@ -67,9 +69,16 @@ import {
   contactOf,
   resolutionNote,
   displayNameOf,
-  mailtoHref,
-  teamsChatHref,
 } from "@shared/contact-resolution";
+import {
+  mailtoWithContext,
+  teamsChatWithContext,
+  type MessageContext,
+} from "@shared/message";
+import { generatedLabel } from "@shared/generated-stamp";
+import { downloadProjectPdf } from "@/pdf/downloadProjectPdf";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { toast } from "sonner";
 
 interface ProjectDetailDialogProps {
   project: Project | null;
@@ -79,36 +88,28 @@ interface ProjectDetailDialogProps {
   onShowStation?: (station: string) => void;
 }
 
-/** Subject line built from real fields only. */
-function subjectFor(project: Project, department?: string): string {
-  const nr = project.projektnummer?.trim();
-  const station = project.station?.trim();
-  const head = nr ? `Projekt ${nr}` : "Projekt";
-  const parts = [head, station, department].filter(Boolean);
-  return parts.join(" – ");
-}
-
 function ContactActions({
   contact,
-  subject,
+  context,
   size = "sm",
 }: {
   contact: Contact;
-  subject: string;
+  /** Everything the message says about where it came from. */
+  context: MessageContext;
   size?: "sm" | "xs";
 }) {
   const h = size === "xs" ? "h-8" : "h-9";
   return (
     <div className="flex flex-wrap gap-2">
       <Button asChild variant="outline" size="sm" className={`${h} gap-1.5`}>
-        <a href={mailtoHref(contact, subject)} aria-label={`E-Mail an ${contact.name || contact.mail}`}>
+        <a href={mailtoWithContext(contact.mail, context)} aria-label={`E-Mail an ${contact.name || contact.mail}`}>
           <Mail className="h-3.5 w-3.5" aria-hidden="true" />
           E-Mail
         </a>
       </Button>
       <Button asChild variant="outline" size="sm" className={`${h} gap-1.5`}>
         <a
-          href={teamsChatHref(contact)}
+          href={teamsChatWithContext(contact.mail, context)}
           target="_blank"
           rel="noreferrer"
           aria-label={`Microsoft-Teams-Chat mit ${contact.name || contact.mail}`}
@@ -127,13 +128,13 @@ function ContactRow({
    *  attribute, and the linter flags "Projektleiter" as an invalid one. */
   roleLabel,
   name,
-  subject,
+  context,
   fallback,
   fallbackLabel,
 }: {
   roleLabel: string;
   name: string | null | undefined;
-  subject: string;
+  context: MessageContext;
   /** Who to write to when the person has no address of their own. */
   fallback?: Contact[] | null;
   fallbackLabel?: string;
@@ -154,7 +155,7 @@ function ContactRow({
         <p className="break-words text-sm font-bold">{displayNameOf(resolution, name)}</p>
         {contact && <p className="break-all text-2xs text-muted-foreground">{contact.mail}</p>}
       </div>
-      {contact && <ContactActions contact={contact} subject={subject} size="xs" />}
+      {contact && <ContactActions contact={contact} context={context} size="xs" />}
 
       {!contact && (
         <p className="text-2xs leading-relaxed text-amber-700 dark:text-amber-500">
@@ -167,7 +168,7 @@ function ContactRow({
         <div className="flex flex-wrap gap-2">
           {fallback.map((c) => (
             <Button key={c.row} asChild variant="outline" size="sm" className="h-8 gap-1.5">
-              <a href={mailtoHref(c, subject)} aria-label={`E-Mail an ${c.name || c.mail}`}>
+              <a href={mailtoWithContext(c.mail, context)} aria-label={`E-Mail an ${c.name || c.mail}`}>
                 <Mail className="h-3.5 w-3.5" aria-hidden="true" />
                 {c.name || c.mail}
               </a>
@@ -216,6 +217,18 @@ function Field({
   );
 }
 
+/**
+ * A deep link back to this project, for a mail the recipient reads elsewhere.
+ *
+ * The Projekte page seeds its search from `?q=`, so this is a real address
+ * that lands on the record — not a link to the app's front door.
+ */
+function projectHref(projektnummer: string | null | undefined): string {
+  const nr = String(projektnummer ?? "").trim();
+  if (typeof window === "undefined" || !nr) return "";
+  return `${window.location.origin}/projects?q=${encodeURIComponent(nr)}`;
+}
+
 export function ProjectDetailDialog({
   project,
   open,
@@ -223,6 +236,9 @@ export function ProjectDetailDialog({
   onShowStation,
 }: ProjectDetailDialogProps) {
   const { data: auditEntries } = useAuditLog();
+  const { user } = useAuth();
+  const [printing, setPrinting] = useState(false);
+  const currentUser = user?.name || user?.email || "";
 
   // Every department, not only the ones with a row: a Fachprüfung that is
   // absent from the data is information too ("nicht erforderlich" vs "offen"
@@ -253,12 +269,91 @@ export function ProjectDetailDialog({
       .slice(0, 8);
   }, [project, auditEntries]);
 
+  /**
+   * The Projektblatt.
+   *
+   * Built from the record this dialog is already rendering, so the sheet and
+   * the screen cannot disagree, and stamped with the instant the button was
+   * pressed rather than any date in the data.
+   */
+  const handlePrint = useCallback(async () => {
+    if (!project) return;
+    setPrinting(true);
+    try {
+      const generatedAt = new Date().toISOString();
+      const filename = await downloadProjectPdf({
+        projektnummer: project.projektnummer ?? "",
+        station: project.station ?? "",
+        projektbeschreibung: project.projektbeschreibung ?? "",
+        bahnhofsmanagement: project.bahnhofsmanagement ?? "",
+        bahnhofsnummer: project.bahnhofsnummer ?? "",
+        streckennummer: project.streckennummer ?? "",
+        projektstand: project.projektstand ?? "",
+        projektleiter: project.projektleiter ?? "",
+        terminProjektvorstellung: formatGerman(project.terminProjektvorstellung) || "",
+        kommentar: project.kommentar ?? "",
+        projektLink: project.projektLink ?? "",
+        openCount: (project.reviews ?? []).filter((r) => isOpen(r.status)).length,
+        blockedCount: (project.reviews ?? []).filter((r) => isBlocking(r.status)).length,
+        reviews: DEPARTMENTS.map((dept) => {
+          const review = (project.reviews ?? []).find((r) => r.department === dept);
+          const resolution = resolveContact(review?.prueferName);
+          const contact = contactOf(resolution);
+          const fallback = recipientsFor(dept as Department)[0];
+          return {
+            department: dept,
+            status: normalizeReviewStatus(review?.status) ?? review?.status ?? "",
+            prueferName: displayNameOf(resolution, review?.prueferName),
+            pruefDatum: formatGerman(review?.pruefDatum) || "",
+            kontakt: contact?.mail ?? fallback?.mail ?? "",
+          };
+        }),
+        generatedAt,
+        generatedBy: currentUser,
+      });
+      toast.success(`${filename} erzeugt`);
+    } catch (err) {
+      // A failed export must say so: the browser gives no feedback of its own
+      // when a download never starts.
+      toast.error(
+        `PDF konnte nicht erzeugt werden: ${err instanceof Error ? err.message : "unbekannter Fehler"}`,
+      );
+    } finally {
+      setPrinting(false);
+    }
+  }, [project, currentUser]);
+
   if (!project) return null;
+
+  /**
+   * Everything an outgoing mail, a Teams message or a printed sheet needs to
+   * say where it came from, built once from the record on screen.
+   *
+   * `href` is a real deep link into this app for this project — the recipient
+   * of a mail can get back to the record instead of asking which one it was.
+   */
+  const contextFor = (department?: string): MessageContext => ({
+    projektnummer: project.projektnummer,
+    station: project.station,
+    department,
+    bahnhofsmanagement: project.bahnhofsmanagement,
+    projektstand: project.projektstand,
+    projektbeschreibung: project.projektbeschreibung,
+    terminProjektvorstellung: formatGerman(project.terminProjektvorstellung),
+    status: department
+      ? (normalizeReviewStatus(reviewByDept.get(department)?.status) ??
+        reviewByDept.get(department)?.status)
+      : undefined,
+    prueferName: department ? reviewByDept.get(department)?.prueferName : undefined,
+    pruefDatum: department ? formatGerman(reviewByDept.get(department)?.pruefDatum) : undefined,
+    absender: currentUser,
+    href: projectHref(project.projektnummer),
+    generatedAt: generatedLabel(),
+  });
 
   const url = projectLinkUrl(project.projektLink);
   const linkNote = !url && project.projektLink?.trim() ? project.projektLink.trim() : null;
   const bmContact = bahnhofsmanagementContact(project.bahnhofsmanagement);
-  const subject = subjectFor(project);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -331,12 +426,35 @@ export function ProjectDetailDialog({
             )}
             {bmContact && (
               <Button asChild variant="outline" size="sm" className="h-9 gap-1.5">
-                <a href={mailtoHref(bmContact, subject)}>
+                <a href={mailtoWithContext(bmContact.mail, contextFor())}>
                   <Mail className="h-3.5 w-3.5" aria-hidden="true" />
                   Bahnhofsmanagement
                 </a>
               </Button>
             )}
+            {/*
+              The third action: this project as a filed document.
+            
+              A screenshot of a dialog has no Projektnummer in its filename and
+              nothing saying when it was taken. The Projektblatt carries both —
+              the stamp is printed under the title, repeated in the footer of
+              every page, and appended to the filename, so a sheet in a meeting
+              can always be dated.
+            */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 gap-1.5"
+              disabled={printing}
+              onClick={handlePrint}
+            >
+              {printing ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+              ) : (
+                <Printer className="h-3.5 w-3.5" aria-hidden="true" />
+              )}
+              {printing ? "Erzeuge PDF…" : "Als PDF"}
+            </Button>
           </div>
         </DialogHeader>
 
@@ -392,7 +510,7 @@ export function ProjectDetailDialog({
               <ContactRow
                 roleLabel="Projektleiter"
                 name={project.projektleiter}
-                subject={subject}
+                context={contextFor()}
                 fallback={bmContact ? [bmContact] : null}
                 fallbackLabel="Zuständiges Bahnhofsmanagement"
               />
@@ -405,7 +523,7 @@ export function ProjectDetailDialog({
                     <p className="break-words text-sm font-bold">{bmContact.name}</p>
                     <p className="break-all text-2xs text-muted-foreground">{bmContact.mail}</p>
                   </div>
-                  <ContactActions contact={bmContact} subject={subject} size="xs" />
+                  <ContactActions contact={bmContact} context={contextFor()} size="xs" />
                 </div>
               ) : (
                 <div className="rounded-xl border border-border/60 p-3">
@@ -470,7 +588,7 @@ export function ProjectDetailDialog({
                     // The department's own recipients are the route the
                     // Anmeldung macro uses; LST has none on file at all.
                     const deptRecipients = recipientsFor(dept as Department);
-                    const deptSubject = subjectFor(project, dept);
+                    const deptContext = contextFor(dept);
 
                     return (
                       <tr key={dept} className="border-t border-border/60 align-top">
@@ -524,7 +642,7 @@ export function ProjectDetailDialog({
                             <div className="flex gap-1">
                               <Button asChild variant="ghost" size="icon" className="h-8 w-8">
                                 <a
-                                  href={mailtoHref(prueferContact, deptSubject)}
+                                  href={mailtoWithContext(prueferContact.mail, deptContext)}
                                   title={`E-Mail an ${prueferContact.name}`}
                                   aria-label={`E-Mail an ${prueferContact.name} (${dept})`}
                                 >
@@ -533,7 +651,7 @@ export function ProjectDetailDialog({
                               </Button>
                               <Button asChild variant="ghost" size="icon" className="h-8 w-8">
                                 <a
-                                  href={teamsChatHref(prueferContact)}
+                                  href={teamsChatWithContext(prueferContact.mail, deptContext)}
                                   target="_blank"
                                   rel="noreferrer"
                                   title={`Teams-Chat mit ${prueferContact.name}`}
@@ -546,7 +664,7 @@ export function ProjectDetailDialog({
                           ) : deptRecipients.length > 0 ? (
                             <Button asChild variant="ghost" size="sm" className="h-8 gap-1.5 px-2">
                               <a
-                                href={mailtoHref(deptRecipients[0] as Contact, deptSubject)}
+                                href={mailtoWithContext((deptRecipients[0] as Contact).mail, deptContext)}
                                 title={`An den Fachbereich ${dept} schreiben`}
                                 aria-label={`An den Fachbereich ${dept} schreiben`}
                               >
