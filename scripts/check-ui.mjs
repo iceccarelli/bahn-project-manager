@@ -136,6 +136,29 @@ const SCENARIOS = [
       await page.waitForTimeout(900);
     },
   },
+  // The two Gewerk workspaces are the Projekte surface scoped to one
+  // department, so they have the same card grid, the same filter panel and the
+  // same dialog — and the same chances to spill, overlap or drop contrast. A
+  // plain page load only ever measures the table.
+  {
+    name: "BVB-EEA · Kacheln + Filter",
+    route: "/bvb-eea",
+    async run(page) {
+      await page.getByRole("button", { name: "Filter", exact: true }).click();
+      await page.click('[aria-label="Kachelansicht"]');
+      await page.waitForTimeout(1200);
+    },
+  },
+  {
+    name: "PSV-ITK · Detaildialog",
+    route: "/psv-itk",
+    async run(page) {
+      await page.evaluate(() => {
+        document.querySelector('table tbody tr button[aria-label^="Details"]')?.click();
+      });
+      await page.waitForTimeout(1200);
+    },
+  },
   {
     name: "Anmeldung · Prüfungen",
     route: "/anmeldung",

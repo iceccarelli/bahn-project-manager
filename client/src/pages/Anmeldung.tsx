@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -9,13 +9,16 @@ import { Step3Pruefungen } from "@/components/anmeldung/Step3Pruefungen";
 import { Step4Termin } from "@/components/anmeldung/Step4Termin";
 import { Step5Bestaetigung } from "@/components/anmeldung/Step5Bestaetigung";
 import { visibleQuestions } from "@shared/checklist";
-import { useChecklistDraft } from "@/hooks/useChecklistDraft";
+import { useChecklistDraft, type ChecklistDraft } from "@/hooks/useChecklistDraft";
 import { bookSlot } from "@/hooks/useSchedule";
 import { CHECKLIST_MODES } from "@shared/checklist";
 import { Check, ChevronLeft, ChevronRight, FileDown, Mail, Save } from "lucide-react";
 import { recipientsFor } from "@shared/contacts";
 import type { Department } from "@shared/types";
-import { mailtoWithContext, type MessageContext } from "@shared/message";
+import { mailtoWithContext, messageSubject, type MessageContext } from "@shared/message";
+import { useAuditTrail } from "@/hooks/useAuditTrail";
+import { useUpdateProject } from "@/hooks/useDataQuery";
+import { AUDIT_ACTIONS } from "@shared/audit-actions";
 import { generatedLabel } from "@shared/generated-stamp";
 
 const STEPS = [
@@ -35,6 +38,19 @@ export default function Anmeldung() {
   const draft = useChecklistDraft();
   const [step, setStep] = useState(1);
   const [submitted, setSubmitted] = useState<{ projectId: number } | null>(null);
+  /**
+   * The project this wizard already created, if it did.
+   *
+   * A failed slot booking sends the user back to step 4 to pick another time,
+   * and the retry called draft.submit() again — which persists the checklist
+   * and creates a *second* project with the same Projektnummer. One rejected
+   * booking was enough to duplicate a project in a 1,298-row dataset. The
+   * project is created once; a retry only books.
+   */
+  type CreatedProject = Awaited<ReturnType<ChecklistDraft["submit"]>>["project"];
+  const createdRef = useRef<CreatedProject | null>(null);
+  const { recordDocument, recordMessage, recordEvent } = useAuditTrail();
+  const updateProject = useUpdateProject();
   const [pdfState, setPdfState] = useState<"idle" | "working">("idle");
 
   const issuesForStep = draft.stepIssues[step] ?? [];
@@ -45,6 +61,16 @@ export default function Anmeldung() {
   const handleSaveDraft = async () => {
     try {
       const saved = await draft.saveDraft();
+      recordEvent(
+        AUDIT_ACTIONS.entwurfGespeichert,
+        [
+          `Entwurf Nr. ${saved.id}`,
+          draft.header.projektnummer.trim() || "ohne Projektnummer",
+          draft.header.stationsname.trim(),
+        ]
+          .filter(Boolean)
+          .join(" · "),
+      );
       toast.success(`Entwurf gespeichert (Nr. ${saved.id})`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Entwurf konnte nicht gespeichert werden");
@@ -72,6 +98,7 @@ export default function Anmeldung() {
         generatedAt: new Date().toISOString(),
         complete: draft.canSubmit,
       });
+      recordDocument("Checkliste", filename, draft.header.projektnummer || "Entwurf");
       toast.success(`${filename} heruntergeladen`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "PDF konnte nicht erzeugt werden");
@@ -82,7 +109,11 @@ export default function Anmeldung() {
 
   const handleSubmit = async () => {
     try {
-      const { project } = await draft.submit();
+      // Create once. On a retry after a rejected slot the project already
+      // exists and only the booking is repeated.
+      const project = createdRef.current ?? (await draft.submit()).project;
+      createdRef.current = project;
+
       if (draft.termin) {
         const info = `${draft.header.projektleitung} - ${draft.header.stationsname} - ${draft.header.projektstand}`;
         if (!bookSlot(draft.termin.slotId, String(project.id), info)) {
@@ -90,6 +121,24 @@ export default function Anmeldung() {
           goTo(4);
           return;
         }
+        // A retry can land on a different day than the project was created
+        // with. Leaving terminProjektvorstellung on the first pick would put
+        // the project and the booking on two different dates — the exact drift
+        // this project exists to prevent. The write goes through the normal
+        // mutation, so it is optimistic, rolled back on refusal, and audited.
+        if (draft.termin.datum && project.terminProjektvorstellung !== draft.termin.datum) {
+          updateProject.mutate({
+            id: project.id,
+            field: "terminProjektvorstellung",
+            value: draft.termin.datum,
+          });
+        }
+
+        // Only now is the slot actually taken.
+        recordEvent(
+          AUDIT_ACTIONS.terminGebucht,
+          `${project.projektnummer ?? `Projekt ${project.id}`} · ${draft.header.stationsname.trim()} · ${draft.termin.datum} ${draft.termin.von}–${draft.termin.bis}`,
+        );
       }
       setSubmitted({ projectId: project.id });
       toast.success(
@@ -174,6 +223,13 @@ export default function Anmeldung() {
                             recipients.map((r) => r.mail).join(","),
                             notifyContext(dept),
                           )}
+                          onClick={() =>
+                            recordMessage(
+                              "mail",
+                              `${dept} (${recipients.length})`,
+                              messageSubject(notifyContext(dept)),
+                            )
+                          }
                         >
                           <Mail className="h-3.5 w-3.5" aria-hidden="true" />
                           {dept}

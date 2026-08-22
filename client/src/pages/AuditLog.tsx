@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { History, Search, Trash2, FilePlus2, PencilLine, ClipboardCheck } from "lucide-react";
+import { History, Search, Trash2, FilePlus2, PencilLine, ClipboardCheck, FileDown, Send } from "lucide-react";
 import { useAuditLog } from "@/hooks/useDataQuery";
+import { auditTone, type AuditTone } from "@shared/audit-actions";
 
 /**
  * Änderungshistorie.
@@ -15,15 +16,43 @@ import { useAuditLog } from "@/hooks/useDataQuery";
  * did not appear broken, it appeared quiet.
  */
 
-/** Icon and tone per action verb, so the log is scannable rather than a wall of text. */
+/**
+ * Icon and tone per action.
+ *
+ * This was a chain of regexes over the action text, so a new kind of entry fell
+ * through to the default and rendered as an anonymous blue row — "PDF erzeugt"
+ * and "E-Mail vorbereitet" would both have looked like a field edit. The tone
+ * now comes from shared/audit-actions.ts, where `Record<AuditAction, AuditTone>`
+ * makes an unclassified action a compile error, and where the two phrases
+ * written before that vocabulary existed are mapped explicitly so an existing
+ * local trail keeps rendering correctly.
+ */
+const TONE_STYLE: Record<AuditTone, { Icon: typeof PencilLine; tone: string }> = {
+  delete: { Icon: Trash2, tone: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300" },
+  create: {
+    Icon: FilePlus2,
+    tone: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300",
+  },
+  review: {
+    Icon: ClipboardCheck,
+    tone: "bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300",
+  },
+  document: {
+    Icon: FileDown,
+    tone: "bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300",
+  },
+  message: {
+    Icon: Send,
+    tone: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
+  },
+  update: {
+    Icon: PencilLine,
+    tone: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
+  },
+};
+
 function actionStyle(action: string) {
-  if (/gelöscht|entfernt/i.test(action))
-    return { Icon: Trash2, tone: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300" };
-  if (/angelegt|erstellt|Anmeldung/i.test(action))
-    return { Icon: FilePlus2, tone: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300" };
-  if (/Prüfung|Review/i.test(action))
-    return { Icon: ClipboardCheck, tone: "bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300" };
-  return { Icon: PencilLine, tone: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300" };
+  return TONE_STYLE[auditTone(action)];
 }
 
 const dateFmt = new Intl.DateTimeFormat("de-DE", {
@@ -124,8 +153,17 @@ export default function AuditLogPage() {
               <tbody>
                 {filtered.map((e) => {
                   const { Icon, tone } = actionStyle(e.action);
+                  const toneName = auditTone(e.action);
                   return (
-                    <tr key={e.id} className="border-b border-border/60 align-top hover:bg-muted/30">
+                    <tr
+                      key={e.id}
+                      // Machine-readable so the smoke suite can assert that
+                      // every logged action is a known one with its own tone,
+                      // rather than inferring it from a badge colour.
+                      data-audit-action={e.action}
+                      data-audit-tone={toneName}
+                      className="border-b border-border/60 align-top hover:bg-muted/30"
+                    >
                       <td className="whitespace-nowrap px-4 py-2.5 font-mono text-2xs text-muted-foreground">
                         {formatStamp(e.timestamp)}
                       </td>

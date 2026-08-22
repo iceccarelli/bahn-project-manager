@@ -8,6 +8,7 @@
  */
 
 import { DEPARTMENTS } from "@shared/validation";
+import { AUDIT_ACTIONS } from "@shared/audit-actions";
 import type { ProjectChecklist } from "@shared/validation";
 import type { Project, Review, Stats, AuditLogEntry } from "@/hooks/useDataQuery";
 import { describeIngest, ingestProjects } from "@shared/ingest";
@@ -214,7 +215,10 @@ export const apiClient = {
 
       projects.push(newProject);
       localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
-      recordAudit("Projekt erstellt", `Projekt ${newProject.projektnummer} (${newProject.station}) angelegt.`);
+      recordAudit(
+        AUDIT_ACTIONS.projektAngelegt,
+        `Projekt ${newProject.projektnummer} (${newProject.station}) angelegt.`,
+      );
 
       window.dispatchEvent(new StorageEvent("storage", {
         key: STORAGE_KEY_PROJECTS,
@@ -248,7 +252,10 @@ export const apiClient = {
 
     Object.assign(project, { [input.field]: input.value });
     localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
-    recordAudit("Projekt aktualisiert", `Feld ${input.field} von ${oldVal} auf ${input.value} geändert.`);
+    recordAudit(
+      AUDIT_ACTIONS.projektAktualisiert,
+      `Feld ${input.field} von ${oldVal} auf ${input.value} geändert.`,
+    );
     window.dispatchEvent(new StorageEvent("storage", { key: STORAGE_KEY_PROJECTS, newValue: JSON.stringify(projects) }));
     return project;
   },
@@ -257,7 +264,7 @@ export const apiClient = {
       const projects = await this.list();
       const filtered = projects.filter((p) => p.id !== id);
       localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(filtered));
-      recordAudit("Projekt gelöscht", `Projekt ID ${id} entfernt.`);
+      recordAudit(AUDIT_ACTIONS.projektGeloescht, `Projekt ID ${id} entfernt.`);
 
       window.dispatchEvent(new StorageEvent("storage", {
         key: STORAGE_KEY_PROJECTS,
@@ -314,7 +321,10 @@ export const apiClient = {
 
     project.reviews[reviewIndex] = candidateReview;
     localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
-    recordAudit("Prüfung aktualisiert", `${input.department}: ${input.field} von ${oldVal} auf ${input.value} gesetzt.`);
+    recordAudit(
+      AUDIT_ACTIONS.pruefungAktualisiert,
+      `${input.department}: ${input.field} von ${oldVal} auf ${input.value} gesetzt.`,
+    );
     window.dispatchEvent(new StorageEvent("storage", { key: STORAGE_KEY_PROJECTS, newValue: JSON.stringify(projects) }));
     return project;
   },

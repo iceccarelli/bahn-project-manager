@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import { AUDIT_ACTIONS } from "@shared/audit-actions";
 import { apiClient } from "@/_core/api/client";
 import {
   CHECKLIST_QUESTIONS,
@@ -256,10 +257,17 @@ export function useChecklistDraft() {
         })),
       });
 
+      // "Wunschtermin", not "Termin": at this point the slot has been chosen
+      // but not taken. bookSlot() runs after this returns and can still fail
+      // because someone else took the slot in the meantime, and the caller then
+      // sends the user back to step 4. Writing "Termin 28.05. 09:00" here put a
+      // booking in the audit trail that may never have happened. The booking
+      // gets its own entry, from the caller, once bookSlot has actually
+      // succeeded.
       await apiClient.audit.record(
-        "Fachspezialistenprüfung angemeldet",
+        AUDIT_ACTIONS.anmeldungEingereicht,
         `${header.projektnummer.trim()} · ${header.stationsname.trim()} · ${requiredCount} von 14 Gewerken erforderlich${
-          termin ? ` · Termin ${termin.datum} ${termin.von}` : " · ohne Projektvorstellung"
+          termin ? ` · Wunschtermin ${termin.datum} ${termin.von}` : " · ohne Projektvorstellung"
         }`,
       );
 

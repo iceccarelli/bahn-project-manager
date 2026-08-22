@@ -20,6 +20,7 @@ import { MapView, type StationSelection } from "@/components/Map";
 import { ProjectDetailDialog } from "@/components/ProjectDetailDialog";
 import { projectLinkUrl } from "@shared/project-link";
 import { documentFilename } from "@shared/generated-stamp";
+import { useAuditTrail } from "@/hooks/useAuditTrail";
 // DB Corporate Status Colors (perfect harmony with Dashboard.tsx)
 
 function StatusBadge({ status }: { status: string | null }) {
@@ -198,6 +199,7 @@ export default function Projects() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [, setLocation] = useLocation();
   const routeSearch = useRouteSearch();
+  const { recordDocument } = useAuditTrail();
   const [viewMode, setViewMode] = useState<"table" | "cards" | "map">("table");
   /** Set by the map; narrows the card view to one station's exact project ids. */
   const [stationFocus, setStationFocus] = useState<StationSelection | null>(null);
@@ -306,11 +308,13 @@ export default function Projects() {
     link.href = url;
     // Date AND time, from the same stamp every PDF uses: two exports on one
     // day were two files with the same name, and the second replaced the first.
-    link.download = documentFilename("DB_Projektuebersicht", [], new Date(), "csv");
+    const exportName = documentFilename("DB_Projektuebersicht", [], new Date(), "csv");
+    link.download = exportName;
     link.click();
     URL.revokeObjectURL(url);
+    recordDocument("CSV-Export", exportName, `${data.projects.length} Projekte`);
     toast.success(`${data.projects.length} Projekte exportiert`);
-  }, [data]);
+  }, [data, recordDocument]);
 
   const departmentButtons = [
     "EEA", "ITK", "BS", "GA", "Energie", "HFT", "HKLS", 

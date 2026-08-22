@@ -835,6 +835,242 @@ await check("mail and Teams carry a written message, not just an address", async
   await page.keyboard.press("Escape");
 });
 
+
+console.log("\n== Gewerk workspaces have the Projekte surface ==");
+
+/**
+ * /bvb-eea and /psv-itk were read-only tables. They are now the same workspace
+ * the Projekte page is, scoped to one Gewerk, so these assert parity rather
+ * than "a table renders": the KPI row, the filter panel, all three views, the
+ * map handing over to the cards, the detail dialog, and the export.
+ *
+ * The KPI check is the load-bearing one. Every number on the page is derived
+ * from a single scoped set, so "Offen + Zugestimmt + Blockiert <= total" and
+ * "total == rows when nothing is filtered" cannot both hold if the KPI row and
+ * the table were ever computed from different collections — which is the exact
+ * defect this audit found on the Dashboard three times.
+ */
+for (const [route, dept, label] of [
+  ["/bvb-eea", "EEA", "BVB-EEA"],
+  ["/psv-itk", "ITK", "PSV-ITK"],
+]) {
+  await check(`${label}: the KPI row and the table count the same set`, async () => {
+    await go(route);
+    await page.waitForSelector("table tbody tr", { timeout: 20000 });
+
+    const kpis = await page.$$eval("main .grid .text-4xl, .grid .text-4xl", (els) =>
+      els.map((e) => Number(e.textContent.replace(/\./g, "").trim())),
+    );
+    assert(kpis.length >= 4, `only ${kpis.length} KPI values rendered`);
+    const [total, open, done, blocked] = kpis;
+    assert(total > 0, `${label} reports zero ${dept} reviews`);
+    assert(
+      open + done + blocked <= total,
+      `${label}: ${open}+${done}+${blocked} exceeds the total ${total}`,
+    );
+
+    const rows = await page.$$eval("table tbody tr", (r) => r.length);
+    assert(rows === total, `${label}: KPI says ${total}, the table renders ${rows}`);
+
+    // And the same number the page derives, derived independently here.
+    const projects = JSON.parse(fs.readFileSync("client/public/data.json", "utf8")).projects;
+    let expected = 0;
+    for (const p of projects) {
+      const r = (p.reviews ?? []).find((x) => x.department === dept);
+      if (!r || !r.status) continue;
+      if (String(r.status).toLowerCase().startsWith("nicht erforderlich")) continue;
+      expected++;
+    }
+    assert(
+      total === expected,
+      `${label}: page says ${total} ${dept} reviews, data.json has ${expected}`,
+    );
+  });
+
+  await check(`${label}: search, filter panel and chips actually narrow the set`, async () => {
+    await go(route);
+    await page.waitForSelector("table tbody tr", { timeout: 20000 });
+    const before = await page.$$eval("table tbody tr", (r) => r.length);
+
+    const box = page.getByLabel(`${label} Prüfungen durchsuchen`);
+    await box.fill("Frankfurt");
+    await page.getByRole("button", { name: "Suchen" }).click();
+    await page.waitForTimeout(600);
+    const after = await page.$$eval("table tbody tr", (r) => r.length);
+    assert(after > 0 && after < before, `${label}: search gave ${after} of ${before} rows`);
+
+    // The active filter is visible and removable — not an invisible state the
+    // user has to guess at from a shrunken row count.
+    const chip = page.getByRole("button", { name: /Filter .*Suche: Frankfurt.* entfernen/ });
+    assert(await chip.count() > 0, `${label}: the search is not shown as a removable chip`);
+    await chip.first().click();
+    await page.waitForTimeout(600);
+    const restored = await page.$$eval("table tbody tr", (r) => r.length);
+    assert(restored === before, `${label}: clearing the chip left ${restored} of ${before} rows`);
+
+    // exact: the chips' accessible names begin with "Filter" too, and
+    // Playwright's name option is a substring match by default.
+    const filterBtn = page.getByRole("button", { name: "Filter", exact: true });
+    assert(
+      (await filterBtn.getAttribute("aria-expanded")) === "false",
+      `${label}: the filter toggle does not report its state`,
+    );
+    await filterBtn.click();
+    await page.waitForTimeout(300);
+    assert(
+      (await filterBtn.getAttribute("aria-expanded")) === "true",
+      `${label}: the filter panel did not open`,
+    );
+  });
+
+  await check(`${label}: all three views render, and the map hands over to the cards`, async () => {
+    await go(route);
+    await page.waitForSelector("table tbody tr", { timeout: 20000 });
+
+    await page.click('[aria-label="Kachelansicht"]');
+    await page.waitForSelector("[data-project-card]", { timeout: 15000 });
+    assert(
+      (await page.$$eval("[data-project-card]", (c) => c.length)) > 0,
+      `${label}: the card view rendered no cards`,
+    );
+
+    await page.click('[aria-label="Kartenansicht"]');
+    await page.waitForSelector(".leaflet-container", { timeout: 15000 });
+    const markers = await page.$$eval(
+      ".leaflet-marker-icon, .leaflet-interactive",
+      (m) => m.length,
+    );
+    assert(markers > 0, `${label}: the map rendered no markers`);
+
+    // Clicking a station must land on the filtered cards, not leave the user
+    // on a map with nothing to read. Leaflet binds its own handlers, so a
+    // synthesised MouseEvent does not reach them — this drives the real marker,
+    // forced because markers overlap heavily at the initial zoom.
+    await page.waitForTimeout(2500);
+    const dots = await page.$$(".db-dot-marker");
+    assert(dots.length > 0, `${label}: the map rendered no station markers`);
+    await dots[dots.length - 1].click({ force: true });
+    await page.waitForTimeout(700);
+    const projectButtons = await page.$$("[data-pid]");
+    assert(projectButtons.length > 0, `${label}: the marker popup lists no projects`);
+
+    await projectButtons[0].click({ force: true });
+    await page.waitForTimeout(1200);
+    const pressed = await page.getAttribute('[aria-label="Kachelansicht"]', "aria-pressed");
+    assert(pressed === "true", `${label}: expected the card view, aria-pressed was ${pressed}`);
+    const landed = await page.$$eval("[data-project-card]", (c) => c.length);
+    assert(landed > 0, `${label}: a map click did not land on the card view`);
+
+    // Arriving from the map opens that project, and the station stays as a
+    // removable chip rather than an invisible filter.
+    await page.waitForSelector('[role="dialog"]', { timeout: 15000 });
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(300);
+    const chips = await page.$$eval("span", (els) =>
+      els.filter((e) => e.children.length === 0 && /^Station: /.test(e.textContent || "")).length,
+    );
+    assert(chips > 0, `${label}: no station chip after arriving from the map`);
+  });
+
+  await check(`${label}: the detail dialog opens with the project's contact routes`, async () => {
+    await go(route);
+    await page.waitForSelector("table tbody tr", { timeout: 20000 });
+    await page.evaluate(() => {
+      document.querySelector('table tbody tr button[aria-label^="Details"]')?.click();
+    });
+    await page.waitForSelector('[role="dialog"]', { timeout: 15000 });
+    const dialog = await page.locator('[role="dialog"]').first().innerText();
+    assert(dialog.length > 200, `${label}: the dialog opened nearly empty`);
+    const mails = await page.$$eval('[role="dialog"] a[href^="mailto:"]', (a) => a.length);
+    assert(mails > 0, `${label}: the dialog offers no mail route`);
+    await page.keyboard.press("Escape");
+  });
+
+  await check(`${label}: the export is scoped to this Gewerk and stamped`, async () => {
+    await go(route);
+    await page.waitForSelector("table tbody tr", { timeout: 20000 });
+    const [dl] = await Promise.all([
+      page.waitForEvent("download", { timeout: 30000 }),
+      page.getByRole("button", { name: /Export/ }).click(),
+    ]);
+    const name = dl.suggestedFilename();
+    assert(
+      new RegExp(`^DB_${dept}_Pruefungen_\\d{4}-\\d{2}-\\d{2}_\\d{4}\\.csv$`).test(name),
+      `${label}: export filename carries no Gewerk or no date+time stamp: ${name}`,
+    );
+    const f = path.join("/tmp", `e2e-${dept}-${Date.now()}.csv`);
+    await dl.saveAs(f);
+    const text = fs.readFileSync(f, "utf-8");
+    const head = text.split("\n")[0];
+    assert(head.includes(`${dept}-Status`), `${label}: CSV header is not Gewerk-scoped: ${head}`);
+    assert(text.split("\n").length > 10, `${label}: CSV carried almost no rows`);
+    fs.unlinkSync(f);
+  });
+}
+
+console.log("\n== the Änderungshistorie records what people actually did ==");
+
+/**
+ * The trail captured field edits and nothing else: a user could export four
+ * PDFs, hand three prefilled mails to Outlook and save a draft, and the log
+ * would say they did nothing all afternoon. These assert the entries exist and
+ * — as importantly — that they claim only what the app can substantiate.
+ */
+await check("a generated document and a prefilled message both reach the log", async () => {
+  await go("/bvb-eea");
+  await page.waitForSelector("table tbody tr", { timeout: 20000 });
+  const [dl] = await Promise.all([
+    page.waitForEvent("download", { timeout: 30000 }),
+    page.getByRole("button", { name: /Export/ }).click(),
+  ]);
+  const exported = dl.suggestedFilename();
+
+  await page.evaluate(() => {
+    document.querySelector('table tbody tr button[aria-label^="Details"]')?.click();
+  });
+  await page.waitForSelector('[role="dialog"]', { timeout: 15000 });
+  // Clicking the anchor would hand the page to an external protocol handler,
+  // which Chromium cannot resolve here. The click that records is the one on
+  // the link itself, so dispatch it without letting the navigation happen.
+  await page.evaluate(() => {
+    const a = document.querySelector('[role="dialog"] a[href^="mailto:"]');
+    a?.addEventListener("click", (e) => e.preventDefault(), { once: true });
+    a?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+  });
+  await page.waitForTimeout(800);
+  await page.keyboard.press("Escape");
+
+  await go("/audit");
+  const body = await page.locator("body").innerText();
+  assert(body.includes("Export erzeugt"), "the CSV export never reached the Änderungshistorie");
+  assert(body.includes(exported), `the entry does not name the file: ${exported}`);
+  assert(
+    body.includes("E-Mail vorbereitet"),
+    "handing a prefilled mail to Outlook never reached the Änderungshistorie",
+  );
+
+  // The app hands a mailto: to the user's client and never learns what happened
+  // next. Claiming delivery would put an unsubstantiable statement in an audit
+  // trail, which is the class of defect this whole pass removes.
+  assert(
+    !/E-Mail gesendet|Nachricht gesendet|PDF gedruckt/.test(body),
+    "the log claims a delivery the app cannot observe",
+  );
+});
+
+await check("every logged action is a known one, rendered with its own tone", async () => {
+  await go("/audit");
+  const rows = await page.$$eval("[data-audit-action]", (els) =>
+    els.map((e) => ({
+      action: e.getAttribute("data-audit-action"),
+      tone: e.getAttribute("data-audit-tone"),
+    })),
+  );
+  assert(rows.length > 0, "the Änderungshistorie rendered no entries");
+  const untoned = rows.filter((r) => !r.tone);
+  assert(untoned.length === 0, `${untoned.length} entries rendered without a tone`);
+});
+
 console.log("\n== summary ==");
 console.log(`${passed} passed, ${failures.length} failed`);
 await browser.close();

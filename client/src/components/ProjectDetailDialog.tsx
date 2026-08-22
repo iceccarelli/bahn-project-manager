@@ -72,9 +72,11 @@ import {
 } from "@shared/contact-resolution";
 import {
   mailtoWithContext,
+  messageSubject,
   teamsChatWithContext,
   type MessageContext,
 } from "@shared/message";
+import { useAuditTrail } from "@/hooks/useAuditTrail";
 import { generatedLabel } from "@shared/generated-stamp";
 import { downloadProjectPdf } from "@/pdf/downloadProjectPdf";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -99,10 +101,19 @@ function ContactActions({
   size?: "sm" | "xs";
 }) {
   const h = size === "xs" ? "h-8" : "h-9";
+  const { recordMessage } = useAuditTrail();
+  const subject = messageSubject(context);
   return (
     <div className="flex flex-wrap gap-2">
       <Button asChild variant="outline" size="sm" className={`${h} gap-1.5`}>
-        <a href={mailtoWithContext(contact.mail, context)} aria-label={`E-Mail an ${contact.name || contact.mail}`}>
+        {/* onClick records and the navigation still happens: the handler is
+            synchronous and the mutation is fire-and-forget, so nothing is
+            delayed and nothing is lost if the mail client steals focus. */}
+        <a
+          href={mailtoWithContext(contact.mail, context)}
+          onClick={() => recordMessage("mail", contact.name || contact.mail, subject)}
+          aria-label={`E-Mail an ${contact.name || contact.mail}`}
+        >
           <Mail className="h-3.5 w-3.5" aria-hidden="true" />
           E-Mail
         </a>
@@ -112,6 +123,7 @@ function ContactActions({
           href={teamsChatWithContext(contact.mail, context)}
           target="_blank"
           rel="noreferrer"
+          onClick={() => recordMessage("teams", contact.name || contact.mail, subject)}
           aria-label={`Microsoft-Teams-Chat mit ${contact.name || contact.mail}`}
         >
           <MessageSquare className="h-3.5 w-3.5" aria-hidden="true" />
@@ -237,6 +249,7 @@ export function ProjectDetailDialog({
 }: ProjectDetailDialogProps) {
   const { data: auditEntries } = useAuditLog();
   const { user } = useAuth();
+  const { recordDocument, recordMessage } = useAuditTrail();
   const [printing, setPrinting] = useState(false);
   const currentUser = user?.name || user?.email || "";
 
@@ -311,6 +324,11 @@ export function ProjectDetailDialog({
         generatedAt,
         generatedBy: currentUser,
       });
+      recordDocument(
+        "Projektblatt",
+        filename,
+        `${project.projektnummer ?? ""} ${project.station ?? ""}`.trim(),
+      );
       toast.success(`${filename} erzeugt`);
     } catch (err) {
       // A failed export must say so: the browser gives no feedback of its own
@@ -321,7 +339,7 @@ export function ProjectDetailDialog({
     } finally {
       setPrinting(false);
     }
-  }, [project, currentUser]);
+  }, [project, currentUser, recordDocument]);
 
   if (!project) return null;
 
@@ -426,7 +444,12 @@ export function ProjectDetailDialog({
             )}
             {bmContact && (
               <Button asChild variant="outline" size="sm" className="h-9 gap-1.5">
-                <a href={mailtoWithContext(bmContact.mail, contextFor())}>
+                <a
+                  href={mailtoWithContext(bmContact.mail, contextFor())}
+                  onClick={() =>
+                    recordMessage("mail", bmContact.name, messageSubject(contextFor()))
+                  }
+                >
                   <Mail className="h-3.5 w-3.5" aria-hidden="true" />
                   Bahnhofsmanagement
                 </a>
@@ -643,6 +666,9 @@ export function ProjectDetailDialog({
                               <Button asChild variant="ghost" size="icon" className="h-8 w-8">
                                 <a
                                   href={mailtoWithContext(prueferContact.mail, deptContext)}
+                                  onClick={() =>
+                                    recordMessage("mail", prueferContact.name, messageSubject(deptContext))
+                                  }
                                   title={`E-Mail an ${prueferContact.name}`}
                                   aria-label={`E-Mail an ${prueferContact.name} (${dept})`}
                                 >
@@ -652,6 +678,9 @@ export function ProjectDetailDialog({
                               <Button asChild variant="ghost" size="icon" className="h-8 w-8">
                                 <a
                                   href={teamsChatWithContext(prueferContact.mail, deptContext)}
+                                  onClick={() =>
+                                    recordMessage("teams", prueferContact.name, messageSubject(deptContext))
+                                  }
                                   target="_blank"
                                   rel="noreferrer"
                                   title={`Teams-Chat mit ${prueferContact.name}`}
@@ -665,6 +694,13 @@ export function ProjectDetailDialog({
                             <Button asChild variant="ghost" size="sm" className="h-8 gap-1.5 px-2">
                               <a
                                 href={mailtoWithContext((deptRecipients[0] as Contact).mail, deptContext)}
+                                onClick={() =>
+                                  recordMessage(
+                                    "mail",
+                                    (deptRecipients[0] as Contact).name || dept,
+                                    messageSubject(deptContext),
+                                  )
+                                }
                                 title={`An den Fachbereich ${dept} schreiben`}
                                 aria-label={`An den Fachbereich ${dept} schreiben`}
                               >
