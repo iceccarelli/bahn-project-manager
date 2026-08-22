@@ -38,26 +38,24 @@ import {
   AlertTriangle,
   Download,
   Filter,
-  Info,
   LayoutGrid,
   Loader2,
   MapPin,
   Plus,
+  MessageSquare,
   Search,
   Table as TableIcon,
   X,
 } from "lucide-react";
-import { useAllData, type Project, type Review } from "@/hooks/useDataQuery";
+import { useAllData, useProjectEdits, type Project, type Review } from "@/hooks/useDataQuery";
 import { MapView, type StationSelection } from "@/components/Map";
 import { ProjectDetailDialog } from "@/components/ProjectDetailDialog";
 import { useAuditTrail } from "@/hooks/useAuditTrail";
+import { InlineEditCell, RowActions, SortHeader } from "@/components/workspace/table-parts";
+import { REVIEW_STATUSES } from "@shared/types";
 import { statusBadgeClass } from "@shared/status-appearance";
-import {
-  APPROVED_STATUSES,
-  BLOCKING_STATUSES,
-  OPEN_STATUSES,
-  normalizeReviewStatus,
-} from "@shared/review-status";
+import { normalizeReviewStatus } from "@shared/review-status";
+import { deriveProjectMetrics, percent } from "@shared/project-metrics";
 import { formatGerman } from "@shared/date";
 import { documentFilename } from "@shared/generated-stamp";
 import type { Department } from "@shared/types";
@@ -78,20 +76,29 @@ interface Entry {
   status: string | null;
 }
 
-const TH = "whitespace-nowrap border-b px-3 py-3 text-left font-semibold text-muted-foreground";
 
+/**
+ * The Projekte KPI card, verbatim.
+ *
+ * Same wrapper, same header, same 4xl figure, same 12px caption, same accent
+ * on the first card. Copying the markup rather than approximating it is the
+ * point: a reader moving between the three tabs must not be able to tell which
+ * one they are on from the chrome, only from the numbers.
+ */
 function KpiCard({
   label,
   value,
   caption,
   accent,
-  tone,
+  valueTone,
+  captionTone,
 }: {
   label: string;
   value: number;
   caption: string;
   accent?: boolean;
-  tone?: string;
+  valueTone?: string;
+  captionTone?: string;
 }) {
   return (
     <Card className={accent ? "border-l-4 border-l-primary shadow-sm" : "shadow-sm"}>
@@ -99,10 +106,10 @@ function KpiCard({
         <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className={`text-4xl font-bold tabular-nums ${tone ?? ""}`}>
+        <div className={`text-4xl font-bold ${valueTone ?? ""}`}>
           {value.toLocaleString("de-DE")}
         </div>
-        <p className={`mt-1 text-xs ${tone ?? "text-muted-foreground"}`}>{caption}</p>
+        <p className={`mt-1 text-xs ${captionTone ?? "text-muted-foreground"}`}>{caption}</p>
       </CardContent>
     </Card>
   );
@@ -155,6 +162,20 @@ export function ReviewWorkspace({
   const [stationFocus, setStationFocus] = useState<StationSelection | null>(null);
   const [focusProjectId, setFocusProjectId] = useState<number | null>(null);
   const [detailProjectId, setDetailProjectId] = useState<number | null>(null);
+  const [sortBy, setSortBy] = useState("projektnummer");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const { applyEdit, applyReviewEdit } = useProjectEdits();
+
+  const handleSort = useCallback((column: string) => {
+    setSortBy((current) => {
+      if (current === column) {
+        setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+        return current;
+      }
+      setSortDir("asc");
+      return column;
+    });
+  }, []);
 
   useEffect(() => {
     const t = setTimeout(() => setSearch(searchInput), 250);
@@ -235,24 +256,64 @@ export function ReviewWorkspace({
   }, [scoped, search, region, status, pruefer]);
 
   /** Station focus is an id filter layered on top of the rest. */
-  const visible = useMemo(() => {
+  const focused = useMemo(() => {
     if (!stationFocus) return filtered;
     const ids = new Set(stationFocus.projectIds);
     return filtered.filter((e) => ids.has(e.project.id));
   }, [filtered, stationFocus]);
 
-  const kpis = useMemo(() => {
-    let open = 0;
-    let done = 0;
-    let blocked = 0;
-    for (const e of scoped) {
-      if (!e.status) continue;
-      if ((OPEN_STATUSES as readonly string[]).includes(e.status)) open++;
-      else if ((APPROVED_STATUSES as readonly string[]).includes(e.status)) done++;
-      else if ((BLOCKING_STATUSES as readonly string[]).includes(e.status)) blocked++;
-    }
-    return { total: scoped.length, open, done, blocked };
-  }, [scoped]);
+  /**
+   * Sorted last, so the order follows whatever is actually on screen.
+   *
+   * German collation, not the default UTF-16 ordering: "Ölbronn" sorts after
+   * "Offenbach" for a reader and before it for a machine. Dates are compared as
+   * dates rather than as the dd.mm.yyyy strings the cells render, which would
+   * have ordered the whole column by day-of-month.
+   */
+  const visible = useMemo(() => {
+    const dir = sortDir === "asc" ? 1 : -1;
+    const key = (e: Entry): string | number | null => {
+      switch (sortBy) {
+        case "prueferName":
+          return e.review.prueferName ?? null;
+        case "pruefDatum":
+          return e.review.pruefDatum ? Date.parse(e.review.pruefDatum) : null;
+        case "status":
+          return e.status ?? e.review.status ?? null;
+        case "terminProjektvorstellung":
+          return e.project.terminProjektvorstellung
+            ? Date.parse(e.project.terminProjektvorstellung)
+            : null;
+        default:
+          return (e.project as unknown as Record<string, string | null>)[sortBy] ?? null;
+      }
+    };
+    return [...focused].sort((a, b) => {
+      const av = key(a);
+      const bv = key(b);
+      // Empty cells sink to the bottom in both directions. Sorting them to the
+      // top of a descending list buries the rows a reader is looking for.
+      if (av === null || av === "") return bv === null || bv === "" ? 0 : 1;
+      if (bv === null || bv === "") return -1;
+      if (typeof av === "number" && typeof bv === "number") return (av - bv) * dir;
+      return String(av).localeCompare(String(bv), "de", { numeric: true }) * dir;
+    });
+  }, [focused, sortBy, sortDir]);
+
+  /**
+   * The same four buckets the Projekte page shows, over this Gewerk's rows.
+   *
+   * deriveProjectMetrics is the single derivation both dashboards already use,
+   * so rather than re-counting here — which is how three pages ended up
+   * disagreeing about the same 18,172 rows — each project is handed to it with
+   * its reviews narrowed to this one department. "Aktiv", "Abgeschlossen" and
+   * "Blockiert" therefore mean on this page exactly what they mean on Projekte,
+   * because it is the same code deciding.
+   */
+  const kpis = useMemo(
+    () => deriveProjectMetrics(scoped.map((e) => ({ reviews: [e.review] }))),
+    [scoped],
+  );
 
   const detailProject = useMemo(
     () =>
@@ -381,32 +442,41 @@ export function ReviewWorkspace({
         </p>
       </div>
 
-      {/* The same four-card row the Projekte page uses, counted over this
-          Gewerk's rows only. */}
+      {/* The Projekte KPI row, scoped — every figure from project-metrics.ts */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-4">
+        {/*
+          The one label that is not copied verbatim. Projekte counts every
+          project, so "Gesamtprojekte" is exactly what its 1.298 is. Here the
+          figure is the projects carrying an {department} Prüfung — 814 of those 1.298
+          for EEA, 510 for ITK — and calling that "Gesamtprojekte" would state
+          a total the dataset contradicts. The card is otherwise identical.
+        */}
         <KpiCard
           accent
-          label={`${department}-Prüfungen`}
+          label={`Projekte mit ${department}-Prüfung`}
           value={kpis.total}
           caption={`von ${data.projects.length.toLocaleString("de-DE")} Projekten`}
+          valueTone="text-primary-strong"
         />
         <KpiCard
-          label="Offen"
-          value={kpis.open}
-          caption="warten auf eine Entscheidung"
-          tone="text-amber-700 dark:text-amber-500"
+          label="Aktiv"
+          value={kpis.active}
+          caption={`${percent(kpis.active, kpis.total)}% der ${department}-Prüfungen in Bearbeitung`}
+          captionTone="text-blue-600 dark:text-blue-400"
         />
         <KpiCard
-          label="Zugestimmt"
-          value={kpis.done}
-          caption="Zustimmung erteilt oder Niederschrift"
-          tone="text-emerald-700 dark:text-emerald-400"
+          label="Abgeschlossen"
+          value={kpis.completed}
+          caption={`${department}-Prüfung zugestimmt`}
+          valueTone="text-emerald-600"
+          captionTone="text-emerald-600 dark:text-emerald-400"
         />
         <KpiCard
           label="Blockiert"
           value={kpis.blocked}
           caption="abgelehnt oder gestoppt"
-          tone="text-primary-strong"
+          valueTone="text-red-600"
+          captionTone="text-red-600 dark:text-red-400"
         />
       </div>
 
@@ -600,66 +670,141 @@ export function ReviewWorkspace({
             <div className="max-h-[75vh] overflow-x-auto overflow-y-auto">
               <table className="w-full border-collapse text-xs">
                 <caption className="sr-only">
-                  {title} – {visible.length} Einträge mit Prüfer, Prüfdatum und Status
+                  {title} – {visible.length} Einträge mit Projektdaten, {prueferLabel},
+                  Prüfdatum und Status. Spaltenüberschriften sortieren.
                 </caption>
-                <thead className="sticky top-0 z-10 bg-card shadow-[0_1px_0_0_hsl(var(--border))]">
+                {/*
+                  The Projekte header row, with this Gewerk's three columns in
+                  place of the fourteen department columns. Same sticky Nr., same
+                  sortable headers, same actions column — a reader moving between
+                  the tabs meets the same table, not a different product.
+                */}
+                <thead className="sticky top-0 z-20 border-b bg-card">
                   <tr>
-                    <th scope="col" className={TH}>Projektnummer</th>
-                    <th scope="col" className={TH}>Region</th>
-                    <th scope="col" className={TH}>Station</th>
-                    <th scope="col" className={TH}>Beschreibung</th>
-                    <th scope="col" className={TH}>Projektleiter</th>
-                    <th scope="col" className={TH}>{prueferLabel}</th>
-                    <th scope="col" className={TH}>Prüfdatum</th>
-                    <th scope="col" className={TH}>Status</th>
-                    <th scope="col" className={TH}>
+                    <th
+                      scope="col"
+                      className="sticky left-0 z-30 min-w-[50px] whitespace-nowrap border-b bg-card px-3 py-3 text-left font-semibold text-muted-foreground"
+                    >
+                      Nr.
+                    </th>
+                    <SortHeader column="projektnummer" label="Projektnummer" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+                    <SortHeader column="bahnhofsmanagement" label="Region" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+                    <SortHeader column="station" label="Station" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+                    <SortHeader column="bahnhofsnummer" label="Bhf-Nr." sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+                    <SortHeader column="streckennummer" label="Strecken-Nr." sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+                    <th scope="col" className="min-w-[220px] whitespace-nowrap border-b px-4 py-3 text-left font-semibold text-muted-foreground">
+                      Beschreibung
+                    </th>
+                    <SortHeader column="projektstand" label="Projektstand" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+                    <SortHeader column="projektleiter" label="Projektleiter" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+                    <SortHeader column="terminProjektvorstellung" label="Termin PV" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+                    <SortHeader column="prueferName" label={prueferLabel} sortBy={sortBy} sortDir={sortDir} onSort={handleSort} className="border-l bg-muted/30" />
+                    <SortHeader column="pruefDatum" label="Prüfdatum" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} className="bg-muted/30" />
+                    <SortHeader column="status" label="Status" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} className="bg-muted/30" />
+                    <th
+                      scope="col"
+                      title="Details, Kommentar & Link"
+                      className="whitespace-nowrap border-b px-3 py-3 text-center font-semibold text-muted-foreground"
+                    >
+                      <MessageSquare className="inline h-4 w-4" aria-hidden="true" />
                       <span className="sr-only">Aktionen</span>
                     </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {visible.map(({ project, review, status: s }) => (
+                  {visible.map(({ project, review, status: s }, index) => (
                     <tr key={project.id} className="border-b transition-colors hover:bg-muted/30">
-                      <td className="max-w-[13rem] break-words px-3 py-3 font-mono text-xs font-medium">
-                        {project.projektnummer || "—"}
+                      <td className="sticky left-0 z-10 whitespace-nowrap bg-card px-3 py-3 text-2xs tabular-nums text-muted-foreground">
+                        {index + 1}
                       </td>
-                      <td className="whitespace-nowrap px-3 py-3 text-xs">
+                      <td className="max-w-[13rem] break-words px-3 py-3 font-mono text-xs font-medium">
+                        <InlineEditCell
+                          value={project.projektnummer}
+                          label={`Projektnummer von Projekt ${project.projektnummer ?? project.id}`}
+                          onSave={(v) => applyEdit(project.id, "projektnummer", v)}
+                        />
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-xs">
                         {project.bahnhofsmanagement || "—"}
                       </td>
-                      <td className="max-w-[14rem] break-words px-3 py-3 text-xs font-medium">
-                        {project.station || "—"}
+                      <td className="max-w-[14rem] break-words px-4 py-3 text-xs font-medium">
+                        <InlineEditCell
+                          value={project.station}
+                          label={`Station von Projekt ${project.projektnummer ?? project.id}`}
+                          onSave={(v) => applyEdit(project.id, "station", v)}
+                        />
                       </td>
-                      <td className="max-w-[20rem] px-3 py-3 text-xs">
+                      <td className="whitespace-nowrap px-4 py-3 text-xs tabular-nums">
+                        {project.bahnhofsnummer || "—"}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-xs tabular-nums">
+                        {project.streckennummer || "—"}
+                      </td>
+                      <td className="max-w-[20rem] px-4 py-3 text-xs">
                         <span className="line-clamp-2">{project.projektbeschreibung || "—"}</span>
                       </td>
-                      <td className="max-w-[12rem] break-words px-3 py-3 text-xs">
-                        {project.projektleiter || "—"}
+                      <td className="whitespace-nowrap px-4 py-3 text-xs">
+                        <InlineEditCell
+                          value={project.projektstand}
+                          label={`Projektstand von Projekt ${project.projektnummer ?? project.id}`}
+                          onSave={(v) => applyEdit(project.id, "projektstand", v)}
+                        />
                       </td>
-                      <td className="max-w-[11rem] break-words px-3 py-3 text-xs">
-                        {review.prueferName || "—"}
+                      <td className="max-w-[12rem] break-words px-4 py-3 text-xs">
+                        <InlineEditCell
+                          value={project.projektleiter}
+                          label={`Projektleiter von Projekt ${project.projektnummer ?? project.id}`}
+                          onSave={(v) => applyEdit(project.id, "projektleiter", v)}
+                        />
                       </td>
-                      <td className="whitespace-nowrap px-3 py-3 text-xs tabular-nums">
+                      <td className="whitespace-nowrap px-4 py-3 text-xs tabular-nums">
+                        {formatGerman(project.terminProjektvorstellung) || "—"}
+                      </td>
+                      <td className="max-w-[11rem] break-words border-l px-4 py-3 text-xs">
+                        <InlineEditCell
+                          value={review.prueferName}
+                          label={`${prueferLabel} für Projekt ${project.projektnummer ?? project.id}`}
+                          onSave={(v) => applyReviewEdit(project.id, department, "prueferName", v)}
+                        />
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-xs tabular-nums">
                         {formatGerman(review.pruefDatum) || "—"}
                       </td>
-                      <td className="whitespace-nowrap px-3 py-3 text-xs">
+                      <td className="whitespace-nowrap px-4 py-3 text-xs">
+                        {/*
+                          Editable, and labelled. The Projekte page carries the
+                          same control; an unlabelled one announced "offen,
+                          combo box" with no way to know which project it wrote
+                          to. The badge colour is the read-at-a-glance signal,
+                          so the select keeps it.
+                        */}
                         <span
-                          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-2xs font-medium ${statusBadgeClass(s)}`}
+                          className={`mr-2 inline-flex items-center rounded-full px-2.5 py-0.5 text-2xs font-medium ${statusBadgeClass(s)}`}
                         >
                           {s ?? review.status ?? "—"}
                         </span>
+                        <select
+                          aria-label={`Status ${department} für Projekt ${project.projektnummer ?? project.id}`}
+                          value={review.status || ""}
+                          onChange={(e) =>
+                            applyReviewEdit(project.id, department, "status", e.target.value)
+                          }
+                          className="mt-1 w-full rounded-md border bg-transparent px-2 py-1 text-2xs outline-none focus:ring-1 focus:ring-primary"
+                        >
+                          <option value="">-</option>
+                          {REVIEW_STATUSES.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
                       </td>
                       <td className="px-3 py-3">
-                        <div className="cell-actions flex items-center justify-center">
-                          <button
-                            type="button"
-                            aria-label={`Details zu Projekt ${project.projektnummer ?? project.id} anzeigen`}
-                            title="Details anzeigen"
-                            onClick={() => setDetailProjectId(project.id)}
-                            className="flex items-center justify-center rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                          >
-                            <Info className="h-4 w-4" aria-hidden="true" />
-                          </button>
-                        </div>
+                        <RowActions
+                          project={project}
+                          onShowDetails={setDetailProjectId}
+                          onEdit={applyEdit}
+                        />
                       </td>
                     </tr>
                   ))}

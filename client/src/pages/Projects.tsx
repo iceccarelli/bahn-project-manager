@@ -9,18 +9,21 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Download, Table, LayoutGrid, MapPin, Filter, X, ArrowUpDown, ExternalLink, MessageSquare, Search, Loader2, Info } from "lucide-react";
+import { Plus, Download, Table, LayoutGrid, MapPin, Filter, X, MessageSquare, Search, Loader2 } from "lucide-react";
 import { DEPARTMENTS, REVIEW_STATUSES } from "@shared/types";
 import { deriveProjectMetrics, percent } from "@shared/project-metrics";
 import { statusBadgeClass } from "@shared/status-appearance";
 import { toast } from "sonner";
 import { MapView, type StationSelection } from "@/components/Map";
 import { ProjectDetailDialog } from "@/components/ProjectDetailDialog";
-import { projectLinkUrl } from "@shared/project-link";
 import { documentFilename } from "@shared/generated-stamp";
 import { useAuditTrail } from "@/hooks/useAuditTrail";
+import {
+  InlineEditCell,
+  RowActions,
+  SortHeader,
+} from "@/components/workspace/table-parts";
 // DB Corporate Status Colors (perfect harmony with Dashboard.tsx)
 
 function StatusBadge({ status }: { status: string | null }) {
@@ -35,59 +38,6 @@ function StatusBadge({ status }: { status: string | null }) {
     >
       {status}
     </span>
-  );
-}
-
-function InlineEditCell({
-  value,
-  onSave,
-  label,
-  className = "",
-}: {
-  value: string | null;
-  onSave: (val: string) => void;
-  /** What this cell holds, e.g. "Projektstand" — used for the accessible name. */
-  label: string;
-  className?: string;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [editValue, setEditValue] = useState(value || "");
-  if (editing) {
-    return (
-      <input
-        aria-label={`${label} bearbeiten`}
-        value={editValue}
-        onChange={(e) => setEditValue(e.target.value)}
-        onBlur={() => {
-          if (editValue !== (value || "")) onSave(editValue);
-          setEditing(false);
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            if (editValue !== (value || "")) onSave(editValue);
-            setEditing(false);
-          }
-          if (e.key === "Escape") setEditing(false);
-        }}
-        className={`bg-transparent border-b border-primary/50 outline-none text-xs w-full focus:border-primary ${className}`}
-      />
-    );
-  }
-  // A <button>, not a <span onClick>. As a span it was unreachable by keyboard,
-  // invisible to assistive tech and had no focus ring — 1,298 rows x 6 editable
-  // cells that only a mouse could ever open.
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        setEditValue(value || "");
-        setEditing(true);
-      }}
-      aria-label={`${label} bearbeiten${value ? `, aktuell ${value}` : ", derzeit leer"}`}
-      className={`-mx-1 w-full cursor-pointer rounded px-1 py-0.5 text-left transition-colors hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${className}`}
-    >
-      {value || "-"}
-    </button>
   );
 }
 
@@ -122,40 +72,6 @@ function FilterChip({
         <X className="h-3 w-3" aria-hidden="true" />
       </button>
     </Badge>
-  );
-}
-
-interface SortHeaderProps {
-  column: string;
-  label: string;
-  sortBy: string;
-  sortDir: "asc" | "desc";
-  onSort: (column: string) => void;
-}
-
-function SortHeader({ column, label, sortBy, sortDir, onSort }: SortHeaderProps) {
-  const isActive = sortBy === column;
-  // aria-sort on the <th> and a real <button> inside it. The whole cell used to
-  // be a click handler on a non-interactive element: no keyboard access, and a
-  // screen reader had no way to know the table was sorted at all.
-  return (
-    <th
-      scope="col"
-      aria-sort={isActive ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
-      className="whitespace-nowrap border-b px-4 py-3 text-left font-semibold text-muted-foreground"
-    >
-      <button
-        type="button"
-        onClick={() => onSort(column)}
-        className="inline-flex items-center gap-1 rounded transition-colors select-none hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-      >
-        {label}
-        <ArrowUpDown
-          className={`h-3 w-3 transition-opacity ${isActive ? "text-primary-strong opacity-100" : "opacity-0"}`}
-          aria-hidden="true"
-        />
-      </button>
-    </th>
   );
 }
 
@@ -824,89 +740,11 @@ export default function Projects() {
                               : "-"}
                           </td>
                           <td className="min-w-[104px] px-3 py-3">
-                            {/* A flex row, not two inline buttons: the two 44px
-                                touch targets need to be laid out side by side
-                                with a gap, and `text-center` on the cell let
-                                them wrap instead. */}
-                            <div className="cell-actions flex items-center justify-center gap-1">
-                            {/* Details reachable from the table too, so the
-                                three views expose the same action rather than
-                                the card grid being the only way in. */}
-                            <button
-                              type="button"
-                              aria-label={`Details zu Projekt ${project.projektnummer ?? project.id} anzeigen`}
-                              title="Details anzeigen"
-                              onClick={() => setDetailProjectId(project.id)}
-                              className="flex items-center justify-center rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                            >
-                              <Info className="h-4 w-4" aria-hidden="true" />
-                            </button>
-                            <Dialog>
-                              <DialogTrigger asChild>
-                                <button
-                                  type="button"
-                                  aria-label={`Kommentar und Link zu Projekt ${project.projektnummer ?? project.id}`}
-                                  className="flex items-center justify-center rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                                >
-                                  <MessageSquare className="h-4 w-4" aria-hidden="true" />
-                                </button>
-                              </DialogTrigger>
-                              <DialogContent className="max-w-md bg-card">
-                                <DialogHeader>
-                                  <DialogTitle>Kommentar &amp; Link</DialogTitle>
-                                </DialogHeader>
-                                <div className="space-y-4 py-4">
-                                  <div className="space-y-2">
-                                    <label
-                                      htmlFor={`kommentar-${project.id}`}
-                                      className="text-xs font-bold uppercase text-muted-foreground"
-                                    >
-                                      Kommentar
-                                    </label>
-                                    <textarea
-                                      id={`kommentar-${project.id}`}
-                                      defaultValue={project.kommentar || ""}
-                                      onBlur={(e) => applyEdit(project.id, "kommentar", e.target.value)}
-                                      className="w-full border rounded-xl px-4 py-3 text-sm bg-background min-h-[120px] resize-y focus:ring-2 focus:ring-primary/20 outline-none"
-                                      placeholder="Kommentar eingeben …"
-                                    />
-                                  </div>
-                                  <div className="space-y-2">
-                                    <label
-                                      htmlFor={`projektlink-${project.id}`}
-                                      className="text-xs font-bold uppercase text-muted-foreground"
-                                    >
-                                      Projektlink
-                                    </label>
-                                    <div className="flex gap-2">
-                                      <Input
-                                        id={`projektlink-${project.id}`}
-                                        defaultValue={project.projektLink || ""}
-                                        onBlur={(e) => applyEdit(project.id, "projektLink", e.target.value)}
-                                        className="flex-1"
-                                        placeholder="https://..."
-                                      />
-                                      {/* Only when it parses as a URL — see
-                                          shared/project-link.ts. And an
-                                          icon-only link needs a name. */}
-                                      {projectLinkUrl(project.projektLink) && (
-                                        <Button variant="outline" size="icon" asChild>
-                                          <a
-                                            href={projectLinkUrl(project.projektLink) as string}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            aria-label={`Projektlink von ${project.projektnummer ?? project.id} in neuem Tab öffnen`}
-                                          >
-                                            <ExternalLink className="h-4 w-4 text-primary-strong" aria-hidden="true" />
-                                          </a>
-                                        </Button>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                              </DialogContent>
-                            </Dialog>
-                          </div>
+                            <RowActions
+                              project={project}
+                              onShowDetails={setDetailProjectId}
+                              onEdit={applyEdit}
+                            />
                           </td>
 
                           {expandedDepts.length > 0 ? (

@@ -249,6 +249,51 @@ export function useDeleteProject() {
 // COMPOSITE HOOKS
 // ============================================================================
 
+/**
+ * The two write helpers every table cell uses.
+ *
+ * They lived inside useProjects, so a page that wanted to edit a row had to
+ * take on the whole filter-and-sort pipeline to get at them — which is why the
+ * Gewerk tables were read-only. They are the same two mutations either way:
+ * optimistic, rolled back and toasted on refusal, and audited through
+ * recordAudit, so an edit made on BVB-EEA reaches the Änderungshistorie
+ * identically to one made on Projekte.
+ *
+ * `field as any` used to sit in both, which threw away the one guarantee the
+ * input type provided: a mistyped field name compiled cleanly and only
+ * surfaced as a silently-wrong write at runtime.
+ */
+export function useProjectEdits() {
+  const updateProjectMutation = useUpdateProject();
+  const updateReviewMutation = useUpdateReview();
+
+  const applyEdit = useCallback(
+    (projectId: number, field: ProjectUpdateInput["field"], value: string) => {
+      updateProjectMutation.mutate({ id: projectId, field, value });
+    },
+    [updateProjectMutation],
+  );
+
+  const applyReviewEdit = useCallback(
+    (
+      projectId: number,
+      departmentName: string,
+      field: ReviewUpdateInput["field"],
+      value: string,
+    ) => {
+      updateReviewMutation.mutate({ projectId, department: departmentName, field, value });
+    },
+    [updateReviewMutation],
+  );
+
+  return {
+    applyEdit,
+    applyReviewEdit,
+    /** True while either write is in flight. */
+    isWriting: updateProjectMutation.isPending || updateReviewMutation.isPending,
+  };
+}
+
 export function useProjects(params: {
   search?: string;
   region?: string;
@@ -268,8 +313,7 @@ export function useProjects(params: {
    */
 }) {
   const { data: allProjectsData, isLoading: allProjectsLoading } = useAllProjects();
-  const updateProjectMutation = useUpdateProject();
-  const updateReviewMutation = useUpdateReview();
+  const { isWriting } = useProjectEdits();
   const createProjectMutation = useCreateProject();
 
   const {
@@ -353,27 +397,7 @@ export function useProjects(params: {
     return { projects: filtered, total: filtered.length };
   }, [allProjectsData, search, region, projektleiter, pruefer, status, department, sortBy, sortDir]);
 
-  // `field as any` used to sit here, which threw away the one guarantee the
-  // input type provided: a mistyped field name compiled cleanly and only
-  // surfaced as a silently-wrong write at runtime.
-  const applyEdit = useCallback(
-    (projectId: number, field: ProjectUpdateInput["field"], value: string) => {
-      updateProjectMutation.mutate({ id: projectId, field, value });
-    },
-    [updateProjectMutation]
-  );
-
-  const applyReviewEdit = useCallback(
-    (
-      projectId: number,
-      departmentName: string,
-      field: ReviewUpdateInput["field"],
-      value: string,
-    ) => {
-      updateReviewMutation.mutate({ projectId, department: departmentName, field, value });
-    },
-    [updateReviewMutation]
-  );
+  const { applyEdit, applyReviewEdit } = useProjectEdits();
 
   const addProject = useCallback(
     (newProjectData: any) => {
@@ -384,7 +408,7 @@ export function useProjects(params: {
 
   return {
     data: result,
-    isLoading: allProjectsLoading || updateProjectMutation.isPending || updateReviewMutation.isPending || createProjectMutation.isPending,
+    isLoading: allProjectsLoading || isWriting || createProjectMutation.isPending,
     applyEdit,
     applyReviewEdit,
     addProject,

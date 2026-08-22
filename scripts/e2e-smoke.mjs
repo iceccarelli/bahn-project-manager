@@ -678,7 +678,9 @@ await check("BVB-EEA and PSV-ITK render German dates and honest headings", async
     assert(body.includes(heading), `${route} lost its heading`);
     assert(!/Verwaltung der/.test(body), `${route} still claims to be a Verwaltung; it has no controls`);
     // dd.mm.yyyy with leading zeros — never yyyy-mm-dd, never d.m.yyyy
-    const dates = await page.$$eval("table tbody tr td:nth-child(7)", (tds) =>
+    // 12th cell: Nr., Projektnummer, Region, Station, Bhf-Nr., Strecken-Nr.,
+    // Beschreibung, Projektstand, Projektleiter, Termin PV, Prüfer, Prüfdatum.
+    const dates = await page.$$eval("table tbody tr td:nth-child(12)", (tds) =>
       tds.map((t) => t.textContent.trim()).filter((t) => t && t !== "—"),
     );
     assert(dates.length > 0, `${route} rendered no Prüfdatum at all`);
@@ -1007,6 +1009,107 @@ for (const [route, dept, label] of [
     fs.unlinkSync(f);
   });
 }
+
+await check("the three tabs are independent surfaces, not one shared state", async () => {
+  // Projekte, BVB-EEA and PSV-ITK each keep their own search, filters, sort and
+  // view mode. They render the same component with different props, so if the
+  // router ever reused the instance, a search typed on one tab would silently
+  // narrow another — and the KPI row would keep reporting the unfiltered set.
+  await go("/bvb-eea");
+  await page.waitForSelector("table tbody tr", { timeout: 20000 });
+  const eeaRows = await page.$$eval("table tbody tr", (r) => r.length);
+  const box = page.getByLabel("BVB-EEA Prüfungen durchsuchen");
+  await box.fill("Frankfurt");
+  await page.getByRole("button", { name: "Suchen" }).click();
+  await page.click('[aria-label="Kachelansicht"]');
+  await page.waitForTimeout(800);
+
+  await go("/psv-itk");
+  await page.waitForSelector("table tbody tr", { timeout: 20000 });
+  const itkSearch = await page.getByLabel("PSV-ITK Prüfungen durchsuchen").inputValue();
+  assert(itkSearch === "", `PSV-ITK inherited BVB-EEA's search: "${itkSearch}"`);
+  assert(
+    (await page.getAttribute('[aria-label="Tabellenansicht"]', "aria-pressed")) === "true",
+    "PSV-ITK inherited BVB-EEA's view mode",
+  );
+
+  await go("/bvb-eea");
+  await page.waitForSelector("table tbody tr", { timeout: 20000 });
+  const back = await page.$$eval("table tbody tr", (r) => r.length);
+  assert(back === eeaRows, `BVB-EEA came back filtered: ${back} of ${eeaRows} rows`);
+
+  // And the two tabs really do scope to different Gewerke.
+  await go("/psv-itk");
+  await page.waitForSelector("table tbody tr", { timeout: 20000 });
+  const itkRows = await page.$$eval("table tbody tr", (r) => r.length);
+  assert(itkRows !== eeaRows, `both tabs render ${itkRows} rows — they are not scoped`);
+});
+
+await check("the Gewerk table carries the Projekte columns and sorts on them", async () => {
+  await go("/psv-itk");
+  await page.waitForSelector("table tbody tr", { timeout: 20000 });
+  const headers = await page.$$eval("table thead th", (th) =>
+    th.map((t) => t.textContent.trim()),
+  );
+  for (const col of [
+    "Nr.", "Projektnummer", "Region", "Station", "Bhf-Nr.", "Strecken-Nr.",
+    "Beschreibung", "Projektstand", "Projektleiter", "Termin PV",
+    "ITK-Prüfer", "Prüfdatum", "Status",
+  ]) {
+    assert(headers.some((h) => h.includes(col)), `the table has no ${col} column`);
+  }
+
+  // Sorting is a real control: a button inside the th, and aria-sort reports it.
+  const station = page.getByRole("button", { name: "Nach Station sortieren" });
+  await station.click();
+  await page.waitForTimeout(500);
+  const first = await page.$$eval("table tbody tr td:nth-child(4)", (t) =>
+    t.slice(0, 40).map((x) => x.textContent.trim()).filter(Boolean),
+  );
+  const sorted = [...first].sort((a, b) => a.localeCompare(b, "de", { numeric: true }));
+  assert(
+    JSON.stringify(first) === JSON.stringify(sorted),
+    `ascending sort did not order the Station column: ${first.slice(0, 3).join(" | ")}`,
+  );
+  const th = await page.$eval(
+    "table thead th:nth-child(4)",
+    (e) => e.getAttribute("aria-sort"),
+  );
+  assert(th === "ascending", `aria-sort reported "${th}" after sorting ascending`);
+
+  await station.click();
+  await page.waitForTimeout(500);
+  const desc = await page.$eval(
+    "table thead th:nth-child(4)",
+    (e) => e.getAttribute("aria-sort"),
+  );
+  assert(desc === "descending", `a second click reported "${desc}"`);
+});
+
+await check("editing a Gewerk row writes through and reaches the Änderungshistorie", async () => {
+  await go("/psv-itk");
+  await page.waitForSelector("table tbody tr", { timeout: 20000 });
+
+  // The Prüfer cell is editable here exactly as it is on Projekte — which is
+  // the "changing names" half of the audit requirement.
+  const cell = page.locator('table tbody tr:first-child td:nth-child(11) button').first();
+  await cell.click();
+  const input = page.locator('table tbody tr:first-child td:nth-child(11) input').first();
+  const stamp = `E2E Prüfer ${Date.now()}`;
+  await input.fill(stamp);
+  await input.press("Enter");
+  await page.waitForTimeout(900);
+
+  const shown = await page
+    .locator('table tbody tr:first-child td:nth-child(11)')
+    .innerText();
+  assert(shown.includes(stamp), `the edit did not persist in the cell: "${shown}"`);
+
+  await go("/audit");
+  const body = await page.locator("body").innerText();
+  assert(body.includes("Prüfung aktualisiert"), "the Gewerk edit never reached the log");
+  assert(body.includes(stamp), "the log entry does not carry the new value");
+});
 
 console.log("\n== the Änderungshistorie records what people actually did ==");
 
