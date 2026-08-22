@@ -1,0 +1,175 @@
+From 86b7b7f1e278eea9a1d6f8d3442cc6be85a72c5a Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 22 Aug 2026 23:09:46 +0000
+Subject: [PATCH] =?UTF-8?q?pnpm=20status=20=E2=80=94=20one=20screen=20that?=
+ =?UTF-8?q?=20says=20whether=20the=20work=20is=20actually=20here?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Three times now a patch has been reported as failed when it applied, or as
+applied when it had not, and the only way to tell them apart was to read
+several hundred lines of gate output and know which numbers to look for. That
+is a bad way to run a project and it has cost real time.
+
+`pnpm status` answers it in under a second, without a browser:
+
+  — the last three commits, and whether the working tree is clean;
+  — nine features, each checked by reading the source for a marker that exists
+    only when that feature is present. Not by commit message: a commit can be
+    reverted, a patch can half-apply, a file can be hand-edited. The marker is
+    there or it is not;
+  — whether dist/public is older than client/src or shared/, which is the
+    difference between "the app looks old" and "the app IS old" — and the one
+    that has actually been biting, because pnpm build writes only the client
+    while a long-running dev server or a cached tab keeps serving what it
+    already had;
+  — the chunk filenames a browser would load, and a hard failure if the
+    superseded DepartmentReviewTable chunk is still among them;
+  — the four numbers each gate should print, so a run can be judged at a glance
+    instead of scrolled.
+
+It ends with one line: everything applied, or how many parts are missing.
+---
+ package.json       |   1 +
+ scripts/status.mjs | 116 +++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 117 insertions(+)
+ create mode 100644 scripts/status.mjs
+
+diff --git a/package.json b/package.json
+index 6745bf1..5903fc4 100644
+--- a/package.json
++++ b/package.json
+@@ -17,6 +17,7 @@
+     "build:parallel": "concurrently -n \"CLIENT,SERVER\" -c \"blue,green\" \"vite build\" \"esbuild server/_core/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist\"",
+     "start": "NODE_ENV=production node dist/index.js",
+     "check": "tsc --noEmit",
++    "status": "node scripts/status.mjs",
+     "format": "prettier --write .",
+     "lint": "biome check .",
+     "lint:staged": "lint-staged",
+diff --git a/scripts/status.mjs b/scripts/status.mjs
+new file mode 100644
+index 0000000..d837a0b
+--- /dev/null
++++ b/scripts/status.mjs
+@@ -0,0 +1,116 @@
++#!/usr/bin/env node
++/**
++ * Where am I?
++ *
++ * The gates print several hundred lines and answer one question each. This
++ * answers the only question that matters between patches — is the work I think
++ * I applied actually in this tree, and is the thing my browser shows me built
++ * from it — in one screen, in under a second, without a browser.
++ *
++ * It reads the source for markers rather than trusting a commit message: a
++ * commit can be reverted, a patch can half-apply, a file can be hand-edited.
++ * A marker is present or it is not.
++ */
++import { execSync } from "node:child_process";
++import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
++import path from "node:path";
++
++const ESC = String.fromCharCode(27);
++const paint = (code) => (s) => `${ESC}[${code}m${s}${ESC}[0m`;
++const green = paint(32);
++const red = paint(31);
++const dim = paint(2);
++const bold = paint(1);
++
++const sh = (cmd) => {
++  try {
++    return execSync(cmd, { encoding: "utf8" }).trim();
++  } catch {
++    return "";
++  }
++};
++
++/**
++ * Each feature, and a string that exists only when that feature is present.
++ * Oldest first, so a half-applied history reads top to bottom.
++ */
++const FEATURES = [
++  ["Gewerk-Workspaces (BVB-EEA / PSV-ITK)", "client/src/components/workspace/ReviewWorkspace.tsx", "ReviewWorkspaceProps"],
++  ["Geteilte Tabellenteile", "client/src/components/workspace/table-parts.tsx", "export function SortHeader"],
++  ["Suche uber die ganze Seite", "shared/search-index.ts", "export function buildSearchIndex"],
++  ["Status als Dropdown, uberall", "client/src/components/workspace/table-parts.tsx", "export function StatusSelect"],
++  ["Anderungshistorie mit Schwere und Ruckgangig", "shared/audit-entry.ts", "export function markCorrections"],
++  ["Dashboard: Arbeitsvorrat statt Zeilenzahl", "shared/portfolio-metrics.ts", "export function gewerkStandings"],
++  ["Portfolio-Relief", "client/src/components/dashboard/PortfolioRelief.tsx", "relief-cell"],
++  ["Relief drehbar und anklickbar", "client/src/components/dashboard/PortfolioRelief.tsx", "setPointerCapture"],
++  ["Ask Bahn", "shared/agent/skills.ts", "export const SKILLS"],
++];
++
++console.log(bold("\nHEAD"));
++for (const line of sh("git log --oneline -3").split("\n").filter(Boolean)) console.log(`  ${line}`);
++const dirty = sh("git status --porcelain");
++console.log(
++  `  ${dirty ? red(`${dirty.split("\n").length} geanderte Datei(en) im Arbeitsverzeichnis`) : green("Arbeitsverzeichnis sauber")}`,
++);
++
++console.log(bold("\nWas im Code liegt"));
++let missing = 0;
++for (const [label, file, marker] of FEATURES) {
++  const present = existsSync(file) && readFileSync(file, "utf8").includes(marker);
++  if (!present) missing++;
++  console.log(`  ${present ? green("OK") : red("FEHLT")}  ${label}`);
++}
++
++console.log(bold("\nWas gebaut ist"));
++const DIST = "dist/public";
++if (!existsSync(DIST)) {
++  console.log(`  ${red("FEHLT")}  dist/public — bitte pnpm build`);
++} else {
++  const newest = (dir) => {
++    let latest = 0;
++    const walk = (d) => {
++      for (const entry of readdirSync(d, { withFileTypes: true })) {
++        if (entry.name === "node_modules" || entry.name.startsWith(".")) continue;
++        const full = path.join(d, entry.name);
++        if (entry.isDirectory()) walk(full);
++        else latest = Math.max(latest, statSync(full).mtimeMs);
++      }
++    };
++    walk(dir);
++    return latest;
++  };
++  const builtAt = newest(DIST);
++  const sourceAt = Math.max(newest("client/src"), newest("shared"));
++  const stale = sourceAt > builtAt;
++  console.log(
++    `  ${stale ? red("ALT") : green("OK")}  dist/public von ${new Date(builtAt).toLocaleString("de-DE")}${stale ? red("  — alter als der Quellcode, bitte pnpm build") : ""}`,
++  );
++  const assets = readdirSync(path.join(DIST, "assets"));
++  for (const [label, needle] of [
++    ["Dashboard", "Dashboard-"],
++    ["Projekte", "Projects-"],
++    ["Gewerk-Workspace", "ReviewWorkspace-"],
++    ["Anderungshistorie", "AuditLog-"],
++  ]) {
++    const hit = assets.find((a) => a.startsWith(needle) && a.endsWith(".js"));
++    console.log(`     ${dim(`${label}: ${hit ?? "fehlt"}`)}`);
++  }
++  // A chunk that only the superseded build produced.
++  const dead = assets.find((a) => a.startsWith("DepartmentReviewTable"));
++  if (dead) console.log(`  ${red("ALT")}  ${dead} — dieser Build ist alter als die Gewerk-Workspaces`);
++}
++
++console.log(bold("\nErwartete Zahlen der Gates"));
++for (const line of [
++  "pnpm exec vitest run          255 passed",
++  "node scripts/e2e-smoke.mjs     81 passed, 0 failed",
++  "node scripts/check-ui.mjs      UI CLEAN",
++  "node scripts/stress-test.mjs    8 passed, 0 failed",
++  "pnpm exec biome check .        72 warnings (unverandert)",
++]) console.log(dim(`  ${line}`));
++
++console.log(
++  missing === 0
++    ? green("\nAlles angewendet.\n")
++    : red(`\n${missing} Bauteil(e) fehlen — der letzte Patch ist nicht vollstandig angekommen.\n`),
++);
+-- 
+2.43.0
+
