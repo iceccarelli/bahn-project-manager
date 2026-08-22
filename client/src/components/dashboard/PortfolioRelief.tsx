@@ -24,11 +24,11 @@
  * trade worth making. This costs nothing and degrades to the flat grid wherever
  * transforms are unavailable or unwanted.
  */
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Box, Grid3x3, RotateCcw } from "lucide-react";
+import { Box, Grid3x3, Maximize2, Minimize2, RotateCcw } from "lucide-react";
 import { gewerkHref } from "@shared/search-index";
 import type { GewerkStanding } from "@shared/portfolio-metrics";
 
@@ -41,17 +41,171 @@ const LANES: ReadonlyArray<{ key: Lane; label: string; hue: string; help: string
   { key: "approved", label: "zugestimmt", hue: "var(--relief-approved)", help: "Zustimmung oder Niederschrift" },
 ];
 
+/**
+ * Where a tile goes when it is chosen.
+ *
+ * The Gewerk tab for the department, plus the state as a search term — so
+ * clicking the red block on the EEA row lands on BVB-EEA filtered to the
+ * rejected rows, which is the question the shape provoked.
+ */
+function laneHref(department: string, lane: Lane): string {
+  const base = gewerkHref(department);
+  const term =
+    lane === "open" ? "offen" : lane === "blocked" ? "abgelehnt" : lane === "approved" ? "Zustimmung erteilt" : "";
+  if (!term) return base;
+  return `${base}${base.includes("?") ? "&" : "?"}q=${encodeURIComponent(term)}`;
+}
+
 /** Elevation in px. Square-root so one huge cell does not flatten the rest. */
 function lift(value: number, max: number): number {
   if (value <= 0 || max <= 0) return 0;
   return Math.round(Math.sqrt(value / max) * 56);
 }
 
+/** Where the camera starts, and what "Ansicht zurücksetzen" returns to. */
+const HOME = { tilt: 52, spin: -24, zoom: 1 } as const;
+
+/*
+ * The camera limits, at module scope.
+ *
+ * Defined inside the component they were a new function identity on every
+ * render, so every callback that used one had to list it as a dependency and be
+ * rebuilt each frame — during a drag, which is the one moment that must not
+ * allocate. They are pure functions of a number and belong here.
+ *
+ * The tilt stops at 78° rather than 90°: past that the tiles are edge-on and
+ * the numbers printed on them disappear, which is the one thing this panel
+ * promises never to happen.
+ */
+const clampTilt = (v: number) => Math.min(78, Math.max(0, v));
+const clampSpin = (v: number) => Math.min(60, Math.max(-60, v));
+const clampZoom = (v: number) => Math.min(2.4, Math.max(0.6, v));
+
 export function PortfolioRelief({ standings }: { standings: readonly GewerkStanding[] }) {
   const [, setLocation] = useLocation();
   const [flat, setFlat] = useState(false);
-  const [tilt, setTilt] = useState(52);
-  const [spin, setSpin] = useState(-24);
+  const [tilt, setTilt] = useState<number>(HOME.tilt);
+  const [spin, setSpin] = useState<number>(HOME.spin);
+  const [zoom, setZoom] = useState<number>(HOME.zoom);
+  const [expanded, setExpanded] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const drag = useRef<{ x: number; y: number; tilt: number; spin: number; active: boolean } | null>(
+    null,
+  );
+  /** Set when a drag ends, so the click it would otherwise produce is dropped. */
+  const swallowClick = useRef(false);
+
+  /*
+   * Pointer events, not mouse events.
+   *
+   * One code path covers mouse, trackpad, pen and touch, and setPointerCapture
+   * means a drag that leaves the panel keeps working instead of stopping dead
+   * halfway through a rotation — which is the difference between something that
+   * feels like an instrument and something that feels broken.
+   */
+  const onPointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (flat || e.button !== 0) return;
+      // Deliberately NOT capturing here.
+      //
+      // Capturing on pointerdown retargets the whole pointer sequence to this
+      // element, and the browser then never produces a click on the tile that
+      // was pressed — so every tile became unclickable the moment the panel
+      // learned to rotate. The capture is taken only once the pointer has
+      // actually travelled, which is the point where the gesture stops being a
+      // click and starts being a drag.
+      drag.current = { x: e.clientX, y: e.clientY, tilt, spin, active: false };
+    },
+    [flat, tilt, spin],
+  );
+
+  /** Below this, the gesture is still a click. */
+  const DRAG_THRESHOLD = 5;
+
+  const onPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    const start = drag.current;
+    if (!start) return;
+    const dx = e.clientX - start.x;
+    const dy = e.clientY - start.y;
+    if (!start.active) {
+      if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+      start.active = true;
+      setDragging(true);
+      e.currentTarget.setPointerCapture(e.pointerId);
+    }
+    // Vertical drag tilts, horizontal drag spins — the mapping a hand expects
+    // when it grabs a surface and pushes it away.
+    setTilt(clampTilt(start.tilt + dy * 0.35));
+    setSpin(clampSpin(start.spin + dx * 0.35));
+  }, []);
+
+  const endDrag = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    const start = drag.current;
+    drag.current = null;
+    if (!start?.active) return;
+    swallowClick.current = true;
+    setDragging(false);
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+  }, []);
+
+  /** A drag that ends over a tile must not also open it. */
+  const onClickCapture = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!swallowClick.current) return;
+    swallowClick.current = false;
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  /*
+   * Wheel zoom, non-passive.
+   *
+   * React attaches wheel listeners passively, so preventDefault() inside a JSX
+   * onWheel is ignored and the page scrolls away underneath the zoom. The
+   * listener is registered by hand for that one reason.
+   */
+  useEffect(() => {
+    const node = stageRef.current;
+    if (!node || flat) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      setZoom((z) => clampZoom(z - e.deltaY * 0.0015));
+    };
+    node.addEventListener("wheel", onWheel, { passive: false });
+    return () => node.removeEventListener("wheel", onWheel);
+  }, [flat]);
+
+  const reset = useCallback(() => {
+    setTilt(HOME.tilt);
+    setSpin(HOME.spin);
+    setZoom(HOME.zoom);
+  }, []);
+
+  /** Arrow keys orbit, +/- zoom, Home recentres — the whole thing without a mouse. */
+  const onKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (flat) return;
+      const step = e.shiftKey ? 10 : 4;
+      const map: Record<string, () => void> = {
+        ArrowUp: () => setTilt((v) => clampTilt(v - step)),
+        ArrowDown: () => setTilt((v) => clampTilt(v + step)),
+        ArrowLeft: () => setSpin((v) => clampSpin(v - step)),
+        ArrowRight: () => setSpin((v) => clampSpin(v + step)),
+        "+": () => setZoom((z) => clampZoom(z + 0.12)),
+        "=": () => setZoom((z) => clampZoom(z + 0.12)),
+        "-": () => setZoom((z) => clampZoom(z - 0.12)),
+        Home: reset,
+      };
+      const run = map[e.key];
+      if (run) {
+        e.preventDefault();
+        run();
+      }
+    },
+    [flat, reset],
+  );
 
   const rows = useMemo(
     () => [...standings].sort((a, b) => b.required - a.required),
@@ -99,14 +253,25 @@ export function PortfolioRelief({ standings }: { standings: readonly GewerkStand
               <Grid3x3 className="h-3.5 w-3.5" aria-hidden="true" />
               Flach
             </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              aria-pressed={expanded}
+              onClick={() => setExpanded((v) => !v)}
+              className="h-8 gap-1.5 text-2xs"
+            >
+              {expanded ? (
+                <Minimize2 className="h-3.5 w-3.5" aria-hidden="true" />
+              ) : (
+                <Maximize2 className="h-3.5 w-3.5" aria-hidden="true" />
+              )}
+              {expanded ? "Verkleinern" : "Vergrößern"}
+            </Button>
             {!flat && (
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={() => {
-                  setTilt(52);
-                  setSpin(-24);
-                }}
+                onClick={reset}
                 className="h-8 gap-1.5 text-2xs"
               >
                 <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
@@ -123,7 +288,7 @@ export function PortfolioRelief({ standings }: { standings: readonly GewerkStand
               <input
                 type="range"
                 min={0}
-                max={70}
+                max={78}
                 value={tilt}
                 onChange={(e) => setTilt(Number(e.target.value))}
                 className="h-1 w-32 accent-primary"
@@ -134,29 +299,63 @@ export function PortfolioRelief({ standings }: { standings: readonly GewerkStand
               Drehung
               <input
                 type="range"
-                min={-45}
-                max={45}
+                min={-60}
+                max={60}
                 value={spin}
                 onChange={(e) => setSpin(Number(e.target.value))}
                 className="h-1 w-32 accent-primary"
                 aria-label="Drehung des Reliefs"
               />
             </label>
+            <label className="flex items-center gap-2 text-2xs text-muted-foreground">
+              Zoom
+              <input
+                type="range"
+                min={60}
+                max={240}
+                value={Math.round(zoom * 100)}
+                onChange={(e) => setZoom(Number(e.target.value) / 100)}
+                className="h-1 w-32 accent-primary"
+                aria-label="Zoom des Reliefs"
+              />
+            </label>
+            <span className="text-2xs text-muted-foreground">
+              Ziehen zum Drehen · Mausrad zum Zoomen · Pfeiltasten, +/−, Pos1
+            </span>
           </div>
         )}
 
-        <div className="overflow-x-auto pb-2">
+        <div className={`overflow-x-auto pb-2 ${expanded ? "h-[70vh] overflow-y-auto" : ""}`}>
+          {/*
+            The stage is the thing you grab. tabIndex + the key handler make the
+            same camera reachable without a pointer, and the role/aria-label say
+            what it is — a control surface, not decoration.
+          */}
           <div
-            className="relief-stage mx-auto min-w-[640px]"
+            ref={stageRef}
+            role="application"
+            aria-label="Portfolio-Relief — ziehen zum Drehen, Mausrad zum Zoomen, Pfeiltasten und Plus/Minus über die Tastatur"
+            tabIndex={flat ? -1 : 0}
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={endDrag}
+            onPointerCancel={endDrag}
+            onClickCapture={onClickCapture}
+            onKeyDown={onKeyDown}
+            className={`relief-stage mx-auto min-w-[640px] rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+              flat ? "" : dragging ? "cursor-grabbing" : "cursor-grab"
+            }`}
             style={
               flat
                 ? undefined
                 : ({
                     "--relief-tilt": `${tilt}deg`,
                     "--relief-spin": `${spin}deg`,
+                    "--relief-zoom": String(zoom),
                   } as React.CSSProperties)
             }
             data-flat={flat ? "true" : "false"}
+            data-dragging={dragging ? "true" : "false"}
           >
             <table className="relief-grid w-full border-separate border-spacing-1 text-2xs">
               <caption className="sr-only">
@@ -200,10 +399,26 @@ export function PortfolioRelief({ standings }: { standings: readonly GewerkStand
                       const height = lift(v, max);
                       return (
                         <td key={lane.key} className="p-0">
-                          <div
+                          {/*
+                            A button, not a div. Every tile is a place you can
+                            go: choosing one filters that Gewerk to that state,
+                            which is the whole reason to look at the shape in
+                            the first place. Zero-value tiles are disabled
+                            rather than hidden — an empty lane is information.
+                          */}
+                          <button
+                            type="button"
                             className="relief-cell"
                             data-value={v}
+                            data-lane={lane.key}
+                            data-department={r.department}
+                            disabled={v === 0}
                             title={`${r.department} · ${lane.label}: ${v}`}
+                            aria-label={`${r.department}, ${lane.label}: ${v} Prüfungen${v > 0 ? " — öffnen" : ""}`}
+                            onClick={() => {
+                              if (v === 0) return;
+                              setLocation(laneHref(r.department, lane.key));
+                            }}
                             style={
                               {
                                 "--relief-lift": `${height}px`,
@@ -213,7 +428,7 @@ export function PortfolioRelief({ standings }: { standings: readonly GewerkStand
                             }
                           >
                             <span className="relief-value tabular-nums">{v}</span>
-                          </div>
+                          </button>
                         </td>
                       );
                     })}

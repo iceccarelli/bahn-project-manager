@@ -1810,6 +1810,184 @@ await check("the diagnostics say what they cannot measure", async () => {
   );
 });
 
+
+console.log("\n== Ask Bahn answers from the data, or says it cannot ==");
+
+const openAsk = async () => {
+  await page.getByRole("button", { name: /^Ask Bahn öffnen/ }).click();
+  await page.waitForSelector("[data-ask-bahn='open']", { timeout: 10000 });
+};
+
+await check("the assistant is reachable from every route and closes cleanly", async () => {
+  for (const route of ["/", "/projects", "/bvb-eea", "/psv-itk", "/audit"]) {
+    await go(route);
+    const launcher = page.getByRole("button", { name: /^Ask Bahn öffnen/ });
+    assert(await launcher.count() === 1, `no launcher on ${route}`);
+  }
+  await openAsk();
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(400);
+  assert(
+    (await page.$$("[data-ask-bahn='open']")).length === 0,
+    "Escape did not close the panel",
+  );
+});
+
+await check("its figures agree with the pages they link to", async () => {
+  await go("/");
+  await openAsk();
+  await page.getByLabel("Frage an Ask Bahn").fill("Wie steht EEA?");
+  await page.getByRole("button", { name: "Fragen" }).click();
+  await page.waitForTimeout(600);
+
+  const text = await page.locator("[data-ask-bahn='open']").innerText();
+  // /bvb-eea reports 814 required EEA checks. The assistant must not differ.
+  assert(/814/.test(text), `the answer does not carry the EEA workload: ${text.slice(0, 200)}`);
+  assert(/erforderlich/.test(text), "the answer does not label what 814 is");
+  // Every answer states where its numbers came from.
+  assert(/nicht erforderlich/.test(text), "the answer does not state its basis");
+});
+
+await check("every answer carries its derivation, never a bare number", async () => {
+  await go("/");
+  await openAsk();
+  for (const question of [
+    "Was ist gerade kritisch?",
+    "Was ist überfällig?",
+    "Wer hat die meiste offene Last?",
+    "Wie verlässlich sind die Zahlen?",
+  ]) {
+    await page.getByLabel("Frage an Ask Bahn").fill(question);
+    await page.getByRole("button", { name: "Fragen" }).click();
+    await page.waitForTimeout(400);
+  }
+  const text = await page.locator("[data-ask-bahn='open']").innerText();
+  for (const phrase of ["Gezählt", "Rangfolge", "Offene Prüfzeilen", "Geprüft"]) {
+    assert(text.includes(phrase), `no derivation matching "${phrase}" in the transcript`);
+  }
+  // The ranking is labelled a judgement, not a measurement.
+  assert(/keine Messung/.test(text), "the risk ranking is not labelled as a heuristic");
+});
+
+await check("it refuses rather than inventing an answer", async () => {
+  await go("/");
+  await openAsk();
+  await page.getByLabel("Frage an Ask Bahn").fill("Wie hoch ist das Budget für 2027?");
+  await page.getByRole("button", { name: "Fragen" }).click();
+  await page.waitForTimeout(600);
+  const text = await page.locator("[data-ask-bahn='open']").innerText();
+  assert(
+    /nicht verstanden|kein Projekt|nichts wird geschätzt/.test(text),
+    `the assistant answered a question it has no data for: ${text.slice(-300)}`,
+  );
+  // And it must not have produced a figure out of nowhere.
+  assert(!/€|EUR|Budget von/.test(text), "the assistant produced a budget figure");
+});
+
+await check("an answer navigates to the screen that proves it", async () => {
+  await go("/");
+  await openAsk();
+  await page.getByLabel("Frage an Ask Bahn").fill("Wie steht ITK?");
+  await page.getByRole("button", { name: "Fragen" }).click();
+  await page.waitForTimeout(600);
+  await page.getByRole("button", { name: "ITK öffnen" }).first().click();
+  await page.waitForTimeout(1200);
+  assert(/\/psv-itk/.test(page.url()), `"ITK öffnen" went to ${page.url()}`);
+  assert(
+    (await page.$$("[data-ask-bahn='open']")).length === 0,
+    "the panel stayed open over the page it navigated to",
+  );
+});
+
+console.log("\n== the relief is an instrument, not a picture ==");
+
+await check("dragging rotates it, and the numbers stay upright", async () => {
+  await go("/");
+  await page.waitForSelector(".relief-cell", { timeout: 25000 });
+  const stage = page.locator(".relief-stage");
+  // page.mouse works in viewport coordinates and never scrolls; the relief sits
+  // about 2,700px down the Dashboard, so without this the drag happens in
+  // empty space below the window.
+  await stage.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(300);
+  const before = await stage.getAttribute("style");
+
+  const box = await stage.boundingBox();
+  assert(box, "the relief has no box to drag");
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + 120, box.y + box.height / 2 + 60, { steps: 8 });
+  await page.mouse.up();
+  await page.waitForTimeout(400);
+
+  const after = await stage.getAttribute("style");
+  assert(before !== after, "dragging did not move the camera");
+  assert(/--relief-spin/.test(after ?? ""), "the spin variable is not being written");
+
+  // The whole promise of this panel: the value is always readable.
+  const cells = await page.$$eval(".relief-cell", (els) =>
+    els.map((e) => ({ attr: e.getAttribute("data-value"), text: e.textContent.trim() })),
+  );
+  for (const c of cells) assert(c.text === c.attr, `a tile draws ${c.attr} but prints "${c.text}"`);
+});
+
+await check("the wheel zooms without scrolling the page away", async () => {
+  await go("/");
+  await page.waitForSelector(".relief-cell", { timeout: 25000 });
+  const stage = page.locator(".relief-stage");
+  await stage.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(300);
+  const box = await stage.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  const scrollBefore = await page.evaluate(() => window.scrollY);
+  await page.mouse.wheel(0, -300);
+  await page.waitForTimeout(400);
+  const style = (await stage.getAttribute("style")) ?? "";
+  const zoom = Number((style.match(/--relief-zoom:\s*([\d.]+)/) ?? ["", "1"])[1]);
+  assert(zoom > 1, `the wheel did not zoom in — zoom is ${zoom}`);
+  const scrollAfter = await page.evaluate(() => window.scrollY);
+  assert(scrollAfter === scrollBefore, "zooming scrolled the page instead");
+});
+
+await check("the keyboard drives the same camera", async () => {
+  await go("/");
+  await page.waitForSelector(".relief-cell", { timeout: 25000 });
+  await page.locator(".relief-stage").focus();
+  const before = (await page.getAttribute(".relief-stage", "style")) ?? "";
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("+");
+  await page.waitForTimeout(400);
+  const after = (await page.getAttribute(".relief-stage", "style")) ?? "";
+  assert(before !== after, "the arrow keys did not move the camera");
+
+  await page.keyboard.press("Home");
+  await page.waitForTimeout(400);
+  const home = (await page.getAttribute(".relief-stage", "style")) ?? "";
+  assert(/--relief-tilt:\s*52deg/.test(home), `Home did not recentre: ${home}`);
+  assert(/--relief-zoom:\s*1\b/.test(home), "Home did not reset the zoom");
+});
+
+await check("a tile is a place you can go, and an empty tile is not", async () => {
+  await go("/");
+  await page.waitForSelector(".relief-cell", { timeout: 25000 });
+
+  const zeroDisabled = await page.$$eval(".relief-cell", (els) =>
+    els
+      .filter((e) => e.getAttribute("data-value") === "0")
+      .every((e) => e.hasAttribute("disabled")),
+  );
+  assert(zeroDisabled, "a tile with no rows behind it is still clickable");
+
+  const target = page.locator('.relief-cell[data-department="EEA"][data-lane="blocked"]');
+  assert(await target.count() === 1, "no EEA/blockiert tile to open");
+  await target.click();
+  await page.waitForTimeout(1200);
+  const url = new URL(page.url());
+  assert(url.pathname === "/bvb-eea", `the EEA tile went to ${url.pathname}`);
+  assert(url.searchParams.get("q") === "abgelehnt", `it did not carry the state: ${url.search}`);
+});
+
 console.log("\n== summary ==");
 console.log(`${passed} passed, ${failures.length} failed`);
 await browser.close();

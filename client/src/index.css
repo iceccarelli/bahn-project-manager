@@ -710,20 +710,45 @@
 }
 
 .relief-stage[data-flat="false"] .relief-grid {
-  transform: rotateX(var(--relief-tilt, 52deg)) rotateZ(var(--relief-spin, -24deg));
+  transform: scale(var(--relief-zoom, 1)) rotateX(var(--relief-tilt, 52deg))
+    rotateZ(var(--relief-spin, -24deg));
   transform-style: preserve-3d;
   transition: transform 200ms ease-out;
 }
 
+/* While a hand is on it, the camera must not lag behind the hand. */
+.relief-stage[data-dragging="true"] .relief-grid,
+.relief-stage[data-dragging="true"] .relief-cell {
+  transition: none;
+}
+
 .relief-cell {
   display: flex;
+  width: 100%;
   align-items: center;
   justify-content: center;
   min-height: 30px;
+  border: 0;
   border-radius: 6px;
   background-color: rgb(var(--relief-fill) / var(--relief-alpha));
   transform-style: preserve-3d;
   transition: transform 200ms ease-out;
+}
+
+.relief-cell:not(:disabled) {
+  cursor: pointer;
+}
+
+/* A tile you can reach rises to meet you. 12px is enough to read as a
+   response and small enough not to collide with the row above. */
+.relief-stage[data-flat="false"] .relief-cell:not(:disabled):hover,
+.relief-stage[data-flat="false"] .relief-cell:not(:disabled):focus-visible {
+  transform: translateZ(calc(var(--relief-lift, 0px) + 12px));
+}
+
+.relief-cell:focus-visible {
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: 2px;
 }
 
 .relief-stage[data-flat="false"] .relief-cell {
@@ -760,5 +785,13 @@
   .relief-grid,
   .relief-cell {
     transition: none;
+  }
+}
+
+/* A coarse pointer cannot hover, and a 30px tile is under the 44px floor.
+   Touch gets taller tiles and keeps the drag-to-rotate. */
+@media (pointer: coarse) {
+  .relief-cell {
+    min-height: 44px;
   }
 }

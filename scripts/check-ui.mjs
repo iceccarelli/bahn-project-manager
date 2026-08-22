@@ -228,6 +228,34 @@ const SCENARIOS = [
     },
   },
   {
+    name: "Ask Bahn · Antwort",
+    route: "/",
+    async run(page) {
+      await page.getByRole("button", { name: /^Ask Bahn öffnen/ }).click();
+      await page.waitForSelector("[data-ask-bahn='open']", { timeout: 15000 });
+      await page.getByLabel("Frage an Ask Bahn").fill("Was ist gerade kritisch?");
+      await page.getByRole("button", { name: "Fragen" }).click();
+      await page.waitForTimeout(700);
+    },
+  },
+  {
+    name: "Dashboard · Relief gedreht",
+    route: "/",
+    async run(page) {
+      await page.waitForSelector(".relief-cell", { timeout: 20000 });
+      await page.locator(".relief-stage").scrollIntoViewIfNeeded();
+      await page.waitForTimeout(300);
+      const box = await page.locator(".relief-stage").boundingBox();
+      if (box) {
+        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(box.x + box.width / 2 + 140, box.y + box.height / 2 - 40, { steps: 6 });
+        await page.mouse.up();
+      }
+      await page.waitForTimeout(600);
+    },
+  },
+  {
     name: "Anmeldung · Prüfungen",
     route: "/anmeldung",
     async run(page) {
@@ -529,7 +557,18 @@ const AUDIT = () => {
    * covered 41% of the map legend — a 36,252px² defect this check found. An
    * absolutely-positioned box sitting on top of content is still a finding.
    */
-  const OVERLAY = "[role='dialog'],[role='listbox'],[role='menu'],[data-radix-popper-content-wrapper]";
+  /*
+   * `data-overlay` is the explicit opt-in.
+   *
+   * The role-based selectors below cover the layers that announce themselves
+   * through ARIA. The Ask Bahn panel is deliberately an <aside> — it is not a
+   * modal and must not claim to be one — so it carries the marker instead of
+   * acquiring a role it does not deserve. Opting in by attribute keeps this
+   * narrow: `position: fixed` in general stays audited, because that is what
+   * the map's legend-covering card was.
+   */
+  const OVERLAY =
+    "[role='dialog'],[role='listbox'],[role='menu'],[data-radix-popper-content-wrapper],[data-overlay]";
   /*
    * Is this background actually painted?
    *
