@@ -9,6 +9,7 @@
 
 import { DEPARTMENTS } from "@shared/validation";
 import { AUDIT_ACTIONS } from "@shared/audit-actions";
+import { surfaceForPath, type AuditMeta } from "@shared/audit-entry";
 import type { ProjectChecklist } from "@shared/validation";
 import type { Project, Review, Stats, AuditLogEntry } from "@/hooks/useDataQuery";
 import { describeIngest, ingestProjects } from "@shared/ingest";
@@ -157,19 +158,36 @@ async function initializeStorage() {
   }
 }
 
-function recordAudit(action: string, details: string) {
+function recordAudit(action: string, details: string, meta?: AuditMeta) {
   const user = JSON.parse(localStorage.getItem("bahn-demo-user") || '{"name":"System"}');
   const audit = JSON.parse(localStorage.getItem(STORAGE_KEY_AUDIT) || "[]");
   const entry: AuditLogEntry = {
-    id: Math.random().toString(36).substring(7),
+    id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`,
     timestamp: new Date().toISOString(),
     user: user.name,
     action,
     details,
+    // Structure, not prose. `details` stays the human sentence; everything a
+    // reader or a filter needs to act on lives here — including which of the
+    // 1,298 projects this was, which the old entry never said.
+    ...(meta ? { meta } : {}),
   };
   audit.unshift(entry);
   localStorage.setItem(STORAGE_KEY_AUDIT, JSON.stringify(audit.slice(0, 1000)));
   return entry;
+}
+
+/**
+ * Which screen the change was made on.
+ *
+ * Read from the URL at write time rather than passed in: the write always
+ * happens on the page the user is looking at, and threading a `surface`
+ * argument through applyEdit, applyReviewEdit, the wizard and the detail dialog
+ * would be four chances to pass the wrong one.
+ */
+function currentSurface(): string {
+  if (typeof window === "undefined") return "App";
+  return surfaceForPath(window.location.pathname);
 }
 
 export const apiClient = {
@@ -218,6 +236,12 @@ export const apiClient = {
       recordAudit(
         AUDIT_ACTIONS.projektAngelegt,
         `Projekt ${newProject.projektnummer} (${newProject.station}) angelegt.`,
+        {
+          projectId: newProject.id,
+          projektnummer: newProject.projektnummer,
+          station: newProject.station,
+          surface: currentSurface(),
+        },
       );
 
       window.dispatchEvent(new StorageEvent("storage", {
@@ -255,6 +279,15 @@ export const apiClient = {
     recordAudit(
       AUDIT_ACTIONS.projektAktualisiert,
       `Feld ${input.field} von ${oldVal} auf ${input.value} geändert.`,
+      {
+        projectId: project.id,
+        projektnummer: project.projektnummer,
+        station: project.station,
+        field: input.field,
+        from: oldVal == null ? null : String(oldVal),
+        to: input.value,
+        surface: currentSurface(),
+      },
     );
     window.dispatchEvent(new StorageEvent("storage", { key: STORAGE_KEY_PROJECTS, newValue: JSON.stringify(projects) }));
     return project;
@@ -264,7 +297,13 @@ export const apiClient = {
       const projects = await this.list();
       const filtered = projects.filter((p) => p.id !== id);
       localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(filtered));
-      recordAudit(AUDIT_ACTIONS.projektGeloescht, `Projekt ID ${id} entfernt.`);
+      const removed = projects.find((p) => p.id === id);
+      recordAudit(AUDIT_ACTIONS.projektGeloescht, `Projekt ID ${id} entfernt.`, {
+        projectId: id,
+        projektnummer: removed?.projektnummer ?? null,
+        station: removed?.station ?? null,
+        surface: currentSurface(),
+      });
 
       window.dispatchEvent(new StorageEvent("storage", {
         key: STORAGE_KEY_PROJECTS,
@@ -303,6 +342,16 @@ export const apiClient = {
     recordAudit(
       AUDIT_ACTIONS.pruefungAktualisiert,
       `${input.department}: ${input.field} von ${oldVal} auf ${input.value} gesetzt.`,
+      {
+        projectId: project.id,
+        projektnummer: project.projektnummer,
+        station: project.station,
+        department: input.department,
+        field: input.field,
+        from: oldVal == null ? null : String(oldVal),
+        to: input.value,
+        surface: currentSurface(),
+      },
     );
     window.dispatchEvent(new StorageEvent("storage", { key: STORAGE_KEY_PROJECTS, newValue: JSON.stringify(projects) }));
     return project;
@@ -397,8 +446,8 @@ export const apiClient = {
       return JSON.parse(localStorage.getItem(STORAGE_KEY_AUDIT) || "[]");
     },
 
-    async record(action: string, details: string): Promise<AuditLogEntry> {
-      const entry = recordAudit(action, details);
+    async record(action: string, details: string, meta?: AuditMeta): Promise<AuditLogEntry> {
+      const entry = recordAudit(action, details, meta);
       window.dispatchEvent(new StorageEvent("storage", { key: STORAGE_KEY_AUDIT }));
       return entry;
     },

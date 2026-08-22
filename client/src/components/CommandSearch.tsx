@@ -314,7 +314,12 @@ export function CommandSearch({ id = "app-search" }: { id?: string }) {
                           aria-selected={i === active}
                           data-index={i}
                           data-search-kind={hit.kind}
-                          onMouseEnter={() => setActive(i)}
+                          // mousemove, not mouseenter: a cursor that happens to be resting
+                          // where the list opens fires mouseenter without the
+                          // user moving it, and silently steals the keyboard
+                          // highlight — so Enter opened the row under the mouse
+                          // instead of the row the reader was looking at.
+                          onMouseMove={() => setActive(i)}
                           onClick={() => go(hit)}
                           className={`flex w-full items-center gap-3 px-4 py-2 text-left transition-colors ${
                             i === active ? "bg-primary/10" : "hover:bg-muted/70"
@@ -327,7 +332,15 @@ export function CommandSearch({ id = "app-search" }: { id?: string }) {
                           <span className="min-w-0 flex-1">
                             <span className="block truncate text-sm font-medium">{hit.label}</span>
                             {hit.sublabel && (
-                              <span className="block truncate text-2xs text-muted-foreground">
+                              // The highlight tints the row red at 10%, and
+                              // muted-foreground on that tint measures 4.3:1 —
+                              // under the floor. The secondary line darkens with
+                              // the highlight instead of staying put.
+                              <span
+                                className={`block truncate text-2xs ${
+                                  i === active ? "text-foreground/75" : "text-muted-foreground"
+                                }`}
+                              >
                                 {hit.sublabel}
                               </span>
                             )}

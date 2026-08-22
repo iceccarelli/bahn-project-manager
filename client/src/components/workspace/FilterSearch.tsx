@@ -127,7 +127,12 @@ export function FilterSearch({
               id={`${id}-opt-${i}`}
               role="option"
               aria-selected={i === active}
-              onMouseEnter={() => setActive(i)}
+              // mousemove, not mouseenter: a cursor that happens to be resting
+                          // where the list opens fires mouseenter without the
+                          // user moving it, and silently steals the keyboard
+                          // highlight — so Enter opened the row under the mouse
+                          // instead of the row the reader was looking at.
+                          onMouseMove={() => setActive(i)}
               onClick={() => choose(s.label)}
               className={`flex w-full items-center justify-between gap-3 px-4 py-2 text-left text-sm transition-colors ${
                 i === active ? "bg-primary/10" : "hover:bg-muted/70"
@@ -135,7 +140,13 @@ export function FilterSearch({
             >
               <span className="truncate">{s.label}</span>
               {s.sublabel && (
-                <span className="shrink-0 text-2xs text-muted-foreground">{s.sublabel}</span>
+                <span
+                  className={`shrink-0 text-2xs ${
+                    i === active ? "text-foreground/75" : "text-muted-foreground"
+                  }`}
+                >
+                  {s.sublabel}
+                </span>
               )}
             </button>
           ))}

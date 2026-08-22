@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import type { AuditMeta } from "@shared/audit-entry";
 import { useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { apiClient } from "@/_core/api/client";
@@ -56,6 +57,12 @@ export interface AuditLogEntry {
   user: string;
   action: string;
   details: string;
+  /**
+   * The structured half. Optional because entries written before
+   * shared/audit-entry.ts existed keep their prose and nothing else — the store
+   * is append-only and there is no migration step.
+   */
+  meta?: AuditMeta;
 }
 
 // ============================================================================
@@ -117,8 +124,12 @@ export function useAuditLog() {
 export function useRecordAudit() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ action, details }: { action: string; details: string }) =>
-      apiClient.audit.record(action, details),
+    mutationFn: ({
+      action,
+      details,
+      meta,
+    }: { action: string; details: string; meta?: AuditMeta }) =>
+      apiClient.audit.record(action, details, meta),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.audit.all });
     },
