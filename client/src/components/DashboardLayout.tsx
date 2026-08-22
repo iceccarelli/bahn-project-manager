@@ -1,4 +1,5 @@
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { AskBahn } from "@/components/agent/AskBahn";
 import {
   Sidebar,
   SidebarContent,
@@ -281,6 +282,9 @@ function DashboardLayoutContent({
           </main>
           <Footer />
         </SidebarInset>
+        {/* Fixed to the viewport, so it belongs to the layout rather than to any
+            one page — every route can be asked about. */}
+        <AskBahn />
       </div>
     </div>
   );
