@@ -103,6 +103,52 @@ if (!existsSync(DIST)) {
   if (dead) console.log(`  ${red("ALT")}  ${dead} — dieser Build ist alter als die Gewerk-Workspaces`);
 }
 
+/*
+ * ---------------------------------------------------------------------------
+ * Was im Netz steht
+ * ---------------------------------------------------------------------------
+ * The section this screen was missing, and the omission cost a whole day.
+ *
+ * Every marker read OK, every gate was green, dist/public was fresh, and this
+ * script printed "Alles angewendet." — while bahn-project-manager.vercel.app
+ * showed none of it, because Vercel builds from origin/main and the commits
+ * had never left the machine. A status screen that reports the working tree
+ * and calls that "everything" is not neutral: it actively says the opposite of
+ * the truth to the one person checking.
+ *
+ * Applied, built and gated is three of four. Deployed is the fourth.
+ */
+console.log(bold("\nWas im Netz steht"));
+let unpushed = 0;
+{
+  // Best-effort: a Codespace without network still gets the local comparison.
+  sh("git fetch -q origin 2>/dev/null || true");
+  const upstream = sh("git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null") || "origin/main";
+  const remote = sh(`git rev-parse --short ${upstream} 2>/dev/null`);
+  const head = sh("git rev-parse --short HEAD");
+  console.log(`  ${dim(`HEAD        ${head}`)}`);
+  console.log(`  ${dim(`${upstream.padEnd(11)} ${remote || "unbekannt"}`)}`);
+  if (!remote) {
+    console.log(`  ${red("?")}   kein Upstream erreichbar — Deploy-Stand unbekannt`);
+  } else {
+    unpushed = Number(sh(`git rev-list --count ${upstream}..HEAD`) || "0");
+    const behind = Number(sh(`git rev-list --count HEAD..${upstream}`) || "0");
+    if (unpushed > 0) {
+      console.log(
+        `  ${red("NEIN")} ${unpushed} Commit(s) sind nur lokal. Vercel baut aus ${upstream} und zeigt sie nicht.`,
+      );
+      for (const line of sh(`git log --oneline ${upstream}..HEAD`).split("\n").filter(Boolean)) {
+        console.log(`     ${dim(line)}`);
+      }
+      console.log(`     ${bold("git push origin HEAD:main")}`);
+    } else if (behind > 0) {
+      console.log(`  ${red("NEIN")} ${behind} Commit(s) liegen auf ${upstream} und nicht hier.`);
+    } else {
+      console.log(`  ${green("OK")}  HEAD steht auf ${upstream} — das Netz zeigt diesen Stand.`);
+    }
+  }
+}
+
 console.log(bold("\nErwartete Zahlen der Gates"));
 for (const line of [
   "pnpm exec vitest run          265 passed, 6 skipped",
@@ -112,8 +158,20 @@ for (const line of [
   "pnpm exec biome check .        72 warnings (unverandert)",
 ]) console.log(dim(`  ${line}`));
 
-console.log(
-  missing === 0
-    ? green("\nAlles angewendet.\n")
-    : red(`\n${missing} Bauteil(e) fehlen — der letzte Patch ist nicht vollstandig angekommen.\n`),
-);
+/*
+ * Four conditions, and the verdict names whichever one fails first.
+ * "Alles angewendet" is reserved for the case where the website has it too.
+ */
+if (missing > 0) {
+  console.log(
+    red(`\n${missing} Bauteil(e) fehlen — der letzte Patch ist nicht vollstandig angekommen.\n`),
+  );
+} else if (unpushed > 0) {
+  console.log(
+    red(
+      `\nIm Code, aber nicht im Netz: ${unpushed} Commit(s) ungepusht.\nDie Website andert sich erst nach  git push origin HEAD:main\n`,
+    ),
+  );
+} else {
+  console.log(green("\nAlles angewendet und gepusht.\n"));
+}
