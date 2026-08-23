@@ -56,7 +56,7 @@ import {
   SortHeader,
   StatusSelect,
 } from "@/components/workspace/table-parts";
-import { statusBadgeClass } from "@shared/status-appearance";
+import { statusBadgeClass, statusPulseClass } from "@shared/status-appearance";
 import { normalizeReviewStatus } from "@shared/review-status";
 import { deriveProjectMetrics, percent } from "@shared/project-metrics";
 import { formatGerman } from "@shared/date";
@@ -815,7 +815,7 @@ export function ReviewWorkspace({
                   <CardHeader className="space-y-2 pb-3">
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
                       <span
-                        className={`inline-flex max-w-full items-center rounded-full px-2.5 py-0.5 text-2xs font-medium leading-tight ${statusBadgeClass(s)}`}
+                        className={`inline-flex max-w-full items-center rounded-full px-2.5 py-0.5 text-2xs font-medium leading-tight ${statusBadgeClass(s)} ${statusPulseClass(s)}`}
                       >
                         {s ?? review.status ?? "—"}
                       </span>

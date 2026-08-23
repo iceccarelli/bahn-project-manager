@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Download, Table, LayoutGrid, MapPin, Filter, X, MessageSquare, Loader2 } from "lucide-react";
 import { DEPARTMENTS, REVIEW_STATUSES } from "@shared/types";
 import { deriveProjectMetrics, percent } from "@shared/project-metrics";
-import { statusBadgeClass } from "@shared/status-appearance";
+import { statusBadgeClass, statusPulseClass } from "@shared/status-appearance";
 import { toast } from "sonner";
 import { MapView, type StationSelection } from "@/components/Map";
 import { ProjectDetailDialog } from "@/components/ProjectDetailDialog";
@@ -35,7 +35,7 @@ function StatusBadge({ status }: { status: string | null }) {
        badge an unshrinkable flex item, so it and the Projektnummer beside it
        pushed each other out of the card. */
     <span
-      className={`inline-flex max-w-full items-center rounded-full px-2.5 py-0.5 text-2xs font-medium leading-tight ${colorClass}`}
+      className={`inline-flex max-w-full items-center rounded-full px-2.5 py-0.5 text-2xs font-medium leading-tight ${colorClass} ${statusPulseClass(status)}`}
     >
       {status}
     </span>

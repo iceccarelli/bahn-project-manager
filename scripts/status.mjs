@@ -44,6 +44,9 @@ const FEATURES = [
   ["Portfolio-Relief", "client/src/components/dashboard/PortfolioRelief.tsx", "relief-cell"],
   ["Relief drehbar und anklickbar", "client/src/components/dashboard/PortfolioRelief.tsx", "setPointerCapture"],
   ["Ask Bahn", "shared/agent/skills.ts", "export const SKILLS"],
+  ["Ask Bahn stellt Anschlussfragen", "shared/agent/follow-ups.ts", "export function followUps"],
+  ["Offene Status pulsieren", "shared/status-appearance.ts", "export function statusPulseClass"],
+  ["Mobile Navigation deckt die Seite ab", "client/src/index.css", "--color-sidebar:"],
 ];
 
 console.log(bold("\nHEAD"));
@@ -102,8 +105,8 @@ if (!existsSync(DIST)) {
 
 console.log(bold("\nErwartete Zahlen der Gates"));
 for (const line of [
-  "pnpm exec vitest run          255 passed",
-  "node scripts/e2e-smoke.mjs     81 passed, 0 failed",
+  "pnpm exec vitest run          265 passed, 6 skipped",
+  "node scripts/e2e-smoke.mjs     86 passed, 0 failed",
   "node scripts/check-ui.mjs      UI CLEAN",
   "node scripts/stress-test.mjs    8 passed, 0 failed",
   "pnpm exec biome check .        72 warnings (unverandert)",

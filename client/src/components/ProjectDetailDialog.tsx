@@ -59,7 +59,7 @@ import {
 import type { Project } from "@/hooks/useDataQuery";
 import { useAuditLog } from "@/hooks/useDataQuery";
 import { DEPARTMENTS, type Department } from "@shared/types";
-import { statusBadgeClass } from "@shared/status-appearance";
+import { statusBadgeClass, statusPulseClass } from "@shared/status-appearance";
 import { normalizeReviewStatus, isOpen, isBlocking } from "@shared/review-status";
 import { formatGerman } from "@shared/date";
 import { projectLinkUrl } from "@shared/project-link";
@@ -405,7 +405,7 @@ export function ProjectDetailDialog({
               </Badge>
             )}
             {openCount > 0 && (
-              <Badge className={`${statusBadgeClass("offen")} text-2xs font-bold`}>
+              <Badge className={`${statusBadgeClass("offen")} ${statusPulseClass("offen")} text-2xs font-bold`}>
                 {openCount} offen
               </Badge>
             )}
@@ -640,7 +640,9 @@ export function ProjectDetailDialog({
                         </td>
                         <td data-label="Status" className="px-3 py-2">
                           {review ? (
-                            <Badge className={`${statusBadgeClass(review.status)} text-2xs font-bold`}>
+                            <Badge
+                              className={`${statusBadgeClass(review.status)} ${statusPulseClass(review.status)} text-2xs font-bold`}
+                            >
                               {status ?? review.status ?? "—"}
                             </Badge>
                           ) : (

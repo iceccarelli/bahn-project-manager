@@ -972,10 +972,20 @@ for (const [route, dept, label] of [
 
     await page.click('[aria-label="Kartenansicht"]');
     await page.waitForSelector(".leaflet-container", { timeout: 15000 });
-    const markers = await page.$$eval(
-      ".leaflet-marker-icon, .leaflet-interactive",
-      (m) => m.length,
-    );
+    /*
+     * Wait for a marker, do not count the instant the container appears.
+     *
+     * Leaflet mounts its container first and adds the layer afterwards, so on
+     * a slower runner — a 2-core Codespace, say — the count ran before a
+     * single marker existed and this failed for BVB-EEA while passing for
+     * PSV-ITK on the same build. That is a flaky gate, and a flaky gate is a
+     * broken one: it teaches you to re-run instead of to look.
+     */
+    const MARKER = ".leaflet-marker-icon, .leaflet-interactive";
+    await page
+      .waitForSelector(MARKER, { timeout: 25000 })
+      .catch(() => {});
+    const markers = await page.$$eval(MARKER, (m) => m.length);
     assert(markers > 0, `${label}: the map rendered no markers`);
 
     // Clicking a station must land on the filtered cards, not leave the user
@@ -1897,6 +1907,212 @@ await check("an answer navigates to the screen that proves it", async () => {
     (await page.$$("[data-ask-bahn='open']")).length === 0,
     "the panel stayed open over the page it navigated to",
   );
+});
+
+await check("every answer hands back questions it can answer", async () => {
+  await go("/");
+  await openAsk();
+  await page.getByLabel("Frage an Ask Bahn").fill("Was ist gerade kritisch?");
+  await page.getByRole("button", { name: "Fragen" }).click();
+  await page.waitForSelector("[data-follow-up='true']", { timeout: 10000 });
+
+  const chips = await page.$$eval("[data-follow-up='true']", (els) =>
+    els.map((e) => e.textContent.trim()),
+  );
+  assert(chips.length >= 2, `only ${chips.length} follow-up chips after the first answer`);
+  // The chips must lead somewhere else, not back to the question just asked.
+  assert(
+    !chips.includes("Was ist gerade kritisch?"),
+    "the assistant offered the question it had just answered",
+  );
+
+  /*
+   * Six hops, each one taken from whatever the previous answer offered.
+   *
+   * This is the failure the unit tests cannot see: a chip that resolves in
+   * isolation but is rendered from a stale answer, or a row that empties out
+   * after the second turn and leaves the reader at a dead end. Every hop has
+   * to produce a new answer that itself offers somewhere to go.
+   */
+  let seen = 1;
+  for (let hop = 0; hop < 6; hop++) {
+    assert(
+      (await page.$$("[data-follow-up='true']")).length > 0,
+      `no follow-up to click on hop ${hop}`,
+    );
+    const label = await page
+      .locator("[data-follow-up='true']")
+      .last()
+      .textContent();
+    await page.locator("[data-follow-up='true']").last().click();
+    await page.waitForTimeout(450);
+
+    seen++;
+    const text = await page.locator("[data-ask-bahn='open']").innerText();
+    assert(
+      !/Das habe ich nicht verstanden/.test(text.slice(-600)),
+      `the chip "${label?.trim()}" led to "not understood" on hop ${hop}`,
+    );
+    assert(
+      (await page.$$("[data-follow-up='true']")).length > 0,
+      `the conversation dead-ended after hop ${hop}`,
+    );
+  }
+  assert(seen === 7, `expected 7 answers in the transcript, counted ${seen}`);
+});
+
+await check("the assistant breathes, and keeps breathing", async () => {
+  await go("/");
+  const launcher = page.getByRole("button", { name: /^Ask Bahn öffnen/ });
+  assert(
+    (await launcher.getAttribute("class")).includes("pulse-brand"),
+    "the launcher does not pulse",
+  );
+  await openAsk();
+  await page.getByLabel("Frage an Ask Bahn").fill("Was ist gerade kritisch?");
+  await page.getByRole("button", { name: "Fragen" }).click();
+  await page.waitForSelector("[data-follow-up='true']", { timeout: 10000 });
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(400);
+  // It used to stop after the first question. That was my call and not the
+  // brief's; the brief says the assistant pulses, so it pulses.
+  assert(
+    (await page.getByRole("button", { name: /^Ask Bahn öffnen/ }).getAttribute("class")).includes(
+      "pulse-brand",
+    ),
+    "the launcher stopped pulsing after it had been used",
+  );
+});
+
+await check("the panel never scrolls sideways, whatever an answer contains", async () => {
+  await go("/");
+  await openAsk();
+  /*
+   * The audit answer is the one that broke it: a fact value can be a generated
+   * filename of fifty-odd characters with nothing to break on, and a flex
+   * child that will not shrink widens the panel from the inside. The reader
+   * got a horizontal scrollbar and a headline starting off screen.
+   */
+  for (const q of ["Was hat sich geändert?", "Was ist gerade kritisch?", "Wie steht EEA?"]) {
+    await page.getByLabel("Frage an Ask Bahn").fill(q);
+    await page.getByRole("button", { name: "Fragen" }).click();
+    await page.waitForTimeout(400);
+  }
+  const panel = page.locator("[data-ask-bahn='open']");
+  const overflow = await panel.evaluate((el) => {
+    const scroller = el.querySelector(".overflow-y-auto");
+    return {
+      panel: el.scrollWidth - el.clientWidth,
+      scroller: scroller ? scroller.scrollWidth - scroller.clientWidth : 0,
+      width: el.getBoundingClientRect().width,
+    };
+  });
+  assert(overflow.panel <= 1, `the panel overflows by ${overflow.panel}px`);
+  assert(overflow.scroller <= 1, `the transcript overflows by ${overflow.scroller}px`);
+  assert(overflow.width <= 24 * 16 + 1, `the panel grew to ${Math.round(overflow.width)}px`);
+
+  // And the input is still reachable and usable with a full transcript.
+  const input = page.getByLabel("Frage an Ask Bahn");
+  assert(await input.isVisible(), "the input scrolled out of the panel");
+  assert(await input.isEnabled(), "the input is not usable");
+  await input.fill("Wie steht das Portfolio insgesamt?");
+  await page.getByRole("button", { name: "Fragen" }).click();
+  await page.waitForTimeout(400);
+});
+
+console.log("\n== open work announces itself ==");
+
+await check("an open status pulses and a settled one does not", async () => {
+  await go("/bvb-eea");
+  await page.waitForSelector('button[aria-label*=" ändern"]', { timeout: 25000 });
+
+  /*
+   * Read from the badge's own accessible name, not from its text.
+   *
+   * `aria-label` is "<Gewerk> ändern, aktuell <Status>", which is the one place
+   * the current status is unambiguous — the visible text is truncated with
+   * `truncate` and carries a ▾ from ::after.
+   */
+  const badges = await page.$$eval('button[aria-label*=" ändern"]', (els) =>
+    els
+      .map((e) => ({
+        status: (/, aktuell (.+)$/.exec(e.getAttribute("aria-label")) || [])[1] || "",
+        pulses: e.className.includes("pulse-open"),
+      }))
+      .filter((b) => b.status),
+  );
+  assert(badges.length > 0, "no status badges found on /bvb-eea");
+
+  /*
+   * Three buckets, not two, and the pulse means exactly one of them.
+   *
+   * shared/review-status.ts classifies four statuses as open, two as approved
+   * and two as blocking. The rest — "Projektkonfig.", "Prüfung erfolgt",
+   * "zurückgestellt", "nicht erforderlich" — are in no lifecycle bucket, which
+   * is why the Dashboard's diagnostics name them and why every "offen" figure
+   * on this site excludes them.
+   *
+   * So they must NOT pulse. Making them pulse is the kinder-looking choice and
+   * would put the animation out of step with every number beside it: 55 badges
+   * breathing on a tab that reports 22 open. An indicator that disagrees with
+   * the count next to it is worse than no indicator.
+   */
+  const OPEN = /^(offen|in Bearbeitung|Nachforderung|prüffähig)$/i;
+  const open = badges.filter((b) => OPEN.test(b.status.trim()));
+  const rest = badges.filter((b) => !OPEN.test(b.status.trim()));
+  assert(open.length > 0, "no open status on the page to check");
+
+  const silentOpen = open.filter((b) => !b.pulses);
+  assert(
+    silentOpen.length === 0,
+    `${silentOpen.length} open statuses do not pulse, e.g. "${silentOpen[0]?.status}"`,
+  );
+  const noisy = rest.filter((b) => b.pulses);
+  assert(
+    noisy.length === 0,
+    `${noisy.length} non-open statuses pulse, e.g. "${noisy[0]?.status}"`,
+  );
+  console.log(`     ${open.length} open pulsing, ${rest.length} not open and quiet`);
+});
+
+await check("the mobile drawer is opaque, not a window onto the page", async () => {
+  const phone = await browser.newPage({ viewport: { width: 375, height: 812 } });
+  try {
+    // A fresh context has empty localStorage, so without this the app sends the
+    // phone straight back to /login and there is no header to open.
+    await phone.goto(U("/login"));
+    await phone.evaluate(() =>
+      localStorage.setItem(
+        "bahn-demo-user",
+        JSON.stringify({ id: 1, openId: "e2e", name: "Vincenzo Grimaldi", email: "v@db.de", role: "admin" }),
+      ),
+    );
+    await phone.goto(U("/projects"), { waitUntil: "domcontentloaded" });
+    const menu = phone.getByRole("button", { name: "Navigation öffnen" });
+    await menu.waitFor({ timeout: 25000 });
+    await menu.click();
+    const drawer = phone.locator('[data-sidebar="sidebar"][data-mobile="true"]');
+    await drawer.waitFor({ timeout: 10000 });
+    await phone.waitForTimeout(700);
+
+    /*
+     * The exact defect, measured rather than eyeballed: the drawer's own
+     * background-color must be opaque. `bg-sidebar` resolved to nothing when
+     * --color-sidebar was undeclared, and the computed value came back
+     * `rgba(0, 0, 0, 0)` — transparent — while every class was still on the
+     * element and nothing anywhere reported a problem.
+     */
+    const bg = await drawer.evaluate((el) => getComputedStyle(el).backgroundColor);
+    const alpha = /rgba?\(([^)]+)\)/.exec(bg);
+    const parts = alpha ? alpha[1].split(",").map((v) => Number.parseFloat(v)) : [];
+    assert(parts.length >= 3, `the drawer has no background colour: ${bg}`);
+    assert(
+      parts.length === 3 || parts[3] >= 0.99,
+      `the drawer background is see-through: ${bg}`,
+    );
+  } finally {
+    await phone.close();
+  }
 });
 
 console.log("\n== the relief is an instrument, not a picture ==");

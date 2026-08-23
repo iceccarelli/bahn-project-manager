@@ -256,6 +256,46 @@ const SCENARIOS = [
     },
   },
   {
+    /*
+     * The scenario this gate did not have, which is why a drawer with no
+     * background shipped.
+     *
+     * `bg-sidebar` resolved to nothing because --color-sidebar was never
+     * declared, so on a phone the page read straight through the open drawer:
+     * "1.298" over "Projektanmeldung", table rows over "Abmelden". Every route
+     * was audited closed, and closed it looks perfect. Nothing opened it.
+     *
+     * Phone only, on purpose: above the mobile breakpoint the same component
+     * renders as a fixed rail, not a Sheet, and the trigger is `lg:hidden`.
+     */
+    name: "Sidebar · Drawer offen",
+    route: "/projects",
+    only: ["phone"],
+    async run(page) {
+      await page.getByRole("button", { name: "Navigation öffnen" }).click();
+      await page.waitForSelector('[data-sidebar="sidebar"][data-mobile="true"]', {
+        timeout: 15000,
+      });
+      // Past the Sheet's slide-in, so nothing is measured mid-transform.
+      await page.waitForTimeout(700);
+    },
+  },
+  {
+    name: "Ask Bahn · Weiterfragen",
+    route: "/",
+    async run(page) {
+      await page.getByRole("button", { name: /^Ask Bahn öffnen/ }).click();
+      await page.waitForSelector("[data-ask-bahn='open']", { timeout: 15000 });
+      await page.getByLabel("Frage an Ask Bahn").fill("Was ist gerade kritisch?");
+      await page.getByRole("button", { name: "Fragen" }).click();
+      await page.waitForSelector("[data-follow-up='true']", { timeout: 15000 });
+      // A second answer stacked under the first: the densest this panel gets,
+      // and the state where two chip rows have to stay legible at 375px.
+      await page.locator("[data-follow-up='true']").first().click();
+      await page.waitForTimeout(700);
+    },
+  },
+  {
     name: "Anmeldung · Prüfungen",
     route: "/anmeldung",
     async run(page) {
@@ -769,12 +809,72 @@ console.log("== palette ==");
   } else {
     console.log(`✅ all ${classes.length} tone classes present in the built CSS`);
   }
+
+  /*
+   * Utilities whose absence is invisible.
+   *
+   * Tailwind v4 does not emit `bg-sidebar` unless `--color-sidebar` exists in
+   * the theme. The palette declared `--color-sidebar-background`, so
+   * `bg-sidebar-background` worked, nobody noticed, and the mobile drawer —
+   * which paints itself with `bg-sidebar` — shipped with no background at all.
+   * There is no error anywhere in that chain: the TypeScript compiles, the
+   * class is on the element, the element renders. The class simply does not
+   * exist in the stylesheet.
+   *
+   * Anything on this list is a class the app depends on and cannot prove for
+   * itself. Add to it whenever a utility's silence would be a defect.
+   */
+  const REQUIRED_UTILITIES = [
+    // The mobile drawer and the desktop rail.
+    "bg-sidebar",
+    "text-sidebar-foreground",
+    "bg-sidebar-accent",
+    // The two pulses: open work, and the assistant before its first use.
+    "pulse-open",
+    "pulse-brand",
+  ];
+  /*
+   * A utility counts as present whether it is used bare or only behind a
+   * variant. Tailwind writes `hover:bg-sidebar-accent` as the selector
+   * `.hover\:bg-sidebar-accent:hover`, so looking for a leading "." alone
+   * reports a class that ships and works as missing — a false alarm, which is
+   * the one thing a gate must never produce.
+   */
+  const present = (c) => css.includes(`.${c}`) || css.includes(`\\:${c}`);
+  const absent = REQUIRED_UTILITIES.filter((c) => !present(c));
+  if (absent.length) {
+    failures++;
+    console.log(`❌ ${absent.length} required utilities are not in the built CSS:`);
+    for (const a of absent) console.log(`     .${a}`);
+  } else {
+    console.log(`✅ all ${REQUIRED_UTILITIES.length} required utilities present`);
+  }
+
+  /*
+   * There was a third check here — every `var(--x)` in the stylesheet having a
+   * matching declaration — and it is gone on purpose.
+   *
+   * A custom property is legitimately set from JavaScript: Radix writes
+   * --radix-select-trigger-width onto the element it measures, and it builds
+   * that name by template, so the literal string is nowhere to grep for.
+   * Tailwind also emits utilities for class strings it scanned out of files
+   * whose components never render, so the reference exists with nothing on the
+   * page to declare it. Both are correct, and neither can be told apart from a
+   * genuine undeclared token without an allowlist that would rot.
+   *
+   * A gate that reports eight non-defects is a gate people learn to skip past,
+   * and then it catches nothing at all. REQUIRED_UTILITIES above covers the
+   * failure that actually happened, exactly, with no false positives.
+   */
 }
 
 console.log("\n== rendering ==");
 for (const vp of VIEWPORTS) {
   for (const route of ROUTES) await audit(route.name, vp, route.path, null);
-  for (const sc of SCENARIOS) await audit(sc.name, vp, sc.route, sc.run);
+  for (const sc of SCENARIOS) {
+    if (sc.only && !sc.only.includes(vp.name)) continue;
+    await audit(sc.name, vp, sc.route, sc.run);
+  }
 }
 
 /*
@@ -790,7 +890,16 @@ for (const theme of THEMES.slice(1)) {
     await audit(route.name, VIEWPORTS[2], route.path, null, theme);
   }
   for (const sc of SCENARIOS) {
-    await audit(sc.name, VIEWPORTS[2], sc.route, sc.run, theme);
+    /*
+     * A viewport-locked scenario is still checked in every theme — at its own
+     * viewport, not the desktop one it would be skipped at. The drawer bug was
+     * a missing colour token, and a colour token is exactly what the theme
+     * sweep exists to catch; running it only in light mode would leave the
+     * same class of defect open in the other three.
+     */
+    const vp = sc.only ? VIEWPORTS.find((v) => v.name === sc.only[0]) : VIEWPORTS[2];
+    if (!vp) continue;
+    await audit(sc.name, vp, sc.route, sc.run, theme);
   }
 }
 

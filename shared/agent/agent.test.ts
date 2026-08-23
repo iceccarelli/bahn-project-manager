@@ -2,6 +2,15 @@ import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import { ask, extractEntities, rankSkills, STARTERS } from "./resolve";
 import { SKILLS, helpAnswer } from "./skills";
+import {
+  ASK,
+  ASK_INTENT,
+  contactAsk,
+  gewerkAsk,
+  MAX_FOLLOW_UPS,
+  stationAsk,
+} from "./follow-ups";
+import { DEPARTMENT_LIST } from "../validation";
 import type { AgentContext } from "./types";
 
 const DATA = JSON.parse(fs.readFileSync("client/public/data.json", "utf8"));
@@ -149,5 +158,128 @@ describe("speed", () => {
       fastest = Math.min(fastest, (performance.now() - started) / STARTERS.length);
     }
     expect(fastest, `${fastest.toFixed(1)} ms per answer`).toBeLessThan(120);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Follow-ups
+// ---------------------------------------------------------------------------
+//
+// A chip is a promise. These tests are the only thing standing between a
+// well-phrased suggestion and a reader clicking it to be told "das habe ich
+// nicht verstanden" — which, once, teaches them the panel is decorative. So
+// every question the assistant offers itself is sent straight back through the
+// resolver, over the real data.json, and has to come back measured.
+
+describe("every answer leads somewhere", () => {
+  const ENTITIES = {
+    department: "ITK",
+    station: "Bensheim",
+    projektnummer: "G.011540063",
+  };
+
+  it("offers at least two next questions on every skill", () => {
+    for (const skill of SKILLS) {
+      const a = skill.run(CTX, ENTITIES);
+      expect(a.followUps.length, skill.id).toBeGreaterThanOrEqual(2);
+      expect(a.followUps.length, skill.id).toBeLessThanOrEqual(MAX_FOLLOW_UPS);
+    }
+  });
+
+  it("offers at least two next questions when it did not understand", () => {
+    expect(helpAnswer().followUps.length).toBeGreaterThanOrEqual(2);
+    expect(ask("qwertz asdfgh", CTX).followUps.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("never offers a question it cannot answer", () => {
+    for (const skill of SKILLS) {
+      for (const f of skill.run(CTX, ENTITIES).followUps) {
+        const next = ask(f.question, CTX);
+        expect(next.confidence, `${skill.id} → ${f.question}`).toBe("measured");
+      }
+    }
+  });
+
+  it("never offers the question that was just answered", () => {
+    for (const skill of SKILLS) {
+      const a = skill.run(CTX, ENTITIES);
+      for (const f of a.followUps) {
+        expect(ask(f.question, CTX).intent, `${skill.id} → ${f.question}`).not.toBe(skill.id);
+      }
+    }
+  });
+
+  it("never offers the same question twice in one row", () => {
+    for (const skill of SKILLS) {
+      const questions = skill.run(CTX, ENTITIES).followUps.map((f) => f.question);
+      expect(new Set(questions).size, skill.id).toBe(questions.length);
+    }
+  });
+
+  it("routes each catalogue question to the skill it was written for", () => {
+    for (const [key, followUp] of Object.entries(ASK)) {
+      const a = ask(followUp.question, CTX);
+      expect(a.intent, followUp.question).toBe(ASK_INTENT[key as keyof typeof ASK]);
+      expect(a.confidence, followUp.question).toBe("measured");
+    }
+  });
+
+  it("builds a Gewerk question that lands on that Gewerk, for all fourteen", () => {
+    for (const department of DEPARTMENT_LIST) {
+      const a = ask(gewerkAsk(department).question, CTX);
+      expect(a.intent, department).toBe("gewerk-status");
+      expect(a.confidence, department).toBe("measured");
+      expect(a.headline, department).toContain(department);
+    }
+  });
+
+  it("builds a station question that lands on that station", () => {
+    // Every station in the file, not a sample: a station name is data, and the
+    // one that breaks the phrasing will be the one nobody thought to try.
+    const stations = [
+      ...new Set(
+        (CTX.projects as ReadonlyArray<{ station?: string | null }>)
+          .map((p) => (p.station ?? "").trim())
+          .filter(Boolean),
+      ),
+    ];
+    expect(stations.length).toBeGreaterThan(50);
+    for (const station of stations) {
+      const followUp = stationAsk(station);
+      if (!followUp) continue;
+      const a = ask(followUp.question, CTX);
+      expect(a.intent, station).toBe("station");
+      expect(a.confidence, station).toBe("measured");
+    }
+  });
+
+  it("never offers a contact question for a Gewerk with no address on file", () => {
+    // LST is the live case: Hilfsdatei rows 74 and 75 are both empty, so there
+    // is nobody to name and the assistant must not pretend otherwise.
+    expect(contactAsk("LST")).toBeNull();
+    for (const department of DEPARTMENT_LIST) {
+      const followUp = contactAsk(department);
+      if (followUp === null) continue;
+      const a = ask(followUp.question, CTX);
+      expect(a.intent, department).toBe("contact");
+      expect(a.facts.length, department).toBeGreaterThan(0);
+    }
+  });
+
+  it("stays answerable two clicks deep from every starter", () => {
+    for (const starter of STARTERS) {
+      const first = ask(starter.question, CTX);
+      expect(first.confidence, starter.question).toBe("measured");
+      for (const f of first.followUps) {
+        const second = ask(f.question, CTX);
+        expect(second.confidence, `${starter.question} → ${f.question}`).toBe("measured");
+        for (const g of second.followUps) {
+          expect(
+            ask(g.question, CTX).confidence,
+            `${starter.question} → ${f.question} → ${g.question}`,
+          ).toBe("measured");
+        }
+      }
+    }
   });
 });

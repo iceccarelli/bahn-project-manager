@@ -47,6 +47,20 @@ export interface AgentAction {
   kind: "navigate" | "export" | "external";
 }
 
+/**
+ * A question the reader can ask next, offered as a chip under the answer.
+ *
+ * The `question` is the exact text that goes back through `ask()`, not a
+ * paraphrase of it. That is the whole contract: a chip that reads well but
+ * resolves to "das habe ich nicht verstanden" is worse than no chip, so the
+ * phrasing here is chosen to score unambiguously against one skill and a unit
+ * test asserts every offered follow-up comes back `measured`.
+ */
+export interface AgentFollowUp {
+  label: string;
+  question: string;
+}
+
 export interface AgentAnswer {
   /** Which skill produced this, for the transcript and for tests. */
   intent: string;
@@ -54,6 +68,12 @@ export interface AgentAnswer {
   headline: string;
   facts: AgentFact[];
   actions: AgentAction[];
+  /**
+   * Where this answer leads. Never empty, and never the question just asked:
+   * an answer that ends the conversation makes the reader guess what else the
+   * assistant knows, and guessing is how people conclude it knows nothing.
+   */
+  followUps: AgentFollowUp[];
   /** What the figures were computed from. Always present. */
   basis: string;
   /**

@@ -97,6 +97,18 @@
   --color-ring: hsl(var(--ring));
 
   /* Sidebar Tokens */
+  /*
+   * --color-sidebar was missing, and that is the whole mobile drawer bug.
+   *
+   * The palette defined --color-sidebar-background, so `bg-sidebar-background`
+   * worked and nobody noticed. The shadcn sidebar paints itself with
+   * `bg-sidebar` — a different token — which resolved to nothing, so the drawer
+   * had no background at all: on a phone the page showed straight through it,
+   * "1.298" reading over "Projektanmeldung" and the table rows over "Abmelden".
+   * The scrim behind it was working the whole time, which is why it looked like
+   * a z-index problem and was not one.
+   */
+  --color-sidebar: hsl(var(--sidebar-background));
   --color-sidebar-background: hsl(var(--sidebar-background));
   --color-sidebar-foreground: hsl(var(--sidebar-foreground));
   --color-sidebar-primary: hsl(var(--sidebar-primary));
@@ -793,5 +805,66 @@
 @media (pointer: coarse) {
   .relief-cell {
     min-height: 44px;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Was noch offen ist, atmet
+   ---------------------------------------------------------------------------
+   A status that is waiting for a decision should be findable across a room and
+   in a table of 1,298 rows. The pulse is on the OPEN states only — offen, in
+   Bearbeitung, Nachforderung, prüffähig — because a signal that applies to
+   everything is not a signal.
+
+   It animates box-shadow and never opacity or colour: fading the text would
+   take the badge below its contrast ratio for part of every cycle, and this
+   project measures that. The ring grows and fades; the label never moves and
+   never dims.
+
+   Two seconds, not one. A dashboard is looked at for hours, and anything faster
+   reads as an alarm rather than a state.
+   --------------------------------------------------------------------------- */
+/* Glow and ring, in one property.
+
+   The first shadow is the expanding ring — what catches the eye in passing.
+   The second is a halo that never fully leaves, so a badge reads as lit at the
+   quiet end of the cycle instead of blinking on and off. Two shadows, one
+   `box-shadow`: still nothing that touches colour, opacity or size, so the
+   label keeps the exact contrast ratio check-ui measured, at every frame. */
+@keyframes bpm-pulse-ring {
+  0% {
+    box-shadow:
+      0 0 0 0 rgb(var(--pulse-rgb) / 0.6),
+      0 0 6px 0 rgb(var(--pulse-rgb) / 0.45);
+  }
+  70% {
+    box-shadow:
+      0 0 0 7px rgb(var(--pulse-rgb) / 0),
+      0 0 14px 3px rgb(var(--pulse-rgb) / 0.25);
+  }
+  100% {
+    box-shadow:
+      0 0 0 0 rgb(var(--pulse-rgb) / 0),
+      0 0 6px 0 rgb(var(--pulse-rgb) / 0.45);
+  }
+}
+
+@utility pulse-open {
+  --pulse-rgb: 245 158 11;
+  animation: bpm-pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Slower than the badges, on purpose: the launcher is on every screen for the
+   whole session, so it is paced below a resting heartbeat. */
+@utility pulse-brand {
+  --pulse-rgb: 236 0 22;
+  animation: bpm-pulse-ring 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Someone who asked not to be moved is not asked twice. */
+@media (prefers-reduced-motion: reduce) {
+  .pulse-open,
+  .pulse-brand {
+    animation: none;
   }
 }

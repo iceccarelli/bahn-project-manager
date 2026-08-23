@@ -20,12 +20,14 @@ import { recipientsFor } from "../contacts";
 import { gewerkHref } from "../search-index";
 import { severityOf } from "../audit-entry";
 import { formatGerman } from "../date";
+import { ASK, contactAsk, followUps, gewerkAsk, stationAsk } from "./follow-ups";
 import type {
   AgentAction,
   AgentTone,
   AgentAnswer,
   AgentContext,
   AgentFact,
+  AgentFollowUp,
   AgentProject,
 } from "./types";
 
@@ -59,13 +61,26 @@ export interface Skill {
   run(ctx: AgentContext, entities: AgentEntities): AgentAnswer;
 }
 
+/*
+ * `followUps` is a required argument, not an optional one, and that is
+ * deliberate: a skill that forgets where its answer leads should not compile.
+ */
 const answer = (
   intent: string,
   headline: string,
   facts: AgentFact[],
   actions: AgentAction[],
   basis: string,
-): AgentAnswer => ({ intent, headline, facts, actions, basis, confidence: "measured" });
+  next: AgentFollowUp[],
+): AgentAnswer => ({
+  intent,
+  headline,
+  facts,
+  actions,
+  followUps: next,
+  basis,
+  confidence: "measured",
+});
 
 // ---------------------------------------------------------------------------
 
@@ -84,6 +99,7 @@ const gewerkStatus: Skill = {
         headline: `${department} kommt in den geladenen Daten nicht vor.`,
         facts: [],
         actions: [],
+        followUps: followUps(ASK.portfolio, ASK["most-critical"], ASK["data-quality"]),
         basis: "Geprüft gegen alle Prüfzeilen der geladenen Projekte.",
         confidence: "unknown",
       };
@@ -114,6 +130,16 @@ const gewerkStatus: Skill = {
       ],
       [{ label: `${department} öffnen`, href: gewerkHref(department), kind: "navigate" }],
       "Gezählt über alle Prüfzeilen dieses Gewerks, ohne „nicht erforderlich“.",
+      // What a reader asks next about a Gewerk is whichever number just came
+      // back bad — so the order follows this Gewerk's own worst figure.
+      followUps(
+        s.blocked > 0 && ASK.blocked,
+        s.overdue > 0 && ASK.overdue,
+        s.unassigned > 0 && ASK.unassigned,
+        contactAsk(department),
+        ASK["most-critical"],
+        ASK.portfolio,
+      ),
     );
   },
 };
@@ -138,6 +164,7 @@ const mostCritical: Skill = {
         headline: "Es sind keine Prüfdaten geladen.",
         facts: [],
         actions: [],
+        followUps: followUps(ASK["data-quality"], ASK.navigate),
         basis: "Keine Projekte im Speicher.",
         confidence: "unknown",
       };
@@ -162,6 +189,14 @@ const mostCritical: Skill = {
         { label: "Alle blockierten zeigen", href: q("abgelehnt"), kind: "navigate" },
       ],
       "Rangfolge aus blockiert ×3 + überfällig ×2 + ohne Prüfer ×1. Eine Priorisierungshilfe, keine Messung.",
+      followUps(
+        gewerkAsk(lead.department),
+        blockedTotal > 0 && ASK.blocked,
+        overdueTotal > 0 && ASK.overdue,
+        contactAsk(lead.department),
+        ASK.workload,
+        ASK.portfolio,
+      ),
     );
   },
 };
@@ -195,6 +230,12 @@ const overdue: Skill = {
       ],
       [{ label: "Dashboard öffnen", href: "/", kind: "navigate" }],
       "Offene Prüfzeilen, deren Prüfdatum vor heute liegt.",
+      followUps(
+        worst[0] && worst[0].overdue > 0 ? gewerkAsk(worst[0].department) : null,
+        ASK.aging,
+        ASK["most-critical"],
+        ASK.workload,
+      ),
     );
   },
 };
@@ -227,6 +268,14 @@ const aging: Skill = {
       ],
       [{ label: "Dashboard öffnen", href: "/", kind: "navigate" }],
       "Abstand zwischen dem eingetragenen Prüfdatum und heute, je offener Prüfzeile.",
+      // The undated cohort is the one that cannot be aged at all, so when it is
+      // non-empty the honest next question is about the data, not the backlog.
+      followUps(
+        ASK.overdue,
+        a.undatedOpen > 0 && ASK["data-quality"],
+        ASK.workload,
+        ASK["most-critical"],
+      ),
     );
   },
 };
@@ -234,7 +283,7 @@ const aging: Skill = {
 const workload: Skill = {
   id: "workload",
   example: "Wer hat die meiste offene Last?",
-  keywords: ["wer", "prufer", "prüfer", "last", "auslastung", "verteilt", "team", "personen", "kapazitat", "kapazität"],
+  keywords: ["wer", "last", "auslastung", "verteilt", "team", "personen", "kapazitat", "kapazität"],
   weight: 70,
   run(ctx) {
     const c = reviewerConcentration(ctx.projects);
@@ -261,6 +310,12 @@ const workload: Skill = {
       ],
       [{ label: "Dashboard öffnen", href: "/", kind: "navigate" }],
       "Gezählt über alle erforderlichen Prüfzeilen mit einem eingetragenen Namen.",
+      followUps(
+        c.unassignedOpen > 0 && ASK.unassigned,
+        ASK.aging,
+        ASK["most-critical"],
+        ASK.portfolio,
+      ),
     );
   },
 };
@@ -268,7 +323,10 @@ const workload: Skill = {
 const unassigned: Skill = {
   id: "unassigned",
   example: "Welche Prüfungen haben keinen Prüfer?",
-  keywords: ["ohne prufer", "ohne prüfer", "unbesetzt", "niemand", "kein prufer", "kein prüfer", "unzugeordnet"],
+  keywords: [
+    "ohne prufer", "ohne prüfer", "kein prufer", "kein prüfer", "keinen prufer",
+    "keinen prüfer", "unbesetzt", "unbesetzte", "niemand", "unzugeordnet",
+  ],
   weight: 75,
   run(ctx) {
     const standings = gewerkStandings(ctx.projects, DEPARTMENT_LIST, ctx.today);
@@ -287,6 +345,13 @@ const unassigned: Skill = {
         ? [{ label: `${worst[0].department} öffnen`, href: gewerkHref(worst[0].department), kind: "navigate" as const }]
         : [],
       "Offene Prüfzeilen, deren Prüferfeld leer ist.",
+      followUps(
+        worst[0] ? gewerkAsk(worst[0].department) : null,
+        worst[0] ? contactAsk(worst[0].department) : null,
+        ASK.workload,
+        ASK["most-critical"],
+        ASK["data-quality"],
+      ),
     );
   },
 };
@@ -307,12 +372,13 @@ const blocked: Skill = {
     const byDept = new Map<string, number>();
     for (const r of rows) byDept.set(r.department, (byDept.get(r.department) ?? 0) + 1);
     const projects = new Set(rows.map((r) => r.project.id));
+    const byCount = [...byDept.entries()].sort((a, b) => b[1] - a[1]);
+    const worstDept = byCount[0]?.[0] ?? null;
     return answer(
       "blocked",
       `${de(rows.length)} Prüfungen sind abgelehnt oder gestoppt, verteilt auf ${de(projects.size)} Projekte.`,
       [
-        ...[...byDept.entries()]
-          .sort((a, b) => b[1] - a[1])
+        ...byCount
           .slice(0, 5)
           .map(([department, count]) => ({
             label: department,
@@ -329,6 +395,13 @@ const blocked: Skill = {
       ],
       [{ label: "Abgelehnte zeigen", href: q("abgelehnt"), kind: "navigate" }],
       "Prüfzeilen im Status „abgelehnt“ oder „gestoppt“.",
+      followUps(
+        worstDept ? gewerkAsk(worstDept) : null,
+        worstDept ? contactAsk(worstDept) : null,
+        ASK["most-critical"],
+        ASK.overdue,
+        ASK["recent-changes"],
+      ),
     );
   },
 };
@@ -350,6 +423,7 @@ const findProject: Skill = {
         headline: `Zu „${nummer}“ ist kein Projekt geladen.`,
         facts: [],
         actions: [{ label: "In Projekte suchen", href: q(nummer), kind: "navigate" }],
+        followUps: followUps(ASK["most-critical"], ASK.portfolio, ASK.navigate),
         basis: "Verglichen mit der Projektnummer jedes geladenen Projekts.",
         confidence: "unknown",
       };
@@ -373,6 +447,14 @@ const findProject: Skill = {
       ],
       [{ label: "Projekt öffnen", href: q(nummer), kind: "navigate" }],
       "Aus dem geladenen Projektdatensatz.",
+      // The Gewerk that is actually open on THIS project, not a generic one.
+      followUps(
+        openHere[0] ? gewerkAsk(openHere[0].department) : null,
+        stationAsk(first.station ?? ""),
+        openHere[0] ? contactAsk(openHere[0].department) : null,
+        ASK["most-critical"],
+        ASK["recent-changes"],
+      ),
     );
   },
 };
@@ -390,13 +472,19 @@ const stationInfo: Skill = {
     );
     let open = 0;
     let blockedCount = 0;
+    const openByDept = new Map<string, number>();
     for (const p of here) {
       for (const r of p.reviews ?? []) {
         const s = normalizeReviewStatus(r.status);
-        if (isOpenStatus(s)) open++;
+        if (isOpenStatus(s)) {
+          open++;
+          openByDept.set(r.department, (openByDept.get(r.department) ?? 0) + 1);
+        }
         if (isBlockedStatus(s)) blockedCount++;
       }
     }
+    const busiestHere =
+      [...openByDept.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
     return answer(
       "station",
       `${station}: ${de(here.length)} Projekte, ${de(open)} offene Prüfungen, ${de(blockedCount)} blockiert.`,
@@ -415,6 +503,12 @@ const stationInfo: Skill = {
         { label: "Auf der Karte", href: "/projects?view=map", kind: "navigate" },
       ],
       "Projekte, deren Station exakt so heißt.",
+      followUps(
+        busiestHere ? gewerkAsk(busiestHere) : null,
+        blockedCount > 0 && ASK.blocked,
+        ASK["most-critical"],
+        ASK.portfolio,
+      ),
     );
   },
 };
@@ -432,6 +526,7 @@ const recentChanges: Skill = {
         headline: "Seit dem Start dieser Sitzung wurde nichts geändert.",
         facts: [],
         actions: [{ label: "Änderungshistorie öffnen", href: "/audit", kind: "navigate" }],
+        followUps: followUps(ASK["most-critical"], ASK.portfolio, ASK.overdue),
         basis: "Die Änderungshistorie ist leer.",
         confidence: "measured",
       };
@@ -456,6 +551,12 @@ const recentChanges: Skill = {
       ],
       [{ label: "Änderungshistorie öffnen", href: "/audit", kind: "navigate" }],
       "Aus der Änderungshistorie dieses Browsers.",
+      followUps(
+        critical.length > 0 && ASK["most-critical"],
+        ASK["data-quality"],
+        ASK.blocked,
+        ASK.portfolio,
+      ),
     );
   },
 };
@@ -492,6 +593,12 @@ const quality: Skill = {
       ],
       [{ label: "Dashboard öffnen", href: "/", kind: "navigate" }],
       "Geprüft über jede geladene Prüfzeile und jedes Projekt.",
+      followUps(
+        dq.openWithoutDate > 0 && ASK.aging,
+        dq.openWithoutPruefer > 0 && ASK.unassigned,
+        ASK.portfolio,
+        ASK["most-critical"],
+      ),
     );
   },
 };
@@ -511,6 +618,7 @@ const contact: Skill = {
         headline: `Für ${department} ist in der Hilfsdatei keine Adresse hinterlegt.`,
         facts: [],
         actions: [{ label: `${department} öffnen`, href: gewerkHref(department), kind: "navigate" }],
+        followUps: followUps(gewerkAsk(department), ASK["most-critical"], ASK.portfolio),
         // Never a constructed address — see shared/contacts.ts.
         basis: "Aus der Hilfsdatei. Adressen werden nie erzeugt, nur gelesen.",
         confidence: "measured",
@@ -522,6 +630,7 @@ const contact: Skill = {
       people.map((p) => ({ label: p.name || "ohne Namen", value: p.mail })),
       [{ label: `${department} öffnen`, href: gewerkHref(department), kind: "navigate" }],
       "Aus der Hilfsdatei. Adressen werden nie erzeugt, nur gelesen.",
+      followUps(gewerkAsk(department), ASK.unassigned, ASK["most-critical"]),
     );
   },
 };
@@ -546,6 +655,7 @@ const navigate: Skill = {
         { label: "Änderungshistorie", href: "/audit", kind: "navigate" },
       ],
       "Alle Routen dieser Anwendung.",
+      followUps(ASK["most-critical"], ASK.portfolio, ASK["recent-changes"], ASK.overdue),
     );
   },
 };
@@ -584,6 +694,12 @@ const portfolio: Skill = {
       ],
       [{ label: "Dashboard öffnen", href: "/", kind: "navigate" }],
       "Summiert über alle 14 Gewerke, ohne „nicht erforderlich“.",
+      followUps(
+        ASK["most-critical"],
+        blockedTotal > 0 && ASK.blocked,
+        ASK.workload,
+        ASK["data-quality"],
+      ),
     );
   },
 };
@@ -612,6 +728,12 @@ export function helpAnswer(): AgentAnswer {
     headline: "Das habe ich nicht verstanden. Fragen, die ich beantworten kann:",
     facts: SKILLS.map((s) => ({ label: s.id, value: s.example })),
     actions: [],
+    followUps: followUps(
+      ASK["most-critical"],
+      ASK.portfolio,
+      ASK.overdue,
+      ASK["recent-changes"],
+    ),
     basis: "Jede Antwort wird aus den geladenen Daten berechnet — nichts wird geschätzt.",
     confidence: "unknown",
   };

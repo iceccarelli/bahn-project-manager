@@ -38,17 +38,42 @@ const TONE: Record<AgentTone, string> = {
   neutral: "text-foreground",
 };
 
-function AnswerBlock({ answer, onGo }: { answer: AgentAnswer; onGo: (href: string) => void }) {
+function AnswerBlock({
+  answer,
+  onGo,
+  onAsk,
+}: {
+  answer: AgentAnswer;
+  onGo: (href: string) => void;
+  onAsk: (question: string) => void;
+}) {
   return (
-    <div className="space-y-2.5 rounded-xl border border-border bg-card p-3">
-      <p className="text-xs font-semibold leading-snug">{answer.headline}</p>
+    /*
+     * `min-w-0` on every level, and it is not decoration.
+     *
+     * A flex or grid child defaults to `min-width: auto`, which means it
+     * refuses to shrink below its content. One audit entry whose value is
+     * "Projektblatt_G.011598624_Bruchenbr_cken_2026-08-23.pdf" — 52 characters
+     * with nothing to break on — therefore widened the whole panel from the
+     * inside. The reader got a horizontal scrollbar and an answer whose left
+     * edge was off screen: "…derungshistorie, 0 davon kritisch."
+     */
+    <div className="min-w-0 space-y-2.5 rounded-xl border border-border bg-card p-3">
+      <p className="text-xs font-semibold leading-snug break-words">{answer.headline}</p>
 
       {answer.facts.length > 0 && (
         <dl className="space-y-1">
           {answer.facts.map((f) => (
-            <div key={`${f.label}-${f.value}`} className="flex items-baseline justify-between gap-3">
+            <div
+              key={`${f.label}-${f.value}`}
+              // Two columns that can both shrink. The value gets what it needs
+              // up to 60% and wraps inside that, instead of pushing the panel.
+              className="grid grid-cols-[minmax(0,1fr)_minmax(0,auto)] items-baseline gap-3"
+            >
               <dt className="min-w-0 truncate text-2xs text-muted-foreground">{f.label}</dt>
-              <dd className={`shrink-0 text-2xs font-semibold tabular-nums ${TONE[f.tone ?? "neutral"]}`}>
+              <dd
+                className={`min-w-0 max-w-[60%] justify-self-end break-all text-right text-2xs font-semibold tabular-nums ${TONE[f.tone ?? "neutral"]}`}
+              >
                 {f.href ? (
                   <button
                     type="button"
@@ -83,8 +108,39 @@ function AnswerBlock({ answer, onGo }: { answer: AgentAnswer; onGo: (href: strin
         </div>
       )}
 
+      {/*
+        * The conversation never ends.
+        *
+        * A reader who does not know what else to ask stops asking, and an
+        * assistant nobody asks is a button. Every answer therefore hands back
+        * the questions it leads to — built from this answer's own figures
+        * where it can be (the Gewerk that came back worst, the station just
+        * named), so the next question is about what was just read rather than
+        * a fixed menu. Every one of them is proven to resolve; see
+        * shared/agent/follow-ups.ts.
+        */}
+      {answer.followUps.length > 0 && (
+        <div className="border-t border-border/60 pt-2">
+          <p className="mb-1.5 text-2xs font-semibold text-muted-foreground">Weiterfragen</p>
+          <ul className="flex flex-wrap gap-1.5">
+            {answer.followUps.map((f) => (
+              <li key={f.question}>
+                <button
+                  type="button"
+                  data-follow-up="true"
+                  onClick={() => onAsk(f.question)}
+                  className="rounded-full border border-border bg-muted/40 px-2.5 py-1 text-2xs leading-tight transition-colors hover:border-primary/50 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  {f.label}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* Always shown. An answer whose derivation is hidden is an assertion. */}
-      <p className="border-t border-border/60 pt-2 text-2xs leading-snug text-muted-foreground">
+      <p className="border-t border-border/60 pt-2 text-2xs leading-snug text-muted-foreground break-words">
         {answer.basis}
       </p>
     </div>
@@ -178,7 +234,16 @@ export function AskBahn() {
           type="button"
           onClick={() => setOpen(true)}
           aria-label="Ask Bahn öffnen — Fragen zu Projekten, Prüfungen und Zahlen"
-          className="fixed bottom-5 right-5 z-40 flex h-12 items-center gap-2 rounded-full bg-primary px-4 text-primary-foreground shadow-lg transition-colors hover:bg-[hsl(354_100%_32%)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+          /*
+           * It breathes for as long as it is on screen.
+           *
+           * The first version stopped after the first question, on the theory
+           * that an invitation is nagging once accepted. That was my call, not
+           * the brief's, and the brief has now said twice that the assistant
+           * pulses. At 3 s it is slower than a resting heartbeat, it animates
+           * box-shadow only, and prefers-reduced-motion turns it off.
+           */
+          className="pulse-brand fixed bottom-5 right-5 z-40 flex h-12 items-center gap-2 rounded-full bg-primary px-4 text-primary-foreground shadow-lg transition-colors hover:bg-[hsl(354_100%_32%)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
         >
           <Bot className="h-5 w-5" aria-hidden="true" />
           <span className="text-sm font-semibold">Ask Bahn</span>
@@ -217,7 +282,7 @@ export function AskBahn() {
             </button>
           </header>
 
-          <div className="flex-1 space-y-3 overflow-y-auto overscroll-contain p-3">
+          <div className="flex-1 space-y-3 overflow-y-auto overflow-x-hidden overscroll-contain p-3">
             {turns.length === 0 ? (
               <div className="space-y-2">
                 <p className="flex items-center gap-1.5 text-2xs font-semibold text-muted-foreground">
@@ -237,11 +302,11 @@ export function AskBahn() {
               </div>
             ) : (
               turns.map((t) => (
-                <div key={t.id} className="space-y-2">
-                  <p className="ml-auto w-fit max-w-[85%] rounded-xl bg-muted px-3 py-1.5 text-xs">
+                <div key={t.id} className="min-w-0 space-y-2">
+                  <p className="ml-auto w-fit max-w-[85%] break-words rounded-xl bg-muted px-3 py-1.5 text-xs">
                     {t.question}
                   </p>
-                  <AnswerBlock answer={t.answer} onGo={go} />
+                  <AnswerBlock answer={t.answer} onGo={go} onAsk={send} />
                 </div>
               ))
             )}

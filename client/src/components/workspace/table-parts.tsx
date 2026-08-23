@@ -23,7 +23,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { projectLinkUrl } from "@shared/project-link";
-import { statusBadgeClass } from "@shared/status-appearance";
+import { statusBadgeClass, statusPulseClass } from "@shared/status-appearance";
 import { REVIEW_STATUSES } from "@shared/types";
 
 /** Every icon button in a row: same size, same ring, same hover. */
@@ -361,7 +361,9 @@ export function StatusSelect({
       onClick={() => setEditing(true)}
       aria-label={`${label} ändern${current ? `, aktuell ${current}` : ", derzeit leer"}`}
       title={current || "kein Status"}
-      className={`block max-w-full truncate rounded-full px-2.5 py-0.5 text-2xs font-medium leading-tight transition-shadow after:ml-1 after:opacity-40 after:content-['▾'] hover:ring-2 hover:ring-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${statusBadgeClass(current || null)} ${className}`}
+      // The pulse rides on the badge itself, so it is present wherever a status
+      // is — Projekte's fourteen columns, both Gewerk tabs, every viewport.
+      className={`block max-w-full truncate rounded-full px-2.5 py-0.5 text-2xs font-medium leading-tight transition-shadow after:ml-1 after:opacity-40 after:content-['▾'] hover:ring-2 hover:ring-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${statusBadgeClass(current || null)} ${statusPulseClass(current || null)} ${className}`}
     >
       {current || "—"}
     </button>

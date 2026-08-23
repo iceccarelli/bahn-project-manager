@@ -9,7 +9,7 @@ import {
   reviewerConcentration,
 } from "@shared/portfolio-metrics";
 import { deriveProjectMetrics, percent } from '@shared/project-metrics';
-import { statusBadgeClass, statusHex, STATUS_TONE, TONE_APPEARANCE } from '@shared/status-appearance';
+import { statusBadgeClass, statusHex, statusPulseClass, STATUS_TONE, TONE_APPEARANCE } from '@shared/status-appearance';
 import { APPROVED_STATUSES, BLOCKING_STATUSES, normalizeReviewStatus, OPEN_STATUSES, type ReviewStatus } from '@shared/review-status';
 import { formatGerman, toDate } from '@shared/date';
 import { projectLinkNote, projectLinkUrl } from '@shared/project-link';
@@ -884,7 +884,7 @@ export default function Dashboard() {
                         {d.reviewer ? ` · ${d.reviewer}` : ""}
                       </span>
                       <span
-                        className={`mt-1 inline-block rounded-full px-2 py-0.5 text-2xs font-medium ${statusBadgeClass(d.status)}`}
+                        className={`mt-1 inline-block rounded-full px-2 py-0.5 text-2xs font-medium ${statusBadgeClass(d.status)} ${statusPulseClass(d.status)}`}
                       >
                         {d.status}
                       </span>
@@ -1171,7 +1171,7 @@ export default function Dashboard() {
                           variant="outline"
                           className={`min-w-0 whitespace-normal break-words text-left ${statusBadgeClass(
                             normalizeReviewStatus(review.status),
-                          )}`}
+                          )} ${statusPulseClass(review.status)}`}
                         >
                           {normalizeReviewStatus(review.status) ?? review.status ?? "—"}
                         </Badge>

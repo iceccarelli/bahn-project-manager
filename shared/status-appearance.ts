@@ -26,7 +26,7 @@
  * with no tone is a type error rather than a silent grey.
  */
 
-import type { ReviewStatus } from "./review-status";
+import { normalizeReviewStatus, OPEN_STATUSES, type ReviewStatus } from "./review-status";
 import { REVIEW_STATUSES } from "./validation";
 
 /**
@@ -163,3 +163,21 @@ export const STATUS_LEGEND: ReadonlyArray<{
   const tone = STATUS_TONE[status];
   return { status, tone, hex: TONE_APPEARANCE[tone].hex };
 });
+
+
+/**
+ * Does this status still want a decision?
+ *
+ * The pulse is attached to this and nothing else. Keeping the question here —
+ * beside the colours — means the badge, the dropdown, the relief and anything
+ * added later cannot disagree about which rows are still waiting.
+ */
+export function isAwaitingDecision(status: string | null | undefined): boolean {
+  const s = normalizeReviewStatus(status);
+  return s !== null && (OPEN_STATUSES as readonly string[]).includes(s);
+}
+
+/** `pulse-open` when the status is still open, otherwise nothing. */
+export function statusPulseClass(status: string | null | undefined): string {
+  return isAwaitingDecision(status) ? "pulse-open" : "";
+}

@@ -16,8 +16,9 @@
 
 import { editDistance, foldExpanded, foldLoose, toleranceFor } from "../search";
 import { DEPARTMENT_LIST } from "../validation";
+import { ASK } from "./follow-ups";
 import { helpAnswer, SKILLS, type AgentEntities, type Skill } from "./skills";
-import type { AgentAnswer, AgentContext } from "./types";
+import type { AgentAnswer, AgentContext, AgentFollowUp } from "./types";
 
 /** Words that carry no intent and would otherwise pull every skill up. */
 const STOPWORDS = new Set([
@@ -187,12 +188,18 @@ export function ask(question: string, ctx: AgentContext): AgentAnswer {
   return (ranked[0] as Ranked).skill.run(ctx, entities);
 }
 
-/** The prompts the widget offers before anyone has typed anything. */
-export const STARTERS: ReadonlyArray<{ label: string; question: string }> = [
-  { label: "Was ist gerade kritisch?", question: "Was ist gerade kritisch?" },
-  { label: "Was ist überfällig?", question: "Was ist überfällig?" },
-  { label: "Wer hat die meiste Last?", question: "Wer hat die meiste offene Last?" },
-  { label: "Wie steht das Portfolio?", question: "Wie steht das Portfolio insgesamt?" },
-  { label: "Was hat sich geändert?", question: "Was hat sich geändert?" },
-  { label: "Wie verlässlich sind die Zahlen?", question: "Wie verlässlich sind die Zahlen?" },
+/**
+ * The prompts the widget offers before anyone has typed anything.
+ *
+ * Taken from the same catalogue the follow-up chips are built from, so a
+ * starter and a chip can never phrase the same question two ways — and so the
+ * one test that proves every offered question resolves covers both.
+ */
+export const STARTERS: ReadonlyArray<AgentFollowUp> = [
+  ASK["most-critical"],
+  ASK.overdue,
+  ASK.workload,
+  ASK.portfolio,
+  ASK["recent-changes"],
+  ASK["data-quality"],
 ];
