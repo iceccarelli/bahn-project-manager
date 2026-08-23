@@ -1748,21 +1748,38 @@ await check("the relief prints every value it draws, and flattens on request", a
     assert(c.text === c.attr, `a cell draws ${c.attr} but prints "${c.text}"`);
   }
 
-  // The lanes have to sum to the Gewerk's required total, or the picture is
-  // describing a different set from the cards above it.
-  const rows = await page.$$eval(".relief-grid tbody tr", (trs) =>
-    trs.map((tr) => {
-      const values = [...tr.querySelectorAll(".relief-cell")].map((c) =>
-        Number(c.getAttribute("data-value")),
-      );
-      const total = Number((tr.lastElementChild?.textContent ?? "0").replace(/\./g, ""));
-      return { values, total };
-    }),
-  );
+  /*
+   * The lanes have to sum to the Gewerk's required total, or the picture is
+   * describing a different set from the cards above it.
+   *
+   * Grouped by `data-department` rather than by walking table rows: the relief
+   * is a CSS grid now, because table boxes cannot hold a 3D context and every
+   * tile's height was being flattened away inside a <td>. The relationship the
+   * assertion cares about is the Gewerk, and that is on the element.
+   */
+  const rows = await page.$$eval(".relief-cell", (cells) => {
+    const byDept = new Map();
+    for (const c of cells) {
+      const dep = c.getAttribute("data-department");
+      if (!byDept.has(dep)) byDept.set(dep, []);
+      byDept.get(dep).push(Number(c.getAttribute("data-value")));
+    }
+    const totals = new Map(
+      [...document.querySelectorAll("[data-relief-label]")].map((b) => [
+        b.getAttribute("data-relief-label"),
+        Number(b.getAttribute("data-relief-total")),
+      ]),
+    );
+    return [...byDept.entries()].map(([dep, values]) => ({
+      dep,
+      values,
+      total: totals.get(dep) ?? -1,
+    }));
+  });
   assert(rows.length === 14, `${rows.length} relief rows, expected 14`);
   for (const r of rows) {
     const sum = r.values.reduce((a, b) => a + b, 0);
-    assert(sum === r.total, `relief lanes sum to ${sum} against a stated total of ${r.total}`);
+    assert(sum === r.total, `${r.dep}: lanes sum to ${sum} against a stated total of ${r.total}`);
   }
 
   const tilted = await page.$eval(".relief-stage", (e) => e.getAttribute("data-flat"));
@@ -1780,6 +1797,122 @@ await check("the relief prints every value it draws, and flattens on request", a
     JSON.stringify(flatCells) === JSON.stringify(cells.map((c) => c.text)),
     "the flat view shows different numbers from the relief",
   );
+});
+
+await check("the buildings actually have height, all the way to the screen", async () => {
+  await go("/");
+  await page.waitForSelector(".relief-cell", { timeout: 25000 });
+
+  /*
+   * The defect this exists to make impossible.
+   *
+   * The relief shipped twice looking flat, and both times the height was
+   * raised — from 56px to 104px — when the height had never been the problem.
+   * Measured in the browser, every tile read:
+   *
+   *     button.relief-cell   preserve-3d
+   *     td                   FLAT
+   *     tr                   FLAT
+   *     tbody                FLAT
+   *
+   * Table boxes cannot establish a 3D rendering context. Each tile's
+   * translateZ was being flattened back into the plane at the <td> before it
+   * reached the screen, so the number was correct, on the element, and
+   * discarded. Nothing on the page reported a problem.
+   *
+   * Two assertions, because either one alone can pass on a broken build: the
+   * ancestor chain must carry preserve-3d unbroken from the tile up to the
+   * stage, AND the tile's own computed matrix must actually contain the Z
+   * translation. Put the grid back in a table and both fail immediately.
+   */
+  const depth = await page.evaluate(() => {
+    const cells = [...document.querySelectorAll(".relief-cell")];
+    const tall = cells.sort(
+      (a, b) => Number(b.dataset.value) - Number(a.dataset.value),
+    )[0];
+
+    const chain = [];
+    let node = tall;
+    while (node && !node.classList.contains("relief-stage")) {
+      chain.push({
+        tag: node.tagName.toLowerCase(),
+        cls: (node.className || "").toString().split(" ")[0],
+        style3d: getComputedStyle(node).transformStyle,
+      });
+      node = node.parentElement;
+    }
+
+    // matrix3d(m11..m44) — the Z translation is the 15th component.
+    const m = getComputedStyle(tall).transform;
+    const parts = /^matrix3d\(([^)]+)\)$/.exec(m)?.[1].split(",").map(Number) ?? null;
+    return {
+      value: Number(tall.dataset.value),
+      lift: Number.parseFloat(getComputedStyle(tall).getPropertyValue("--relief-lift")) || 0,
+      translateZ: parts ? Math.round(parts[14]) : null,
+      matrixKind: m.slice(0, 9),
+      chain,
+    };
+  });
+
+  assert(depth.value > 100, `the tallest tile is only ${depth.value}`);
+  assert(depth.lift > 100, `the tallest tile lifts only ${depth.lift}px`);
+  for (const link of depth.chain) {
+    assert(
+      link.style3d === "preserve-3d",
+      `<${link.tag}.${link.cls}> is ${link.style3d} — it flattens every tile above it`,
+    );
+  }
+  assert(
+    depth.matrixKind === "matrix3d(",
+    `the tile's transform is 2D (${depth.matrixKind}) — the height never left the plane`,
+  );
+  assert(
+    depth.translateZ === Math.round(depth.lift),
+    `the tile declares ${depth.lift}px of height but paints translateZ ${depth.translateZ}`,
+  );
+  console.log(`     tallest ${depth.value} → ${depth.lift}px, translateZ ${depth.translateZ}`);
+
+  // A zero stays on the ground. Height has to mean something at both ends.
+  const zeroLift = await page.$$eval('.relief-cell[data-value="0"]', (els) =>
+    els.map((e) => Number.parseFloat(getComputedStyle(e).getPropertyValue("--relief-lift")) || 0),
+  );
+  assert(zeroLift.length > 0, "no empty lane to check");
+  assert(
+    zeroLift.every((l) => l === 0),
+    "an empty lane is standing above the ground",
+  );
+});
+
+await check("nothing is clipped out of the relief at its default camera", async () => {
+  await go("/");
+  await page.waitForSelector(".relief-cell", { timeout: 25000 });
+  await page.waitForTimeout(600);
+  /*
+   * A 3D transform paints far outside its layout box and the scroll container
+   * clips to the box, so „gesamt" spent a version sliced off the right edge
+   * while the Gewerk names were sliced off the left. The stage reserves room
+   * derived from the camera; this is the check that the derivation is right.
+   */
+  const spill = await page.evaluate(() => {
+    const scroller = document.querySelector(".relief-stage")?.parentElement;
+    if (!scroller) return null;
+    const box = scroller.getBoundingClientRect();
+    let worst = 0;
+    let culprit = "";
+    for (const cell of document.querySelectorAll(".relief-cell, [data-relief-label]")) {
+      const r = cell.getBoundingClientRect();
+      const over = Math.max(box.left - r.left, r.right - box.right, 0);
+      if (over > worst) {
+        worst = over;
+        culprit = cell.getAttribute("data-relief-label") ??
+          `${cell.getAttribute("data-department")}/${cell.getAttribute("data-lane")}`;
+      }
+    }
+    return { worst: Math.round(worst), culprit, scrolls: scroller.scrollWidth > scroller.clientWidth + 1 };
+  });
+  assert(spill, "no relief to measure");
+  assert(spill.worst <= 2, `${spill.culprit} hangs ${spill.worst}px outside the panel`);
+  assert(!spill.scrolls, "the relief needs a horizontal scrollbar at its default camera");
 });
 
 await check("Präsentationsmodus is opt-in, advances, and pauses when read", async () => {
@@ -2446,8 +2579,12 @@ await check("the keyboard drives the same camera", async () => {
   await page.keyboard.press("Home");
   await page.waitForTimeout(400);
   const home = (await page.getAttribute(".relief-stage", "style")) ?? "";
-  assert(/--relief-tilt:\s*52deg/.test(home), `Home did not recentre: ${home}`);
-  assert(/--relief-zoom:\s*1\b/.test(home), "Home did not reset the zoom");
+  /* Compared against the camera this test found, not against a number copied
+     out of the component — HOME has moved twice and a gate that restates it
+     fails for the wrong reason each time. */
+  assert(home === before, `Home did not recentre.\n  was:  ${before}\n  now:  ${home}`);
+  // The default zoom is no longer 1: the relief opens slightly zoomed out so
+  // the whole skyline fits its card. `home === before` above already covers it.
 });
 
 await check("a tile is a place you can go, and an empty tile is not", async () => {
@@ -2484,11 +2621,40 @@ await check("a tile is a place you can go, and an empty tile is not", async () =
   const stageBox = await stage.boundingBox();
   assert(stageBox, "the relief has no box");
   // page.mouse.move is the one interaction with no actionability check, which
-  // is exactly what a hand does: it arrives before it aims.
+  // is exactly what a hand does: it arrives before it aims. It also pauses the
+  // sweep, so the target stops moving before anything tries to hit it.
   await page.mouse.move(stageBox.x + stageBox.width / 2, stageBox.y + 12);
   await page.waitForTimeout(500);
-  // If the pause did not take, this click times out — which is the assertion.
-  await target.click({ timeout: 8000 });
+
+  /*
+   * Aim at a point that is actually on the tile.
+   *
+   * A tile is a rotated parallelogram, and the centre of its axis-aligned
+   * bounding box can fall outside it entirely — which is where a plain
+   * .click() aims. That is not a test detail: it is the difference between a
+   * tile a person can hit and one whose middle is empty air, so the check is
+   * that SOME point of the tile hit-tests to the tile, and then it clicks
+   * there.
+   */
+  const hit = await page.evaluate(() => {
+    const tile = document.querySelector(
+      '.relief-cell[data-department="EEA"][data-lane="blocked"]',
+    );
+    if (!tile) return null;
+    const r = tile.getBoundingClientRect();
+    for (let fy = 0.5; fy <= 0.9; fy += 0.1) {
+      for (let fx = 0.2; fx <= 0.8; fx += 0.1) {
+        const x = r.left + r.width * fx;
+        const y = r.top + r.height * fy;
+        const el = document.elementFromPoint(x, y);
+        if (el === tile || tile.contains(el)) return { x, y };
+      }
+    }
+    return null;
+  });
+  assert(hit, "no point of the EEA/blockiert tile hit-tests to the tile itself");
+  await page.mouse.click(hit.x, hit.y);
+  await page.waitForTimeout(400);
   await page.waitForTimeout(1200);
   const url = new URL(page.url());
   assert(url.pathname === "/bvb-eea", `the EEA tile went to ${url.pathname}`);

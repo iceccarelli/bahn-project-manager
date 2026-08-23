@@ -762,8 +762,19 @@
 }
 
 .relief-stage {
-  perspective: 1400px;
-  perspective-origin: 50% 30%;
+  perspective: 1600px;
+  perspective-origin: 50% 42%;
+  /*
+   * Room on all four sides, because a 3D transform paints far outside its
+   * layout box and the box is what the scroll container clips to.
+   *
+   * Without the headroom the tallest tower was cut off at the top; without the
+   * side padding rotateZ walked the „gesamt" column past the right edge and the
+   * Gewerk names past the left. The vertical figure comes from MAX_LIFT_PX via
+   * the component, so the reserve and the tallest possible building can never
+   * disagree.
+   */
+  padding: var(--relief-headroom, 0px) var(--relief-padr, 0px) 1.5rem var(--relief-padl, 0px);
 }
 
 .relief-stage[data-flat="false"] .relief-grid {
@@ -771,6 +782,80 @@
     rotateZ(var(--relief-spin, -24deg));
   transform-style: preserve-3d;
   transition: transform 200ms ease-out;
+}
+
+/* ---------------------------------------------------------------------------
+   The grid is a grid, and that is the fix
+   ---------------------------------------------------------------------------
+   It was an HTML <table>. Measured in the browser, every tile read:
+
+       button.relief-cell   transform-style: preserve-3d
+       td                   transform-style: FLAT
+       tr                   transform-style: FLAT
+       tbody                transform-style: FLAT
+
+   Table boxes cannot establish a 3D rendering context — that is the
+   specification, not a browser quirk — so each tile's translateZ was flattened
+   back into the plane at the <td> before it reached the screen. Two rounds of
+   raising the height changed a number that was being discarded.
+
+   Every label, tile and total is now a DIRECT child of one CSS grid. There is
+   nothing between the perspective origin and a tile that can flatten it.
+   --------------------------------------------------------------------------- */
+.relief-grid {
+  display: grid;
+  grid-template-columns: 11.5rem repeat(4, minmax(96px, 1fr));
+  /*
+   * 26px between rows, not 10px.
+   *
+   * The row gap is what a building has to stand in. At 10px the rows were 25px
+   * apart on screen and a mid-sized tower reached back over four of them —
+   * three Gewerke's numbers ended up stacked on one another at the top of the
+   * grid. 26px puts them 40px apart, which is enough air that only the very
+   * tallest towers overlap anything, and those are sorted to the back row where
+   * there is nothing behind them.
+   */
+  gap: 26px 14px;
+  align-items: center;
+  transform-style: preserve-3d;
+}
+
+.relief-rowlabel {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  border: 0;
+  background: none;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-align: left;
+  cursor: pointer;
+}
+.relief-rowname {
+  font-size: 11px;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+.relief-rowtotal {
+  font-size: 11px;
+  font-weight: 600;
+  color: hsl(var(--muted-foreground));
+}
+.relief-rowlabel:hover {
+  color: hsl(var(--primary-strong));
+}
+.relief-rowlabel:focus-visible {
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: 2px;
+}
+
+/* The labels and totals live on the ground plane, so they stay readable while
+   the towers rise out of it. Counter-rotated for the same reason the values
+   are: text that tilts with the stage stops being text. */
+.relief-stage[data-flat="false"] .relief-rowlabel {
+  transform: rotateZ(calc(var(--relief-spin, -24deg) * -1))
+    rotateX(calc(var(--relief-tilt, 52deg) * -1));
 }
 
 /* While a hand is on it, the camera must not lag behind the hand. */
@@ -784,8 +869,8 @@
  *
  * A slow drift the panel performs on its own so the relief reads as an object
  * rather than a picture of one — and so a room looking at a screen sees the
- * ridgelines move against each other, which is what makes the heights legible
- * from a distance.
+ * skyline move against itself, which is what makes the heights legible from a
+ * distance.
  *
  * It sweeps rather than spins: the camera is clamped to ±60° of yaw because
  * past that the row labels turn edge-on. 24 seconds for a full there-and-back,
@@ -810,6 +895,36 @@
 
 .relief-orbit {
   transform-style: preserve-3d;
+  /*
+   * The wrapper must not catch the clicks meant for the buildings.
+   *
+   * Measured, after every tile in the relief turned out to be unclickable: at
+   * all 2,019 sampled points across the panel, document.elementFromPoint
+   * returned .relief-orbit and never a tile. An element that establishes a 3D
+   * rendering context hit-tests as its own flat box, and this one covers the
+   * whole grid — so the moment the tiles gained real depth, the wrapper that
+   * carries the idle sweep started swallowing every pointer event aimed at
+   * them. It did not show up before because the tiles had no depth to gain.
+   *
+   * Turning hit-testing off here and back on for the things that are actually
+   * interactive restores it exactly: 125 of those points reach a tile again.
+   * The alternative — transform-style: flat on this element — also restores
+   * the clicks, by flattening the subtree, which is the defect this whole
+   * rework exists to remove.
+   */
+  pointer-events: none;
+  /*
+   * Reclaim the band the tilt squashes out of the plane; see `reserve` in
+   * PortfolioRelief.tsx for where the figure comes from.
+   *
+   * Asymmetric on purpose. The far rows lose their whole share at the top —
+   * nothing is up there but empty plane. The near rows do not: perspective
+   * pushes the bottom row toward the viewer and its own plinth adds to that,
+   * so pulling the full amount back cut „Baubetriebsplanung" off the bottom
+   * edge. 55% is what it can give up and still stand on the card.
+   */
+  margin-top: calc(var(--relief-squash, 0px) * -1);
+  margin-bottom: calc(var(--relief-squash, 0px) * -0.55);
 }
 
 .relief-stage[data-autoturn="true"] .relief-orbit {
@@ -821,10 +936,9 @@
  *
  * Found by the click gate, not by looking: a tile that is drifting is a tile
  * Playwright will not click because it never settles — and a person aiming at
- * a 30px target that keeps sliding has exactly the same problem, they just
+ * a small target that keeps sliding has exactly the same problem, they just
  * blame themselves for it. Hover and keyboard focus pause the sweep where it
- * stands; moving away resumes it. `animation-play-state` costs no state and no
- * render, so the pause is instant.
+ * stands; moving away resumes it.
  */
 .relief-stage[data-autoturn="true"]:hover .relief-orbit,
 .relief-stage[data-autoturn="true"]:focus-within .relief-orbit {
@@ -841,10 +955,9 @@
  * No sweep on a touch screen.
  *
  * The pause is bound to hover, and a finger has no hover: on a phone the only
- * way to stop the drift would be to hit a moving 44px target first, which is
- * the problem the pause exists to solve. A touch reader gets the mountain
- * range standing still and the drag gesture, which is the better half of the
- * interaction anyway.
+ * way to stop the drift would be to hit a moving target first, which is the
+ * problem the pause exists to solve. A touch reader gets the skyline standing
+ * still and the drag gesture, which is the better half of the interaction.
  */
 @media (pointer: coarse) {
   .relief-stage[data-autoturn="true"] .relief-orbit {
@@ -866,49 +979,71 @@
   transition: transform 200ms ease-out;
 }
 
-/*
- * The side of the column — the thing that turns tiles into a mountain range.
- *
- * Raised tiles alone read as confetti floating over a table: you can see that
- * something is high but not what it is standing on, and the eye has nothing to
- * judge one height against another with. A real vertical face, hinged at the
- * tile's front edge and folded down to the ground plane, gives every value a
- * visible column. Ridges then line up across a row and the shape of the
- * portfolio becomes a landscape instead of a scatter.
- *
- * It is a pseudo-element inside an existing preserve-3d subtree, so it costs
- * no DOM node and no second rendering stack, and it inherits the tile's own
- * fill so the colour scale still means exactly what the legend says. The
- * gradient darkens towards the base purely as shading — the number is on the
- * top face and is the only thing anyone reads a value from.
- */
-.relief-stage[data-flat="false"] .relief-cell::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: var(--relief-lift, 0px);
-  transform-origin: bottom center;
-  transform: rotateX(-90deg);
-  background: linear-gradient(
-    to bottom,
-    rgb(var(--relief-fill) / calc(var(--relief-alpha) * 0.85)),
-    rgb(var(--relief-fill) / calc(var(--relief-alpha) * 0.3))
-  );
-  border-radius: 0 0 4px 4px;
-  pointer-events: none;
+.relief-cell,
+.relief-rowlabel {
+  pointer-events: auto;
 }
 
 .relief-cell:not(:disabled) {
   cursor: pointer;
 }
 
-/* A tile you can reach rises to meet you. 12px is enough to read as a
-   response and small enough not to collide with the row above. */
+/* ---------------------------------------------------------------------------
+   Two faces make a building
+   ---------------------------------------------------------------------------
+   The tile is the roof. ::after is the front wall, hinged at the roof's front
+   edge and folded down to the ground; ::before is the right wall, hinged at
+   the roof's right edge and folded the same way. Both are exactly
+   --relief-lift deep, so the box closes on the ground plane whatever the
+   height.
+
+   Three tones, front darker than roof and side darkest, is the oldest trick
+   there is for making a box read as solid — and it is doing real work here:
+   without a visible wall the eye can see that something is raised but has
+   nothing to judge one height against another with, which is why raised tiles
+   alone always looked like confetti rather than a skyline.
+
+   Both inherit the tile's own fill, so the colour scale still means exactly
+   what the legend says. The number stays on the roof and is the only thing
+   anyone reads a value from.
+   --------------------------------------------------------------------------- */
+.relief-stage[data-flat="false"] .relief-cell::after,
+.relief-stage[data-flat="false"] .relief-cell::before {
+  content: "";
+  position: absolute;
+  background-color: rgb(var(--relief-fill) / var(--relief-alpha));
+  pointer-events: none;
+  backface-visibility: hidden;
+}
+
+/* front wall */
+.relief-stage[data-flat="false"] .relief-cell::after {
+  top: 100%;
+  left: 0;
+  width: 100%;
+  height: var(--relief-lift, 0px);
+  transform-origin: top center;
+  transform: rotateX(-90deg);
+  background-image: linear-gradient(to bottom, rgb(0 0 0 / 0.12), rgb(0 0 0 / 0.34));
+  border-radius: 0 0 3px 3px;
+}
+
+/* right wall */
+.relief-stage[data-flat="false"] .relief-cell::before {
+  left: 100%;
+  top: 0;
+  height: 100%;
+  width: var(--relief-lift, 0px);
+  transform-origin: left center;
+  transform: rotateY(90deg);
+  background-image: linear-gradient(to right, rgb(0 0 0 / 0.3), rgb(0 0 0 / 0.46));
+}
+
+/* A tile you can reach rises to meet you. 14px is enough to read as a
+   response and small enough not to change how tall it looks. */
 .relief-stage[data-flat="false"] .relief-cell:not(:disabled):hover,
 .relief-stage[data-flat="false"] .relief-cell:not(:disabled):focus-visible {
-  transform: translateZ(calc(var(--relief-lift, 0px) + 12px));
+  transform: translateZ(calc(var(--relief-lift, 0px) + 14px));
 }
 
 .relief-cell:focus-visible {
@@ -918,7 +1053,7 @@
 
 .relief-stage[data-flat="false"] .relief-cell {
   transform: translateZ(var(--relief-lift, 0px));
-  box-shadow: 0 6px 14px rgb(0 0 0 / 0.18);
+  box-shadow: 0 8px 18px rgb(0 0 0 / 0.22);
 }
 
 /*
@@ -926,25 +1061,25 @@
  *
  * `pulse-open` animates box-shadow, and so does the tile's depth shadow — one
  * property, so the plain utility would have replaced the shadow that makes the
- * column sit on the ground for the duration of every cycle. This keyframe
+ * building sit on the ground for the duration of every cycle. This keyframe
  * carries both: the drop shadow stays constant, the ring and halo ride on top.
  */
 @keyframes bpm-relief-open {
   0% {
     box-shadow:
-      0 6px 14px rgb(0 0 0 / 0.18),
+      0 8px 18px rgb(0 0 0 / 0.22),
       0 0 0 0 rgb(var(--relief-open) / 0.65),
       0 0 8px 0 rgb(var(--relief-open) / 0.5);
   }
   70% {
     box-shadow:
-      0 6px 14px rgb(0 0 0 / 0.18),
+      0 8px 18px rgb(0 0 0 / 0.22),
       0 0 0 8px rgb(var(--relief-open) / 0),
       0 0 18px 4px rgb(var(--relief-open) / 0.28);
   }
   100% {
     box-shadow:
-      0 6px 14px rgb(0 0 0 / 0.18),
+      0 8px 18px rgb(0 0 0 / 0.22),
       0 0 0 0 rgb(var(--relief-open) / 0),
       0 0 8px 0 rgb(var(--relief-open) / 0.5);
   }
@@ -985,6 +1120,11 @@
 .relief-stage[data-flat="false"] .relief-value {
   transform: rotateZ(calc(var(--relief-spin, -24deg) * -1))
     rotateX(calc(var(--relief-tilt, 52deg) * -1));
+}
+
+/* The flat table keeps the old tile look and none of the 3D. */
+.relief-flat .relief-cell {
+  min-height: 30px;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -593,6 +593,19 @@ export default function Dashboard() {
       </div>
 
       {/* MAIN CONTENT */}
+      {/*
+        The relief is full width, and that is a measurement rather than a
+        preference.
+        
+        In the 7-of-12 column it had about 650px to work in. A 14×4 grid tilted
+        to 44° and yawed to −18° paints roughly 830px wide before the towers'
+        side walls are counted, so the far column was clipped on every screen
+        and the horizontal scrollbar was doing the work the layout should have
+        done. Nothing else on this Dashboard needs the width more than the one
+        panel whose whole job is showing the shape of 3.699 Prüfungen at once.
+      */}
+      <PortfolioRelief standings={standings} />
+
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
         {/* LEFT COLUMN - CHARTS */}
         <div className="xl:col-span-7 space-y-6">
@@ -651,8 +664,6 @@ export default function Dashboard() {
             shared/portfolio-metrics.ts and agrees with the Gewerk tabs.
           */}
           <GewerkePortfolio standings={standings} />
-
-          <PortfolioRelief standings={standings} />
 
           {/* Aging, concentration and the trustworthiness of the rows every
               other panel is built on. */}
