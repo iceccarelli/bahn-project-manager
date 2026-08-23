@@ -142,3 +142,6 @@ _dbg.mjs
 _one.mjs
 _audit.mjs
 _diag*.mjs
+
+# Patch artifacts are transfer files, never repository content.
+*.patch
