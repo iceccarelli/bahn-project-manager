@@ -1,0 +1,265 @@
+From 726728eb8313fef3a534fe187cce6da5cd08d0a9 Mon Sep 17 00:00:00 2001
+From: Vincenzo Grimaldi <vince.ceccarelli@gmail.com>
+Date: Sun, 23 Aug 2026 14:09:30 +0000
+Subject: [PATCH] pnpm status sagt jetzt auch, ob das Netz den Stand hat
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Diese Woche zweimal dasselbe Muster, zweimal einen Tag gekostet:
+
+  1. Der Patch lag unter einem Pfad, den es in der Codespace nicht gab.
+     `git am` starb in Zeile 4, alle Gates liefen gegen alten Code und
+     meldeten grun.
+  2. Der Patch war angewendet, gebaut, alle Gates grun, alle Marker OK —
+     und die Website zeigte nichts davon, weil `origin/main` noch auf
+     "Add files via upload" stand. Zwei Commits hatten die Maschine nie
+     verlassen. Vercel baut aus origin/main.
+
+Im zweiten Fall hat dieses Skript "Alles angewendet." gedruckt. Das war
+nicht neutral falsch, sondern aktiv irrefuhrend: die einzige Person, die
+nachgesehen hat, hat vom Statusbildschirm das Gegenteil der Wahrheit
+gelesen.
+
+Angewendet, gebaut und gepruft sind drei von vier Bedingungen.
+Ausgeliefert ist die vierte, und sie fehlte hier.
+
+Neu:
+
+  — Abschnitt "Was im Netz steht": HEAD gegen den Upstream, mit den
+    Commits, die noch nicht druben sind, und der Befehlszeile, die das
+    andert. `git fetch` ist best effort — ohne Netz bleibt der lokale
+    Vergleich, statt gar keine Aussage;
+  — das Schlussurteil nennt die erste Bedingung, die nicht erfullt ist.
+    "Alles angewendet und gepusht." gibt es nur noch, wenn HEAD wirklich
+    auf dem Upstream steht.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01GJwENjMMPe6PSZBdrXkzBj
+---
+ scripts/status.mjs |  68 ++++++++++++++++++++++--
+ statusdeploy.patch | 129 +++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 192 insertions(+), 5 deletions(-)
+ create mode 100644 statusdeploy.patch
+
+diff --git a/scripts/status.mjs b/scripts/status.mjs
+index c488d27..878f39b 100644
+--- a/scripts/status.mjs
++++ b/scripts/status.mjs
+@@ -103,6 +103,52 @@ if (!existsSync(DIST)) {
+   if (dead) console.log(`  ${red("ALT")}  ${dead} — dieser Build ist alter als die Gewerk-Workspaces`);
+ }
+ 
++/*
++ * ---------------------------------------------------------------------------
++ * Was im Netz steht
++ * ---------------------------------------------------------------------------
++ * The section this screen was missing, and the omission cost a whole day.
++ *
++ * Every marker read OK, every gate was green, dist/public was fresh, and this
++ * script printed "Alles angewendet." — while bahn-project-manager.vercel.app
++ * showed none of it, because Vercel builds from origin/main and the commits
++ * had never left the machine. A status screen that reports the working tree
++ * and calls that "everything" is not neutral: it actively says the opposite of
++ * the truth to the one person checking.
++ *
++ * Applied, built and gated is three of four. Deployed is the fourth.
++ */
++console.log(bold("\nWas im Netz steht"));
++let unpushed = 0;
++{
++  // Best-effort: a Codespace without network still gets the local comparison.
++  sh("git fetch -q origin 2>/dev/null || true");
++  const upstream = sh("git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null") || "origin/main";
++  const remote = sh(`git rev-parse --short ${upstream} 2>/dev/null`);
++  const head = sh("git rev-parse --short HEAD");
++  console.log(`  ${dim(`HEAD        ${head}`)}`);
++  console.log(`  ${dim(`${upstream.padEnd(11)} ${remote || "unbekannt"}`)}`);
++  if (!remote) {
++    console.log(`  ${red("?")}   kein Upstream erreichbar — Deploy-Stand unbekannt`);
++  } else {
++    unpushed = Number(sh(`git rev-list --count ${upstream}..HEAD`) || "0");
++    const behind = Number(sh(`git rev-list --count HEAD..${upstream}`) || "0");
++    if (unpushed > 0) {
++      console.log(
++        `  ${red("NEIN")} ${unpushed} Commit(s) sind nur lokal. Vercel baut aus ${upstream} und zeigt sie nicht.`,
++      );
++      for (const line of sh(`git log --oneline ${upstream}..HEAD`).split("\n").filter(Boolean)) {
++        console.log(`     ${dim(line)}`);
++      }
++      console.log(`     ${bold("git push origin HEAD:main")}`);
++    } else if (behind > 0) {
++      console.log(`  ${red("NEIN")} ${behind} Commit(s) liegen auf ${upstream} und nicht hier.`);
++    } else {
++      console.log(`  ${green("OK")}  HEAD steht auf ${upstream} — das Netz zeigt diesen Stand.`);
++    }
++  }
++}
++
+ console.log(bold("\nErwartete Zahlen der Gates"));
+ for (const line of [
+   "pnpm exec vitest run          265 passed, 6 skipped",
+@@ -112,8 +158,20 @@ for (const line of [
+   "pnpm exec biome check .        72 warnings (unverandert)",
+ ]) console.log(dim(`  ${line}`));
+ 
+-console.log(
+-  missing === 0
+-    ? green("\nAlles angewendet.\n")
+-    : red(`\n${missing} Bauteil(e) fehlen — der letzte Patch ist nicht vollstandig angekommen.\n`),
+-);
++/*
++ * Four conditions, and the verdict names whichever one fails first.
++ * "Alles angewendet" is reserved for the case where the website has it too.
++ */
++if (missing > 0) {
++  console.log(
++    red(`\n${missing} Bauteil(e) fehlen — der letzte Patch ist nicht vollstandig angekommen.\n`),
++  );
++} else if (unpushed > 0) {
++  console.log(
++    red(
++      `\nIm Code, aber nicht im Netz: ${unpushed} Commit(s) ungepusht.\nDie Website andert sich erst nach  git push origin HEAD:main\n`,
++    ),
++  );
++} else {
++  console.log(green("\nAlles angewendet und gepusht.\n"));
++}
+diff --git a/statusdeploy.patch b/statusdeploy.patch
+new file mode 100644
+index 0000000..41d5105
+--- /dev/null
++++ b/statusdeploy.patch
+@@ -0,0 +1,129 @@
++From c0ae6b8cc32fd534a13f2a4e148b02e2066c8edf Mon Sep 17 00:00:00 2001
++From: Vincenzo Grimaldi <vince.ceccarelli@gmail.com>
++Date: Sun, 23 Aug 2026 14:09:30 +0000
++Subject: [PATCH] pnpm status sagt jetzt auch, ob das Netz den Stand hat
++MIME-Version: 1.0
++Content-Type: text/plain; charset=UTF-8
++Content-Transfer-Encoding: 8bit
++
++Diese Woche zweimal dasselbe Muster, zweimal einen Tag gekostet:
++
++  1. Der Patch lag unter einem Pfad, den es in der Codespace nicht gab.
++     `git am` starb in Zeile 4, alle Gates liefen gegen alten Code und
++     meldeten grun.
++  2. Der Patch war angewendet, gebaut, alle Gates grun, alle Marker OK —
++     und die Website zeigte nichts davon, weil `origin/main` noch auf
++     "Add files via upload" stand. Zwei Commits hatten die Maschine nie
++     verlassen. Vercel baut aus origin/main.
++
++Im zweiten Fall hat dieses Skript "Alles angewendet." gedruckt. Das war
++nicht neutral falsch, sondern aktiv irrefuhrend: die einzige Person, die
++nachgesehen hat, hat vom Statusbildschirm das Gegenteil der Wahrheit
++gelesen.
++
++Angewendet, gebaut und gepruft sind drei von vier Bedingungen.
++Ausgeliefert ist die vierte, und sie fehlte hier.
++
++Neu:
++
++  — Abschnitt "Was im Netz steht": HEAD gegen den Upstream, mit den
++    Commits, die noch nicht druben sind, und der Befehlszeile, die das
++    andert. `git fetch` ist best effort — ohne Netz bleibt der lokale
++    Vergleich, statt gar keine Aussage;
++  — das Schlussurteil nennt die erste Bedingung, die nicht erfullt ist.
++    "Alles angewendet und gepusht." gibt es nur noch, wenn HEAD wirklich
++    auf dem Upstream steht.
++
++Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
++Claude-Session: https://claude.ai/code/session_01GJwENjMMPe6PSZBdrXkzBj
++---
++ scripts/status.mjs | 69 ++++++++++++++++++++++++++++++++++++++++++----
++ 1 file changed, 64 insertions(+), 5 deletions(-)
++
++diff --git a/scripts/status.mjs b/scripts/status.mjs
++index c488d27..0ecd2e5 100644
++--- a/scripts/status.mjs
+++++ b/scripts/status.mjs
++@@ -103,6 +103,52 @@ if (!existsSync(DIST)) {
++   if (dead) console.log(`  ${red("ALT")}  ${dead} — dieser Build ist alter als die Gewerk-Workspaces`);
++ }
++ 
+++/*
+++ * ---------------------------------------------------------------------------
+++ * Was im Netz steht
+++ * ---------------------------------------------------------------------------
+++ * The section this screen was missing, and the omission cost a whole day.
+++ *
+++ * Every marker read OK, every gate was green, dist/public was fresh, and this
+++ * script printed "Alles angewendet." — while bahn-project-manager.vercel.app
+++ * showed none of it, because Vercel builds from origin/main and the commits
+++ * had never left the machine. A status screen that reports the working tree
+++ * and calls that "everything" is not neutral: it actively says the opposite of
+++ * the truth to the one person checking.
+++ *
+++ * Applied, built and gated is three of four. Deployed is the fourth.
+++ */
+++console.log(bold("\nWas im Netz steht"));
+++let unpushed = 0;
+++{
+++  // Best-effort: a Codespace without network still gets the local comparison.
+++  sh("git fetch -q origin 2>/dev/null || true");
+++  const upstream = sh("git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null") || "origin/main";
+++  const remote = sh(`git rev-parse --short ${upstream} 2>/dev/null`);
+++  const head = sh("git rev-parse --short HEAD");
+++  console.log(`  ${dim(`HEAD        ${head}`)}`);
+++  console.log(`  ${dim(`${upstream.padEnd(11)} ${remote || "unbekannt"}`)}`);
+++  if (!remote) {
+++    console.log(`  ${red("?")}   kein Upstream erreichbar — Deploy-Stand unbekannt`);
+++  } else {
+++    unpushed = Number(sh(`git rev-list --count ${upstream}..HEAD`) || "0");
+++    const behind = Number(sh(`git rev-list --count HEAD..${upstream}`) || "0");
+++    if (unpushed > 0) {
+++      console.log(
+++        `  ${red("NEIN")} ${unpushed} Commit(s) sind nur lokal. Vercel baut aus ${upstream} und zeigt sie nicht.`,
+++      );
+++      for (const line of sh(`git log --oneline ${upstream}..HEAD`).split("\n").filter(Boolean)) {
+++        console.log(`     ${dim(line)}`);
+++      }
+++      console.log(`     ${bold("git push origin HEAD:main")}`);
+++    } else if (behind > 0) {
+++      console.log(`  ${red("NEIN")} ${behind} Commit(s) liegen auf ${upstream} und nicht hier.`);
+++    } else {
+++      console.log(`  ${green("OK")}  HEAD steht auf ${upstream} — das Netz zeigt diesen Stand.`);
+++    }
+++  }
+++}
+++
++ console.log(bold("\nErwartete Zahlen der Gates"));
++ for (const line of [
++   "pnpm exec vitest run          265 passed, 6 skipped",
++@@ -112,8 +158,21 @@ for (const line of [
++   "pnpm exec biome check .        72 warnings (unverandert)",
++ ]) console.log(dim(`  ${line}`));
++ 
++-console.log(
++-  missing === 0
++-    ? green("\nAlles angewendet.\n")
++-    : red(`\n${missing} Bauteil(e) fehlen — der letzte Patch ist nicht vollstandig angekommen.\n`),
++-);
+++/*
+++ * Four conditions, and the verdict names whichever one fails first.
+++ * "Alles angewendet" is reserved for the case where the website has it too.
+++ */
+++if (missing > 0) {
+++  console.log(
+++    red(`\n${missing} Bauteil(e) fehlen — der letzte Patch ist nicht vollstandig angekommen.\n`),
+++  );
+++} else if (unpushed > 0) {
+++  console.log(
+++    red(
+++      `\nIm Code, aber nicht im Netz: ${unpushed} Commit(s) ungepusht.` +
+++        `\nDie Website andert sich erst nach  git push origin HEAD:main\n`,
+++    ),
+++  );
+++} else {
+++  console.log(green("\nAlles angewendet und gepusht.\n"));
+++}
++-- 
++2.43.0
++
+-- 
+2.43.0
+
