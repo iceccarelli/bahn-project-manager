@@ -47,6 +47,10 @@ const FEATURES = [
   ["Ask Bahn stellt Anschlussfragen", "shared/agent/follow-ups.ts", "export function followUps"],
   ["Offene Status pulsieren", "shared/status-appearance.ts", "export function statusPulseClass"],
   ["Mobile Navigation deckt die Seite ab", "client/src/index.css", "--color-sidebar:"],
+  ["Handlungsbedarf fuhrt in die gefilterten Karten", "shared/handlungsbedarf.ts", "export function bedarfHref"],
+  ["Gewerke-Karussell statt Leerzustand", "client/src/components/dashboard/GewerkeCarousel.tsx", "export const ROTATE_MS"],
+  ["Relief als Gebirge, dreht sich selbst", "client/src/index.css", "bpm-relief-sweep"],
+  ["Alle acht Bahnhofsmanagements", "client/src/pages/Dashboard.tsx", "Regionale Verteilung — alle"],
 ];
 
 console.log(bold("\nHEAD"));
@@ -151,8 +155,8 @@ let unpushed = 0;
 
 console.log(bold("\nErwartete Zahlen der Gates"));
 for (const line of [
-  "pnpm exec vitest run          265 passed, 6 skipped",
-  "node scripts/e2e-smoke.mjs     86 passed, 0 failed",
+  "pnpm exec vitest run          275 passed, 6 skipped",
+  "node scripts/e2e-smoke.mjs     93 passed, 0 failed",
   "node scripts/check-ui.mjs      UI CLEAN",
   "node scripts/stress-test.mjs    8 passed, 0 failed",
   "pnpm exec biome check .        72 warnings (unverandert)",

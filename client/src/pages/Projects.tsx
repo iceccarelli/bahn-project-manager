@@ -13,6 +13,12 @@ import { Plus, Download, Table, LayoutGrid, MapPin, Filter, X, MessageSquare, Lo
 import { DEPARTMENTS, REVIEW_STATUSES } from "@shared/types";
 import { deriveProjectMetrics, percent } from "@shared/project-metrics";
 import { statusBadgeClass, statusPulseClass } from "@shared/status-appearance";
+import {
+  bedarfFor,
+  countBedarf,
+  projectMatchesBedarf,
+  type BedarfKey,
+} from "@shared/handlungsbedarf";
 import { toast } from "sonner";
 import { MapView, type StationSelection } from "@/components/Map";
 import { ProjectDetailDialog } from "@/components/ProjectDetailDialog";
@@ -104,6 +110,21 @@ export default function Projects() {
    * map already does (buildStationGeo) to be available to the page, which is a
    * change to where that resolution lives, not a prop rename.
    */
+  /*
+   * Two link-in filters, both addressed the same way station focus already is:
+   * an id set layered over whatever the search and the filter panel produced.
+   *
+   *   ?bedarf=overdue   the Dashboard's "Prüftermin überschritten" badge
+   *   ?projekt=42       one row of a reviewer's timeline
+   *
+   * The predicate behind `bedarf` is shared/handlungsbedarf.ts — the same
+   * function that produced the number on the badge. A page that recomputed
+   * "overdue" itself would drift from that badge the first time either side
+   * learned about a status, and a link that lands on a different set than the
+   * number promised is worse than no link at all.
+   */
+  const [bedarfFocus, setBedarfFocus] = useState<BedarfKey | null>(null);
+  const [projectFocus, setProjectFocus] = useState<number | null>(null);
   const [region, setRegion] = useState<string>("");
   const [projektleiter, setProjektleiter] = useState<string>("");
   const [pruefer, setPruefer] = useState<string>("");
@@ -139,6 +160,14 @@ export default function Projects() {
   const { data: filterOptions } = useFilters();
   const { data: allData } = useAllData();
 
+  /* Local midnight, pinned once: the same boundary the Dashboard's badge used,
+     so the set here and the count there cannot disagree by a few hours. */
+  const todayMidnight = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  }, []);
+
 
   // KPIs derived from the 18,172 stored review rows, not from multipliers.
   // These four cards previously read Math.round(total * 0.86) and
@@ -170,6 +199,27 @@ export default function Projects() {
       setSearchInput(q);
       setSearch(q);
       setStationFocus(null);
+    }
+
+    // `bedarfFor` rejects anything that did not come from us, so a hand-typed
+    // ?bedarf=überfällig shows everything rather than an empty page blamed on
+    // the data.
+    const bedarf = bedarfFor(params.get("bedarf"));
+    setBedarfFocus(bedarf ? bedarf.key : null);
+
+    const projektRaw = params.get("projekt");
+    const projekt = projektRaw === null ? Number.NaN : Number(projektRaw);
+    setProjectFocus(Number.isInteger(projekt) && projekt > 0 ? projekt : null);
+
+    // Arriving with either focus clears the leftover text search: the reader
+    // asked for a set, not for that set intersected with whatever was typed
+    // here twenty minutes ago.
+    if (bedarf || Number.isInteger(projekt)) {
+      setStationFocus(null);
+      if (!q) {
+        setSearchInput("");
+        setSearch("");
+      }
     }
   }, [routeSearch]);
 
@@ -303,11 +353,37 @@ export default function Projects() {
    * result rather than to everything.
    */
   const visibleProjects = useMemo(() => {
-    const list: Project[] = data?.projects ?? [];
-    if (!stationFocus) return list;
-    const ids = new Set(stationFocus.projectIds);
-    return list.filter((p) => ids.has(p.id));
-  }, [data, stationFocus]);
+    let list: Project[] = data?.projects ?? [];
+    if (stationFocus) {
+      const ids = new Set(stationFocus.projectIds);
+      list = list.filter((p) => ids.has(p.id));
+    }
+    if (projectFocus !== null) {
+      list = list.filter((p) => p.id === projectFocus);
+    }
+    if (bedarfFocus) {
+      // `todayMidnight` is pinned per render so 1,298 calls cannot straddle a
+      // date boundary and disagree with each other about "overdue".
+      list = list.filter((p) => projectMatchesBedarf(p, bedarfFocus, todayMidnight));
+    }
+    return list;
+  }, [data, stationFocus, projectFocus, bedarfFocus, todayMidnight]);
+
+  /**
+   * The reconciliation the chip prints.
+   *
+   * The badge that sent the reader here counted PRÜFZEILEN — 558 of them. This
+   * page can only list PROJEKTE, and those 558 rows sit in 258 of them. Both
+   * numbers are right and they are not the same number, so the chip states
+   * both rather than leaving somebody to notice the gap and quietly stop
+   * trusting the screen.
+   */
+  const bedarfSummary = useMemo(() => {
+    if (!bedarfFocus) return null;
+    return (
+      countBedarf(allData?.projects ?? [], todayMidnight).find((c) => c.key === bedarfFocus) ?? null
+    );
+  }, [bedarfFocus, allData, todayMidnight]);
 
   const detailProject = useMemo(
     () =>
@@ -601,6 +677,26 @@ export default function Projects() {
             <FilterChip
               label={`Station: ${stationFocus.name}`}
               onClear={clearStationFocus}
+              emphasis
+            />
+          )}
+          {bedarfSummary && (
+            <FilterChip
+              label={`${bedarfSummary.label}: ${bedarfSummary.rows.toLocaleString("de-DE")} Prüfzeilen in ${bedarfSummary.projects.toLocaleString("de-DE")} Projekten`}
+              onClear={() => {
+                setBedarfFocus(null);
+                setLocation("/projects?view=cards");
+              }}
+              emphasis
+            />
+          )}
+          {projectFocus !== null && (
+            <FilterChip
+              label={`Projekt #${projectFocus}`}
+              onClear={() => {
+                setProjectFocus(null);
+                setLocation("/projects?view=cards");
+              }}
               emphasis
             />
           )}

@@ -698,6 +698,51 @@
 }
 
 /* ---------------------------------------------------------------------------
+   Ken Burns
+   ---------------------------------------------------------------------------
+   A slow push-in on the Gewerke carousel, plus a short fade as one Gewerk
+   hands over to the next.
+
+   1.0 to 1.04 over eight seconds, no blur and no rotation, because the thing
+   drifting is a chart somebody is reading. A move large enough to notice
+   consciously would carry the numbers out from under a reader's eye every four
+   seconds, which is a worse panel than a still one. `transform-origin: center`
+   keeps the pie centred while it grows rather than walking it off its box.
+   --------------------------------------------------------------------------- */
+@keyframes bpm-kenburns {
+  from {
+    transform: scale(1) translate3d(0, 0, 0);
+  }
+  to {
+    transform: scale(1.04) translate3d(0, -0.5%, 0);
+  }
+}
+
+@keyframes bpm-slide-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.kenburns {
+  transform-origin: center;
+  animation:
+    bpm-slide-in 320ms ease-out both,
+    bpm-kenburns 8s ease-in-out 320ms infinite alternate;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kenburns {
+    animation: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
    Portfolio-Relief
    ---------------------------------------------------------------------------
    CSS 3D rather than a third rendering stack. The stage tilts; each cell lifts
@@ -734,7 +779,81 @@
   transition: none;
 }
 
+/*
+ * The idle sweep.
+ *
+ * A slow drift the panel performs on its own so the relief reads as an object
+ * rather than a picture of one — and so a room looking at a screen sees the
+ * ridgelines move against each other, which is what makes the heights legible
+ * from a distance.
+ *
+ * It sweeps rather than spins: the camera is clamped to ±60° of yaw because
+ * past that the row labels turn edge-on. 24 seconds for a full there-and-back,
+ * slow enough that it never competes with reading a number.
+ *
+ * It is a CSS animation on a wrapper, not a state update per frame: sixty
+ * renders a second of a 14×4 grid to move a camera is not a trade worth
+ * making, and this way the compositor owns it. `data-autoturn` is dropped by
+ * the component the instant a hand touches the panel — see PortfolioRelief.
+ */
+@keyframes bpm-relief-sweep {
+  0% {
+    transform: rotateZ(-9deg);
+  }
+  50% {
+    transform: rotateZ(9deg);
+  }
+  100% {
+    transform: rotateZ(-9deg);
+  }
+}
+
+.relief-orbit {
+  transform-style: preserve-3d;
+}
+
+.relief-stage[data-autoturn="true"] .relief-orbit {
+  animation: bpm-relief-sweep 24s ease-in-out infinite;
+}
+
+/*
+ * It holds still under a hand.
+ *
+ * Found by the click gate, not by looking: a tile that is drifting is a tile
+ * Playwright will not click because it never settles — and a person aiming at
+ * a 30px target that keeps sliding has exactly the same problem, they just
+ * blame themselves for it. Hover and keyboard focus pause the sweep where it
+ * stands; moving away resumes it. `animation-play-state` costs no state and no
+ * render, so the pause is instant.
+ */
+.relief-stage[data-autoturn="true"]:hover .relief-orbit,
+.relief-stage[data-autoturn="true"]:focus-within .relief-orbit {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .relief-stage[data-autoturn="true"] .relief-orbit {
+    animation: none;
+  }
+}
+
+/*
+ * No sweep on a touch screen.
+ *
+ * The pause is bound to hover, and a finger has no hover: on a phone the only
+ * way to stop the drift would be to hit a moving 44px target first, which is
+ * the problem the pause exists to solve. A touch reader gets the mountain
+ * range standing still and the drag gesture, which is the better half of the
+ * interaction anyway.
+ */
+@media (pointer: coarse) {
+  .relief-stage[data-autoturn="true"] .relief-orbit {
+    animation: none;
+  }
+}
+
 .relief-cell {
+  position: relative;
   display: flex;
   width: 100%;
   align-items: center;
@@ -745,6 +864,40 @@
   background-color: rgb(var(--relief-fill) / var(--relief-alpha));
   transform-style: preserve-3d;
   transition: transform 200ms ease-out;
+}
+
+/*
+ * The side of the column — the thing that turns tiles into a mountain range.
+ *
+ * Raised tiles alone read as confetti floating over a table: you can see that
+ * something is high but not what it is standing on, and the eye has nothing to
+ * judge one height against another with. A real vertical face, hinged at the
+ * tile's front edge and folded down to the ground plane, gives every value a
+ * visible column. Ridges then line up across a row and the shape of the
+ * portfolio becomes a landscape instead of a scatter.
+ *
+ * It is a pseudo-element inside an existing preserve-3d subtree, so it costs
+ * no DOM node and no second rendering stack, and it inherits the tile's own
+ * fill so the colour scale still means exactly what the legend says. The
+ * gradient darkens towards the base purely as shading — the number is on the
+ * top face and is the only thing anyone reads a value from.
+ */
+.relief-stage[data-flat="false"] .relief-cell::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--relief-lift, 0px);
+  transform-origin: bottom center;
+  transform: rotateX(-90deg);
+  background: linear-gradient(
+    to bottom,
+    rgb(var(--relief-fill) / calc(var(--relief-alpha) * 0.85)),
+    rgb(var(--relief-fill) / calc(var(--relief-alpha) * 0.3))
+  );
+  border-radius: 0 0 4px 4px;
+  pointer-events: none;
 }
 
 .relief-cell:not(:disabled) {
@@ -766,6 +919,47 @@
 .relief-stage[data-flat="false"] .relief-cell {
   transform: translateZ(var(--relief-lift, 0px));
   box-shadow: 0 6px 14px rgb(0 0 0 / 0.18);
+}
+
+/*
+ * The open lane breathes, without losing its ground shadow.
+ *
+ * `pulse-open` animates box-shadow, and so does the tile's depth shadow — one
+ * property, so the plain utility would have replaced the shadow that makes the
+ * column sit on the ground for the duration of every cycle. This keyframe
+ * carries both: the drop shadow stays constant, the ring and halo ride on top.
+ */
+@keyframes bpm-relief-open {
+  0% {
+    box-shadow:
+      0 6px 14px rgb(0 0 0 / 0.18),
+      0 0 0 0 rgb(var(--relief-open) / 0.65),
+      0 0 8px 0 rgb(var(--relief-open) / 0.5);
+  }
+  70% {
+    box-shadow:
+      0 6px 14px rgb(0 0 0 / 0.18),
+      0 0 0 8px rgb(var(--relief-open) / 0),
+      0 0 18px 4px rgb(var(--relief-open) / 0.28);
+  }
+  100% {
+    box-shadow:
+      0 6px 14px rgb(0 0 0 / 0.18),
+      0 0 0 0 rgb(var(--relief-open) / 0),
+      0 0 8px 0 rgb(var(--relief-open) / 0.5);
+  }
+}
+
+.relief-stage[data-flat="false"] .relief-cell[data-lane="open"]:not(:disabled) {
+  animation: bpm-relief-open 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Flat is a table. A table does not need to breathe to be read, and 14 pulsing
+   cells in a grid of 56 is noise rather than signal. */
+@media (prefers-reduced-motion: reduce) {
+  .relief-cell[data-lane="open"] {
+    animation: none;
+  }
 }
 
 /*

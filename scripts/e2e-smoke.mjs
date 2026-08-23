@@ -683,7 +683,21 @@ await check("truncated lists say how much they are hiding", async () => {
     !/Status pro Gewerke — \d+ von \d+/.test(body),
     "the old truncated Gewerke grid is still on the page",
   );
-  assert(/Regionale Verteilung — Top \d+ von \d+/.test(body), "the region list does not state its own coverage");
+  // The region panel stopped truncating too — it shows all eight
+  // Bahnhofsmanagements — so the rule it satisfies changed the same way the
+  // Gewerke panel's did: hide nothing, and account for what is not covered.
+  assert(
+    /Regionale Verteilung — alle \d+/.test(body),
+    "the region list does not state its own coverage",
+  );
+  assert(
+    !/Regionale Verteilung — Top \d+ von \d+/.test(body),
+    "the region list is still truncated",
+  );
+  assert(
+    /von 1\.298 Projekten tragen ein Bahnhofsmanagement/.test(body),
+    "the region list does not account for the projects with no region",
+  );
 });
 
 await check("BVB-EEA and PSV-ITK render German dates and honest headings", async () => {
@@ -2115,6 +2129,258 @@ await check("the mobile drawer is opaque, not a window onto the page", async () 
   }
 });
 
+console.log("\n== the Dashboard hands the reader onward ==");
+
+await check("Handlungsbedarf lands on exactly the set it counted", async () => {
+  await go("/");
+  await page.waitForSelector("[data-bedarf]", { timeout: 25000 });
+
+  const rows = await page.$$eval("[data-bedarf]", (els) =>
+    els.map((e) => ({
+      key: e.dataset.bedarf,
+      label: (e.getAttribute("aria-label") || "").trim(),
+      pulses: e.className.includes("pulse-open") || e.innerHTML.includes("pulse-open"),
+    })),
+  );
+  assert(rows.length === 4, `expected 4 Handlungsbedarf rows, found ${rows.length}`);
+
+  /*
+   * The assertion this whole feature exists for.
+   *
+   * The badge counts Prüfzeilen, the page can only list Projekte, and those are
+   * different numbers for the same fact. Both come out of the aria-label, and
+   * the number of cards on the landing page has to equal the project figure —
+   * not approximately, exactly. A link that lands on a different set than the
+   * badge promised is the drift this project spends its life removing.
+   */
+  for (const row of rows) {
+    const m = /: (\d[\d.]*) Prüfzeilen in (\d[\d.]*) Projekten/.exec(row.label);
+    assert(m, `no counts in the label for ${row.key}: ${row.label}`);
+    const rowCount = Number(m[1].replace(/\./g, ""));
+    const projectCount = Number(m[2].replace(/\./g, ""));
+    assert(projectCount <= rowCount, `${row.key}: ${projectCount} projects from ${rowCount} rows`);
+
+    await page.click(`[data-bedarf="${row.key}"]`);
+    await page.waitForTimeout(1400);
+    assert(
+      new URL(page.url()).searchParams.get("bedarf") === row.key,
+      `${row.key} went to ${page.url()}`,
+    );
+    await page.waitForSelector("[data-project-card]", { timeout: 25000 });
+    const cards = await page.$$eval("[data-project-card]", (c) => c.length);
+    assert(
+      cards === projectCount,
+      `${row.key}: badge promised ${projectCount} Projekte, the page shows ${cards}`,
+    );
+
+    // And the chip reconciles the two figures on screen rather than leaving a
+    // reader to notice that 558 became 258.
+    const body = await page.locator("main").innerText();
+    assert(
+      body.includes("Prüfzeilen in") && body.includes("Projekten"),
+      `${row.key}: no chip reconciling the two counts`,
+    );
+    // A card carries the way into the project.
+    // The card's accessible name is its aria-label — "Details zu Projekt X
+    // anzeigen" — not the word on the button.
+    assert(
+      (await page.$$('[data-project-card] button[aria-label^="Details"]')).length > 0,
+      `${row.key}: the cards offer no "Details anzeigen"`,
+    );
+    await go("/");
+    await page.waitForSelector("[data-bedarf]", { timeout: 25000 });
+  }
+
+  const awaiting = rows.filter((r) => r.key !== "blocked");
+  for (const r of awaiting) {
+    assert(r.pulses, `the open bucket "${r.key}" does not pulse`);
+  }
+  assert(
+    !rows.find((r) => r.key === "blocked")?.pulses,
+    "the settled bucket „abgelehnt oder gestoppt“ pulses",
+  );
+});
+
+/** Fachspezialisten rows start collapsed; open the first one. */
+const openFirstReviewer = async () => {
+  await go("/");
+  /* `data-fach-row` exists so this gate does not have to guess at the card
+     markup — walking up from a heading breaks every time a wrapper moves. */
+  await page.waitForSelector("[data-fach-row]", { timeout: 25000 });
+  await page.locator("[data-fach-row]").first().click();
+  await page.waitForSelector("[data-timeline-entry]", { timeout: 25000 });
+};
+
+await check("a reviewer's timeline entry opens that exact project", async () => {
+  await openFirstReviewer();
+
+  const first = page.locator("[data-timeline-entry]").first();
+  const id = await first.getAttribute("data-timeline-entry");
+  await first.click();
+  await page.waitForTimeout(1400);
+  assert(
+    new URL(page.url()).searchParams.get("projekt") === id,
+    `the timeline row went to ${page.url()} instead of project ${id}`,
+  );
+  await page.waitForSelector("[data-project-card]", { timeout: 25000 });
+  const cards = await page.$$eval("[data-project-card]", (c) => c.length);
+  // Addressed by id, so it is one project however many share a Projektnummer —
+  // 1,298 of them share 385.
+  assert(cards === 1, `project ${id} produced ${cards} cards`);
+  assert(
+    (await page.$$('[data-project-card] button[aria-label^="Details"]')).length > 0,
+    "the project card offers no \"Details anzeigen\"",
+  );
+});
+
+await check("open work in the timeline pulses, settled work does not", async () => {
+  await openFirstReviewer();
+  const entries = await page.$$eval("[data-timeline-entry]", (els) =>
+    els.map((e) => ({
+      text: e.innerText.trim(),
+      pulses: e.innerHTML.includes("pulse-open"),
+    })),
+  );
+  assert(entries.length > 0, "no timeline entries to check");
+  const OPEN = /^(offen|in Bearbeitung|Nachforderung|prüffähig)\b/im;
+  let open = 0;
+  let settled = 0;
+  for (const e of entries) {
+    const first = e.text.split("\n").map((l) => l.trim()).filter(Boolean)[1] ?? "";
+    if (OPEN.test(first)) {
+      open++;
+      assert(e.pulses, `open entry does not pulse: ${first}`);
+    } else {
+      settled++;
+      assert(!e.pulses, `settled entry pulses: ${first}`);
+    }
+  }
+  assert(open > 0, "no open entry in the timeline to check");
+  console.log(`     ${open} open pulsing, ${settled} settled quiet`);
+});
+
+await check("every Bahnhofsmanagement is shown, not the largest five", async () => {
+  await go("/");
+  const heading = await page.getByText(/Regionale Verteilung/).first().innerText();
+  assert(!/Top \d/.test(heading), `the card still says "${heading}"`);
+  const text = await page.locator("main").innerText();
+  for (const region of [
+    "Frankfurt", "Darmstadt", "Koblenz", "Kassel",
+    "Saarbrücken", "Kaiserslautern", "Mainz", "Gießen",
+  ]) {
+    assert(text.includes(region), `${region} is missing from the regional panel`);
+  }
+  // And it says why the bars do not sum to 1.298.
+  assert(
+    /von 1\.298 Projekten tragen ein Bahnhofsmanagement/.test(text),
+    "the panel does not account for the projects with no region",
+  );
+});
+
+await check("the Gewerke panel always shows one, and rotates", async () => {
+  await go("/");
+  await page.waitForSelector("[data-gewerke-carousel]", { timeout: 25000 });
+  const stage = page.locator("[data-gewerke-carousel]");
+
+  // It used to open on an empty state behind a dropdown nobody found.
+  const shown = await page.locator("main").innerText();
+  assert(!/Wählen Sie ein Gewerke/.test(shown), "the empty state is still there");
+  assert(/Status-Verteilung für /.test(shown), "no Gewerk is on screen");
+
+  const first = await stage.getAttribute("data-gewerke-carousel");
+  assert(first, "the carousel does not name the Gewerk it is showing");
+
+  // Moving the pointer away, because hover pauses it on purpose.
+  await page.mouse.move(5, 5);
+  await page.waitForFunction(
+    (was) => document.querySelector("[data-gewerke-carousel]")?.getAttribute("data-gewerke-carousel") !== was,
+    first,
+    { timeout: 12000 },
+  );
+
+  // Stepping by hand works and does not pin.
+  const before = await stage.getAttribute("data-gewerke-carousel");
+  await page.getByRole("button", { name: "Nächste Status-Verteilung" }).click();
+  await page.waitForTimeout(300);
+  assert(
+    (await stage.getAttribute("data-gewerke-carousel")) !== before,
+    "the next button did not advance the carousel",
+  );
+
+  // Pause is a real control, not a label: WCAG 2.2.2 requires it.
+  await page.getByRole("button", { name: "Pause" }).click();
+  const paused = await stage.getAttribute("data-gewerke-carousel");
+  assert(
+    (await stage.getAttribute("data-rotating")) === "false",
+    "the carousel says it is still rotating after Pause",
+  );
+  await page.waitForTimeout(Math.round(4000 * 1.6));
+  assert(
+    (await stage.getAttribute("data-gewerke-carousel")) === paused,
+    "the carousel advanced while paused",
+  );
+});
+
+await check("the relief turns by itself and yields the moment it is touched", async () => {
+  await go("/");
+  await page.waitForSelector(".relief-cell", { timeout: 25000 });
+  const stage = page.locator(".relief-stage");
+  assert(
+    (await stage.getAttribute("data-autoturn")) === "true",
+    "the relief does not turn by itself",
+  );
+
+  await stage.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(300);
+  const box = await stage.boundingBox();
+  assert(box, "the relief has no box to drag");
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + 90, box.y + box.height / 2, { steps: 6 });
+  await page.mouse.up();
+  await page.waitForTimeout(300);
+  assert(
+    (await stage.getAttribute("data-autoturn")) === "false",
+    "the relief kept drifting after the reader took the camera",
+  );
+
+  // And the reset button hands it back.
+  await page.getByRole("button", { name: /Ansicht zurücksetzen/ }).click();
+  await page.waitForTimeout(300);
+  assert(
+    (await stage.getAttribute("data-autoturn")) === "true",
+    "„Ansicht zurücksetzen“ did not restart the self-rotation",
+  );
+});
+
+await check("the open lane of the relief breathes and the others do not", async () => {
+  await go("/");
+  await page.waitForSelector(".relief-cell", { timeout: 25000 });
+  const lanes = await page.$$eval(".relief-cell", (els) =>
+    els.map((e) => ({
+      lane: e.dataset.lane,
+      value: Number(e.dataset.value),
+      animation: getComputedStyle(e).animationName,
+    })),
+  );
+  const open = lanes.filter((l) => l.lane === "open" && l.value > 0);
+  const rest = lanes.filter((l) => l.lane !== "open");
+  assert(open.length > 0, "no open lane cells to check");
+  for (const cell of open) {
+    assert(
+      cell.animation.includes("relief-open"),
+      `an open lane cell is not animated: ${cell.animation}`,
+    );
+  }
+  for (const cell of rest) {
+    assert(
+      !cell.animation.includes("relief-open"),
+      `a ${cell.lane} cell is animated as if it were open`,
+    );
+  }
+  console.log(`     ${open.length} open columns breathing, ${rest.length} others still`);
+});
+
 console.log("\n== the relief is an instrument, not a picture ==");
 
 await check("dragging rotates it, and the numbers stay upright", async () => {
@@ -2197,7 +2463,32 @@ await check("a tile is a place you can go, and an empty tile is not", async () =
 
   const target = page.locator('.relief-cell[data-department="EEA"][data-lane="blocked"]');
   assert(await target.count() === 1, "no EEA/blockiert tile to open");
-  await target.click();
+
+  /*
+   * Hover first, then click — which is what a hand does anyway.
+   *
+   * The relief drifts on its own now, and Playwright checks that an element is
+   * stable BEFORE it moves the pointer, so a bare .click() waits forever on a
+   * target that is still sweeping. Moving into the panel pauses the sweep
+   * (`.relief-stage:hover` → animation-play-state: paused), and only then is
+   * the tile a fixed target.
+   *
+   * That ordering is not a workaround for the test: it is the guarantee the
+   * panel has to keep. A tile that never stops moving is a tile nobody can hit
+   * — a person aiming at a 30px target that keeps sliding has exactly the same
+   * problem, they just blame themselves for missing. The assertion below is
+   * that entering the panel is enough to make it aimable.
+   */
+  const stage = page.locator(".relief-stage");
+  await stage.scrollIntoViewIfNeeded();
+  const stageBox = await stage.boundingBox();
+  assert(stageBox, "the relief has no box");
+  // page.mouse.move is the one interaction with no actionability check, which
+  // is exactly what a hand does: it arrives before it aims.
+  await page.mouse.move(stageBox.x + stageBox.width / 2, stageBox.y + 12);
+  await page.waitForTimeout(500);
+  // If the pause did not take, this click times out — which is the assertion.
+  await target.click({ timeout: 8000 });
   await page.waitForTimeout(1200);
   const url = new URL(page.url());
   assert(url.pathname === "/bvb-eea", `the EEA tile went to ${url.pathname}`);

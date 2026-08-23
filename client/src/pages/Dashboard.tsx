@@ -10,7 +10,9 @@ import {
 } from "@shared/portfolio-metrics";
 import { deriveProjectMetrics, percent } from '@shared/project-metrics';
 import { statusBadgeClass, statusHex, statusPulseClass, STATUS_TONE, TONE_APPEARANCE } from '@shared/status-appearance';
-import { APPROVED_STATUSES, BLOCKING_STATUSES, normalizeReviewStatus, OPEN_STATUSES, type ReviewStatus } from '@shared/review-status';
+import { bedarfHref, countBedarf, projectHref } from '@shared/handlungsbedarf';
+import { GewerkeCarousel } from '@/components/dashboard/GewerkeCarousel';
+import { APPROVED_STATUSES, normalizeReviewStatus, OPEN_STATUSES, type ReviewStatus } from '@shared/review-status';
 import { formatGerman, toDate } from '@shared/date';
 import { projectLinkNote, projectLinkUrl } from '@shared/project-link';
 import { useLocation } from 'wouter';
@@ -40,7 +42,6 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAllData, useAuditLog } from '@/hooks/useDataQuery';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -175,22 +176,33 @@ export default function Dashboard() {
     return d !== null && d < today && stillOpen;
   }).length;
 
-  // Real regional distribution from actual bahnhofsmanagement values (top 5).
-  const regionCount = new Set(
-    projects.map((p) => (p.bahnhofsmanagement ?? "").trim()).filter(Boolean),
-  ).size;
-
+  /*
+   * Every Bahnhofsmanagement, not the largest five.
+   *
+   * There are eight, they fit, and the three that were cut — Kaiserslautern,
+   * Mainz, Gießen — are 288 projects. A regional panel that hides three of
+   * eight regions answers "where is the work" wrongly for everyone who sits in
+   * one of them. The palette therefore has eight entries rather than five with
+   * a modulo, which silently gave the sixth region the first one's colour.
+   */
   const regionDistribution = (() => {
     const counts: Record<string, number> = {};
     for (const p of projects) {
-      if (p.bahnhofsmanagement) counts[p.bahnhofsmanagement] = (counts[p.bahnhofsmanagement] || 0) + 1;
+      const region = (p.bahnhofsmanagement ?? "").trim();
+      if (region) counts[region] = (counts[region] || 0) + 1;
     }
-    const palette = ["#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ef4444"];
+    const palette = [
+      "#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ef4444",
+      "#0891b2", "#db2777", "#65a30d",
+    ];
     return Object.entries(counts)
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
       .map(([region, count], i) => ({ region, count, color: palette[i % palette.length] }));
   })();
+  const regionCount = regionDistribution.length;
+  /* Stated, not hidden: 126 projects carry no Bahnhofsmanagement at all, and a
+     panel whose bars do not sum to the total has to say why. */
+  const regionAssigned = regionDistribution.reduce((a, r) => a + r.count, 0);
 
   // `counts[review.status]` keyed on the raw string, so statusHex() fell
   // through to its neutral fallback: TBQ's 80 "Niederschrift erstellt
@@ -228,15 +240,8 @@ export default function Dashboard() {
   const concentration = useMemo(() => reviewerConcentration(projects), [projects]);
   const quality = useMemo(() => dataQuality(projects), [projects]);
 
-  const selectedGewerkeData = selectedGewerke 
-    ? gewerkeStatusData.find(g => g.name === selectedGewerke) 
-    : null;
-
-  const selectedPieData = selectedGewerkeData 
-    ? Object.entries(selectedGewerkeData.breakdown)
-        .sort((a, b) => b[1] - a[1])
-        .map(([status, value]) => ({ name: status, value, color: statusHex(status) }))
-    : [];
+  /* The per-Gewerk slices moved into GewerkeCarousel, which owns which Gewerk
+     is on screen. `selectedGewerke` survives as the pin the carousel honours. */
 
   /*
    * Workload per reviewer.
@@ -408,32 +413,25 @@ export default function Dashboard() {
    * named stations outside RB Mitte entirely). Every figure here is counted
    * from the review rows.
    */
+  /*
+   * The four buckets now come from shared/handlungsbedarf.ts.
+   *
+   * They were counted here, inline, in a useMemo nothing else could reach.
+   * The moment the badges became links — "show me the 558" — a second
+   * implementation of "overdue" would have had to exist on the Projekte page
+   * to decide which projects to list, and two implementations drift the day
+   * one of them learns about a status the other has not. A badge reading 558
+   * over a page listing a different set is worse than a badge that links
+   * nowhere, because it looks like it worked.
+   *
+   * The module returns the row count (the workload, unchanged: 558/132/97/111)
+   * and the number of distinct projects those rows sit in, so the landing page
+   * can reconcile the two on screen instead of leaving a reader to notice.
+   */
   const handlungsbedarf = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    let overdue = 0;
-    let blocked = 0;
-    let nachforderung = 0;
-    let unassigned = 0;
-    for (const p of projects) {
-      for (const r of p.reviews || []) {
-        const status = normalizeReviewStatus(r.status);
-        if (!status) continue;
-        if (BLOCKING_STATUSES.includes(status)) blocked++;
-        if (status === "Nachforderung") nachforderung++;
-        if (OPEN_STATUSES.includes(status)) {
-          const due = toDate(r.pruefDatum);
-          if (due && due < today) overdue++;
-          if (!r.prueferName?.trim()) unassigned++;
-        }
-      }
-    }
-    return [
-      { key: "overdue", label: "Prüftermin überschritten", count: overdue, tone: "blocked" as const },
-      { key: "blocked", label: "abgelehnt oder gestoppt", count: blocked, tone: "blocked" as const },
-      { key: "nachforderung", label: "Nachforderung offen", count: nachforderung, tone: "attention" as const },
-      { key: "unassigned", label: "offen, ohne Prüfer", count: unassigned, tone: "pending" as const },
-    ];
+    const midnight = new Date();
+    midnight.setHours(0, 0, 0, 0);
+    return countBedarf(projects, midnight.getTime());
   }, [projects]);
 
   const relativeTime = (iso: string): string => {
@@ -660,85 +658,28 @@ export default function Dashboard() {
               other panel is built on. */}
           <PortfolioDiagnostics aging={aging} concentration={concentration} quality={quality} />
 
-          {/* Detailed Gewerke View */}
-          <Card className="border-2 border-primary/20">
-            <CardHeader>
-              {/* Was `flex items-center justify-between` with a fixed w-64 select:
-                  the title and a 256px control cannot share a 327px content box,
-                  so <main> measured 406px in a 375px viewport. Stacks below sm. */}
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <CardTitle className="min-w-0 break-words">
-                  {selectedGewerke ? `Status-Verteilung für ${selectedGewerke}` : "Detaillierte Ansicht per Gewerke"}
-                </CardTitle>
-                <div className="w-full sm:w-64 sm:shrink-0">
-                  <Select 
-                    value={selectedGewerke || "all"} 
-                    onValueChange={(value) => setSelectedGewerke(value === "all" ? null : value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Gewerke auswählen..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Alle Gewerke anzeigen</SelectItem>
-                      {GEWERKE.map((gew) => (
-                        <SelectItem key={gew} value={gew}>{gew}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {!selectedGewerke ? (
-                <div className="flex flex-col items-center justify-center h-[320px] text-center">
-                  <div className="text-6xl mb-4">📊</div>
-                  <h3 className="text-xl font-semibold mb-2">Wählen Sie ein Gewerke</h3>
-                  <p className="text-muted-foreground max-w-md">
-                    Nutzen Sie das Dropdown oben, um die detaillierte Status-Verteilung für einen bestimmten Fachbereich anzuzeigen.
-                  </p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-                  <div className="lg:col-span-3 h-[380px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={selectedPieData}
-                          cx="50%" cy="50%" innerRadius={80} outerRadius={140} paddingAngle={3} dataKey="value"
-                        >
-                          {selectedPieData.map((entry) => (
-                            <Cell key={entry.name} fill={entry.color} />
-                          ))}
-                        </Pie>
-                        <Tooltip />
-                        <Legend formatter={(value) => <span className="text-foreground">{value}</span>} />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <div className="lg:col-span-2 space-y-4">
-                    <div>
-                      <div className="text-sm text-muted-foreground mb-1">Gesamtzahl Prüfungen</div>
-                      <div className="text-4xl font-bold">{selectedGewerkeData?.value?.toLocaleString("de-DE")}</div>
-                    </div>
-                    <div className="space-y-2 pt-4 border-t">
-                      {selectedPieData.map((item) => (
-                        <div key={item.name} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                          <div className="flex items-center gap-2">
-                            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
-                            <span>{item.name}</span>
-                          </div>
-                          <Badge variant="outline">{item.value}</Badge>
-                        </div>
-                      ))}
-                    </div>
-                    <Button variant="outline" className="w-full mt-4" onClick={() => setSelectedGewerke(null)}>
-                      Zurück zur Übersicht
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          {/*
+            Detaillierte Ansicht per Gewerke — a carousel, not an empty state.
+
+            It used to open on "Wählen Sie ein Gewerke" and a 📊 emoji: a panel
+            three quarters of a screen tall that showed nothing at all until the
+            reader guessed there was a dropdown worth using. Most never did, so
+            fourteen breakdowns sat behind a control that looked like a filter
+            for a chart that was not there.
+
+            Now it always shows one, and moves to the next every four seconds,
+            so the whole portfolio goes past without anybody choosing anything.
+            Picking a Gewerk from the dropdown pins it — an explicit choice
+            always beats the rotation. Pausing is required, not a nicety: WCAG
+            2.2.2 covers anything that moves on its own for more than five
+            seconds, so there is a pause button, it pauses on hover and on
+            focus, and prefers-reduced-motion stops it before it ever starts.
+          */}
+          <GewerkeCarousel
+            data={gewerkeStatusData}
+            pinned={selectedGewerke}
+            onPin={setSelectedGewerke}
+          />
         </div>
 
         {/* RIGHT COLUMN - FACHSPEZIALISTEN */}
@@ -761,6 +702,7 @@ export default function Dashboard() {
                 >
                   <button
                     type="button"
+                    data-fach-row={fach.name}
                     aria-expanded={expandedFach === fach.name}
                     className="flex w-full items-center justify-between p-4 text-left cursor-pointer hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     onClick={() => setExpandedFach(expandedFach === fach.name ? null : fach.name)}
@@ -817,15 +759,42 @@ export default function Dashboard() {
                                  1,509 rows across the panel. The department is
                                  what distinguishes them, so it is now in the
                                  key and on screen. */
-                              <div key={`${item.date}-${item.projectId}-${item.department}-${item.action}`} className="flex items-start gap-3 text-sm border-l-2 border-primary pl-3 py-1">
-                                <div className="font-mono text-xs text-muted-foreground w-24 shrink-0">{formatGerman(item.date) || item.date}</div>
-                                <div className="min-w-0">
-                                  <span className="font-medium">{item.action}</span> — {item.project}
+                              /*
+                                A row is a link to the project it describes.
+                                
+                                Reading "offen — Bensheim (EEA)" and then having
+                                to go and find Bensheim by hand is the reason
+                                this panel got looked at once and never again.
+                                The href addresses the project by id, so it is
+                                exactly one card however many projects share a
+                                Projektnummer — 1.298 of them share 385 — and
+                                the card carries "Details anzeigen".
+                                
+                                The status word itself pulses when the entry is
+                                still open, using the same one function every
+                                other status surface in the app uses.
+                              */
+                              <button
+                                key={`${item.date}-${item.projectId}-${item.department}-${item.action}`}
+                                type="button"
+                                data-timeline-entry={item.projectId}
+                                onClick={() => setLocation(projectHref(item.projectId))}
+                                aria-label={`${item.action} — ${item.project}${item.department ? `, ${item.department}` : ""}, Projekt öffnen`}
+                                className="flex w-full items-start gap-3 border-l-2 border-primary py-1 pl-3 text-left text-sm transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                              >
+                                <span className="w-24 shrink-0 font-mono text-xs text-muted-foreground">{formatGerman(item.date) || item.date}</span>
+                                <span className="min-w-0">
+                                  <span
+                                    className={`inline-block rounded-full px-1.5 font-medium ${statusPulseClass(item.action)}`}
+                                  >
+                                    {item.action}
+                                  </span>{" "}
+                                  — {item.project}
                                   {item.department && (
                                     <span className="ml-1 text-xs text-muted-foreground">({item.department})</span>
                                   )}
-                                </div>
-                              </div>
+                                </span>
+                              </button>
                             )) : (
                               <div className="text-xs text-muted-foreground">Keine kürzlichen Aktivitäten</div>
                             )}
@@ -906,22 +875,44 @@ export default function Dashboard() {
               </CardTitle>
             </CardHeader>
             <CardContent className="max-h-[280px] space-y-2 overflow-auto pr-1">
+              {/*
+                Each row is a place you can go.
+                
+                A count nobody can open is a count nobody can act on, which is
+                the opposite of what a panel called "Handlungsbedarf" is for.
+                The link carries the bucket key, the Projekte page recomputes
+                the same predicate from the same module, and the chip it shows
+                states both figures — so the 558 on this badge and the 258
+                cards it lands on are visibly the same fact counted two ways,
+                not two numbers that disagree.
+              */}
               {handlungsbedarf.map((h) => (
-                <div
+                <button
                   key={h.key}
-                  className="flex items-center justify-between gap-3 rounded-xl border bg-card p-3"
+                  type="button"
+                  data-bedarf={h.key}
+                  disabled={h.rows === 0}
+                  onClick={() => setLocation(bedarfHref(h.key))}
+                  title={h.basis}
+                  aria-label={`${h.label}: ${h.rows} Prüfzeilen in ${h.projects} Projekten — öffnen`}
+                  className="flex w-full items-center justify-between gap-3 rounded-xl border bg-card p-3 text-left transition-colors hover:border-primary/40 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-default disabled:hover:border-border disabled:hover:bg-card"
                 >
-                  <span className="min-w-0 text-sm leading-tight">{h.label}</span>
+                  <span className="min-w-0">
+                    <span className="block text-sm leading-tight">{h.label}</span>
+                    <span className="mt-0.5 block text-2xs text-muted-foreground">
+                      in {h.projects.toLocaleString("de-DE")} Projekten
+                    </span>
+                  </span>
                   <span
                     className={`shrink-0 rounded-full px-2.5 py-0.5 text-sm font-bold tabular-nums ${
-                      h.count === 0
+                      h.rows === 0
                         ? "bg-muted text-muted-foreground"
-                        : TONE_APPEARANCE[h.tone].badge
+                        : `${TONE_APPEARANCE[h.tone].badge} ${h.awaiting ? "pulse-open" : ""}`
                     }`}
                   >
-                    {h.count.toLocaleString("de-DE")}
+                    {h.rows.toLocaleString("de-DE")}
                   </span>
-                </div>
+                </button>
               ))}
               <p className="pt-1 text-2xs text-muted-foreground">
                 Aus {totalReviews.toLocaleString("de-DE")} Prüfzeilen berechnet.
@@ -1044,8 +1035,12 @@ export default function Dashboard() {
           <Card>
             <CardHeader>
               <CardTitle>
-                Regionale Verteilung — Top {regionDistribution.length} von {regionCount}
+                Regionale Verteilung — alle {regionCount}
               </CardTitle>
+              <p className="text-2xs text-muted-foreground">
+                {regionAssigned.toLocaleString("de-DE")} von{" "}
+                {totalProjects.toLocaleString("de-DE")} Projekten tragen ein Bahnhofsmanagement.
+              </p>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
@@ -1054,8 +1049,19 @@ export default function Dashboard() {
                     <div className="w-3 h-3 rounded-full" style={{ backgroundColor: r.color }} />
                     <div className="flex-1">{r.region}</div>
                     <div className="font-mono font-bold">{r.count.toLocaleString("de-DE")}</div>
-                    <div className="w-24 h-2 bg-muted rounded-full overflow-hidden">
-                      <div className="h-full bg-current" style={{ width: `${(r.count / totalProjects) * 100}%`, color: r.color }} />
+                    {/* Scaled against the largest region, not the project
+                        total: against 1.298 even Frankfurt filled a quarter of
+                        its track and the other seven were slivers that could
+                        not be told apart. The number beside it is the value;
+                        the bar only has to make the ranking visible. */}
+                    <div className="h-2 w-24 shrink-0 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="h-full bg-current"
+                        style={{
+                          width: `${Math.max(4, (r.count / (regionDistribution[0]?.count || 1)) * 100)}%`,
+                          color: r.color,
+                        }}
+                      />
                     </div>
                   </div>
                 ))}

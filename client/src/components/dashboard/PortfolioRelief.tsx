@@ -56,10 +56,25 @@ function laneHref(department: string, lane: Lane): string {
   return `${base}${base.includes("?") ? "&" : "?"}q=${encodeURIComponent(term)}`;
 }
 
-/** Elevation in px. Square-root so one huge cell does not flatten the rest. */
+/**
+ * Elevation in px.
+ *
+ * Square-root, so one huge cell does not flatten the rest: EEA's 583 approvals
+ * are 4.4× BS's 134 and would be 4.4× the height on a linear scale, leaving
+ * eleven Gewerke as a uniform smear along the floor.
+ *
+ * 56px was a hill. 104px is a mountain range: at the default 52° tilt that is
+ * about 82px of apparent rise, roughly two and a half tile heights, which is
+ * where a ridgeline starts reading as terrain rather than as a slightly raised
+ * table. It is bounded rather than free precisely because a taller column
+ * would occlude the row behind it, and a number this panel hides is a number
+ * it has failed to report.
+ */
+export const MAX_LIFT_PX = 104;
+
 function lift(value: number, max: number): number {
   if (value <= 0 || max <= 0) return 0;
-  return Math.round(Math.sqrt(value / max) * 56);
+  return Math.round(Math.sqrt(value / max) * MAX_LIFT_PX);
 }
 
 /** Where the camera starts, and what "Ansicht zurücksetzen" returns to. */
@@ -89,6 +104,15 @@ export function PortfolioRelief({ standings }: { standings: readonly GewerkStand
   const [zoom, setZoom] = useState<number>(HOME.zoom);
   const [expanded, setExpanded] = useState(false);
   const [dragging, setDragging] = useState(false);
+  /*
+   * The panel turns by itself until somebody takes the wheel.
+   *
+   * `touched` latches on the first drag, key press or slider move and never
+   * un-latches on its own — a camera that resumes drifting after a reader
+   * positioned it by hand is fighting them. "Ansicht zurücksetzen" is the one
+   * way back, because that button already means "give me the default view".
+   */
+  const [touched, setTouched] = useState(false);
   const stageRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ x: number; y: number; tilt: number; spin: number; active: boolean } | null>(
     null,
@@ -132,6 +156,7 @@ export function PortfolioRelief({ standings }: { standings: readonly GewerkStand
       if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
       start.active = true;
       setDragging(true);
+      setTouched(true);
       e.currentTarget.setPointerCapture(e.pointerId);
     }
     // Vertical drag tilts, horizontal drag spins — the mapping a hand expects
@@ -171,6 +196,7 @@ export function PortfolioRelief({ standings }: { standings: readonly GewerkStand
     if (!node || flat) return;
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
+      setTouched(true);
       setZoom((z) => clampZoom(z - e.deltaY * 0.0015));
     };
     node.addEventListener("wheel", onWheel, { passive: false });
@@ -181,6 +207,8 @@ export function PortfolioRelief({ standings }: { standings: readonly GewerkStand
     setTilt(HOME.tilt);
     setSpin(HOME.spin);
     setZoom(HOME.zoom);
+    // Back to the default view means back to the default behaviour.
+    setTouched(false);
   }, []);
 
   /** Arrow keys orbit, +/- zoom, Home recentres — the whole thing without a mouse. */
@@ -201,6 +229,7 @@ export function PortfolioRelief({ standings }: { standings: readonly GewerkStand
       const run = map[e.key];
       if (run) {
         e.preventDefault();
+        setTouched(true);
         run();
       }
     },
@@ -290,7 +319,10 @@ export function PortfolioRelief({ standings }: { standings: readonly GewerkStand
                 min={0}
                 max={78}
                 value={tilt}
-                onChange={(e) => setTilt(Number(e.target.value))}
+                onChange={(e) => {
+                  setTouched(true);
+                  setTilt(Number(e.target.value));
+                }}
                 className="h-1 w-32 accent-primary"
                 aria-label="Neigung des Reliefs"
               />
@@ -302,7 +334,10 @@ export function PortfolioRelief({ standings }: { standings: readonly GewerkStand
                 min={-60}
                 max={60}
                 value={spin}
-                onChange={(e) => setSpin(Number(e.target.value))}
+                onChange={(e) => {
+                  setTouched(true);
+                  setSpin(Number(e.target.value));
+                }}
                 className="h-1 w-32 accent-primary"
                 aria-label="Drehung des Reliefs"
               />
@@ -314,13 +349,18 @@ export function PortfolioRelief({ standings }: { standings: readonly GewerkStand
                 min={60}
                 max={240}
                 value={Math.round(zoom * 100)}
-                onChange={(e) => setZoom(Number(e.target.value) / 100)}
+                onChange={(e) => {
+                  setTouched(true);
+                  setZoom(Number(e.target.value) / 100);
+                }}
                 className="h-1 w-32 accent-primary"
                 aria-label="Zoom des Reliefs"
               />
             </label>
             <span className="text-2xs text-muted-foreground">
-              Ziehen zum Drehen · Mausrad zum Zoomen · Pfeiltasten, +/−, Pos1
+              {touched
+                ? "Ziehen zum Drehen · Mausrad zum Zoomen · Pfeiltasten, +/−, Pos1 · „Ansicht zurücksetzen“ startet die Eigendrehung neu"
+                : "Dreht sich von selbst · anfassen übernimmt die Kamera · Mausrad zum Zoomen · Pfeiltasten, +/−, Pos1"}
             </span>
           </div>
         )}
@@ -356,7 +396,19 @@ export function PortfolioRelief({ standings }: { standings: readonly GewerkStand
             }
             data-flat={flat ? "true" : "false"}
             data-dragging={dragging ? "true" : "false"}
+            data-autoturn={!flat && !touched ? "true" : "false"}
           >
+            {/*
+              The orbit is its own element on purpose.
+              
+              The idle sweep and the reader's own tilt/spin/zoom are two
+              transforms of the same object, and stacking both on one node means
+              the CSS animation overwrites the inline transform the sliders set.
+              Nesting composes them instead: the grid holds the camera the
+              reader controls, the wrapper adds the drift, and the drift stops
+              by removing one attribute — no per-frame state, no re-render.
+            */}
+            <div className="relief-orbit">
             <table className="relief-grid w-full border-separate border-spacing-1 text-2xs">
               <caption className="sr-only">
                 Erforderliche Prüfungen je Gewerk und Zustand. Die Tabelle enthält alle Werte auch
@@ -439,6 +491,7 @@ export function PortfolioRelief({ standings }: { standings: readonly GewerkStand
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         </div>
       </CardContent>
