@@ -1,0 +1,1452 @@
+From 750ff65fa829d619063a80711fd631cf4983084f Mon Sep 17 00:00:00 2001
+From: Vincenzo Grimaldi <vince.ceccarelli@gmail.com>
+Date: Sun, 23 Aug 2026 12:24:41 +0000
+Subject: [PATCH] Die Navigation deckt die Seite ab, offene Arbeit pulsiert,
+ und keine Antwort endet
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Drei Dinge, ein Zusammenhang: was noch offen ist, muss sichtbar sein, und was
+sichtbar ist, muss anklickbar bleiben.
+
+1. Die mobile Navigation war durchsichtig
+---------------------------------------
+`--color-sidebar` war nie deklariert. Die Palette definierte
+`--color-sidebar-background`, also funktionierte `bg-sidebar-background` und
+niemandem fiel etwas auf — die shadcn-Sidebar streicht sich aber mit
+`bg-sidebar`, einem anderen Token. Tailwind v4 gibt eine Utility nicht aus,
+deren Token es nicht kennt: die Klasse stand am Element, existierte im
+Stylesheet aber nicht. Auf dem Telefon las man die Seite durch die offene
+Schublade hindurch, "1.298" uber "Projektanmeldung", Tabellenzeilen uber
+"Abmelden". Der Scrim dahinter hat die ganze Zeit funktioniert, weshalb es wie
+ein z-index-Problem aussah und keines war.
+
+Ein Token, eine Zeile. Und weil die Prufung jede Route nur geschlossen
+gesehen hat, gibt es sie jetzt auch offen:
+
+  — check-ui: Szenario "Sidebar · Drawer offen", nur @phone, in allen vier
+    Themes (ein Farbtoken ist genau das, wofur der Theme-Durchlauf da ist);
+  — check-ui: REQUIRED_UTILITIES liest das gebaute CSS und verlangt, dass
+    `bg-sidebar` und die vier anderen tragenden Klassen wirklich darin stehen.
+    Das ist der einzige Weg, dieses Versagen zu sehen — der TypeScript
+    kompiliert, die Klasse steht am Element, nichts meldet einen Fehler;
+  — e2e: die Hintergrundfarbe der offenen Schublade wird gemessen, nicht
+    betrachtet. Vorher kam `rgba(0, 0, 0, 0)` zuruck.
+
+2. Offene Arbeit pulsiert
+-------------------------
+`@keyframes bpm-pulse-ring` animiert ausschliesslich `box-shadow` — nie
+Deckkraft, nie Farbe, damit der Kontrast wahrend des Zyklus nie faellt und
+check-ui weiter messen kann, was es misst. Zwei Utilities: `pulse-open`
+(bernstein, 2 s) fur offene Prufungen, `pulse-brand` (DB-rot, 2,4 s) fur den
+Ask-Bahn-Knopf, bis er einmal benutzt wurde. `prefers-reduced-motion` schaltet
+beide ab.
+
+Was pulsiert, entscheidet eine Stelle: `statusPulseClass` in
+shared/status-appearance.ts, gespeist aus OPEN_STATUSES. Vier Status sind
+offen, zwei zugestimmt, zwei blockierend — die ubrigen vier
+("Projektkonfig.", "Prufung erfolgt", "zuruckgestellt", "nicht erforderlich")
+liegen in keinem Lebenszyklus-Topf, und genau deshalb pulsieren sie nicht:
+auf /bvb-eea waren das 55 atmende Abzeichen neben einer Zahl, die 22 offene
+meldet. Ein Indikator, der der Zahl daneben widerspricht, ist schlimmer als
+keiner. Die Diagnostik des Dashboards benennt diese vier weiterhin.
+
+Gemessen im e2e uber alle 814 EEA-Zeilen: 82 offen und pulsierend, 732 nicht
+offen und still.
+
+3. Keine Antwort endet
+----------------------
+Ask Bahn gibt nach jeder Antwort die Fragen zuruck, die aus ihr folgen — als
+klickbare Chips, gebaut aus den eigenen Zahlen dieser Antwort: das Gewerk, das
+gerade am schlechtesten dasteht, die Station, die eben genannt wurde, der
+Ansprechpartner fur genau dieses Gewerk. Wer nicht weiss, was er noch fragen
+kann, hoert auf zu fragen.
+
+Ein Chip ist ein Versprechen, also wird es gepruft und nicht behauptet:
+
+  — `followUps` ist ein Pflichtargument von `answer()`. Eine Faehigkeit, die
+    vergisst, wohin ihre Antwort fuhrt, kompiliert nicht;
+  — jede angebotene Frage ist einmal formuliert, in shared/agent/follow-ups.ts,
+    mit zwei Schlusselwoertern ihrer Zielfaehigkeit statt einem ("Wie steht das
+    Gewerk EEA?", "Was laeuft an der Station Kassel-Wilhelmshoehe?"), damit der
+    Abstand strukturell ist und nicht zufaellig;
+  — die Tests schicken jede Frage durch `ask()` gegen die echte data.json: alle
+    vierzehn Gewerke, jede Station der Datei, drei Klicks tief ab jedem
+    Startvorschlag. Nichts darf "nicht verstanden" zuruckgeben;
+  — kein Chip bietet die Frage an, die gerade beantwortet wurde;
+  — fur ein Gewerk ohne Adresse in der Hilfsdatei gibt es keinen Kontakt-Chip.
+    LST ist der Fall: Zeile 74 und 75 sind leer, es gibt niemanden zu nennen,
+    und der Assistent tut nicht so als ob.
+
+Die Startvorschlaege kommen jetzt aus demselben Katalog, damit dieselbe Frage
+nicht an zwei Stellen unterschiedlich formuliert ist.
+
+Nebenbei zwei Treffer aus der Keyword-Tabelle: "Welche Prufungen haben keinen
+Prufer?" landete bei `workload` statt bei `unassigned`, weil dessen
+Schlusselwoerter alle "ohne Prufer" lauten und niemand so spricht.
+
+Gates, seriell, gegen dist/ von diesem Stand:
+  vitest       265 bestanden, 6 uebersprungen  (vorher 255)
+  e2e-smoke     85 bestanden, 0 fehlgeschlagen (vorher 81)
+  check-ui      UI CLEAN
+  stress-test    8 bestanden, 0 fehlgeschlagen
+  biome         72 Warnungen, unveraendert
+  tsc           sauber
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01GJwENjMMPe6PSZBdrXkzBj
+---
+ client/src/components/ProjectDetailDialog.tsx |   8 +-
+ client/src/components/agent/AskBahn.tsx       |  49 ++++-
+ .../components/workspace/ReviewWorkspace.tsx  |   4 +-
+ .../src/components/workspace/table-parts.tsx  |   6 +-
+ client/src/index.css                          |  58 ++++++
+ client/src/pages/Projects.tsx                 |   4 +-
+ scripts/check-ui.mjs                          | 113 +++++++++++-
+ scripts/e2e-smoke.mjs                         | 168 ++++++++++++++++++
+ scripts/status.mjs                            |   7 +-
+ shared/agent/agent.test.ts                    | 132 ++++++++++++++
+ shared/agent/follow-ups.ts                    | 120 +++++++++++++
+ shared/agent/resolve.ts                       |  25 ++-
+ shared/agent/skills.ts                        | 134 +++++++++++++-
+ shared/agent/types.ts                         |  20 +++
+ shared/status-appearance.ts                   |  20 ++-
+ 15 files changed, 836 insertions(+), 32 deletions(-)
+ create mode 100644 shared/agent/follow-ups.ts
+
+diff --git a/client/src/components/ProjectDetailDialog.tsx b/client/src/components/ProjectDetailDialog.tsx
+index bef385a..908d25d 100644
+--- a/client/src/components/ProjectDetailDialog.tsx
++++ b/client/src/components/ProjectDetailDialog.tsx
+@@ -59,7 +59,7 @@ import {
+ import type { Project } from "@/hooks/useDataQuery";
+ import { useAuditLog } from "@/hooks/useDataQuery";
+ import { DEPARTMENTS, type Department } from "@shared/types";
+-import { statusBadgeClass } from "@shared/status-appearance";
++import { statusBadgeClass, statusPulseClass } from "@shared/status-appearance";
+ import { normalizeReviewStatus, isOpen, isBlocking } from "@shared/review-status";
+ import { formatGerman } from "@shared/date";
+ import { projectLinkUrl } from "@shared/project-link";
+@@ -405,7 +405,7 @@ export function ProjectDetailDialog({
+               </Badge>
+             )}
+             {openCount > 0 && (
+-              <Badge className={`${statusBadgeClass("offen")} text-2xs font-bold`}>
++              <Badge className={`${statusBadgeClass("offen")} ${statusPulseClass("offen")} text-2xs font-bold`}>
+                 {openCount} offen
+               </Badge>
+             )}
+@@ -640,7 +640,9 @@ export function ProjectDetailDialog({
+                         </td>
+                         <td data-label="Status" className="px-3 py-2">
+                           {review ? (
+-                            <Badge className={`${statusBadgeClass(review.status)} text-2xs font-bold`}>
++                            <Badge
++                              className={`${statusBadgeClass(review.status)} ${statusPulseClass(review.status)} text-2xs font-bold`}
++                            >
+                               {status ?? review.status ?? "—"}
+                             </Badge>
+                           ) : (
+diff --git a/client/src/components/agent/AskBahn.tsx b/client/src/components/agent/AskBahn.tsx
+index 506775e..754a9a7 100644
+--- a/client/src/components/agent/AskBahn.tsx
++++ b/client/src/components/agent/AskBahn.tsx
+@@ -38,7 +38,15 @@ const TONE: Record<AgentTone, string> = {
+   neutral: "text-foreground",
+ };
+ 
+-function AnswerBlock({ answer, onGo }: { answer: AgentAnswer; onGo: (href: string) => void }) {
++function AnswerBlock({
++  answer,
++  onGo,
++  onAsk,
++}: {
++  answer: AgentAnswer;
++  onGo: (href: string) => void;
++  onAsk: (question: string) => void;
++}) {
+   return (
+     <div className="space-y-2.5 rounded-xl border border-border bg-card p-3">
+       <p className="text-xs font-semibold leading-snug">{answer.headline}</p>
+@@ -83,6 +91,37 @@ function AnswerBlock({ answer, onGo }: { answer: AgentAnswer; onGo: (href: strin
+         </div>
+       )}
+ 
++      {/*
++        * The conversation never ends.
++        *
++        * A reader who does not know what else to ask stops asking, and an
++        * assistant nobody asks is a button. Every answer therefore hands back
++        * the questions it leads to — built from this answer's own figures
++        * where it can be (the Gewerk that came back worst, the station just
++        * named), so the next question is about what was just read rather than
++        * a fixed menu. Every one of them is proven to resolve; see
++        * shared/agent/follow-ups.ts.
++        */}
++      {answer.followUps.length > 0 && (
++        <div className="border-t border-border/60 pt-2">
++          <p className="mb-1.5 text-2xs font-semibold text-muted-foreground">Weiterfragen</p>
++          <ul className="flex flex-wrap gap-1.5">
++            {answer.followUps.map((f) => (
++              <li key={f.question}>
++                <button
++                  type="button"
++                  data-follow-up="true"
++                  onClick={() => onAsk(f.question)}
++                  className="rounded-full border border-border bg-muted/40 px-2.5 py-1 text-2xs leading-tight transition-colors hover:border-primary/50 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
++                >
++                  {f.label}
++                </button>
++              </li>
++            ))}
++          </ul>
++        </div>
++      )}
++
+       {/* Always shown. An answer whose derivation is hidden is an assertion. */}
+       <p className="border-t border-border/60 pt-2 text-2xs leading-snug text-muted-foreground">
+         {answer.basis}
+@@ -178,7 +217,11 @@ export function AskBahn() {
+           type="button"
+           onClick={() => setOpen(true)}
+           aria-label="Ask Bahn öffnen — Fragen zu Projekten, Prüfungen und Zahlen"
+-          className="fixed bottom-5 right-5 z-40 flex h-12 items-center gap-2 rounded-full bg-primary px-4 text-primary-foreground shadow-lg transition-colors hover:bg-[hsl(354_100%_32%)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
++          // It breathes until it has been used once, then stops for good: an
++          // invitation is useful the first time and nagging every time after.
++          className={`fixed bottom-5 right-5 z-40 flex h-12 items-center gap-2 rounded-full bg-primary px-4 text-primary-foreground shadow-lg transition-colors hover:bg-[hsl(354_100%_32%)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
++            turns.length === 0 ? "pulse-brand" : ""
++          }`}
+         >
+           <Bot className="h-5 w-5" aria-hidden="true" />
+           <span className="text-sm font-semibold">Ask Bahn</span>
+@@ -241,7 +284,7 @@ export function AskBahn() {
+                   <p className="ml-auto w-fit max-w-[85%] rounded-xl bg-muted px-3 py-1.5 text-xs">
+                     {t.question}
+                   </p>
+-                  <AnswerBlock answer={t.answer} onGo={go} />
++                  <AnswerBlock answer={t.answer} onGo={go} onAsk={send} />
+                 </div>
+               ))
+             )}
+diff --git a/client/src/components/workspace/ReviewWorkspace.tsx b/client/src/components/workspace/ReviewWorkspace.tsx
+index 6906214..658b522 100644
+--- a/client/src/components/workspace/ReviewWorkspace.tsx
++++ b/client/src/components/workspace/ReviewWorkspace.tsx
+@@ -56,7 +56,7 @@ import {
+   SortHeader,
+   StatusSelect,
+ } from "@/components/workspace/table-parts";
+-import { statusBadgeClass } from "@shared/status-appearance";
++import { statusBadgeClass, statusPulseClass } from "@shared/status-appearance";
+ import { normalizeReviewStatus } from "@shared/review-status";
+ import { deriveProjectMetrics, percent } from "@shared/project-metrics";
+ import { formatGerman } from "@shared/date";
+@@ -815,7 +815,7 @@ export function ReviewWorkspace({
+                   <CardHeader className="space-y-2 pb-3">
+                     <div className="flex min-w-0 flex-wrap items-center gap-2">
+                       <span
+-                        className={`inline-flex max-w-full items-center rounded-full px-2.5 py-0.5 text-2xs font-medium leading-tight ${statusBadgeClass(s)}`}
++                        className={`inline-flex max-w-full items-center rounded-full px-2.5 py-0.5 text-2xs font-medium leading-tight ${statusBadgeClass(s)} ${statusPulseClass(s)}`}
+                       >
+                         {s ?? review.status ?? "—"}
+                       </span>
+diff --git a/client/src/components/workspace/table-parts.tsx b/client/src/components/workspace/table-parts.tsx
+index ad6b2c3..9737589 100644
+--- a/client/src/components/workspace/table-parts.tsx
++++ b/client/src/components/workspace/table-parts.tsx
+@@ -23,7 +23,7 @@ import {
+   DialogTrigger,
+ } from "@/components/ui/dialog";
+ import { projectLinkUrl } from "@shared/project-link";
+-import { statusBadgeClass } from "@shared/status-appearance";
++import { statusBadgeClass, statusPulseClass } from "@shared/status-appearance";
+ import { REVIEW_STATUSES } from "@shared/types";
+ 
+ /** Every icon button in a row: same size, same ring, same hover. */
+@@ -361,7 +361,9 @@ export function StatusSelect({
+       onClick={() => setEditing(true)}
+       aria-label={`${label} ändern${current ? `, aktuell ${current}` : ", derzeit leer"}`}
+       title={current || "kein Status"}
+-      className={`block max-w-full truncate rounded-full px-2.5 py-0.5 text-2xs font-medium leading-tight transition-shadow after:ml-1 after:opacity-40 after:content-['▾'] hover:ring-2 hover:ring-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${statusBadgeClass(current || null)} ${className}`}
++      // The pulse rides on the badge itself, so it is present wherever a status
++      // is — Projekte's fourteen columns, both Gewerk tabs, every viewport.
++      className={`block max-w-full truncate rounded-full px-2.5 py-0.5 text-2xs font-medium leading-tight transition-shadow after:ml-1 after:opacity-40 after:content-['▾'] hover:ring-2 hover:ring-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${statusBadgeClass(current || null)} ${statusPulseClass(current || null)} ${className}`}
+     >
+       {current || "—"}
+     </button>
+diff --git a/client/src/index.css b/client/src/index.css
+index 5f2f782..87af4a5 100644
+--- a/client/src/index.css
++++ b/client/src/index.css
+@@ -97,6 +97,18 @@
+   --color-ring: hsl(var(--ring));
+ 
+   /* Sidebar Tokens */
++  /*
++   * --color-sidebar was missing, and that is the whole mobile drawer bug.
++   *
++   * The palette defined --color-sidebar-background, so `bg-sidebar-background`
++   * worked and nobody noticed. The shadcn sidebar paints itself with
++   * `bg-sidebar` — a different token — which resolved to nothing, so the drawer
++   * had no background at all: on a phone the page showed straight through it,
++   * "1.298" reading over "Projektanmeldung" and the table rows over "Abmelden".
++   * The scrim behind it was working the whole time, which is why it looked like
++   * a z-index problem and was not one.
++   */
++  --color-sidebar: hsl(var(--sidebar-background));
+   --color-sidebar-background: hsl(var(--sidebar-background));
+   --color-sidebar-foreground: hsl(var(--sidebar-foreground));
+   --color-sidebar-primary: hsl(var(--sidebar-primary));
+@@ -795,3 +807,49 @@
+     min-height: 44px;
+   }
+ }
++
++/* ---------------------------------------------------------------------------
++   Was noch offen ist, atmet
++   ---------------------------------------------------------------------------
++   A status that is waiting for a decision should be findable across a room and
++   in a table of 1,298 rows. The pulse is on the OPEN states only — offen, in
++   Bearbeitung, Nachforderung, prüffähig — because a signal that applies to
++   everything is not a signal.
++
++   It animates box-shadow and never opacity or colour: fading the text would
++   take the badge below its contrast ratio for part of every cycle, and this
++   project measures that. The ring grows and fades; the label never moves and
++   never dims.
++
++   Two seconds, not one. A dashboard is looked at for hours, and anything faster
++   reads as an alarm rather than a state.
++   --------------------------------------------------------------------------- */
++@keyframes bpm-pulse-ring {
++  0% {
++    box-shadow: 0 0 0 0 rgb(var(--pulse-rgb) / 0.55);
++  }
++  70% {
++    box-shadow: 0 0 0 6px rgb(var(--pulse-rgb) / 0);
++  }
++  100% {
++    box-shadow: 0 0 0 0 rgb(var(--pulse-rgb) / 0);
++  }
++}
++
++@utility pulse-open {
++  --pulse-rgb: 245 158 11;
++  animation: bpm-pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
++}
++
++@utility pulse-brand {
++  --pulse-rgb: 236 0 22;
++  animation: bpm-pulse-ring 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
++}
++
++/* Someone who asked not to be moved is not asked twice. */
++@media (prefers-reduced-motion: reduce) {
++  .pulse-open,
++  .pulse-brand {
++    animation: none;
++  }
++}
+diff --git a/client/src/pages/Projects.tsx b/client/src/pages/Projects.tsx
+index 8158da8..dada8b3 100644
+--- a/client/src/pages/Projects.tsx
++++ b/client/src/pages/Projects.tsx
+@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
+ import { Plus, Download, Table, LayoutGrid, MapPin, Filter, X, MessageSquare, Loader2 } from "lucide-react";
+ import { DEPARTMENTS, REVIEW_STATUSES } from "@shared/types";
+ import { deriveProjectMetrics, percent } from "@shared/project-metrics";
+-import { statusBadgeClass } from "@shared/status-appearance";
++import { statusBadgeClass, statusPulseClass } from "@shared/status-appearance";
+ import { toast } from "sonner";
+ import { MapView, type StationSelection } from "@/components/Map";
+ import { ProjectDetailDialog } from "@/components/ProjectDetailDialog";
+@@ -35,7 +35,7 @@ function StatusBadge({ status }: { status: string | null }) {
+        badge an unshrinkable flex item, so it and the Projektnummer beside it
+        pushed each other out of the card. */
+     <span
+-      className={`inline-flex max-w-full items-center rounded-full px-2.5 py-0.5 text-2xs font-medium leading-tight ${colorClass}`}
++      className={`inline-flex max-w-full items-center rounded-full px-2.5 py-0.5 text-2xs font-medium leading-tight ${colorClass} ${statusPulseClass(status)}`}
+     >
+       {status}
+     </span>
+diff --git a/scripts/check-ui.mjs b/scripts/check-ui.mjs
+index 8e8d804..09baea1 100644
+--- a/scripts/check-ui.mjs
++++ b/scripts/check-ui.mjs
+@@ -255,6 +255,46 @@ const SCENARIOS = [
+       await page.waitForTimeout(600);
+     },
+   },
++  {
++    /*
++     * The scenario this gate did not have, which is why a drawer with no
++     * background shipped.
++     *
++     * `bg-sidebar` resolved to nothing because --color-sidebar was never
++     * declared, so on a phone the page read straight through the open drawer:
++     * "1.298" over "Projektanmeldung", table rows over "Abmelden". Every route
++     * was audited closed, and closed it looks perfect. Nothing opened it.
++     *
++     * Phone only, on purpose: above the mobile breakpoint the same component
++     * renders as a fixed rail, not a Sheet, and the trigger is `lg:hidden`.
++     */
++    name: "Sidebar · Drawer offen",
++    route: "/projects",
++    only: ["phone"],
++    async run(page) {
++      await page.getByRole("button", { name: "Navigation öffnen" }).click();
++      await page.waitForSelector('[data-sidebar="sidebar"][data-mobile="true"]', {
++        timeout: 15000,
++      });
++      // Past the Sheet's slide-in, so nothing is measured mid-transform.
++      await page.waitForTimeout(700);
++    },
++  },
++  {
++    name: "Ask Bahn · Weiterfragen",
++    route: "/",
++    async run(page) {
++      await page.getByRole("button", { name: /^Ask Bahn öffnen/ }).click();
++      await page.waitForSelector("[data-ask-bahn='open']", { timeout: 15000 });
++      await page.getByLabel("Frage an Ask Bahn").fill("Was ist gerade kritisch?");
++      await page.getByRole("button", { name: "Fragen" }).click();
++      await page.waitForSelector("[data-follow-up='true']", { timeout: 15000 });
++      // A second answer stacked under the first: the densest this panel gets,
++      // and the state where two chip rows have to stay legible at 375px.
++      await page.locator("[data-follow-up='true']").first().click();
++      await page.waitForTimeout(700);
++    },
++  },
+   {
+     name: "Anmeldung · Prüfungen",
+     route: "/anmeldung",
+@@ -769,12 +809,72 @@ console.log("== palette ==");
+   } else {
+     console.log(`✅ all ${classes.length} tone classes present in the built CSS`);
+   }
++
++  /*
++   * Utilities whose absence is invisible.
++   *
++   * Tailwind v4 does not emit `bg-sidebar` unless `--color-sidebar` exists in
++   * the theme. The palette declared `--color-sidebar-background`, so
++   * `bg-sidebar-background` worked, nobody noticed, and the mobile drawer —
++   * which paints itself with `bg-sidebar` — shipped with no background at all.
++   * There is no error anywhere in that chain: the TypeScript compiles, the
++   * class is on the element, the element renders. The class simply does not
++   * exist in the stylesheet.
++   *
++   * Anything on this list is a class the app depends on and cannot prove for
++   * itself. Add to it whenever a utility's silence would be a defect.
++   */
++  const REQUIRED_UTILITIES = [
++    // The mobile drawer and the desktop rail.
++    "bg-sidebar",
++    "text-sidebar-foreground",
++    "bg-sidebar-accent",
++    // The two pulses: open work, and the assistant before its first use.
++    "pulse-open",
++    "pulse-brand",
++  ];
++  /*
++   * A utility counts as present whether it is used bare or only behind a
++   * variant. Tailwind writes `hover:bg-sidebar-accent` as the selector
++   * `.hover\:bg-sidebar-accent:hover`, so looking for a leading "." alone
++   * reports a class that ships and works as missing — a false alarm, which is
++   * the one thing a gate must never produce.
++   */
++  const present = (c) => css.includes(`.${c}`) || css.includes(`\\:${c}`);
++  const absent = REQUIRED_UTILITIES.filter((c) => !present(c));
++  if (absent.length) {
++    failures++;
++    console.log(`❌ ${absent.length} required utilities are not in the built CSS:`);
++    for (const a of absent) console.log(`     .${a}`);
++  } else {
++    console.log(`✅ all ${REQUIRED_UTILITIES.length} required utilities present`);
++  }
++
++  /*
++   * There was a third check here — every `var(--x)` in the stylesheet having a
++   * matching declaration — and it is gone on purpose.
++   *
++   * A custom property is legitimately set from JavaScript: Radix writes
++   * --radix-select-trigger-width onto the element it measures, and it builds
++   * that name by template, so the literal string is nowhere to grep for.
++   * Tailwind also emits utilities for class strings it scanned out of files
++   * whose components never render, so the reference exists with nothing on the
++   * page to declare it. Both are correct, and neither can be told apart from a
++   * genuine undeclared token without an allowlist that would rot.
++   *
++   * A gate that reports eight non-defects is a gate people learn to skip past,
++   * and then it catches nothing at all. REQUIRED_UTILITIES above covers the
++   * failure that actually happened, exactly, with no false positives.
++   */
+ }
+ 
+ console.log("\n== rendering ==");
+ for (const vp of VIEWPORTS) {
+   for (const route of ROUTES) await audit(route.name, vp, route.path, null);
+-  for (const sc of SCENARIOS) await audit(sc.name, vp, sc.route, sc.run);
++  for (const sc of SCENARIOS) {
++    if (sc.only && !sc.only.includes(vp.name)) continue;
++    await audit(sc.name, vp, sc.route, sc.run);
++  }
+ }
+ 
+ /*
+@@ -790,7 +890,16 @@ for (const theme of THEMES.slice(1)) {
+     await audit(route.name, VIEWPORTS[2], route.path, null, theme);
+   }
+   for (const sc of SCENARIOS) {
+-    await audit(sc.name, VIEWPORTS[2], sc.route, sc.run, theme);
++    /*
++     * A viewport-locked scenario is still checked in every theme — at its own
++     * viewport, not the desktop one it would be skipped at. The drawer bug was
++     * a missing colour token, and a colour token is exactly what the theme
++     * sweep exists to catch; running it only in light mode would leave the
++     * same class of defect open in the other three.
++     */
++    const vp = sc.only ? VIEWPORTS.find((v) => v.name === sc.only[0]) : VIEWPORTS[2];
++    if (!vp) continue;
++    await audit(sc.name, vp, sc.route, sc.run, theme);
+   }
+ }
+ 
+diff --git a/scripts/e2e-smoke.mjs b/scripts/e2e-smoke.mjs
+index 6008130..74017c4 100644
+--- a/scripts/e2e-smoke.mjs
++++ b/scripts/e2e-smoke.mjs
+@@ -1899,6 +1899,174 @@ await check("an answer navigates to the screen that proves it", async () => {
+   );
+ });
+ 
++await check("every answer hands back questions it can answer", async () => {
++  await go("/");
++  await openAsk();
++  await page.getByLabel("Frage an Ask Bahn").fill("Was ist gerade kritisch?");
++  await page.getByRole("button", { name: "Fragen" }).click();
++  await page.waitForSelector("[data-follow-up='true']", { timeout: 10000 });
++
++  const chips = await page.$$eval("[data-follow-up='true']", (els) =>
++    els.map((e) => e.textContent.trim()),
++  );
++  assert(chips.length >= 2, `only ${chips.length} follow-up chips after the first answer`);
++  // The chips must lead somewhere else, not back to the question just asked.
++  assert(
++    !chips.includes("Was ist gerade kritisch?"),
++    "the assistant offered the question it had just answered",
++  );
++
++  /*
++   * Six hops, each one taken from whatever the previous answer offered.
++   *
++   * This is the failure the unit tests cannot see: a chip that resolves in
++   * isolation but is rendered from a stale answer, or a row that empties out
++   * after the second turn and leaves the reader at a dead end. Every hop has
++   * to produce a new answer that itself offers somewhere to go.
++   */
++  let seen = 1;
++  for (let hop = 0; hop < 6; hop++) {
++    assert(
++      (await page.$$("[data-follow-up='true']")).length > 0,
++      `no follow-up to click on hop ${hop}`,
++    );
++    const label = await page
++      .locator("[data-follow-up='true']")
++      .last()
++      .textContent();
++    await page.locator("[data-follow-up='true']").last().click();
++    await page.waitForTimeout(450);
++
++    seen++;
++    const text = await page.locator("[data-ask-bahn='open']").innerText();
++    assert(
++      !/Das habe ich nicht verstanden/.test(text.slice(-600)),
++      `the chip "${label?.trim()}" led to "not understood" on hop ${hop}`,
++    );
++    assert(
++      (await page.$$("[data-follow-up='true']")).length > 0,
++      `the conversation dead-ended after hop ${hop}`,
++    );
++  }
++  assert(seen === 7, `expected 7 answers in the transcript, counted ${seen}`);
++});
++
++await check("the assistant breathes until it is used, then stops", async () => {
++  await go("/");
++  const launcher = page.getByRole("button", { name: /^Ask Bahn öffnen/ });
++  assert(
++    (await launcher.getAttribute("class")).includes("pulse-brand"),
++    "the launcher does not pulse before its first use",
++  );
++  await openAsk();
++  await page.getByLabel("Frage an Ask Bahn").fill("Was ist gerade kritisch?");
++  await page.getByRole("button", { name: "Fragen" }).click();
++  await page.waitForSelector("[data-follow-up='true']", { timeout: 10000 });
++  await page.keyboard.press("Escape");
++  await page.waitForTimeout(400);
++  assert(
++    !(await page.getByRole("button", { name: /^Ask Bahn öffnen/ }).getAttribute("class")).includes(
++      "pulse-brand",
++    ),
++    "the launcher kept pulsing after it had been used",
++  );
++});
++
++console.log("\n== open work announces itself ==");
++
++await check("an open status pulses and a settled one does not", async () => {
++  await go("/bvb-eea");
++  await page.waitForSelector('button[aria-label*=" ändern"]', { timeout: 25000 });
++
++  /*
++   * Read from the badge's own accessible name, not from its text.
++   *
++   * `aria-label` is "<Gewerk> ändern, aktuell <Status>", which is the one place
++   * the current status is unambiguous — the visible text is truncated with
++   * `truncate` and carries a ▾ from ::after.
++   */
++  const badges = await page.$$eval('button[aria-label*=" ändern"]', (els) =>
++    els
++      .map((e) => ({
++        status: (/, aktuell (.+)$/.exec(e.getAttribute("aria-label")) || [])[1] || "",
++        pulses: e.className.includes("pulse-open"),
++      }))
++      .filter((b) => b.status),
++  );
++  assert(badges.length > 0, "no status badges found on /bvb-eea");
++
++  /*
++   * Three buckets, not two, and the pulse means exactly one of them.
++   *
++   * shared/review-status.ts classifies four statuses as open, two as approved
++   * and two as blocking. The rest — "Projektkonfig.", "Prüfung erfolgt",
++   * "zurückgestellt", "nicht erforderlich" — are in no lifecycle bucket, which
++   * is why the Dashboard's diagnostics name them and why every "offen" figure
++   * on this site excludes them.
++   *
++   * So they must NOT pulse. Making them pulse is the kinder-looking choice and
++   * would put the animation out of step with every number beside it: 55 badges
++   * breathing on a tab that reports 22 open. An indicator that disagrees with
++   * the count next to it is worse than no indicator.
++   */
++  const OPEN = /^(offen|in Bearbeitung|Nachforderung|prüffähig)$/i;
++  const open = badges.filter((b) => OPEN.test(b.status.trim()));
++  const rest = badges.filter((b) => !OPEN.test(b.status.trim()));
++  assert(open.length > 0, "no open status on the page to check");
++
++  const silentOpen = open.filter((b) => !b.pulses);
++  assert(
++    silentOpen.length === 0,
++    `${silentOpen.length} open statuses do not pulse, e.g. "${silentOpen[0]?.status}"`,
++  );
++  const noisy = rest.filter((b) => b.pulses);
++  assert(
++    noisy.length === 0,
++    `${noisy.length} non-open statuses pulse, e.g. "${noisy[0]?.status}"`,
++  );
++  console.log(`     ${open.length} open pulsing, ${rest.length} not open and quiet`);
++});
++
++await check("the mobile drawer is opaque, not a window onto the page", async () => {
++  const phone = await browser.newPage({ viewport: { width: 375, height: 812 } });
++  try {
++    // A fresh context has empty localStorage, so without this the app sends the
++    // phone straight back to /login and there is no header to open.
++    await phone.goto(U("/login"));
++    await phone.evaluate(() =>
++      localStorage.setItem(
++        "bahn-demo-user",
++        JSON.stringify({ id: 1, openId: "e2e", name: "Vincenzo Grimaldi", email: "v@db.de", role: "admin" }),
++      ),
++    );
++    await phone.goto(U("/projects"), { waitUntil: "domcontentloaded" });
++    const menu = phone.getByRole("button", { name: "Navigation öffnen" });
++    await menu.waitFor({ timeout: 25000 });
++    await menu.click();
++    const drawer = phone.locator('[data-sidebar="sidebar"][data-mobile="true"]');
++    await drawer.waitFor({ timeout: 10000 });
++    await phone.waitForTimeout(700);
++
++    /*
++     * The exact defect, measured rather than eyeballed: the drawer's own
++     * background-color must be opaque. `bg-sidebar` resolved to nothing when
++     * --color-sidebar was undeclared, and the computed value came back
++     * `rgba(0, 0, 0, 0)` — transparent — while every class was still on the
++     * element and nothing anywhere reported a problem.
++     */
++    const bg = await drawer.evaluate((el) => getComputedStyle(el).backgroundColor);
++    const alpha = /rgba?\(([^)]+)\)/.exec(bg);
++    const parts = alpha ? alpha[1].split(",").map((v) => Number.parseFloat(v)) : [];
++    assert(parts.length >= 3, `the drawer has no background colour: ${bg}`);
++    assert(
++      parts.length === 3 || parts[3] >= 0.99,
++      `the drawer background is see-through: ${bg}`,
++    );
++  } finally {
++    await phone.close();
++  }
++});
++
+ console.log("\n== the relief is an instrument, not a picture ==");
+ 
+ await check("dragging rotates it, and the numbers stay upright", async () => {
+diff --git a/scripts/status.mjs b/scripts/status.mjs
+index d837a0b..4954d83 100644
+--- a/scripts/status.mjs
++++ b/scripts/status.mjs
+@@ -44,6 +44,9 @@ const FEATURES = [
+   ["Portfolio-Relief", "client/src/components/dashboard/PortfolioRelief.tsx", "relief-cell"],
+   ["Relief drehbar und anklickbar", "client/src/components/dashboard/PortfolioRelief.tsx", "setPointerCapture"],
+   ["Ask Bahn", "shared/agent/skills.ts", "export const SKILLS"],
++  ["Ask Bahn stellt Anschlussfragen", "shared/agent/follow-ups.ts", "export function followUps"],
++  ["Offene Status pulsieren", "shared/status-appearance.ts", "export function statusPulseClass"],
++  ["Mobile Navigation deckt die Seite ab", "client/src/index.css", "--color-sidebar:"],
+ ];
+ 
+ console.log(bold("\nHEAD"));
+@@ -102,8 +105,8 @@ if (!existsSync(DIST)) {
+ 
+ console.log(bold("\nErwartete Zahlen der Gates"));
+ for (const line of [
+-  "pnpm exec vitest run          255 passed",
+-  "node scripts/e2e-smoke.mjs     81 passed, 0 failed",
++  "pnpm exec vitest run          265 passed, 6 skipped",
++  "node scripts/e2e-smoke.mjs     85 passed, 0 failed",
+   "node scripts/check-ui.mjs      UI CLEAN",
+   "node scripts/stress-test.mjs    8 passed, 0 failed",
+   "pnpm exec biome check .        72 warnings (unverandert)",
+diff --git a/shared/agent/agent.test.ts b/shared/agent/agent.test.ts
+index b4e34ed..416cad3 100644
+--- a/shared/agent/agent.test.ts
++++ b/shared/agent/agent.test.ts
+@@ -2,6 +2,15 @@ import { describe, it, expect } from "vitest";
+ import fs from "node:fs";
+ import { ask, extractEntities, rankSkills, STARTERS } from "./resolve";
+ import { SKILLS, helpAnswer } from "./skills";
++import {
++  ASK,
++  ASK_INTENT,
++  contactAsk,
++  gewerkAsk,
++  MAX_FOLLOW_UPS,
++  stationAsk,
++} from "./follow-ups";
++import { DEPARTMENT_LIST } from "../validation";
+ import type { AgentContext } from "./types";
+ 
+ const DATA = JSON.parse(fs.readFileSync("client/public/data.json", "utf8"));
+@@ -151,3 +160,126 @@ describe("speed", () => {
+     expect(fastest, `${fastest.toFixed(1)} ms per answer`).toBeLessThan(120);
+   });
+ });
++
++// ---------------------------------------------------------------------------
++// Follow-ups
++// ---------------------------------------------------------------------------
++//
++// A chip is a promise. These tests are the only thing standing between a
++// well-phrased suggestion and a reader clicking it to be told "das habe ich
++// nicht verstanden" — which, once, teaches them the panel is decorative. So
++// every question the assistant offers itself is sent straight back through the
++// resolver, over the real data.json, and has to come back measured.
++
++describe("every answer leads somewhere", () => {
++  const ENTITIES = {
++    department: "ITK",
++    station: "Bensheim",
++    projektnummer: "G.011540063",
++  };
++
++  it("offers at least two next questions on every skill", () => {
++    for (const skill of SKILLS) {
++      const a = skill.run(CTX, ENTITIES);
++      expect(a.followUps.length, skill.id).toBeGreaterThanOrEqual(2);
++      expect(a.followUps.length, skill.id).toBeLessThanOrEqual(MAX_FOLLOW_UPS);
++    }
++  });
++
++  it("offers at least two next questions when it did not understand", () => {
++    expect(helpAnswer().followUps.length).toBeGreaterThanOrEqual(2);
++    expect(ask("qwertz asdfgh", CTX).followUps.length).toBeGreaterThanOrEqual(2);
++  });
++
++  it("never offers a question it cannot answer", () => {
++    for (const skill of SKILLS) {
++      for (const f of skill.run(CTX, ENTITIES).followUps) {
++        const next = ask(f.question, CTX);
++        expect(next.confidence, `${skill.id} → ${f.question}`).toBe("measured");
++      }
++    }
++  });
++
++  it("never offers the question that was just answered", () => {
++    for (const skill of SKILLS) {
++      const a = skill.run(CTX, ENTITIES);
++      for (const f of a.followUps) {
++        expect(ask(f.question, CTX).intent, `${skill.id} → ${f.question}`).not.toBe(skill.id);
++      }
++    }
++  });
++
++  it("never offers the same question twice in one row", () => {
++    for (const skill of SKILLS) {
++      const questions = skill.run(CTX, ENTITIES).followUps.map((f) => f.question);
++      expect(new Set(questions).size, skill.id).toBe(questions.length);
++    }
++  });
++
++  it("routes each catalogue question to the skill it was written for", () => {
++    for (const [key, followUp] of Object.entries(ASK)) {
++      const a = ask(followUp.question, CTX);
++      expect(a.intent, followUp.question).toBe(ASK_INTENT[key as keyof typeof ASK]);
++      expect(a.confidence, followUp.question).toBe("measured");
++    }
++  });
++
++  it("builds a Gewerk question that lands on that Gewerk, for all fourteen", () => {
++    for (const department of DEPARTMENT_LIST) {
++      const a = ask(gewerkAsk(department).question, CTX);
++      expect(a.intent, department).toBe("gewerk-status");
++      expect(a.confidence, department).toBe("measured");
++      expect(a.headline, department).toContain(department);
++    }
++  });
++
++  it("builds a station question that lands on that station", () => {
++    // Every station in the file, not a sample: a station name is data, and the
++    // one that breaks the phrasing will be the one nobody thought to try.
++    const stations = [
++      ...new Set(
++        (CTX.projects as ReadonlyArray<{ station?: string | null }>)
++          .map((p) => (p.station ?? "").trim())
++          .filter(Boolean),
++      ),
++    ];
++    expect(stations.length).toBeGreaterThan(50);
++    for (const station of stations) {
++      const followUp = stationAsk(station);
++      if (!followUp) continue;
++      const a = ask(followUp.question, CTX);
++      expect(a.intent, station).toBe("station");
++      expect(a.confidence, station).toBe("measured");
++    }
++  });
++
++  it("never offers a contact question for a Gewerk with no address on file", () => {
++    // LST is the live case: Hilfsdatei rows 74 and 75 are both empty, so there
++    // is nobody to name and the assistant must not pretend otherwise.
++    expect(contactAsk("LST")).toBeNull();
++    for (const department of DEPARTMENT_LIST) {
++      const followUp = contactAsk(department);
++      if (followUp === null) continue;
++      const a = ask(followUp.question, CTX);
++      expect(a.intent, department).toBe("contact");
++      expect(a.facts.length, department).toBeGreaterThan(0);
++    }
++  });
++
++  it("stays answerable two clicks deep from every starter", () => {
++    for (const starter of STARTERS) {
++      const first = ask(starter.question, CTX);
++      expect(first.confidence, starter.question).toBe("measured");
++      for (const f of first.followUps) {
++        const second = ask(f.question, CTX);
++        expect(second.confidence, `${starter.question} → ${f.question}`).toBe("measured");
++        for (const g of second.followUps) {
++          expect(
++            ask(g.question, CTX).confidence,
++            `${starter.question} → ${f.question} → ${g.question}`,
++          ).toBe("measured");
++        }
++      }
++    }
++  });
++});
+diff --git a/shared/agent/follow-ups.ts b/shared/agent/follow-ups.ts
+new file mode 100644
+index 0000000..fe8744e
+--- /dev/null
++++ b/shared/agent/follow-ups.ts
+@@ -0,0 +1,120 @@
++/**
++ * The questions an answer leads to.
++ *
++ * ---------------------------------------------------------------------------
++ * Why the phrasing here is not free text
++ * ---------------------------------------------------------------------------
++ * A follow-up chip is a promise: the reader clicks it because they expect an
++ * answer. If the sentence on the chip scores against the wrong skill — or
++ * against none — the click produces "das habe ich nicht verstanden", and one
++ * of those teaches a reader that the whole panel is decorative.
++ *
++ * So every question the assistant offers itself is written once, here, in a
++ * phrasing chosen to carry at least two keywords of its target skill and none
++ * of any other. `ask()` is the arbiter, not this file's good intentions:
++ * tests/agent-follow-ups.test.ts sends every offered follow-up back through the
++ * resolver and fails if it does not come back with the intended intent and
++ * `confidence: "measured"`. That is what keeps a chip from ever being a dead
++ * end, including the chips built from live data — a Gewerk name, a station.
++ */
++
++import { recipientsFor } from "../contacts";
++import type { AgentFollowUp } from "./types";
++
++/**
++ * The fixed questions, one per skill that needs no entity.
++ *
++ * Keyed by skill id so a reader can check the mapping against skills.ts at a
++ * glance, and so the test can iterate the pairs rather than trusting a comment.
++ */
++export const ASK = {
++  "most-critical": { label: "Was ist gerade kritisch?", question: "Was ist gerade kritisch?" },
++  overdue: { label: "Was ist überfällig?", question: "Was ist überfällig?" },
++  blocked: { label: "Was ist blockiert?", question: "Welche Prüfungen sind blockiert?" },
++  unassigned: { label: "Was hat keinen Prüfer?", question: "Welche Prüfungen haben keinen Prüfer?" },
++  workload: { label: "Wer trägt die meiste Last?", question: "Wer hat die meiste offene Last?" },
++  aging: { label: "Wie alt ist der Rückstand?", question: "Wie alt sind die offenen Prüfungen?" },
++  portfolio: { label: "Wie steht das Portfolio?", question: "Wie steht das Portfolio insgesamt?" },
++  "data-quality": {
++    label: "Wie verlässlich sind die Zahlen?",
++    question: "Wie verlässlich sind die Zahlen?",
++  },
++  "recent-changes": { label: "Was hat sich geändert?", question: "Was hat sich geändert?" },
++  navigate: { label: "Wohin kann ich springen?", question: "Öffne die Übersicht" },
++} as const satisfies Record<string, AgentFollowUp>;
++
++/** The skill each fixed question is written to reach. Pinned by the test. */
++export const ASK_INTENT: Readonly<Record<keyof typeof ASK, string>> = {
++  "most-critical": "most-critical",
++  overdue: "overdue",
++  blocked: "blocked",
++  unassigned: "unassigned",
++  workload: "workload",
++  aging: "aging",
++  portfolio: "portfolio",
++  "data-quality": "data-quality",
++  "recent-changes": "recent-changes",
++  navigate: "navigate",
++};
++
++/*
++ * The entity questions carry two keywords on purpose.
++ *
++ * "Wie steht EEA?" resolves today, but it wins by 90 to nothing — and a Gewerk
++ * or station name is data, so tomorrow it may contain a word that belongs to
++ * another skill. Naming the kind of thing as well as the thing ("das Gewerk
++ * EEA", "an der Station Kassel-Wilhelmshöhe") doubles the score of the intended
++ * skill and makes the margin structural rather than lucky.
++ */
++
++/** "How does this Gewerk stand" — reaches `gewerk-status`. */
++export function gewerkAsk(department: string): AgentFollowUp {
++  const q = `Wie steht das Gewerk ${department}?`;
++  return { label: q, question: q };
++}
++
++/**
++ * "Who is responsible" — reaches `contact`, but only when there is somebody to
++ * name. For a Gewerk with no address in the Hilfsdatei the answer is an honest
++ * dead end, and a dead end is not a suggestion. LST is exactly this case.
++ */
++export function contactAsk(department: string): AgentFollowUp | null {
++  if (recipientsFor(department as never).length === 0) return null;
++  const q = `Wer ist der Ansprechpartner für ${department}?`;
++  return { label: q, question: q };
++}
++
++/** "What is happening here" — reaches `station`. */
++export function stationAsk(station: string): AgentFollowUp | null {
++  const name = station.trim();
++  if (!name) return null;
++  const q = `Was läuft an der Station ${name}?`;
++  return { label: q, question: q };
++}
++
++/** How many chips fit under an answer before they stop being a shortcut. */
++export const MAX_FOLLOW_UPS = 4;
++
++/**
++ * Assemble the chips: drop what did not apply, drop repeats, cap the row.
++ *
++ * Callers pass more candidates than fit, most specific first — a question built
++ * from this answer's own worst Gewerk beats a generic one — and the cap decides.
++ * The generic tail at the end of every call is what guarantees a non-empty row
++ * even when nothing specific applied.
++ */
++export function followUps(
++  ...candidates: Array<AgentFollowUp | null | undefined | false>
++): AgentFollowUp[] {
++  const out: AgentFollowUp[] = [];
++  const seen = new Set<string>();
++  for (const candidate of candidates) {
++    if (!candidate) continue;
++    const key = candidate.question.trim().toLowerCase();
++    if (seen.has(key)) continue;
++    seen.add(key);
++    out.push(candidate);
++    if (out.length === MAX_FOLLOW_UPS) break;
++  }
++  return out;
++}
+diff --git a/shared/agent/resolve.ts b/shared/agent/resolve.ts
+index 25767e1..bd99793 100644
+--- a/shared/agent/resolve.ts
++++ b/shared/agent/resolve.ts
+@@ -16,8 +16,9 @@
+ 
+ import { editDistance, foldExpanded, foldLoose, toleranceFor } from "../search";
+ import { DEPARTMENT_LIST } from "../validation";
++import { ASK } from "./follow-ups";
+ import { helpAnswer, SKILLS, type AgentEntities, type Skill } from "./skills";
+-import type { AgentAnswer, AgentContext } from "./types";
++import type { AgentAnswer, AgentContext, AgentFollowUp } from "./types";
+ 
+ /** Words that carry no intent and would otherwise pull every skill up. */
+ const STOPWORDS = new Set([
+@@ -187,12 +188,18 @@ export function ask(question: string, ctx: AgentContext): AgentAnswer {
+   return (ranked[0] as Ranked).skill.run(ctx, entities);
+ }
+ 
+-/** The prompts the widget offers before anyone has typed anything. */
+-export const STARTERS: ReadonlyArray<{ label: string; question: string }> = [
+-  { label: "Was ist gerade kritisch?", question: "Was ist gerade kritisch?" },
+-  { label: "Was ist überfällig?", question: "Was ist überfällig?" },
+-  { label: "Wer hat die meiste Last?", question: "Wer hat die meiste offene Last?" },
+-  { label: "Wie steht das Portfolio?", question: "Wie steht das Portfolio insgesamt?" },
+-  { label: "Was hat sich geändert?", question: "Was hat sich geändert?" },
+-  { label: "Wie verlässlich sind die Zahlen?", question: "Wie verlässlich sind die Zahlen?" },
++/**
++ * The prompts the widget offers before anyone has typed anything.
++ *
++ * Taken from the same catalogue the follow-up chips are built from, so a
++ * starter and a chip can never phrase the same question two ways — and so the
++ * one test that proves every offered question resolves covers both.
++ */
++export const STARTERS: ReadonlyArray<AgentFollowUp> = [
++  ASK["most-critical"],
++  ASK.overdue,
++  ASK.workload,
++  ASK.portfolio,
++  ASK["recent-changes"],
++  ASK["data-quality"],
+ ];
+diff --git a/shared/agent/skills.ts b/shared/agent/skills.ts
+index 6bd6471..b841614 100644
+--- a/shared/agent/skills.ts
++++ b/shared/agent/skills.ts
+@@ -20,12 +20,14 @@ import { recipientsFor } from "../contacts";
+ import { gewerkHref } from "../search-index";
+ import { severityOf } from "../audit-entry";
+ import { formatGerman } from "../date";
++import { ASK, contactAsk, followUps, gewerkAsk, stationAsk } from "./follow-ups";
+ import type {
+   AgentAction,
+   AgentTone,
+   AgentAnswer,
+   AgentContext,
+   AgentFact,
++  AgentFollowUp,
+   AgentProject,
+ } from "./types";
+ 
+@@ -59,13 +61,26 @@ export interface Skill {
+   run(ctx: AgentContext, entities: AgentEntities): AgentAnswer;
+ }
+ 
++/*
++ * `followUps` is a required argument, not an optional one, and that is
++ * deliberate: a skill that forgets where its answer leads should not compile.
++ */
+ const answer = (
+   intent: string,
+   headline: string,
+   facts: AgentFact[],
+   actions: AgentAction[],
+   basis: string,
+-): AgentAnswer => ({ intent, headline, facts, actions, basis, confidence: "measured" });
++  next: AgentFollowUp[],
++): AgentAnswer => ({
++  intent,
++  headline,
++  facts,
++  actions,
++  followUps: next,
++  basis,
++  confidence: "measured",
++});
+ 
+ // ---------------------------------------------------------------------------
+ 
+@@ -84,6 +99,7 @@ const gewerkStatus: Skill = {
+         headline: `${department} kommt in den geladenen Daten nicht vor.`,
+         facts: [],
+         actions: [],
++        followUps: followUps(ASK.portfolio, ASK["most-critical"], ASK["data-quality"]),
+         basis: "Geprüft gegen alle Prüfzeilen der geladenen Projekte.",
+         confidence: "unknown",
+       };
+@@ -114,6 +130,16 @@ const gewerkStatus: Skill = {
+       ],
+       [{ label: `${department} öffnen`, href: gewerkHref(department), kind: "navigate" }],
+       "Gezählt über alle Prüfzeilen dieses Gewerks, ohne „nicht erforderlich“.",
++      // What a reader asks next about a Gewerk is whichever number just came
++      // back bad — so the order follows this Gewerk's own worst figure.
++      followUps(
++        s.blocked > 0 && ASK.blocked,
++        s.overdue > 0 && ASK.overdue,
++        s.unassigned > 0 && ASK.unassigned,
++        contactAsk(department),
++        ASK["most-critical"],
++        ASK.portfolio,
++      ),
+     );
+   },
+ };
+@@ -138,6 +164,7 @@ const mostCritical: Skill = {
+         headline: "Es sind keine Prüfdaten geladen.",
+         facts: [],
+         actions: [],
++        followUps: followUps(ASK["data-quality"], ASK.navigate),
+         basis: "Keine Projekte im Speicher.",
+         confidence: "unknown",
+       };
+@@ -162,6 +189,14 @@ const mostCritical: Skill = {
+         { label: "Alle blockierten zeigen", href: q("abgelehnt"), kind: "navigate" },
+       ],
+       "Rangfolge aus blockiert ×3 + überfällig ×2 + ohne Prüfer ×1. Eine Priorisierungshilfe, keine Messung.",
++      followUps(
++        gewerkAsk(lead.department),
++        blockedTotal > 0 && ASK.blocked,
++        overdueTotal > 0 && ASK.overdue,
++        contactAsk(lead.department),
++        ASK.workload,
++        ASK.portfolio,
++      ),
+     );
+   },
+ };
+@@ -195,6 +230,12 @@ const overdue: Skill = {
+       ],
+       [{ label: "Dashboard öffnen", href: "/", kind: "navigate" }],
+       "Offene Prüfzeilen, deren Prüfdatum vor heute liegt.",
++      followUps(
++        worst[0] && worst[0].overdue > 0 ? gewerkAsk(worst[0].department) : null,
++        ASK.aging,
++        ASK["most-critical"],
++        ASK.workload,
++      ),
+     );
+   },
+ };
+@@ -227,6 +268,14 @@ const aging: Skill = {
+       ],
+       [{ label: "Dashboard öffnen", href: "/", kind: "navigate" }],
+       "Abstand zwischen dem eingetragenen Prüfdatum und heute, je offener Prüfzeile.",
++      // The undated cohort is the one that cannot be aged at all, so when it is
++      // non-empty the honest next question is about the data, not the backlog.
++      followUps(
++        ASK.overdue,
++        a.undatedOpen > 0 && ASK["data-quality"],
++        ASK.workload,
++        ASK["most-critical"],
++      ),
+     );
+   },
+ };
+@@ -234,7 +283,7 @@ const aging: Skill = {
+ const workload: Skill = {
+   id: "workload",
+   example: "Wer hat die meiste offene Last?",
+-  keywords: ["wer", "prufer", "prüfer", "last", "auslastung", "verteilt", "team", "personen", "kapazitat", "kapazität"],
++  keywords: ["wer", "last", "auslastung", "verteilt", "team", "personen", "kapazitat", "kapazität"],
+   weight: 70,
+   run(ctx) {
+     const c = reviewerConcentration(ctx.projects);
+@@ -261,6 +310,12 @@ const workload: Skill = {
+       ],
+       [{ label: "Dashboard öffnen", href: "/", kind: "navigate" }],
+       "Gezählt über alle erforderlichen Prüfzeilen mit einem eingetragenen Namen.",
++      followUps(
++        c.unassignedOpen > 0 && ASK.unassigned,
++        ASK.aging,
++        ASK["most-critical"],
++        ASK.portfolio,
++      ),
+     );
+   },
+ };
+@@ -268,7 +323,10 @@ const workload: Skill = {
+ const unassigned: Skill = {
+   id: "unassigned",
+   example: "Welche Prüfungen haben keinen Prüfer?",
+-  keywords: ["ohne prufer", "ohne prüfer", "unbesetzt", "niemand", "kein prufer", "kein prüfer", "unzugeordnet"],
++  keywords: [
++    "ohne prufer", "ohne prüfer", "kein prufer", "kein prüfer", "keinen prufer",
++    "keinen prüfer", "unbesetzt", "unbesetzte", "niemand", "unzugeordnet",
++  ],
+   weight: 75,
+   run(ctx) {
+     const standings = gewerkStandings(ctx.projects, DEPARTMENT_LIST, ctx.today);
+@@ -287,6 +345,13 @@ const unassigned: Skill = {
+         ? [{ label: `${worst[0].department} öffnen`, href: gewerkHref(worst[0].department), kind: "navigate" as const }]
+         : [],
+       "Offene Prüfzeilen, deren Prüferfeld leer ist.",
++      followUps(
++        worst[0] ? gewerkAsk(worst[0].department) : null,
++        worst[0] ? contactAsk(worst[0].department) : null,
++        ASK.workload,
++        ASK["most-critical"],
++        ASK["data-quality"],
++      ),
+     );
+   },
+ };
+@@ -307,12 +372,13 @@ const blocked: Skill = {
+     const byDept = new Map<string, number>();
+     for (const r of rows) byDept.set(r.department, (byDept.get(r.department) ?? 0) + 1);
+     const projects = new Set(rows.map((r) => r.project.id));
++    const byCount = [...byDept.entries()].sort((a, b) => b[1] - a[1]);
++    const worstDept = byCount[0]?.[0] ?? null;
+     return answer(
+       "blocked",
+       `${de(rows.length)} Prüfungen sind abgelehnt oder gestoppt, verteilt auf ${de(projects.size)} Projekte.`,
+       [
+-        ...[...byDept.entries()]
+-          .sort((a, b) => b[1] - a[1])
++        ...byCount
+           .slice(0, 5)
+           .map(([department, count]) => ({
+             label: department,
+@@ -329,6 +395,13 @@ const blocked: Skill = {
+       ],
+       [{ label: "Abgelehnte zeigen", href: q("abgelehnt"), kind: "navigate" }],
+       "Prüfzeilen im Status „abgelehnt“ oder „gestoppt“.",
++      followUps(
++        worstDept ? gewerkAsk(worstDept) : null,
++        worstDept ? contactAsk(worstDept) : null,
++        ASK["most-critical"],
++        ASK.overdue,
++        ASK["recent-changes"],
++      ),
+     );
+   },
+ };
+@@ -350,6 +423,7 @@ const findProject: Skill = {
+         headline: `Zu „${nummer}“ ist kein Projekt geladen.`,
+         facts: [],
+         actions: [{ label: "In Projekte suchen", href: q(nummer), kind: "navigate" }],
++        followUps: followUps(ASK["most-critical"], ASK.portfolio, ASK.navigate),
+         basis: "Verglichen mit der Projektnummer jedes geladenen Projekts.",
+         confidence: "unknown",
+       };
+@@ -373,6 +447,14 @@ const findProject: Skill = {
+       ],
+       [{ label: "Projekt öffnen", href: q(nummer), kind: "navigate" }],
+       "Aus dem geladenen Projektdatensatz.",
++      // The Gewerk that is actually open on THIS project, not a generic one.
++      followUps(
++        openHere[0] ? gewerkAsk(openHere[0].department) : null,
++        stationAsk(first.station ?? ""),
++        openHere[0] ? contactAsk(openHere[0].department) : null,
++        ASK["most-critical"],
++        ASK["recent-changes"],
++      ),
+     );
+   },
+ };
+@@ -390,13 +472,19 @@ const stationInfo: Skill = {
+     );
+     let open = 0;
+     let blockedCount = 0;
++    const openByDept = new Map<string, number>();
+     for (const p of here) {
+       for (const r of p.reviews ?? []) {
+         const s = normalizeReviewStatus(r.status);
+-        if (isOpenStatus(s)) open++;
++        if (isOpenStatus(s)) {
++          open++;
++          openByDept.set(r.department, (openByDept.get(r.department) ?? 0) + 1);
++        }
+         if (isBlockedStatus(s)) blockedCount++;
+       }
+     }
++    const busiestHere =
++      [...openByDept.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+     return answer(
+       "station",
+       `${station}: ${de(here.length)} Projekte, ${de(open)} offene Prüfungen, ${de(blockedCount)} blockiert.`,
+@@ -415,6 +503,12 @@ const stationInfo: Skill = {
+         { label: "Auf der Karte", href: "/projects?view=map", kind: "navigate" },
+       ],
+       "Projekte, deren Station exakt so heißt.",
++      followUps(
++        busiestHere ? gewerkAsk(busiestHere) : null,
++        blockedCount > 0 && ASK.blocked,
++        ASK["most-critical"],
++        ASK.portfolio,
++      ),
+     );
+   },
+ };
+@@ -432,6 +526,7 @@ const recentChanges: Skill = {
+         headline: "Seit dem Start dieser Sitzung wurde nichts geändert.",
+         facts: [],
+         actions: [{ label: "Änderungshistorie öffnen", href: "/audit", kind: "navigate" }],
++        followUps: followUps(ASK["most-critical"], ASK.portfolio, ASK.overdue),
+         basis: "Die Änderungshistorie ist leer.",
+         confidence: "measured",
+       };
+@@ -456,6 +551,12 @@ const recentChanges: Skill = {
+       ],
+       [{ label: "Änderungshistorie öffnen", href: "/audit", kind: "navigate" }],
+       "Aus der Änderungshistorie dieses Browsers.",
++      followUps(
++        critical.length > 0 && ASK["most-critical"],
++        ASK["data-quality"],
++        ASK.blocked,
++        ASK.portfolio,
++      ),
+     );
+   },
+ };
+@@ -492,6 +593,12 @@ const quality: Skill = {
+       ],
+       [{ label: "Dashboard öffnen", href: "/", kind: "navigate" }],
+       "Geprüft über jede geladene Prüfzeile und jedes Projekt.",
++      followUps(
++        dq.openWithoutDate > 0 && ASK.aging,
++        dq.openWithoutPruefer > 0 && ASK.unassigned,
++        ASK.portfolio,
++        ASK["most-critical"],
++      ),
+     );
+   },
+ };
+@@ -511,6 +618,7 @@ const contact: Skill = {
+         headline: `Für ${department} ist in der Hilfsdatei keine Adresse hinterlegt.`,
+         facts: [],
+         actions: [{ label: `${department} öffnen`, href: gewerkHref(department), kind: "navigate" }],
++        followUps: followUps(gewerkAsk(department), ASK["most-critical"], ASK.portfolio),
+         // Never a constructed address — see shared/contacts.ts.
+         basis: "Aus der Hilfsdatei. Adressen werden nie erzeugt, nur gelesen.",
+         confidence: "measured",
+@@ -522,6 +630,7 @@ const contact: Skill = {
+       people.map((p) => ({ label: p.name || "ohne Namen", value: p.mail })),
+       [{ label: `${department} öffnen`, href: gewerkHref(department), kind: "navigate" }],
+       "Aus der Hilfsdatei. Adressen werden nie erzeugt, nur gelesen.",
++      followUps(gewerkAsk(department), ASK.unassigned, ASK["most-critical"]),
+     );
+   },
+ };
+@@ -546,6 +655,7 @@ const navigate: Skill = {
+         { label: "Änderungshistorie", href: "/audit", kind: "navigate" },
+       ],
+       "Alle Routen dieser Anwendung.",
++      followUps(ASK["most-critical"], ASK.portfolio, ASK["recent-changes"], ASK.overdue),
+     );
+   },
+ };
+@@ -584,6 +694,12 @@ const portfolio: Skill = {
+       ],
+       [{ label: "Dashboard öffnen", href: "/", kind: "navigate" }],
+       "Summiert über alle 14 Gewerke, ohne „nicht erforderlich“.",
++      followUps(
++        ASK["most-critical"],
++        blockedTotal > 0 && ASK.blocked,
++        ASK.workload,
++        ASK["data-quality"],
++      ),
+     );
+   },
+ };
+@@ -612,6 +728,12 @@ export function helpAnswer(): AgentAnswer {
+     headline: "Das habe ich nicht verstanden. Fragen, die ich beantworten kann:",
+     facts: SKILLS.map((s) => ({ label: s.id, value: s.example })),
+     actions: [],
++    followUps: followUps(
++      ASK["most-critical"],
++      ASK.portfolio,
++      ASK.overdue,
++      ASK["recent-changes"],
++    ),
+     basis: "Jede Antwort wird aus den geladenen Daten berechnet — nichts wird geschätzt.",
+     confidence: "unknown",
+   };
+diff --git a/shared/agent/types.ts b/shared/agent/types.ts
+index 57f888c..74613be 100644
+--- a/shared/agent/types.ts
++++ b/shared/agent/types.ts
+@@ -47,6 +47,20 @@ export interface AgentAction {
+   kind: "navigate" | "export" | "external";
+ }
+ 
++/**
++ * A question the reader can ask next, offered as a chip under the answer.
++ *
++ * The `question` is the exact text that goes back through `ask()`, not a
++ * paraphrase of it. That is the whole contract: a chip that reads well but
++ * resolves to "das habe ich nicht verstanden" is worse than no chip, so the
++ * phrasing here is chosen to score unambiguously against one skill and a unit
++ * test asserts every offered follow-up comes back `measured`.
++ */
++export interface AgentFollowUp {
++  label: string;
++  question: string;
++}
++
+ export interface AgentAnswer {
+   /** Which skill produced this, for the transcript and for tests. */
+   intent: string;
+@@ -54,6 +68,12 @@ export interface AgentAnswer {
+   headline: string;
+   facts: AgentFact[];
+   actions: AgentAction[];
++  /**
++   * Where this answer leads. Never empty, and never the question just asked:
++   * an answer that ends the conversation makes the reader guess what else the
++   * assistant knows, and guessing is how people conclude it knows nothing.
++   */
++  followUps: AgentFollowUp[];
+   /** What the figures were computed from. Always present. */
+   basis: string;
+   /**
+diff --git a/shared/status-appearance.ts b/shared/status-appearance.ts
+index 7ad6cf8..e269116 100644
+--- a/shared/status-appearance.ts
++++ b/shared/status-appearance.ts
+@@ -26,7 +26,7 @@
+  * with no tone is a type error rather than a silent grey.
+  */
+ 
+-import type { ReviewStatus } from "./review-status";
++import { normalizeReviewStatus, OPEN_STATUSES, type ReviewStatus } from "./review-status";
+ import { REVIEW_STATUSES } from "./validation";
+ 
+ /**
+@@ -163,3 +163,21 @@ export const STATUS_LEGEND: ReadonlyArray<{
+   const tone = STATUS_TONE[status];
+   return { status, tone, hex: TONE_APPEARANCE[tone].hex };
+ });
++
++
++/**
++ * Does this status still want a decision?
++ *
++ * The pulse is attached to this and nothing else. Keeping the question here —
++ * beside the colours — means the badge, the dropdown, the relief and anything
++ * added later cannot disagree about which rows are still waiting.
++ */
++export function isAwaitingDecision(status: string | null | undefined): boolean {
++  const s = normalizeReviewStatus(status);
++  return s !== null && (OPEN_STATUSES as readonly string[]).includes(s);
++}
++
++/** `pulse-open` when the status is still open, otherwise nothing. */
++export function statusPulseClass(status: string | null | undefined): string {
++  return isAwaitingDecision(status) ? "pulse-open" : "";
++}
+-- 
+2.43.0
+
