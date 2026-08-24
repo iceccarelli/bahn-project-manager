@@ -888,6 +888,40 @@ console.log("== palette ==");
   }
 
   /*
+   * A reveal may move an element. It may never resize one.
+   *
+   * The first version rose from `scale(0.985)`, and getBoundingClientRect
+   * returns the transformed box — so a 44px touch target measured 43.34px for
+   * as long as the animation ran, and the tappable area really was that small.
+   * It passed on a fast machine and failed on a slow one, because whether the
+   * defect was visible depended on how quickly the page happened to paint.
+   *
+   * Anything that changes an element's rendered size during an arrival is the
+   * same defect wearing different numbers, so the stylesheet is checked rather
+   * than trusted.
+   */
+  const RESIZING = /(scale[3dXYZ]*\s*\(|zoom\s*:|width\s*:|height\s*:)/;
+  const resizes = [];
+  for (const rule of css.split("}")) {
+    const [selector, body] = rule.split("{");
+    if (!selector || !body) continue;
+    if (!/\.reveal|data-stream|bpm-reveal|bpm-stream/.test(selector)) continue;
+    if (RESIZING.test(body)) resizes.push(`${selector.trim().slice(0, 60)} → ${body.trim().slice(0, 60)}`);
+  }
+  // Keyframe blocks are named, not selected, so they are checked separately.
+  for (const name of ["bpm-reveal", "bpm-stream-cell"]) {
+    const block = new RegExp(`@keyframes\\s+${name}\\s*\\{([\\s\\S]*?)\\}\\s*\\}`).exec(css);
+    if (block && RESIZING.test(block[1])) resizes.push(`@keyframes ${name}`);
+  }
+  if (resizes.length) {
+    failures++;
+    console.log(`❌ ${resizes.length} reveal rules change an element's size:`);
+    for (const r of resizes) console.log(`     ${r}`);
+  } else {
+    console.log("✅ no reveal rule changes an element's size");
+  }
+
+  /*
    * There was a third check here — every `var(--x)` in the stylesheet having a
    * matching declaration — and it is gone on purpose.
    *

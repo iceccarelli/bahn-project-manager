@@ -802,10 +802,25 @@
    revealed occupies exactly the space it will occupy, which is why nothing
    below it jumps when it lands.
    --------------------------------------------------------------------------- */
+/*
+ * Translate and opacity. No scale — and that is a correctness rule, not taste.
+ *
+ * The first version rose from `scale(0.985)`, and a touch gate caught what
+ * that costs: getBoundingClientRect returns the TRANSFORMED box, so a 44px
+ * row action measured 43.34px for as long as the animation ran, and the hit
+ * area really was that small. It passed on a fast machine and failed on a
+ * slower one, which is the worst kind of defect — one whose presence depends
+ * on how quickly the reader's laptop happened to paint.
+ *
+ * The promise this whole system rests on is that a reveal never changes what
+ * an element IS, only how visible it is. A scale breaks that promise by 1.5%,
+ * and 1.5% of 44 is under the accessible minimum. A translate does not: the
+ * element moves, and stays exactly its own size the whole way.
+ */
 @keyframes bpm-reveal {
   from {
     opacity: 0;
-    transform: translate3d(0, 18px, 0) scale(0.985);
+    transform: translate3d(0, 20px, 0);
   }
   to {
     opacity: 1;
@@ -816,7 +831,7 @@
 /* Not yet seen: held back, and only while something exists to release it. */
 [data-motion="on"] .reveal[data-revealed="false"] {
   opacity: 0;
-  transform: translate3d(0, 18px, 0) scale(0.985);
+  transform: translate3d(0, 20px, 0);
 }
 
 [data-motion="on"] .reveal[data-revealed="true"] {

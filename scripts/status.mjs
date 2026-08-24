@@ -55,6 +55,7 @@ const FEATURES = [
   ["Tabellen stromen Zeile fur Zeile", "client/src/hooks/useTableStream.ts", "export function useTableStream"],
   ["3D-Donut, jede Bande anklickbar", "client/src/components/dashboard/Pie3D.tsx", "export function Pie3D"],
   ["Tonband-Filter uber alle Flachen", "shared/handlungsbedarf.ts", "export function toneHref"],
+  ["LST-Lucke sichtbar und schliessbar", "client/src/components/anmeldung/RecipientGap.tsx", "data-recipient-gap"],
   ["Alle acht Bahnhofsmanagements", "client/src/pages/Dashboard.tsx", "Regionale Verteilung — alle"],
 ];
 
@@ -160,8 +161,8 @@ let unpushed = 0;
 
 console.log(bold("\nErwartete Zahlen der Gates"));
 for (const line of [
-  "pnpm exec vitest run          281 passed, 6 skipped",
-  "node scripts/e2e-smoke.mjs    102 passed, 0 failed",
+  "pnpm exec vitest run          289 passed, 6 skipped",
+  "node scripts/e2e-smoke.mjs    104 passed, 0 failed",
   "node scripts/check-ui.mjs      UI CLEAN",
   "node scripts/stress-test.mjs    8 passed, 0 failed",
   "pnpm exec biome check .        71 warnings",

@@ -10,6 +10,9 @@ import {
   recipientsFor,
 } from "@shared/contacts";
 import { Printer } from "lucide-react";
+import { effectiveRecipients } from "@shared/contact-overrides";
+import { useRecipientOverrides } from "@/hooks/useRecipientOverrides";
+import { RecipientGap } from "./RecipientGap";
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
@@ -31,9 +34,19 @@ export function Step5Bestaetigung({ draft }: { draft: ChecklistDraft }) {
   // the ITK off-by-two survived: the mail went out, and nobody could see that
   // it went to a Brandschutz specialist instead of the two busiest ITK
   // reviewers. shared/contacts.ts has the corrected ranges.
+  const { overrides } = useRecipientOverrides();
   const openDepartments = reviews.filter((r) => r.status === "offen").map((r) => r.department);
   const mailCount = mailListFor(openDepartments).length;
-  const unreachable = openDepartments.filter((d) => recipientsFor(d).length === 0);
+  /*
+   * Unreachable AFTER everything, not just after the workbook.
+   *
+   * It used to ask the Hilfsdatei alone, so a department stayed flagged even
+   * once somebody had supplied the missing address — the warning could never
+   * be cleared, which is the fastest way to teach a reader to ignore it.
+   */
+  const unreachable = openDepartments.filter(
+    (d) => effectiveRecipients(d, recipientsFor(d), overrides).length === 0,
+  );
   const bmContact = bahnhofsmanagementContact(header.bahnhofsmanagement);
 
   return (
@@ -139,16 +152,16 @@ export function Step5Bestaetigung({ draft }: { draft: ChecklistDraft }) {
                   {mailCount} {mailCount === 1 ? "Empfänger" : "Empfänger"} insgesamt
                   {bmContact ? ` · BM ${bmContact.group}: ${bmContact.name}` : ""}
                 </p>
-                {unreachable.length > 0 && (
-                  // Named rather than swallowed: the Excel macro reported a
-                  // successful send for these too, which is how LST went 52
-                  // reviews without anyone being told.
-                  <p className="mt-2 rounded border border-primary/40 bg-primary/5 px-3 py-2 text-2xs font-bold text-primary-strong">
-                    Für {unreachable.join(", ")} ist in der Hilfsdatei keine
-                    E-Mail-Adresse hinterlegt. Diese Prüfung wird angelegt, aber es
-                    kann niemand benachrichtigt werden.
-                  </p>
-                )}
+                {/*
+                  Named, and now fixable.
+                  
+                  The Excel macro reported a successful send for these too,
+                  which is how LST went 52 reviews without one person being
+                  told. Saying so was the first half; the second half is a
+                  field for whoever knows the address, because a gap nobody can
+                  close is a gap that stays open.
+                */}
+                <RecipientGap departments={unreachable} />
               </>
             )}
           </section>

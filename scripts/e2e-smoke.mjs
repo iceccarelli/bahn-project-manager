@@ -119,7 +119,48 @@ page.on("console", (m) => {
 });
 
 const U = (r) => `http://localhost:${PORT}${r}`;
-const go = async (r) => { await page.goto(U(r), { waitUntil: "networkidle" }); await page.waitForTimeout(800); };
+
+/**
+ * Wait until nothing on screen is still arriving.
+ *
+ * Sections fade in as they are scrolled to and table rows stream in behind
+ * them. Neither changes what an element is — that invariant is enforced in the
+ * stylesheet and gated in check-ui — but both take time, and a measurement
+ * taken mid-arrival is a measurement of a moving thing.
+ *
+ * This is why "both table row actions are separate 44px targets" passed on one
+ * machine and failed on another: it measured at a fixed 800ms and the answer
+ * depended on how fast the machine painted. A gate whose result depends on the
+ * hardware is not a gate. Waiting for the actual condition, rather than for a
+ * duration somebody guessed, is the fix.
+ */
+const settled = async (target = page) => {
+  await target
+    .waitForFunction(
+      () => {
+        const moving = [...document.querySelectorAll(".reveal")].some((el) => {
+          const r = el.getBoundingClientRect();
+          const onScreen = r.bottom > 0 && r.top < window.innerHeight;
+          return onScreen && Number.parseFloat(getComputedStyle(el).opacity) < 0.99;
+        });
+        const rows = [...document.querySelectorAll("tbody[data-stream] > tr")].slice(0, 30);
+        const streaming = rows.some(
+          (r) => Number.parseFloat(getComputedStyle(r).opacity) < 0.99,
+        );
+        return !moving && !streaming;
+      },
+      null,
+      { timeout: 15000 },
+    )
+    .catch(() => {});
+};
+const go = async (r) => {
+  await page.goto(U(r), { waitUntil: "networkidle" });
+  // Settled, not "800ms and hope": every check below this line measures a page
+  // that has finished arriving, on any machine.
+  await settled();
+  await page.waitForTimeout(150);
+};
 
 let passed = 0;
 const failures = [];
@@ -776,7 +817,9 @@ await check("both table row actions are separate 44px targets on touch", async (
   const tp = await touch.newPage();
   await tp.goto(U("/projects"), { waitUntil: "networkidle" });
   await tp.waitForSelector("table tbody tr", { timeout: 15000 });
-  await tp.waitForTimeout(800);
+  // The actual condition, not a guessed duration — see `settled`.
+  await settled(tp);
+  await tp.waitForTimeout(150);
   const r = await tp.evaluate(() => {
     const cell = [...document.querySelectorAll("td")].find(
       (td) => td.querySelectorAll("button").length >= 2,
@@ -2512,6 +2555,123 @@ await check("the open lane of the relief breathes and the others do not", async 
     );
   }
   console.log(`     ${open.length} open columns breathing, ${rest.length} others still`);
+});
+
+console.log("\n== the department that reached nobody ==");
+
+await check("LST is named as unreachable, and the gap can be closed", async () => {
+  /*
+   * The oldest open item in this project, and the one it refused to fake.
+   *
+   * LST carries 52 Prüfungen — 22 still open — and both of its recipient rows
+   * in the Hilfsdatei are empty. The Excel macro sent to an empty string and
+   * reported success. This app has known since the workbook was transcribed:
+   * `departmentsWithoutRecipients()` has returned ["LST"] the whole time, and
+   * was called by one script and one test and by nothing anybody could see.
+   *
+   * The address is still never invented. What changed is that the gap is shown
+   * to the person who could close it, and that they can.
+   */
+  await page.evaluate(() => localStorage.removeItem("bahn-recipient-overrides"));
+  await go("/anmeldung");
+
+  /*
+   * Answer the question that opens LST, rather than assuming it is open.
+   *
+   * Step 3 is derived, not set: which of the fourteen Prüfungen are „offen"
+   * comes out of the checklist answers in step 2. A fresh draft answers „Nein"
+   * to all of them, so nothing is open and nothing can be unreachable —
+   * a version of this check that skipped straight to step 5 reported "the
+   * wizard does not name any unreachable Gewerk" and was right to.
+   *
+   * Question 19 (`lst`) is the one: Leit- und Sicherungstechnik, Signalanlagen,
+   * Bahnübergänge.
+   */
+  await page.getByRole("button", { name: /^Schritt 2:/ }).click();
+  await page.waitForTimeout(600);
+  const answered = await page.evaluate(() => {
+    const row = [...document.querySelectorAll("main table tbody tr")].find((r) =>
+      /Leit- und Sicherungstechnik/.test(r.textContent ?? ""),
+    );
+    const ja = row?.querySelector('input[value="Ja"]');
+    if (!ja) return false;
+    ja.click();
+    return true;
+  });
+  assert(answered, "the checklist has no Leit- und Sicherungstechnik question");
+  await page.waitForTimeout(500);
+
+  await page.getByRole("button", { name: /Bestätigung/ }).click();
+  await page.waitForTimeout(900);
+
+  const panel = page.locator("[data-recipient-gap]");
+  assert(await panel.count() > 0, "the wizard does not name any unreachable Gewerk");
+  const named = (await panel.getAttribute("data-recipient-gap")) ?? "";
+  assert(named.includes("LST"), `the unreachable list is "${named}" — LST is not in it`);
+
+  const body = await page.locator("main").innerText();
+  assert(
+    /kann niemand benachrichtigt werden/.test(body),
+    "the wizard does not say that nobody will be notified",
+  );
+
+  // A placeholder is refused, by name, rather than accepted and never answered.
+  await page.click('[data-gap-open="LST"]');
+  await page.fill('[data-gap-name="LST"]', "Test");
+  await page.fill('[data-gap-mail="LST"]', "test@test.de");
+  await page.getByRole("button", { name: "Eintragen" }).click();
+  await page.waitForTimeout(300);
+  assert(
+    (await page.$$('[data-gap-problem="placeholder-mail"]')).length === 1,
+    "a placeholder address was accepted as a recipient",
+  );
+
+  // A real one closes the gap, and the entry records who supplied it.
+  await page.fill('[data-gap-name="LST"]', "A. Beispiel");
+  await page.fill('[data-gap-mail="LST"]', "a.beispiel@example.org");
+  await page.getByRole("button", { name: "Eintragen" }).click();
+  await page.waitForTimeout(600);
+
+  const after = await page.locator("main").innerText();
+  assert(/a\.beispiel@example\.org/.test(after), "the supplied address is not shown");
+  assert(/ergänzt von/.test(after), "the supplied address carries no provenance");
+  const stillNamed = (await page.locator("[data-recipient-gap]").getAttribute("data-recipient-gap")) ?? "";
+  assert(
+    !stillNamed.split(",").includes("LST"),
+    "LST is still listed as unreachable after an address was supplied",
+  );
+
+  // And it is recorded like every other change on this site.
+  await go("/audit");
+  const audit = await page.locator("main").innerText();
+  assert(
+    /Empfänger für LST ergänzt/.test(audit),
+    "supplying a recipient was not written to the Änderungshistorie",
+  );
+
+  await page.evaluate(() => localStorage.removeItem("bahn-recipient-overrides"));
+});
+
+await check("no page anywhere shows a constructed deutschebahn.com address", async () => {
+  /*
+   * The rule this project has held since the beginning, checked across every
+   * surface rather than trusted per file.
+   *
+   * The Hilfsdatei's real addresses are the only ones allowed on screen. A
+   * `vorname.nachname@deutschebahn.com` appearing anywhere means something
+   * built one from a name, which is the single most dangerous thing this app
+   * could do: it looks right, it reaches a real person, and it is the wrong
+   * one.
+   */
+  for (const route of ["/", "/projects", "/bvb-eea", "/psv-itk", "/anmeldung", "/audit"]) {
+    await go(route);
+    const text = await page.locator("body").innerText();
+    const constructed = [...text.matchAll(/([a-zä-ü-]+)\.([a-zä-ü-]+)@deutschebahn\.com/gi)];
+    assert(
+      constructed.length === 0,
+      `${route} shows a constructed address: ${constructed[0]?.[0]}`,
+    );
+  }
 });
 
 console.log("\n== the page arrives, and never withholds ==");
