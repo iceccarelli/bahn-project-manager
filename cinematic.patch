@@ -1,0 +1,2220 @@
+From 02c0e3334b0aaa1299e27ec1aaa1b9f989d46bbc Mon Sep 17 00:00:00 2001
+From: Vincenzo Grimaldi <vince.ceccarelli@gmail.com>
+Date: Mon, 24 Aug 2026 12:43:26 +0000
+Subject: [PATCH] Kinematischer Auftritt, stromende Tabellen, ein Donut mit
+ Korper
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Alle drei, plus die Gates, die sie sicher machen. Der Grund, sie vorher
+getrennt zu haben, war real — und die Losung ist eine einzige Regel.
+
+Die Regel
+---------
+Nichts hier entfernt jemals ein Element, versteckt es mit `display` oder
+verzogert sein Rendern. Jedes Element steht im DOM, im Fluss und ist ab
+dem ersten Paint messbar. Ein Auftritt andert `opacity` und `transform` —
+zwei Eigenschaften, die kein Layout und keinen Textinhalt beruhren.
+
+Das ist keine Stilfrage. Eine Seite, die ihren Inhalt erst beim Scrollen
+einhangt, ist eine Seite, auf der „1.298 Projekte gefunden" nur manchmal
+stimmt, auf der die UI-Prufung leere Karten vermisst und auf der eine
+Zeilenzahl im Test davon abhangt, wie weit jemand gescrollt hat. Jedes
+davon ist ein echter Defekt mit einer Animation als Kostum.
+
+Der Schalter
+------------
+`<html data-motion="on">` wird beim Start gesetzt, und NUR wenn der Leser
+keine reduzierte Bewegung verlangt hat. Jede versteckende Regel im
+Stylesheet liegt darunter. Also:
+
+  — reduzierte Bewegung → das Attribut erscheint nie → nichts wird je
+    versteckt;
+  — kein JavaScript → dasselbe, aus demselben Grund;
+  — check-ui → emuliert reduzierte Bewegung und misst den Endzustand,
+    also genau das, was es messen soll.
+
+Es gibt keine Test-Sonderregel. Der Weg, den die Automatisierung nimmt,
+ist der Weg eines Menschen, der um Ruhe gebeten hat — also ein Weg, der
+funktionieren muss. Ein neues Gate liest das gebaute CSS und scheitert,
+wenn irgendeine `opacity: 0`-Regel fur `.reveal` oder `[data-stream]`
+ausserhalb des Schalters liegt.
+
+1. Die Seite tritt auf
+----------------------
+`useReveal` nimmt einen Container und lasst dessen direkte Kinder
+nacheinander eintreffen — eine Zeile pro Seite statt achtundfunfzig
+Karten von Hand zu umwickeln, was achtundfunfzig Gelegenheiten waren, ein
+<div> in einen <tbody> zu setzen. Der Versatz ist bei acht Schritten
+gekappt: uncapped wartet die zwanzigste Karte 1,2 s, bis der Leser
+langst daran vorbeigescrollt ist.
+
+2. Tabellen stromen
+-------------------
+Zeilen laufen nacheinander ein, und die ersten fullen sich von links —
+eine Diagonale durch die Tabelle. Der Zeilenversatz ist bei Zeile 24
+gekappt, der Spaltenversatz gilt nur fur die ersten zwolf Zeilen, und
+beide kommen aus `nth-child`-Regeln statt aus Inline-Styles: 1.298 Zeilen
+x 27 Spalten sind 35.000 Inline-Styles fur eine Verzierung.
+
+Das Gate zahlt die Zeilen MITTEN in der Welle und danach und verlangt
+dieselbe Zahl. Gemessen: 1.298 wahrend, 1.298 danach.
+
+3. Der Donut hat einen Korper
+-----------------------------
+Das Diagramm wird mehrfach gezeichnet: einmal als Deckflache und darunter
+mehrfach dunkler versetzt, der Stapel auf X gekippt. Die offenen Bander
+stehen heraus und leuchten. Jede Bande ist anklickbar und landet auf den
+Projekten dahinter.
+
+Wie beim Relief gilt: aus der Form wird nichts abgelesen. Ein gekipptes
+Kreisdiagramm lasst nahe Segmente grosser wirken als gleich grosse ferne,
+also steht jede Zahl aufrecht in der Liste daneben. Die Kippung ist, wie
+es aussieht; die Liste ist, was es sagt.
+
+Drei Befunde, alle aus der Messung
+----------------------------------
+1. Der Stream startete nie. `threshold: 0.01` klingt wie „ein Pixel" und
+   ist „ein Prozent DES ELEMENTS" — bei einem 1.298-Zeilen-Korper sind
+   das funfhundert Pixel. Die Tabelle konnte den Bildschirm fullen, ohne
+   ihre eigene Schwelle zu erreichen.
+
+2. Eine Bande im Gewerke-Donut fuhrte auf das ganze Portfolio. „Projekte
+   mit einer offenen Zeile und einer EEA-Zeile" ist eine viel grossere
+   Menge als „Projekte mit einer offenen EEA-Zeile" — das erste bekommt
+   man aus zwei unabhangigen Filtern, das zweite ist, was die Bande
+   gezahlt hat. Das Gewerk geht jetzt IN das Pradikat, und die Links
+   gehen auf BVB-EEA, PSV-ITK oder Projekte mit ?gewerk=.
+
+3. Der Ken-Burns-Zoom hielt nie an, also war jeder Knopf im Karussell ein
+   bewegliches Ziel. Playwright klickt nichts, was nicht zur Ruhe kommt —
+   und ein Mensch, der nach einer Bande greift, wahrend das Panel unter
+   ihm skaliert, hat dasselbe Problem, gibt aber sich die Schuld. Der
+   Zoom haltet jetzt uberall an, wo auch die Rotation anhalt.
+
+Gates, seriell, gegen dist/ von diesem Stand:
+  vitest       281 bestanden, 6 uebersprungen (vorher 275)
+  e2e-smoke    102 bestanden, 0 fehlgeschlagen (vorher 95)
+  check-ui      UI CLEAN
+  stress-test    8 bestanden, 0 fehlgeschlagen
+  biome         71 Warnungen (eine weniger)
+  tsc           sauber
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01GJwENjMMPe6PSZBdrXkzBj
+---
+ client/src/components/Reveal.tsx              |  52 ++++
+ .../components/dashboard/GewerkeCarousel.tsx  | 104 +++----
+ client/src/components/dashboard/Pie3D.tsx     | 217 ++++++++++++++
+ .../components/workspace/ReviewWorkspace.tsx  |  25 +-
+ client/src/hooks/useReveal.ts                 |  24 ++
+ client/src/hooks/useTableStream.ts            |  76 +++++
+ client/src/index.css                          | 235 ++++++++++++++++
+ client/src/lib/motion.ts                      | 153 ++++++++++
+ client/src/main.tsx                           |  12 +
+ client/src/pages/Anmeldung.tsx                |   6 +-
+ client/src/pages/AuditLog.tsx                 |  10 +-
+ client/src/pages/Dashboard.tsx                | 152 +++++-----
+ client/src/pages/Projects.tsx                 |  54 +++-
+ scripts/check-ui.mjs                          |  37 +++
+ scripts/e2e-smoke.mjs                         | 264 ++++++++++++++++++
+ scripts/status.mjs                            |  10 +-
+ shared/handlungsbedarf.test.ts                |  76 ++++-
+ shared/handlungsbedarf.ts                     | 137 ++++++++-
+ 18 files changed, 1478 insertions(+), 166 deletions(-)
+ create mode 100644 client/src/components/Reveal.tsx
+ create mode 100644 client/src/components/dashboard/Pie3D.tsx
+ create mode 100644 client/src/hooks/useReveal.ts
+ create mode 100644 client/src/hooks/useTableStream.ts
+ create mode 100644 client/src/lib/motion.ts
+
+diff --git a/client/src/components/Reveal.tsx b/client/src/components/Reveal.tsx
+new file mode 100644
+index 0000000..343a7d3
+--- /dev/null
++++ b/client/src/components/Reveal.tsx
+@@ -0,0 +1,52 @@
++/**
++ * A section that arrives.
++ *
++ * Wraps children in one element that fades and rises into place the first time
++ * it is scrolled to, then never again. `as` keeps the markup honest — a
++ * revealed table row is still a <tr>, a revealed list item still an <li> —
++ * because a wrapper <div> inside a <tbody> is invalid HTML and a wrapper
++ * around a grid child breaks the grid.
++ *
++ * Everything about the safety of this lives in client/src/lib/motion.ts: the
++ * element is always in the DOM, always in flow, and only ever hidden when
++ * something exists that will show it again.
++ */
++import { useEffect, useRef, type ElementType, type ReactNode } from "react";
++import { observeReveal } from "@/lib/motion";
++
++export function Reveal({
++  children,
++  as: Tag = "div",
++  /** Position in a run of siblings — turns a list into a cascade. */
++  index = 0,
++  className = "",
++  ...rest
++}: {
++  children: ReactNode;
++  as?: ElementType;
++  index?: number;
++  className?: string;
++} & Record<string, unknown>) {
++  const ref = useRef<HTMLElement>(null);
++  useEffect(() => observeReveal(ref.current), []);
++  return (
++    <Tag
++      ref={ref}
++      className={`reveal ${className}`}
++      /*
++       * The stagger is capped at eight steps.
++       *
++       * Uncapped, the twentieth card on a Dashboard would wait 1.2s after the
++       * first — by which time the reader has scrolled past it and is looking
++       * at an empty box. A cascade is a flourish on the first few; after that
++       * it is just latency with a nice name.
++       */
++      style={{ "--reveal-i": Math.min(index, 8) } as React.CSSProperties}
++      {...rest}
++    >
++      {children}
++    </Tag>
++  );
++}
++
++export default Reveal;
+diff --git a/client/src/components/dashboard/GewerkeCarousel.tsx b/client/src/components/dashboard/GewerkeCarousel.tsx
+index 006367b..b8bcba4 100644
+--- a/client/src/components/dashboard/GewerkeCarousel.tsx
++++ b/client/src/components/dashboard/GewerkeCarousel.tsx
+@@ -27,7 +27,6 @@
+  */
+ import { useCallback, useEffect, useId, useMemo, useState } from "react";
+ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+-import { Badge } from "@/components/ui/badge";
+ import { Button } from "@/components/ui/button";
+ import {
+   Select,
+@@ -36,16 +35,21 @@ import {
+   SelectTrigger,
+   SelectValue,
+ } from "@/components/ui/select";
+-import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+ import { ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
+ import { useLocation } from "wouter";
+-import { statusHex, statusPulseClass } from "@shared/status-appearance";
++import type { ToneCount } from "@shared/handlungsbedarf";
++import { Pie3D } from "@/components/dashboard/Pie3D";
+ import { gewerkHref } from "@shared/search-index";
+ 
+ export interface GewerkeStatusDatum {
+   name: string;
+   value: number;
+-  breakdown: Record<string, number>;
++  /**
++   * The tone bands for THIS Gewerk, counted by the same function that counts
++   * the portfolio donut — scoped to the department, so a slice's figure and
++   * the set its link produces are one computation.
++   */
++  slices: ToneCount[];
+ }
+ 
+ /** How long one Gewerk holds the panel. */
+@@ -112,12 +116,16 @@ export function GewerkeCarousel({
+     return () => window.clearInterval(id);
+   }, [rotating, data.length]);
+ 
+-  const slices = useMemo(() => {
+-    if (!current) return [];
+-    return Object.entries(current.breakdown)
+-      .sort((a, b) => b[1] - a[1])
+-      .map(([status, value]) => ({ name: status, value, color: statusHex(status) }));
+-  }, [current]);
++  /*
++   * Folded to tones, the same eight bands the big donut uses.
++   *
++   * Twelve statuses onto eight tones means „Zustimmung erteilt" and
++   * „Niederschrift erstellt" stop being two slices of identical green with two
++   * legend entries sharing a swatch. It also makes every slice clickable
++   * against the same predicate — the per-Gewerk breakdown and the portfolio
++   * donut now speak one language.
++   */
++  const slices = current?.slices ?? [];
+ 
+   if (!current) return null;
+ 
+@@ -251,61 +259,31 @@ export function GewerkeCarousel({
+              * fade plays once on mount and never again.
+              */
+             key={current.name}
++            /*
++             * The drift stops whenever the rotation does.
++             *
++             * Found by the click gate: a Ken Burns push that never pauses
++             * makes every button inside it a moving target, and Playwright
++             * refuses to click an element that never settles. A person aiming
++             * at a slice has exactly the same problem — the panel is still
++             * scaling under their finger — they just blame themselves for
++             * missing. `rotating` is already false on hover, on focus, when
++             * pinned and under reduced motion, so binding the drift to it
++             * makes the panel hold still in every case where somebody is
++             * reaching for something in it.
++             */
++            data-drift={rotating ? "on" : "off"}
+             className="kenburns grid grid-cols-1 gap-6 lg:grid-cols-5"
+           >
+-            <div className="h-[380px] min-w-0 lg:col-span-3">
+-              <ResponsiveContainer width="100%" height="100%">
+-                <PieChart>
+-                  <Pie
+-                    data={slices}
+-                    cx="50%"
+-                    cy="50%"
+-                    innerRadius={80}
+-                    outerRadius={140}
+-                    paddingAngle={3}
+-                    dataKey="value"
+-                    isAnimationActive={!reduced}
+-                  >
+-                    {slices.map((entry) => (
+-                      <Cell key={entry.name} fill={entry.color} />
+-                    ))}
+-                  </Pie>
+-                  <Tooltip />
+-                  <Legend formatter={(value) => <span className="text-foreground">{value}</span>} />
+-                </PieChart>
+-              </ResponsiveContainer>
+-            </div>
+-            <div className="min-w-0 space-y-4 lg:col-span-2">
+-              <div>
+-                <div className="mb-1 text-sm text-muted-foreground">Gesamtzahl Prüfungen</div>
+-                <div className="text-4xl font-bold tabular-nums">
+-                  {current.value.toLocaleString("de-DE")}
+-                </div>
+-              </div>
+-              <div className="space-y-2 border-t pt-4">
+-                {slices.map((item) => (
+-                  <div
+-                    key={item.name}
+-                    className="flex items-center justify-between gap-2 rounded-lg bg-muted/50 p-3"
+-                  >
+-                    <div className="flex min-w-0 items-center gap-2">
+-                      <div
+-                        className="h-3 w-3 shrink-0 rounded-full"
+-                        style={{ backgroundColor: item.color }}
+-                      />
+-                      {/* Open states breathe here too — the same one function
+-                          that decides it on every other status surface. */}
+-                      <span className={`min-w-0 truncate rounded-full px-1 ${statusPulseClass(item.name)}`}>
+-                        {item.name}
+-                      </span>
+-                    </div>
+-                    <Badge variant="outline" className="shrink-0 tabular-nums">
+-                      {item.value.toLocaleString("de-DE")}
+-                    </Badge>
+-                  </div>
+-                ))}
+-              </div>
+-            </div>
++            <Pie3D
++              slices={slices}
++              label={`Status-Verteilung für ${current.name}`}
++              department={current.name}
++              height={330}
++            />
++            <p className="mt-3 text-2xs text-muted-foreground lg:col-span-5">
++              {current.value.toLocaleString("de-DE")} Prüfungen in {current.name}.
++            </p>
+           </div>
+         </section>
+       </CardContent>
+diff --git a/client/src/components/dashboard/Pie3D.tsx b/client/src/components/dashboard/Pie3D.tsx
+new file mode 100644
+index 0000000..331c1d4
+--- /dev/null
++++ b/client/src/components/dashboard/Pie3D.tsx
+@@ -0,0 +1,217 @@
++/**
++ * A donut with real thickness, and every slice a place you can go.
++ *
++ * ---------------------------------------------------------------------------
++ * How the depth is made
++ * ---------------------------------------------------------------------------
++ * The chart is drawn once as the top face and again, offset downwards and
++ * darkened, as the extruded side — the oldest way there is to give a flat
++ * shape a body. The stack sits inside a container tilted on X, so the disc
++ * lies on a table rather than facing the reader, and the side becomes visible
++ * exactly as it does on a real coin.
++ *
++ * ---------------------------------------------------------------------------
++ * What the tilt is NOT allowed to cost
++ * ---------------------------------------------------------------------------
++ * Tilting a pie makes near slices look bigger than far ones of the same size.
++ * That is the reason this project's relief refuses to encode anything in
++ * perspective, and the same rule applies here: nothing is read off the shape.
++ * Every slice prints its own count in the list beside the chart, the legend is
++ * flat and upright, and the numbers are the deliverable. The tilt is how it
++ * looks; the list is what it says.
++ *
++ * ---------------------------------------------------------------------------
++ * Clicking
++ * ---------------------------------------------------------------------------
++ * A slice is a filter. Choosing one lands on the projects behind it — and
++ * because the slice count and the landing set come from one predicate in
++ * shared/handlungsbedarf.ts, the number on the slice and the number of cards
++ * on the page are the same fact counted two ways rather than two numbers that
++ * disagree.
++ */
++import { useCallback, useMemo, useState } from "react";
++import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
++import { useLocation } from "wouter";
++import { toneHref, type ToneCount } from "@shared/handlungsbedarf";
++import { toneIsAwaiting } from "@shared/handlungsbedarf";
++
++/** How many copies make the side of the disc. Enough to look solid, few enough to be free. */
++const DEPTH_LAYERS = 7;
++const LAYER_PX = 3;
++
++export function Pie3D({
++  slices,
++  height = 380,
++  label,
++  department,
++}: {
++  slices: readonly ToneCount[];
++  height?: number;
++  label: string;
++  /**
++   * The Gewerk this donut is showing, when it is showing one.
++   *
++   * It scopes where a slice goes. Without it, a band inside „Status-Verteilung
++   * für EEA" would land on every project with an open row in any of fourteen
++   * departments — a link that looks right and is wrong by a factor of four.
++   */
++  department?: string;
++}) {
++  const [, setLocation] = useLocation();
++  const [active, setActive] = useState<string | null>(null);
++
++  const total = useMemo(() => slices.reduce((a, s) => a + s.rows, 0), [slices]);
++
++  const go = useCallback(
++    (tone: string) => setLocation(toneHref(tone as never, department)),
++    [setLocation, department],
++  );
++
++  if (slices.length === 0) return null;
++
++  const layers = Array.from({ length: DEPTH_LAYERS }, (_, i) => i);
++
++  return (
++    <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
++      <div className="min-w-0 lg:col-span-3">
++        <div className="pie3d" style={{ height }}>
++          <div className="pie3d-stack">
++            {/*
++              The side of the disc: the same geometry, painted below the top
++              face and progressively darker. `aria-hidden`, because it carries
++              no information a reader has not already been given — it is the
++              thickness of a shape, not a value.
++            */}
++            {layers.map((i) => (
++              <div
++                key={i}
++                aria-hidden="true"
++                className="pie3d-layer"
++                style={{ transform: `translateZ(${-(i + 1) * LAYER_PX}px)`, opacity: 0.9 }}
++              >
++                <ResponsiveContainer width="100%" height="100%">
++                  <PieChart>
++                    <Pie
++                      data={slices as ToneCount[]}
++                      dataKey="rows"
++                      nameKey="label"
++                      cx="50%"
++                      cy="50%"
++                      innerRadius="46%"
++                      outerRadius="78%"
++                      paddingAngle={2}
++                      isAnimationActive={false}
++                      stroke="none"
++                    >
++                      {slices.map((s) => (
++                        <Cell key={s.tone} fill={s.hex} fillOpacity={0.55 - i * 0.05} />
++                      ))}
++                    </Pie>
++                  </PieChart>
++                </ResponsiveContainer>
++              </div>
++            ))}
++
++            <div className="pie3d-top">
++              <ResponsiveContainer width="100%" height="100%">
++                <PieChart>
++                  <Pie
++                    data={slices as ToneCount[]}
++                    dataKey="rows"
++                    nameKey="label"
++                    cx="50%"
++                    cy="50%"
++                    innerRadius="46%"
++                    outerRadius="78%"
++                    paddingAngle={2}
++                    isAnimationActive={false}
++                    onClick={(_, index) => {
++                      const slice = slices[index];
++                      if (slice) go(slice.tone);
++                    }}
++                    onMouseEnter={(_, index) => setActive(slices[index]?.tone ?? null)}
++                    onMouseLeave={() => setActive(null)}
++                    stroke="hsl(var(--card))"
++                    strokeWidth={2}
++                    className="cursor-pointer"
++                  >
++                    {slices.map((s) => (
++                      <Cell
++                        key={s.tone}
++                        fill={s.hex}
++                        /* Open work is lifted out of the disc and lit; settled
++                           work sits flush. The distinction is the one every
++                           other status surface in this app already makes. */
++                        className={
++                          toneIsAwaiting(s.tone)
++                            ? "pie3d-slice pie3d-slice-open"
++                            : "pie3d-slice"
++                        }
++                        opacity={active === null || active === s.tone ? 1 : 0.55}
++                      />
++                    ))}
++                  </Pie>
++                  <Tooltip
++                    formatter={(value: number, name: string) => [
++                      `${value.toLocaleString("de-DE")} Prüfzeilen`,
++                      name,
++                    ]}
++                    contentStyle={{
++                      background: "hsl(var(--card))",
++                      border: "1px solid hsl(var(--border))",
++                      borderRadius: 8,
++                      fontSize: 12,
++                    }}
++                  />
++                </PieChart>
++              </ResponsiveContainer>
++            </div>
++          </div>
++        </div>
++      </div>
++
++      {/*
++        The list is the deliverable, not the disc.
++        
++        It is upright, unrotated and carries every figure the chart encodes —
++        so nothing anyone needs is ever read off a tilted shape, and a reader
++        who cannot use the chart at all loses nothing but the picture.
++      */}
++      <ul className="min-w-0 space-y-1.5 lg:col-span-2" aria-label={label}>
++        {slices.map((s) => (
++          <li key={s.tone}>
++            <button
++              type="button"
++              data-tone-slice={s.tone}
++              data-tone-rows={s.rows}
++              data-tone-projects={s.projects}
++              data-tone-department={department ?? ""}
++              onClick={() => go(s.tone)}
++              onMouseEnter={() => setActive(s.tone)}
++              onMouseLeave={() => setActive(null)}
++              aria-label={`${s.label}: ${s.rows} Prüfzeilen in ${s.projects} Projekten — öffnen`}
++              className={`flex w-full items-center gap-2.5 rounded-lg border border-transparent bg-muted/40 px-3 py-2 text-left transition-colors hover:border-primary/40 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
++                active === s.tone ? "border-primary/40 bg-muted" : ""
++              }`}
++            >
++              <span
++                aria-hidden="true"
++                className={`h-3 w-3 shrink-0 rounded-full ${toneIsAwaiting(s.tone) ? "pulse-open" : ""}`}
++                style={{ backgroundColor: s.hex }}
++              />
++              <span className="min-w-0 flex-1 truncate text-xs font-medium">{s.label}</span>
++              <span className="shrink-0 text-xs font-bold tabular-nums">
++                {s.rows.toLocaleString("de-DE")}
++              </span>
++              <span className="w-11 shrink-0 text-right text-2xs tabular-nums text-muted-foreground">
++                {total > 0 ? `${Math.round((s.rows / total) * 100)}%` : "—"}
++              </span>
++            </button>
++          </li>
++        ))}
++      </ul>
++    </div>
++  );
++}
++
++export default Pie3D;
+diff --git a/client/src/components/workspace/ReviewWorkspace.tsx b/client/src/components/workspace/ReviewWorkspace.tsx
+index 658b522..b2eae16 100644
+--- a/client/src/components/workspace/ReviewWorkspace.tsx
++++ b/client/src/components/workspace/ReviewWorkspace.tsx
+@@ -22,7 +22,12 @@
+  * keep true.
+  */
+ import { useCallback, useEffect, useMemo, useState } from "react";
++import { useReveal } from "@/hooks/useReveal";
+ import { useLocation, useSearch as useRouteSearch } from "wouter";
++import { useTableStream } from "@/hooks/useTableStream";
++import { toneFor } from "@shared/handlungsbedarf";
++import { STATUS_TONE, type StatusTone } from "@shared/status-appearance";
++import type { ReviewStatus } from "@shared/review-status";
+ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+ import { Button } from "@/components/ui/button";
+ import { Badge } from "@/components/ui/badge";
+@@ -143,6 +148,9 @@ export function ReviewWorkspace({
+   const { data, isLoading, isError } = useAllData();
+   const [, setLocation] = useLocation();
+   const routeSearch = useRouteSearch();
++  const streamRef = useTableStream();
++  /** Set from ?tone=, when a slice of this Gewerk's donut sent the reader here. */
++  const [toneFocus, setToneFocus] = useState<StatusTone | null>(null);
+   const { recordDocument } = useAuditTrail();
+ 
+   // Seeded from ?q= for the same reason the Projekte page is: the header search
+@@ -162,6 +170,8 @@ export function ReviewWorkspace({
+   const [pruefer, setPruefer] = useState("");
+   const [showFilters, setShowFilters] = useState(false);
+   const [viewMode, setViewMode] = useState<"table" | "cards" | "map">("table");
++  /* Section-by-section arrival, replayed when the view changes. */
++  const revealRef = useReveal(viewMode);
+   const [stationFocus, setStationFocus] = useState<StationSelection | null>(null);
+   const [focusProjectId, setFocusProjectId] = useState<number | null>(null);
+   const [detailProjectId, setDetailProjectId] = useState<number | null>(null);
+@@ -187,6 +197,7 @@ export function ReviewWorkspace({
+ 
+   useEffect(() => {
+     const params = new URLSearchParams(routeSearch);
++    setToneFocus(toneFor(params.get("tone")));
+     const q = (params.get("q") ?? "").trim();
+     if (q) {
+       setSearchInput(q);
+@@ -243,6 +254,14 @@ export function ReviewWorkspace({
+     return scoped.filter(({ project, review, status: s }) => {
+       if (region && project.bahnhofsmanagement !== region) return false;
+       if (status && s !== status) return false;
++      /*
++       * `?tone=pending` — arrived from a slice of this Gewerk's own donut.
++       *
++       * Every row here already belongs to this department, so the tone alone
++       * is the whole filter: the slice counted „offene EEA-Zeilen" and this
++       * lists exactly those.
++       */
++      if (toneFocus && STATUS_TONE[s as ReviewStatus] !== toneFocus) return false;
+       if (pruefer && (review.prueferName ?? "") !== pruefer) return false;
+       if (terms.length === 0) return true;
+       const haystack = [
+@@ -261,7 +280,7 @@ export function ReviewWorkspace({
+         .join(" ");
+       return terms.every((t) => haystack.includes(t));
+     });
+-  }, [scoped, search, region, status, pruefer]);
++  }, [scoped, search, region, status, pruefer, toneFocus]);
+ 
+   /** Station focus is an id filter layered on top of the rest. */
+   const focused = useMemo(() => {
+@@ -440,7 +459,7 @@ export function ReviewWorkspace({
+   const anyFilter = Boolean(search || region || status || pruefer || stationFocus);
+ 
+   return (
+-    <div className="min-h-screen space-y-8 bg-background p-6">
++    <div ref={revealRef} className="min-h-screen space-y-8 bg-background p-6">
+       <div>
+         <h1 className="page-title">{title}</h1>
+         <p className="mt-2 text-muted-foreground">
+@@ -720,7 +739,7 @@ export function ReviewWorkspace({
+                     </th>
+                   </tr>
+                 </thead>
+-                <tbody>
++                <tbody ref={streamRef}>
+                   {visible.map(({ project, review }, index) => (
+                     <tr key={project.id} className="border-b transition-colors hover:bg-muted/30">
+                       <td className="sticky left-0 z-10 w-[52px] min-w-[52px] whitespace-nowrap bg-card px-3 py-3 tabular-nums text-muted-foreground">
+diff --git a/client/src/hooks/useReveal.ts b/client/src/hooks/useReveal.ts
+new file mode 100644
+index 0000000..e72a376
+--- /dev/null
++++ b/client/src/hooks/useReveal.ts
+@@ -0,0 +1,24 @@
++/**
++ * One line per page: its sections arrive one at a time as they are scrolled to.
++ *
++ * Put the returned ref on a container; every direct child of it becomes a
++ * revealed section, staggered by position. Pass a `key` that changes whenever
++ * the children are replaced — a view toggle, a filter — so the cascade plays
++ * for the new arrangement instead of only for the first one.
++ *
++ * Decoration only. See client/src/lib/motion.ts for why nothing here can ever
++ * leave content unrendered, unmeasurable or unreadable.
++ */
++import { useEffect, useRef } from "react";
++import { revealChildren } from "@/lib/motion";
++
++export function useReveal<T extends HTMLElement = HTMLDivElement>(key: unknown = null) {
++  const ref = useRef<T>(null);
++  // biome-ignore lint/correctness/useExhaustiveDependencies: `key` is the trigger, not a value the effect reads
++  useEffect(() => {
++    // A frame's grace, so children rendered in the same commit are all present.
++    const id = requestAnimationFrame(() => revealChildren(ref.current));
++    return () => cancelAnimationFrame(id);
++  }, [key]);
++  return ref;
++}
+diff --git a/client/src/hooks/useTableStream.ts b/client/src/hooks/useTableStream.ts
+new file mode 100644
+index 0000000..d3863e5
+--- /dev/null
++++ b/client/src/hooks/useTableStream.ts
+@@ -0,0 +1,76 @@
++/**
++ * Turn a table body's arrival into a wave.
++ *
++ * Returns a ref to put on a `<tbody>`. When that tbody first scrolls into
++ * view, `data-stream="on"` goes on it and the stylesheet does the rest — the
++ * rows cascade down and each of the first rows fills in from the left.
++ *
++ * Why an attribute and not React state: the wave is a CSS concern, and a state
++ * update here would re-render a table of 1.298 rows to change one attribute on
++ * one element. This writes the attribute directly and never renders anything.
++ *
++ * The safety rule is the same as everywhere else in client/src/lib/motion.ts:
++ * the attribute is only ever added when motion is allowed, and nothing is
++ * hidden unless the attribute is there. Every row is in the DOM and countable
++ * from the first paint, whatever the animation is doing.
++ */
++import { useEffect, useRef } from "react";
++import { motionAllowed } from "@/lib/motion";
++
++export function useTableStream<T extends HTMLElement = HTMLTableSectionElement>() {
++  const ref = useRef<T>(null);
++
++  useEffect(() => {
++    const node = ref.current;
++    if (!node) return;
++    if (!motionAllowed() || typeof IntersectionObserver === "undefined") return;
++
++    /*
++     * Replayed when the set changes, not only once.
++     *
++     * Filtering a table to four rows and back to 1.298 is a new arrival, and a
++     * wave that only ever plays on mount would make the first result feel
++     * alive and every one after it feel dead. The MutationObserver watches the
++     * row count and re-arms; `requestAnimationFrame` lets the browser drop the
++     * attribute and pick it up again as two frames, which is what restarts a
++     * CSS animation.
++     */
++    let armed = false;
++    const arm = () => {
++      node.removeAttribute("data-stream");
++      requestAnimationFrame(() => {
++        requestAnimationFrame(() => node.setAttribute("data-stream", "on"));
++      });
++    };
++
++    const io = new IntersectionObserver(
++      (entries) => {
++        if (!entries.some((e) => e.isIntersecting)) return;
++        if (armed) return;
++        armed = true;
++        arm();
++      },
++            // Zero, not 0.01: a threshold is a fraction OF THE ELEMENT, and one per
++      // cent of a 1.298-row table body is five hundred pixels. See motion.ts.
++      { threshold: 0 },
++    );
++    io.observe(node);
++
++    let rows = node.childElementCount;
++    const mo = new MutationObserver(() => {
++      const next = node.childElementCount;
++      if (next === rows) return;
++      rows = next;
++      if (armed) arm();
++    });
++    mo.observe(node, { childList: true });
++
++    return () => {
++      io.disconnect();
++      mo.disconnect();
++      node.removeAttribute("data-stream");
++    };
++  }, []);
++
++  return ref;
++}
+diff --git a/client/src/index.css b/client/src/index.css
+index 88f3b99..688ab0d 100644
+--- a/client/src/index.css
++++ b/client/src/index.css
+@@ -697,6 +697,232 @@
+   }
+ }
+ 
++/* ---------------------------------------------------------------------------
++   A donut with a body
++   ---------------------------------------------------------------------------
++   The chart is drawn several times: once as the top face and again beneath it,
++   each copy pushed a little further back and a little darker. Tilted on X, the
++   stack reads as a disc lying on a table with a visible edge.
++
++   The same rule the Portfolio-Relief keeps applies here, and for the same
++   reason: a tilt makes near slices look larger than far ones of equal size, so
++   nothing is read off the shape. Every figure the disc encodes is printed
++   upright in the list beside it. The tilt is how it looks; the list is what it
++   says.
++   --------------------------------------------------------------------------- */
++.pie3d {
++  perspective: 1100px;
++  perspective-origin: 50% 45%;
++}
++
++.pie3d-stack {
++  position: relative;
++  height: 100%;
++  width: 100%;
++  transform-style: preserve-3d;
++  transform: rotateX(46deg);
++}
++
++.pie3d-layer,
++.pie3d-top {
++  position: absolute;
++  inset: 0;
++  transform-style: preserve-3d;
++}
++
++.pie3d-layer {
++  /* The body of the disc carries no information, so it must not catch a click
++     meant for the face on top of it. */
++  pointer-events: none;
++  filter: brightness(0.72);
++}
++
++/* A slice reacts to being pointed at, and the open ones stand proud of the
++   disc without waiting to be asked. */
++.pie3d-slice {
++  transition:
++    transform 220ms cubic-bezier(0.22, 0.7, 0.2, 1),
++    filter 220ms ease-out;
++  transform-origin: center;
++}
++
++.pie3d-slice-open {
++  filter: drop-shadow(0 0 8px rgb(245 158 11 / 0.55)) brightness(1.06);
++}
++
++[data-motion="on"] .pie3d-slice-open {
++  animation: bpm-slice-breathe 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
++}
++
++@keyframes bpm-slice-breathe {
++  0%,
++  100% {
++    filter: drop-shadow(0 0 6px rgb(245 158 11 / 0.45)) brightness(1.04);
++  }
++  50% {
++    filter: drop-shadow(0 0 14px rgb(245 158 11 / 0.7)) brightness(1.1);
++  }
++}
++
++.pie3d-top .recharts-sector {
++  cursor: pointer;
++}
++
++@media (prefers-reduced-motion: reduce) {
++  .pie3d-slice,
++  .pie3d-slice-open {
++    animation: none !important;
++    transition: none;
++  }
++}
++
++/* A tilted disc on a phone is a stripe. Below the breakpoint it lies flat and
++   stays a chart. */
++@media (max-width: 640px) {
++  .pie3d-stack {
++    transform: none;
++  }
++  .pie3d-layer {
++    display: none;
++  }
++}
++
++/* ---------------------------------------------------------------------------
++   Cinematic arrival
++   ---------------------------------------------------------------------------
++   Every rule that hides anything on this page is scoped under
++   `[data-motion="on"]`, which client/src/lib/motion.ts puts on <html> only
++   when the reader has NOT asked for reduced motion. Under reduced motion, with
++   JavaScript off, or in an audit that emulates it, the attribute never appears
++   and not one of these selectors matches — the page is simply there.
++
++   Nothing below touches layout. `opacity` and `transform` are the only
++   properties that move, so an element is measurable, hit-testable and readable
++   by a screen reader for the whole of its arrival. A section that is not yet
++   revealed occupies exactly the space it will occupy, which is why nothing
++   below it jumps when it lands.
++   --------------------------------------------------------------------------- */
++@keyframes bpm-reveal {
++  from {
++    opacity: 0;
++    transform: translate3d(0, 18px, 0) scale(0.985);
++  }
++  to {
++    opacity: 1;
++    transform: none;
++  }
++}
++
++/* Not yet seen: held back, and only while something exists to release it. */
++[data-motion="on"] .reveal[data-revealed="false"] {
++  opacity: 0;
++  transform: translate3d(0, 18px, 0) scale(0.985);
++}
++
++[data-motion="on"] .reveal[data-revealed="true"] {
++  animation: bpm-reveal 560ms cubic-bezier(0.22, 0.7, 0.2, 1) both;
++  animation-delay: calc(var(--reveal-i, 0) * 65ms);
++}
++
++/* ---------------------------------------------------------------------------
++   The wave through a table
++   ---------------------------------------------------------------------------
++   Rows arrive one after another and each row fills in from the left, so a
++   table of 1.298 projects lands as a sweep rather than as a wall.
++
++   Two decisions keep it from being a performance disaster and a usability one:
++
++     — the row delay is capped at the twenty-fourth row. Beyond that the wave
++       would be scheduling animations for rows nobody will reach for minutes,
++       and the reader who scrolls fast would meet a screen of empty boxes
++       waiting their turn. The first screenful cascades; the rest is instant.
++
++     — the column delay comes from `nth-child` rules written once, not from an
++       inline style per cell. A Projekte row has 27 columns and there are 1.298
++       of them: 35.000 inline styles to animate a flourish is not a trade worth
++       making, and the stylesheet does the same job for nothing.
++
++   Same contract as the reveal: opacity and transform only. Every row is in the
++   DOM and countable from the first paint, so "1.298 Projekte gefunden" is true
++   the whole time and a row count never depends on how far anything scrolled.
++   --------------------------------------------------------------------------- */
++@keyframes bpm-stream-cell {
++  from {
++    opacity: 0;
++    transform: translate3d(-6px, 0, 0);
++  }
++  to {
++    opacity: 1;
++    transform: none;
++  }
++}
++
++[data-motion="on"] tbody[data-stream="on"] > tr {
++  animation: bpm-stream-cell 300ms ease-out both;
++}
++
++/* The row wave: 24 steps, then nothing. */
++[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(1) { animation-delay: 0ms; }
++[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(2) { animation-delay: 26ms; }
++[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(3) { animation-delay: 52ms; }
++[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(4) { animation-delay: 78ms; }
++[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(5) { animation-delay: 104ms; }
++[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(6) { animation-delay: 130ms; }
++[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(7) { animation-delay: 156ms; }
++[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(8) { animation-delay: 182ms; }
++[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(9) { animation-delay: 208ms; }
++[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(10) { animation-delay: 234ms; }
++[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(11) { animation-delay: 260ms; }
++[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(12) { animation-delay: 286ms; }
++[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(13) { animation-delay: 312ms; }
++[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(14) { animation-delay: 338ms; }
++[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(15) { animation-delay: 364ms; }
++[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(16) { animation-delay: 390ms; }
++[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(17) { animation-delay: 416ms; }
++[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(18) { animation-delay: 442ms; }
++[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(19) { animation-delay: 468ms; }
++[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(20) { animation-delay: 494ms; }
++[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(21) { animation-delay: 520ms; }
++[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(22) { animation-delay: 546ms; }
++[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(23) { animation-delay: 572ms; }
++[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(n + 24) { animation-delay: 598ms; }
++
++/*
++ * The column sweep, on the first rows only.
++ *
++ * Cells animate on top of their row's own delay, so a cell lands at
++ * row-delay + column-delay and the whole thing reads as a diagonal wave. It is
++ * limited to the first twelve rows: past there the row is already arriving at
++ * the cap and adding a per-cell offset to hundreds of rows buys nothing a
++ * reader will ever see.
++ */
++[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(-n + 12) > * {
++  animation: bpm-stream-cell 260ms ease-out both;
++}
++[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(-n + 12) > *:nth-child(1) { animation-delay: 0ms; }
++[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(-n + 12) > *:nth-child(2) { animation-delay: 22ms; }
++[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(-n + 12) > *:nth-child(3) { animation-delay: 44ms; }
++[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(-n + 12) > *:nth-child(4) { animation-delay: 66ms; }
++[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(-n + 12) > *:nth-child(5) { animation-delay: 88ms; }
++[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(-n + 12) > *:nth-child(6) { animation-delay: 110ms; }
++[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(-n + 12) > *:nth-child(7) { animation-delay: 132ms; }
++[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(-n + 12) > *:nth-child(n + 8) { animation-delay: 154ms; }
++
++/*
++ * Reduced motion is handled by the absence of `[data-motion="on"]`, so no
++ * override is needed here — but the media query is kept as a second line of
++ * defence for anything that sets the attribute by hand.
++ */
++@media (prefers-reduced-motion: reduce) {
++  .reveal,
++  tbody[data-stream="on"] > tr,
++  tbody[data-stream="on"] > tr > * {
++    animation: none !important;
++    opacity: 1 !important;
++    transform: none !important;
++  }
++}
++
+ /* ---------------------------------------------------------------------------
+    Ken Burns
+    ---------------------------------------------------------------------------
+@@ -736,6 +962,15 @@
+     bpm-kenburns 8s ease-in-out 320ms infinite alternate;
+ }
+ 
++/* Freeze where it stands rather than snap back: removing the animation would
++   drop the scale in one frame, which is a jolt exactly when somebody is
++   reaching for a control. */
++.kenburns[data-drift="off"],
++.kenburns:hover,
++.kenburns:focus-within {
++  animation-play-state: paused;
++}
++
+ @media (prefers-reduced-motion: reduce) {
+   .kenburns {
+     animation: none;
+diff --git a/client/src/lib/motion.ts b/client/src/lib/motion.ts
+new file mode 100644
+index 0000000..656a3ea
+--- /dev/null
++++ b/client/src/lib/motion.ts
+@@ -0,0 +1,153 @@
++/**
++ * Cinematic motion that automation and accessibility both see through.
++ *
++ * ---------------------------------------------------------------------------
++ * The rule that makes this safe
++ * ---------------------------------------------------------------------------
++ * Nothing here ever removes an element, hides it with `display`, or delays
++ * rendering it. Every element is in the DOM, in flow, and measurable from the
++ * first paint. A reveal changes `opacity` and `transform` only — two
++ * properties that affect no layout and no text content.
++ *
++ * That is not a stylistic preference, it is what keeps the whole thing
++ * honest. A page that mounts its content when it scrolls into view is a page
++ * where "1.298 Projekte gefunden" is true only sometimes, where the UI audit
++ * measures blank cards, and where a row count in a test depends on how far the
++ * harness happened to scroll. Every one of those is a real defect wearing an
++ * animation as a disguise.
++ *
++ * ---------------------------------------------------------------------------
++ * The switch
++ * ---------------------------------------------------------------------------
++ * `<html data-motion="on">` is set at boot, and ONLY when the reader has not
++ * asked for reduced motion. Every hiding rule in the stylesheet is scoped
++ * under that attribute, so:
++ *
++ *   — reduced motion  → the attribute never appears → nothing is ever hidden,
++ *                       no animation runs, the page is simply there;
++ *   — no JavaScript   → same, for the same reason;
++ *   — an audit        → emulates reduced motion and measures the final state,
++ *                       which is the state it is supposed to be measuring.
++ *
++ * There is no test-only flag. The path automation takes is the path a person
++ * who asked not to be moved takes, which means it is a path that has to work.
++ */
++
++const MOTION_QUERY = "(prefers-reduced-motion: reduce)";
++
++/** True when this reader has not asked us to stop moving things. */
++export function motionAllowed(): boolean {
++  if (typeof window === "undefined" || !window.matchMedia) return false;
++  return !window.matchMedia(MOTION_QUERY).matches;
++}
++
++/**
++ * Put the switch on <html> and keep it in step with the OS setting.
++ *
++ * Called once from main.tsx, before React renders, so the first paint already
++ * knows which world it is in and nothing flashes from hidden to shown.
++ */
++export function installMotionSwitch(): () => void {
++  if (typeof window === "undefined" || !window.matchMedia) return () => {};
++  const mq = window.matchMedia(MOTION_QUERY);
++  const apply = () => {
++    const root = document.documentElement;
++    if (mq.matches) root.removeAttribute("data-motion");
++    else root.setAttribute("data-motion", "on");
++  };
++  apply();
++  mq.addEventListener("change", apply);
++  return () => mq.removeEventListener("change", apply);
++}
++
++/**
++ * One observer for the whole page, not one per element.
++ *
++ * A Dashboard has dozens of revealable sections and a table has hundreds of
++ * rows; an IntersectionObserver each would be hundreds of observers competing
++ * for the same scroll. This is a single instance every element registers with,
++ * and each element is unobserved the moment it has been seen — a reveal
++ * happens once, and after that the element is just an element.
++ */
++let observer: IntersectionObserver | null = null;
++
++function sharedObserver(): IntersectionObserver | null {
++  if (typeof window === "undefined" || !("IntersectionObserver" in window)) return null;
++  if (observer) return observer;
++  observer = new IntersectionObserver(
++    (entries) => {
++      for (const entry of entries) {
++        if (!entry.isIntersecting) continue;
++        const el = entry.target as HTMLElement;
++        el.setAttribute("data-revealed", "true");
++        observer?.unobserve(el);
++      }
++    },
++    {
++      /* A little before the edge, so a section is already arriving rather than
++         starting to arrive once it is fully on screen. */
++      rootMargin: "0px 0px -8% 0px",
++      /*
++       * Zero, meaning "any pixel of it is on screen".
++       *
++       * 0.01 sounds like the same thing and is not: it is one per cent OF THE
++       * ELEMENT, and the Projekte table body is 1.298 rows tall. One per cent
++       * of fifty thousand pixels is five hundred, so a table could be filling
++       * the screen and still not have met its own threshold — which is exactly
++       * how the stream came to never start.
++       */
++      threshold: 0,
++    },
++  );
++  return observer;
++}
++
++/**
++ * Register an element to reveal when it is scrolled to.
++ *
++ * Marks it hidden FIRST and only if motion is allowed and an observer exists —
++ * so on any path where the reveal cannot happen, the element is never hidden
++ * in the first place. There is no state in which content is invisible with
++ * nothing left to show it.
++ */
++export function observeReveal(el: HTMLElement | null): () => void {
++  if (!el) return () => {};
++  const io = sharedObserver();
++  if (!io || !motionAllowed()) {
++    el.setAttribute("data-revealed", "true");
++    return () => {};
++  }
++  el.setAttribute("data-revealed", "false");
++  io.observe(el);
++  return () => io.unobserve(el);
++}
++
++/**
++ * Reveal every direct child of one container, one after another.
++ *
++ * The alternative was wrapping fifty-eight cards on the Dashboard by hand,
++ * which is fifty-eight chances to wrap the wrong element — a `<div>` inside a
++ * `<tbody>`, a wrapper around a grid child that breaks the grid. This adds the
++ * class and the stagger index to children that already exist, so the markup
++ * does not change at all and nothing can be nested wrongly.
++ *
++ * Re-run it by changing `key`: switching the Projekte view replaces the
++ * children, and a cascade that only ever played on mount would make the first
++ * arrangement feel alive and every one after it feel dead.
++ */
++export function revealChildren(container: HTMLElement | null): () => void {
++  if (!container) return () => {};
++  const stop: Array<() => void> = [];
++  let index = 0;
++  for (const child of Array.from(container.children)) {
++    const el = child as HTMLElement;
++    if (!(el instanceof HTMLElement)) continue;
++    el.classList.add("reveal");
++    el.style.setProperty("--reveal-i", String(Math.min(index, 8)));
++    stop.push(observeReveal(el));
++    index++;
++  }
++  return () => {
++    for (const s of stop) s();
++  };
++}
+diff --git a/client/src/main.tsx b/client/src/main.tsx
+index 7e33c8b..be99a97 100644
+--- a/client/src/main.tsx
++++ b/client/src/main.tsx
+@@ -5,6 +5,18 @@ import React from 'react'
+ import ReactDOM from 'react-dom/client'
+ import App from './App.tsx'
+ import './index.css'
++import { installMotionSwitch } from './lib/motion'
++
++/*
++ * Before the first render, not after.
++ *
++ * Every rule that hides a not-yet-revealed section is scoped under
++ * <html data-motion="on">. Setting the attribute here means the very first
++ * paint already knows whether it is allowed to animate — set it in an effect
++ * instead and the page paints once fully visible, then blanks itself out to
++ * play the reveal, which is the worst of both.
++ */
++installMotionSwitch()
+ 
+ ReactDOM.createRoot(document.getElementById('root')!).render(
+   <React.StrictMode>
+diff --git a/client/src/pages/Anmeldung.tsx b/client/src/pages/Anmeldung.tsx
+index da91057..394c7e2 100644
+--- a/client/src/pages/Anmeldung.tsx
++++ b/client/src/pages/Anmeldung.tsx
+@@ -1,4 +1,5 @@
+ import { useRef, useState } from "react";
++import { useReveal } from "@/hooks/useReveal";
+ import { useLocation } from "wouter";
+ import { toast } from "sonner";
+ import { Button } from "@/components/ui/button";
+@@ -37,6 +38,9 @@ export default function Anmeldung() {
+   const [, setLocation] = useLocation();
+   const draft = useChecklistDraft();
+   const [step, setStep] = useState(1);
++  /* The page arrives a section at a time. Decoration only —
++     see client/src/lib/motion.ts. */
++  const revealRef = useReveal(step);
+   const [submitted, setSubmitted] = useState<{ projectId: number } | null>(null);
+   /**
+    * The project this wizard already created, if it did.
+@@ -278,7 +282,7 @@ export default function Anmeldung() {
+   }
+ 
+   return (
+-    <div className="space-y-6 p-6">
++    <div ref={revealRef} className="space-y-6 p-6">
+       <header className="flex flex-wrap items-end justify-between gap-4">
+         <div>
+           <h1 className="page-title">Projektanmeldung</h1>
+diff --git a/client/src/pages/AuditLog.tsx b/client/src/pages/AuditLog.tsx
+index 6402c0a..226fd99 100644
+--- a/client/src/pages/AuditLog.tsx
++++ b/client/src/pages/AuditLog.tsx
+@@ -1,4 +1,5 @@
+ import { useEffect, useMemo, useState } from "react";
++import { useReveal } from "@/hooks/useReveal";
+ import { Card, CardContent } from "@/components/ui/card";
+ import { Input } from "@/components/ui/input";
+ import { Button } from "@/components/ui/button";
+@@ -7,6 +8,7 @@ import {
+   AlertOctagon, Undo2, CornerUpLeft,
+ } from "lucide-react";
+ import { useAuditLog } from "@/hooks/useDataQuery";
++import { useTableStream } from "@/hooks/useTableStream";
+ import { useAuditUndo } from "@/hooks/useAuditUndo";
+ import { auditTone, type AuditTone } from "@shared/audit-actions";
+ import {
+@@ -94,6 +96,10 @@ const WINDOWS: ReadonlyArray<{ key: string; label: string; hours: number | null
+ 
+ export default function AuditLogPage() {
+   const { data: entries, isLoading } = useAuditLog();
++  const streamRef = useTableStream();
++  /* The page arrives a section at a time. Decoration only —
++     see client/src/lib/motion.ts. */
++  const revealRef = useReveal(null);
+   const undo = useAuditUndo();
+   const [query, setQuery] = useState("");
+   const [onlyCritical, setOnlyCritical] = useState(false);
+@@ -153,7 +159,7 @@ export default function AuditLogPage() {
+   );
+ 
+   return (
+-    <div className="space-y-6">
++    <div ref={revealRef} className="space-y-6">
+       <header className="flex flex-wrap items-end justify-between gap-4">
+         <div>
+           <h1 className="page-title">Änderungshistorie</h1>
+@@ -282,7 +288,7 @@ export default function AuditLogPage() {
+                   </th>
+                 </tr>
+               </thead>
+-              <tbody>
++              <tbody ref={streamRef}>
+                 {filtered.map((e) => {
+                   const { Icon, tone } = actionStyle(e.action);
+                   const toneName = auditTone(e.action);
+diff --git a/client/src/pages/Dashboard.tsx b/client/src/pages/Dashboard.tsx
+index f035337..520616a 100644
+--- a/client/src/pages/Dashboard.tsx
++++ b/client/src/pages/Dashboard.tsx
+@@ -1,4 +1,5 @@
+ import React, { useMemo, useState } from 'react';
++import { useReveal } from "@/hooks/useReveal";
+ import { GewerkePortfolio } from "@/components/dashboard/GewerkePortfolio";
+ import { PortfolioRelief } from "@/components/dashboard/PortfolioRelief";
+ import { PortfolioDiagnostics } from "@/components/dashboard/PortfolioDiagnostics";
+@@ -9,19 +10,19 @@ import {
+   reviewerConcentration,
+ } from "@shared/portfolio-metrics";
+ import { deriveProjectMetrics, percent } from '@shared/project-metrics';
+-import { statusBadgeClass, statusHex, statusPulseClass, STATUS_TONE, TONE_APPEARANCE } from '@shared/status-appearance';
+-import { bedarfHref, countBedarf, projectHref } from '@shared/handlungsbedarf';
++import { statusBadgeClass, statusPulseClass, TONE_APPEARANCE } from '@shared/status-appearance';
++import { bedarfHref, countBedarf, countTones, projectHref } from '@shared/handlungsbedarf';
++import { Pie3D } from '@/components/dashboard/Pie3D';
+ import { GewerkeCarousel } from '@/components/dashboard/GewerkeCarousel';
+-import { APPROVED_STATUSES, normalizeReviewStatus, OPEN_STATUSES, type ReviewStatus } from '@shared/review-status';
++import { APPROVED_STATUSES, normalizeReviewStatus, OPEN_STATUSES } from '@shared/review-status';
+ import { formatGerman, toDate } from '@shared/date';
+ import { projectLinkNote, projectLinkUrl } from '@shared/project-link';
+ import { useLocation } from 'wouter';
+ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+ import { Button } from '@/components/ui/button';
+ import { Badge } from '@/components/ui/badge';
+-import { 
+-  PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip 
+-} from 'recharts';
++/* Recharts left this file with the flat donut: the chart lives in Pie3D now,
++   and the Gewerke breakdown in GewerkeCarousel. */
+ import {
+   AlertTriangle,
+   Bell,
+@@ -210,17 +211,24 @@ export default function Dashboard() {
+   // "nicht erforderlich" rows in the same pie — a completed sign-off painted
+   // as irrelevant. That is verbatim the regression status-appearance.ts was
+   // written to make impossible.
+-  const gewerkeStatusData = GEWERKE.map(gew => {
+-    const counts: Record<string, number> = {};
+-    projects.forEach(p => {
+-      const review = p.reviews.find(r => r.department === gew);
+-      const status = normalizeReviewStatus(review?.status);
+-      if (status) counts[status] = (counts[status] || 0) + 1;
+-    });
++  /*
++   * Per-Gewerk tone bands, from the same counter as the portfolio donut.
++   *
++   * It used to build a raw status histogram here and let the chart fold it —
++   * two foldings of the same data, and the chart's copy had no idea which
++   * projects were behind a band, so a slice inside „Status-Verteilung für EEA"
++   * carried a project count of zero and a link to the whole portfolio.
++   *
++   * `countTones(projects, gewerk)` scopes both the count and the predicate to
++   * the department in one place, so the figure on a slice and the set its link
++   * produces cannot disagree.
++   */
++  const gewerkeStatusData = GEWERKE.map((gew) => {
++    const slices = countTones(projects, gew);
+     return {
+       name: gew,
+-      value: Object.values(counts).reduce((a, b) => a + b, 0),
+-      breakdown: counts
++      value: slices.reduce((a, s) => a + s.rows, 0),
++      slices,
+     };
+   });
+ 
+@@ -240,6 +248,10 @@ export default function Dashboard() {
+   const concentration = useMemo(() => reviewerConcentration(projects), [projects]);
+   const quality = useMemo(() => dataQuality(projects), [projects]);
+ 
++  /* One line, and the whole page arrives a section at a time. Decoration
++     only — see client/src/lib/motion.ts. */
++  const revealRef = useReveal(projects.length);
++
+   /* The per-Gewerk slices moved into GewerkeCarousel, which owns which Gewerk
+      is on screen. `selectedGewerke` survives as the pin the carousel honours. */
+ 
+@@ -306,58 +318,38 @@ export default function Dashboard() {
+    * badges use, and a row whose status cannot be mapped is counted as
+    * unbekannt instead of vanishing.
+    */
+-  const { visibleStatusData, unmappedStatusRows, totalStatusRows } = useMemo(() => {
+-    const counts = new Map<string, number>();
++  /*
++   * The slices come from shared/handlungsbedarf.ts now, not from here.
++   *
++   * The grouping was already right — twelve statuses onto eight tones, so
++   * „Zustimmung erteilt" and „Niederschrift erstellt" are one green band
++   * rather than two slices sharing a colour. What was missing is that nothing
++   * else could reach the computation. The moment a slice became clickable, the
++   * Projekte page needed the same definition of „which rows are in this band"
++   * to decide what to list, and a second copy of that would drift on the day
++   * one side learned a status the other had not.
++   *
++   * `countTones` returns both the row count that sizes the slice and the
++   * number of distinct projects those rows sit in, so the landing page can
++   * reconcile the two on screen.
++   *
++   * Rows whose status is outside the vocabulary have no tone and therefore no
++   * band and no filter to land on. They are counted and stated in the
++   * subtitle rather than drawn as a slice that goes nowhere.
++   */
++  const { toneSlices, unmappedStatusRows, totalStatusRows } = useMemo(() => {
++    const slices = countTones(projects);
+     let unmapped = 0;
+     for (const p of projects) {
+       for (const r of p.reviews ?? []) {
+         if (!r.status) continue;
+-        const s = normalizeReviewStatus(r.status);
+-        if (s === null) { unmapped++; continue; }
+-        counts.set(s, (counts.get(s) ?? 0) + 1);
++        if (normalizeReviewStatus(r.status) === null) unmapped++;
+       }
+     }
+-    /*
+-     * Grouped by tone, not by status.
+-     *
+-     * Plotting all 12 canonical statuses made the chart complete but
+-     * unreadable: status-appearance.ts maps 12 statuses onto 8 tones, so
+-     * "Zustimmung erteilt" and "Niederschrift erstellt" are the same green and
+-     * "abgelehnt" and "gestoppt" the same red. Two slices with one colour and
+-     * two legend entries with one swatch is not a legend. Grouping by tone
+-     * gives 8 slices, 8 distinct colours, and still counts every row — the
+-     * tooltip names the statuses inside each.
+-     */
+-    const byTone = new Map<string, { value: number; statuses: string[]; color: string }>();
+-    for (const [status, n] of counts) {
+-      const tone = STATUS_TONE[status as ReviewStatus];
+-      const label = TONE_APPEARANCE[tone].label;
+-      const entry = byTone.get(label) ?? {
+-        value: 0,
+-        statuses: [],
+-        color: TONE_APPEARANCE[tone].hex,
+-      };
+-      entry.value += n;
+-      entry.statuses.push(`${status} (${n.toLocaleString("de-DE")})`);
+-      byTone.set(label, entry);
+-    }
+-    const data = [...byTone.entries()]
+-      .sort((a, b) => b[1].value - a[1].value)
+-      .map(([name, e]) => ({ name, value: e.value, color: e.color, statuses: e.statuses }));
+-    if (unmapped > 0) {
+-      data.push({
+-        name: "unbekannter Status",
+-        value: unmapped,
+-        color: statusHex(null),
+-        statuses: [],
+-      });
+-    }
+     return {
+-      // already filtered: a zero bucket cannot occur, since every bucket is
+-      // built from a status that was actually counted
+-      visibleStatusData: data,
++      toneSlices: slices,
+       unmappedStatusRows: unmapped,
+-      totalStatusRows: data.reduce((n, d) => n + d.value, 0),
++      totalStatusRows: slices.reduce((n, d) => n + d.rows, 0),
+     };
+   }, [projects]);
+ 
+@@ -505,7 +497,7 @@ export default function Dashboard() {
+   }
+ 
+   return (
+-    <div className="space-y-8 p-6 bg-background min-h-screen">
++    <div ref={revealRef} className="space-y-8 p-6 bg-background min-h-screen">
+       {/* HEADER */}
+       <div className="flex items-center justify-between">
+         <div>
+@@ -624,34 +616,18 @@ export default function Dashboard() {
+                   : ""}
+               </p>
+             </CardHeader>
+-            <CardContent className="h-[420px]">
+-              <ResponsiveContainer width="100%" height="100%">
+-                <PieChart>
+-                  {/* One array, used for both. Recharts matches <Cell> to slice
+-                      by index, so feeding the Pie a filtered array while
+-                      mapping Cells from the unfiltered one shifts every colour
+-                      the moment any bucket reaches zero. */}
+-                  <Pie
+-                    data={visibleStatusData}
+-                    cx="50%" cy="50%" innerRadius={90} outerRadius={160} paddingAngle={2} dataKey="value"
+-                  >
+-                    {visibleStatusData.map((entry) => (
+-                      <Cell key={entry.name} fill={entry.color} />
+-                    ))}
+-                  </Pie>
+-                  {/* The tooltip names the statuses folded into each tone, so
+-                      grouping costs no detail. */}
+-                  <Tooltip
+-                    formatter={(value: number, name: string, item: { payload?: { statuses?: string[] } }) => [
+-                      `${value.toLocaleString("de-DE")} Prüfzeilen${
+-                        item?.payload?.statuses?.length ? ` — ${item.payload.statuses.join(", ")}` : ""
+-                      }`,
+-                      name,
+-                    ]}
+-                  />
+-                  <Legend formatter={(value) => <span className="text-foreground">{value}</span>} />
+-                </PieChart>
+-              </ResponsiveContainer>
++            <CardContent>
++              {/*
++                The donut has a body now, and every slice is a way in.
++                
++                It was a flat disc with a legend and no way to act on any of
++                it: „offen 946" and then nothing to click. Pie3D draws the same
++                data with a visible edge, lifts the open bands out of it, and
++                sends a slice to the projects behind it — counted by the same
++                function in shared/handlungsbedarf.ts that sized the slice, so
++                the number and the landing set cannot disagree.
++              */}
++              <Pie3D slices={toneSlices} label="Status-Verteilung über alle Gewerke" height={380} />
+             </CardContent>
+           </Card>
+ 
+diff --git a/client/src/pages/Projects.tsx b/client/src/pages/Projects.tsx
+index 8ea66ed..aa8531f 100644
+--- a/client/src/pages/Projects.tsx
++++ b/client/src/pages/Projects.tsx
+@@ -1,4 +1,5 @@
+ import React, { useState, useMemo, useCallback, useEffect } from "react";
++import { useReveal } from "@/hooks/useReveal";
+ import { useLocation, useSearch as useRouteSearch } from "wouter";
+ 
+ import {
+@@ -16,14 +17,19 @@ import { statusBadgeClass, statusPulseClass } from "@shared/status-appearance";
+ import {
+   bedarfFor,
+   countBedarf,
++  countTones,
+   projectMatchesBedarf,
++  projectMatchesTone,
++  toneFor,
+   type BedarfKey,
+ } from "@shared/handlungsbedarf";
++import type { StatusTone } from "@shared/status-appearance";
+ import { toast } from "sonner";
+ import { MapView, type StationSelection } from "@/components/Map";
+ import { ProjectDetailDialog } from "@/components/ProjectDetailDialog";
+ import { documentFilename } from "@shared/generated-stamp";
+ import { useAuditTrail } from "@/hooks/useAuditTrail";
++import { useTableStream } from "@/hooks/useTableStream";
+ import { FilterSearch } from "@/components/workspace/FilterSearch";
+ import {
+   InlineEditCell,
+@@ -125,6 +131,10 @@ export default function Projects() {
+    */
+   const [bedarfFocus, setBedarfFocus] = useState<BedarfKey | null>(null);
+   const [projectFocus, setProjectFocus] = useState<number | null>(null);
++  /** ?tone=pending — a slice of the Dashboard's status donut. */
++  const [toneFocus, setToneFocus] = useState<StatusTone | null>(null);
++  /** ?gewerk=GA — set when the slice came from one Gewerk's own donut. */
++  const [toneGewerk, setToneGewerk] = useState<string | null>(null);
+   const [region, setRegion] = useState<string>("");
+   const [projektleiter, setProjektleiter] = useState<string>("");
+   const [pruefer, setPruefer] = useState<string>("");
+@@ -159,6 +169,12 @@ export default function Projects() {
+ 
+   const { data: filterOptions } = useFilters();
+   const { data: allData } = useAllData();
++  /* The wave through the 1.298 rows. Decoration only — every row is in the DOM
++     and countable from the first paint; see client/src/lib/motion.ts. */
++  const streamRef = useTableStream();
++  /* The page arrives a section at a time; keyed on the view so switching
++     between table, cards and map plays the cascade for the new one. */
++  const revealRef = useReveal(viewMode);
+ 
+   /* Local midnight, pinned once: the same boundary the Dashboard's badge used,
+      so the set here and the count there cannot disagree by a few hours. */
+@@ -207,6 +223,11 @@ export default function Projects() {
+     const bedarf = bedarfFor(params.get("bedarf"));
+     setBedarfFocus(bedarf ? bedarf.key : null);
+ 
++    const tone = toneFor(params.get("tone"));
++    setToneFocus(tone);
++    const gewerk = (params.get("gewerk") ?? "").trim();
++    setToneGewerk(tone && gewerk ? gewerk : null);
++
+     const projektRaw = params.get("projekt");
+     const projekt = projektRaw === null ? Number.NaN : Number(projektRaw);
+     setProjectFocus(Number.isInteger(projekt) && projekt > 0 ? projekt : null);
+@@ -214,7 +235,7 @@ export default function Projects() {
+     // Arriving with either focus clears the leftover text search: the reader
+     // asked for a set, not for that set intersected with whatever was typed
+     // here twenty minutes ago.
+-    if (bedarf || Number.isInteger(projekt)) {
++    if (bedarf || tone || Number.isInteger(projekt)) {
+       setStationFocus(null);
+       if (!q) {
+         setSearchInput("");
+@@ -366,8 +387,22 @@ export default function Projects() {
+       // date boundary and disagree with each other about "overdue".
+       list = list.filter((p) => projectMatchesBedarf(p, bedarfFocus, todayMidnight));
+     }
++    if (toneFocus) {
++      // The Gewerk is passed INTO the predicate, not applied as a second
++      // filter: "a project with an open row and a GA row" is a much larger set
++      // than "a project with an open GA row", and only the second is what the
++      // slice counted.
++      list = list.filter((p) => projectMatchesTone(p, toneFocus, toneGewerk ?? undefined));
++    }
+     return list;
+-  }, [data, stationFocus, projectFocus, bedarfFocus, todayMidnight]);
++  }, [data, stationFocus, projectFocus, bedarfFocus, toneFocus, toneGewerk, todayMidnight]);
++
++  /** The same reconciliation the Handlungsbedarf chip prints, for a slice. */
++  const toneSummary = useMemo(() => {
++    if (!toneFocus) return null;
++    const counted = countTones(allData?.projects ?? [], toneGewerk ?? undefined);
++    return counted.find((c) => c.tone === toneFocus) ?? null;
++  }, [toneFocus, toneGewerk, allData]);
+ 
+   /**
+    * The reconciliation the chip prints.
+@@ -410,7 +445,7 @@ export default function Projects() {
+   }, [focusProjectId, viewMode, visibleProjects]);
+ 
+   return (
+-    <div className="space-y-8 p-6 bg-background min-h-screen">
++    <div ref={revealRef} className="space-y-8 p-6 bg-background min-h-screen">
+       {/* KPI cards — every figure derived in shared/project-metrics.ts */}
+       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+         <Card className="border-l-4 border-l-primary shadow-sm">
+@@ -690,6 +725,17 @@ export default function Projects() {
+               emphasis
+             />
+           )}
++          {toneSummary && (
++            <FilterChip
++              label={`${toneGewerk ? `${toneGewerk} · ` : ""}${toneSummary.label}: ${toneSummary.rows.toLocaleString("de-DE")} Prüfzeilen in ${toneSummary.projects.toLocaleString("de-DE")} Projekten`}
++              onClear={() => {
++                setToneFocus(null);
++                setToneGewerk(null);
++                setLocation("/projects?view=cards");
++              }}
++              emphasis
++            />
++          )}
+           {projectFocus !== null && (
+             <FilterChip
+               label={`Projekt #${projectFocus}`}
+@@ -776,7 +822,7 @@ export default function Projects() {
+                       </tr>
+                     )}
+                   </thead>
+-                  <TableBody>
++                  <TableBody ref={streamRef}>
+                     {data?.projects.map((project: Project) => {
+                       const reviews = project.reviews || [];
+                       return (
+diff --git a/scripts/check-ui.mjs b/scripts/check-ui.mjs
+index 09baea1..6c4a89e 100644
+--- a/scripts/check-ui.mjs
++++ b/scripts/check-ui.mjs
+@@ -850,6 +850,43 @@ console.log("== palette ==");
+     console.log(`✅ all ${REQUIRED_UTILITIES.length} required utilities present`);
+   }
+ 
++  /*
++   * Nothing may hide itself outside the motion switch.
++   *
++   * The cinematic arrival works by holding sections at opacity 0 until they
++   * are scrolled to. That is only safe because every such rule is scoped under
++   * `[data-motion="on"]`, an attribute client/src/lib/motion.ts adds ONLY when
++   * the reader has not asked for reduced motion — so a reduced-motion reader,
++   * a browser with JavaScript off, and this audit all see a page where nothing
++   * was ever hidden.
++   *
++   * One unscoped `opacity: 0` breaks that promise silently: the audit would
++   * still pass, because it measures with reduced motion emulated and would
++   * simply be measuring blank boxes, and a reader who asked not to be moved
++   * would get a page that never appears. So the invariant is checked in the
++   * stylesheet itself rather than trusted.
++   */
++  const HIDING = /(opacity\s*:\s*0(?![.\d])|visibility\s*:\s*hidden)/;
++  const unscoped = [];
++  for (const rule of css.split("}")) {
++    const [selector, body] = rule.split("{");
++    if (!selector || !body || !HIDING.test(body)) continue;
++    if (!/\.reveal|data-stream|data-revealed/.test(selector)) continue;
++    // The minifier strips the quotes: `[data-motion="on"]` ships as
++    // `[data-motion=on]`. Matching only the authored form made this report the
++    // one rule it exists to bless.
++    if (/\[data-motion=['"]?on['"]?\]/.test(selector)) continue;
++    if (selector.includes("prefers-reduced-motion")) continue;
++    unscoped.push(selector.trim().slice(0, 90));
++  }
++  if (unscoped.length) {
++    failures++;
++    console.log(`❌ ${unscoped.length} reveal rules hide content outside the motion switch:`);
++    for (const u of unscoped) console.log(`     ${u}`);
++  } else {
++    console.log("✅ every reveal rule is scoped under the motion switch");
++  }
++
+   /*
+    * There was a third check here — every `var(--x)` in the stylesheet having a
+    * matching declaration — and it is gone on purpose.
+diff --git a/scripts/e2e-smoke.mjs b/scripts/e2e-smoke.mjs
+index 460df0e..af9a411 100644
+--- a/scripts/e2e-smoke.mjs
++++ b/scripts/e2e-smoke.mjs
+@@ -2514,6 +2514,270 @@ await check("the open lane of the relief breathes and the others do not", async
+   console.log(`     ${open.length} open columns breathing, ${rest.length} others still`);
+ });
+ 
++console.log("\n== the page arrives, and never withholds ==");
++
++await check("a section that has not arrived yet is still fully rendered", async () => {
++  await go("/");
++  await page.waitForSelector(".reveal", { timeout: 25000 });
++
++  /*
++   * The assertion the whole cinematic pass hangs on.
++   *
++   * Reveal-on-scroll is only safe because it is decoration: an unrevealed
++   * section is transparent, not absent. It occupies its space, its text is in
++   * the DOM, and it is measurable — which is what stops "1.298 Projekte
++   * gefunden" from being true only after somebody scrolled, and what stops
++   * this suite from counting rows that depend on scroll position.
++   *
++   * If anyone ever swaps the opacity for a conditional render, this fails
++   * immediately and says so.
++   */
++  const held = await page.evaluate(() => {
++    const pending = [...document.querySelectorAll('.reveal[data-revealed="false"]')];
++    return pending.slice(0, 6).map((el) => ({
++      height: Math.round(el.getBoundingClientRect().height),
++      text: (el.textContent ?? "").trim().length,
++      display: getComputedStyle(el).display,
++      visibility: getComputedStyle(el).visibility,
++    }));
++  });
++  assert(held.length > 0, "nothing was held back — the reveal is not running at all");
++  for (const h of held) {
++    assert(h.height > 0, "a section waiting to arrive occupies no space");
++    assert(h.text > 0, "a section waiting to arrive has no text in the DOM");
++    assert(h.display !== "none", `a section waiting to arrive is display:${h.display}`);
++    assert(h.visibility !== "hidden", "a section waiting to arrive is visibility:hidden");
++  }
++});
++
++await check("scrolling the page leaves nothing invisible behind it", async () => {
++  await go("/");
++  await page.waitForSelector(".reveal", { timeout: 25000 });
++  const height = await page.evaluate(() => document.body.scrollHeight);
++  for (let y = 0; y < height; y += 500) {
++    await page.evaluate((top) => window.scrollTo(0, top), y);
++    await page.waitForTimeout(90);
++  }
++  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
++  await page.waitForTimeout(1200);
++
++  const stuck = await page.evaluate(() =>
++    [...document.querySelectorAll(".reveal")]
++      .filter((el) => Number.parseFloat(getComputedStyle(el).opacity) < 0.99)
++      .map((el) => (el.textContent ?? "").trim().slice(0, 48)),
++  );
++  assert(stuck.length === 0, `${stuck.length} sections never arrived, e.g. "${stuck[0]}"`);
++  const count = await page.$$eval(".reveal", (e) => e.length);
++  console.log(`     ${count} sections, all arrived`);
++});
++
++await check("reduced motion is served a page that was never hidden", async () => {
++  const quiet = await browser.newPage({
++    viewport: { width: 1440, height: 1000 },
++    reducedMotion: "reduce",
++  });
++  try {
++    await quiet.goto(U("/login"));
++    await quiet.evaluate(() =>
++      localStorage.setItem(
++        "bahn-demo-user",
++        JSON.stringify({ id: 1, openId: "e2e", name: "Vincenzo Grimaldi", email: "v@db.de", role: "admin" }),
++      ),
++    );
++    await quiet.goto(U("/"), { waitUntil: "networkidle" });
++    await quiet.waitForSelector(".reveal", { timeout: 25000 });
++    await quiet.waitForTimeout(400);
++
++    // The switch is the whole mechanism: no attribute, no hiding rule matches.
++    const motion = await quiet.evaluate(() => document.documentElement.getAttribute("data-motion"));
++    assert(motion === null, `data-motion is "${motion}" under reduced motion`);
++
++    const hidden = await quiet.evaluate(() =>
++      [...document.querySelectorAll(".reveal")].filter(
++        (el) => Number.parseFloat(getComputedStyle(el).opacity) < 0.99,
++      ).length,
++    );
++    assert(hidden === 0, `${hidden} sections are transparent for a reader who asked not to be moved`);
++
++    const streaming = await quiet.evaluate(
++      () => document.querySelectorAll("[data-stream]").length,
++    );
++    assert(streaming === 0, "a table is streaming for a reader who asked not to be moved");
++  } finally {
++    await quiet.close();
++  }
++});
++
++await check("the table streams without ever holding a row back", async () => {
++  await go("/projects");
++  await page.waitForSelector("table tbody tr", { timeout: 30000 });
++
++  /*
++   * Counted while the wave is still running, on purpose.
++   *
++   * The row count is what every other assertion in this suite and every
++   * figure on the page depends on. The stream may only change when a row
++   * appears, never whether it exists — so the count taken mid-animation has to
++   * equal the count taken after it settles.
++   */
++  const during = await page.$$eval("table tbody tr", (r) => r.length);
++  const streaming = await page.$eval("table tbody", (b) => b.getAttribute("data-stream"));
++  await page.waitForTimeout(1400);
++  const after = await page.$$eval("table tbody tr", (r) => r.length);
++  assert(during === after, `${during} rows mid-stream, ${after} after — rows are being withheld`);
++  assert(during > 100, `only ${during} rows in the table`);
++  assert(streaming === "on", "the table did not stream at all");
++
++  // And every row is opaque once the wave has passed.
++  const faded = await page.$$eval("table tbody tr", (rows) =>
++    rows.filter((r) => Number.parseFloat(getComputedStyle(r).opacity) < 0.99).length,
++  );
++  assert(faded === 0, `${faded} rows never finished arriving`);
++  console.log(`     ${after} rows, streamed, none withheld`);
++});
++
++console.log("\n== the donut is a control surface ==");
++
++await check("a slice lands on exactly the projects it counted", async () => {
++  await go("/");
++  await page.waitForSelector("[data-tone-slice]", { timeout: 25000 });
++
++  /*
++   * The portfolio donut only — `data-tone-department=""`.
++   *
++   * There are two donuts on this page and they answer different questions.
++   * The Gewerke carousel's bands are scoped to one department, so their
++   * project figures are that Gewerk's and their links go to that Gewerk's own
++   * tab. Mixing them into one assertion is how the first run of this check
++   * reported "done: 0 projects from 583 rows" — it had picked up a per-Gewerk
++   * slice and measured it against a portfolio-wide claim.
++   */
++  const slices = await page.$$eval('[data-tone-slice][data-tone-department=""]', (els) =>
++    els.map((e) => ({
++      tone: e.dataset.toneSlice,
++      rows: Number(e.dataset.toneRows),
++      projects: Number(e.dataset.toneProjects),
++    })),
++  );
++  assert(slices.length >= 5, `only ${slices.length} slices in the donut`);
++  for (const s of slices) {
++    assert(s.rows > 0, `${s.tone} is a slice of nothing`);
++    assert(s.projects > 0 && s.projects <= s.rows, `${s.tone}: ${s.projects} projects from ${s.rows} rows`);
++  }
++
++  // Two of them, end to end — the whole set would be eight page loads of a
++  // 1.298-project table for one repeated assertion.
++  for (const s of [slices[0], slices.find((x) => x.tone === "pending") ?? slices[1]]) {
++    await go("/");
++    await page.waitForSelector(`[data-tone-slice="${s.tone}"][data-tone-department=""]`, {
++      timeout: 25000,
++    });
++    await page.click(`[data-tone-slice="${s.tone}"][data-tone-department=""]`);
++    await page.waitForTimeout(1500);
++    assert(
++      new URL(page.url()).searchParams.get("tone") === s.tone,
++      `${s.tone} went to ${page.url()}`,
++    );
++    await page.waitForSelector("[data-project-card]", { timeout: 30000 });
++    const cards = await page.$$eval("[data-project-card]", (c) => c.length);
++    assert(
++      cards === s.projects,
++      `${s.tone}: the slice promised ${s.projects} Projekte, the page shows ${cards}`,
++    );
++    const main = await page.locator("main").innerText();
++    assert(
++      main.includes("Prüfzeilen in") && main.includes("Projekten"),
++      `${s.tone}: no chip reconciling the two counts`,
++    );
++  }
++});
++
++await check("a Gewerk's own slice lands on that Gewerk, not on everything", async () => {
++  await go("/");
++  await page.waitForSelector('[data-tone-slice][data-tone-department]:not([data-tone-department=""])', {
++    timeout: 25000,
++  });
++  /*
++   * Stop the carousel with its own Pause button before touching anything.
++   *
++   * It advances every four seconds and remounts its subtree when it does, so
++   * a slice read at one moment is detached from the DOM by the next — which
++   * is what this check spent three runs discovering. Hovering pauses it too,
++   * but the pointer has to arrive somewhere, and "somewhere" is a button that
++   * may already have been replaced.
++   *
++   * Using the control the panel offers is both deterministic and the thing a
++   * reader does: a rotating panel that you have to out-race to click is not a
++   * panel anybody can use, and the Pause button is the answer for both of us.
++   */
++  await page.getByRole("button", { name: "Pause" }).click();
++  await page.waitForTimeout(400);
++  assert(
++    (await page.getAttribute("[data-gewerke-carousel]", "data-rotating")) === "false",
++    "Pause did not stop the carousel",
++  );
++  const slice = await page.$eval(
++    '[data-tone-slice][data-tone-department]:not([data-tone-department=""])',
++    (e) => ({
++      tone: e.dataset.toneSlice,
++      dep: e.dataset.toneDepartment,
++      rows: Number(e.dataset.toneRows),
++      projects: Number(e.dataset.toneProjects),
++    }),
++  );
++  assert(slice.rows > 0, `${slice.dep}/${slice.tone} is a slice of nothing`);
++  assert(
++    slice.projects > 0,
++    `${slice.dep}/${slice.tone} counts ${slice.projects} projects — the per-Gewerk figure is not being computed`,
++  );
++
++  const target = page.locator(
++    `[data-tone-slice="${slice.tone}"][data-tone-department="${slice.dep}"]`,
++  );
++  await target.click({ timeout: 8000 });
++  await page.waitForTimeout(1600);
++  const url = new URL(page.url());
++  assert(url.searchParams.get("tone") === slice.tone, `it dropped the tone: ${page.url()}`);
++  const scoped =
++    url.pathname === "/bvb-eea" ||
++    url.pathname === "/psv-itk" ||
++    url.searchParams.get("gewerk") === slice.dep;
++  assert(scoped, `${slice.dep}'s slice went to ${page.url()} — not scoped to the Gewerk`);
++});
++
++await check("the donut has a body, and the open bands stand out of it", async () => {
++  await go("/");
++  await page.waitForSelector(".pie3d-top", { timeout: 25000 });
++  await page.waitForTimeout(600);
++
++  // Thickness: the stack is tilted and the layers beneath the face are real.
++  const shape = await page.evaluate(() => {
++    const stack = document.querySelector(".pie3d-stack");
++    const layers = document.querySelectorAll(".pie3d-layer");
++    return {
++      transform: getComputedStyle(stack).transform.slice(0, 9),
++      style3d: getComputedStyle(stack).transformStyle,
++      layers: layers.length,
++      layerEvents: layers.length ? getComputedStyle(layers[0]).pointerEvents : "",
++    };
++  });
++  assert(shape.transform === "matrix3d(", `the donut is not tilted: ${shape.transform}`);
++  assert(shape.style3d === "preserve-3d", "the stack does not hold a 3D context");
++  assert(shape.layers >= 5, `only ${shape.layers} depth layers — the disc has no edge`);
++  // The body carries no information and must not catch a click meant for the face.
++  assert(shape.layerEvents === "none", "the disc's body swallows clicks");
++
++  // Open bands are lit; settled ones are not.
++  const lit = await page.evaluate(() => {
++    const open = [...document.querySelectorAll(".pie3d-slice-open")].length;
++    const all = [...document.querySelectorAll(".pie3d-slice")].length;
++    return { open, all };
++  });
++  assert(lit.open > 0, "no open band is highlighted in the donut");
++  assert(lit.open < lit.all, "every band is highlighted, which highlights nothing");
++  console.log(`     ${lit.open} of ${lit.all} bands lit as open`);
++});
++
+ console.log("\n== the relief is an instrument, not a picture ==");
+ 
+ await check("dragging rotates it, and the numbers stay upright", async () => {
+diff --git a/scripts/status.mjs b/scripts/status.mjs
+index cfb71a8..3efd278 100644
+--- a/scripts/status.mjs
++++ b/scripts/status.mjs
+@@ -51,6 +51,10 @@ const FEATURES = [
+   ["Gewerke-Karussell statt Leerzustand", "client/src/components/dashboard/GewerkeCarousel.tsx", "export const ROTATE_MS"],
+   ["Relief als Gebirge, dreht sich selbst", "client/src/index.css", "bpm-relief-sweep"],
+   ["Relief hat echte Hohe (kein <table>)", "client/src/components/dashboard/PortfolioRelief.tsx", "export const MAX_LIFT_PX"],
++  ["Kinematischer Auftritt beim Scrollen", "client/src/lib/motion.ts", "export function installMotionSwitch"],
++  ["Tabellen stromen Zeile fur Zeile", "client/src/hooks/useTableStream.ts", "export function useTableStream"],
++  ["3D-Donut, jede Bande anklickbar", "client/src/components/dashboard/Pie3D.tsx", "export function Pie3D"],
++  ["Tonband-Filter uber alle Flachen", "shared/handlungsbedarf.ts", "export function toneHref"],
+   ["Alle acht Bahnhofsmanagements", "client/src/pages/Dashboard.tsx", "Regionale Verteilung — alle"],
+ ];
+ 
+@@ -156,11 +160,11 @@ let unpushed = 0;
+ 
+ console.log(bold("\nErwartete Zahlen der Gates"));
+ for (const line of [
+-  "pnpm exec vitest run          275 passed, 6 skipped",
+-  "node scripts/e2e-smoke.mjs     95 passed, 0 failed",
++  "pnpm exec vitest run          281 passed, 6 skipped",
++  "node scripts/e2e-smoke.mjs    102 passed, 0 failed",
+   "node scripts/check-ui.mjs      UI CLEAN",
+   "node scripts/stress-test.mjs    8 passed, 0 failed",
+-  "pnpm exec biome check .        72 warnings (unverandert)",
++  "pnpm exec biome check .        71 warnings",
+ ]) console.log(dim(`  ${line}`));
+ 
+ /*
+diff --git a/shared/handlungsbedarf.test.ts b/shared/handlungsbedarf.test.ts
+index 5c5d1f0..0e852bd 100644
+--- a/shared/handlungsbedarf.test.ts
++++ b/shared/handlungsbedarf.test.ts
+@@ -9,7 +9,15 @@ import {
+   projectMatchesBedarf,
+   reviewMatchesBedarf,
+ } from "./handlungsbedarf";
+-import { OPEN_STATUSES, BLOCKING_STATUSES } from "./review-status";
++import {
++  countTones,
++  projectMatchesTone,
++  toneFor,
++  toneHref,
++  toneIsAwaiting,
++} from "./handlungsbedarf";
++import { normalizeReviewStatus, OPEN_STATUSES, BLOCKING_STATUSES } from "./review-status";
++import { STATUS_TONE, TONE_APPEARANCE } from "./status-appearance";
+ 
+ const DATA = JSON.parse(fs.readFileSync("client/public/data.json", "utf8"));
+ /*
+@@ -89,3 +97,69 @@ describe("the four buckets are counted once, here", () => {
+     expect(projectHref(42)).toBe("/projects?projekt=42&view=cards");
+   });
+ });
++
++describe("a slice of the status donut lands on what it counted", () => {
++  it("counts every row that carries a recognised status, and no others", () => {
++    const slices = countTones(DATA.projects);
++    const total = slices.reduce((a, s) => a + s.rows, 0);
++    /*
++     * Normalised, not raw. 80 rows read "Niederschrift erstellt
++     * (LP05-05-01-F31)" — a canonical status with an annotation — and
++     * comparing against the raw string counts them as unrecognised while the
++     * chart correctly plots them. The comparison has to speak the same
++     * language the chart does or it is testing the wrong thing.
++     */
++    let recognised = 0;
++    for (const p of DATA.projects) {
++      for (const r of p.reviews ?? []) {
++        if (!r.status) continue;
++        if (normalizeReviewStatus(r.status) !== null) recognised++;
++      }
++    }
++    // Equal, not approximately: the donut's slices are the whole of what it
++    // claims to plot, and a row that falls out of it silently is the defect
++    // this whole file exists to prevent.
++    expect(total).toBe(recognised);
++    expect(total).toBeGreaterThan(15_000);
++    expect(total).toBeLessThanOrEqual(18_172);
++  });
++
++  it("agrees with itself: the project figure is the set the filter returns", () => {
++    for (const slice of countTones(DATA.projects)) {
++      const filtered = DATA.projects.filter((p: never) =>
++        projectMatchesTone(p, slice.tone),
++      ).length;
++      expect(filtered, slice.tone).toBe(slice.projects);
++    }
++  });
++
++  it("gives every slice a label and a colour from the one appearance table", () => {
++    for (const slice of countTones(DATA.projects)) {
++      expect(slice.label, slice.tone).toBe(TONE_APPEARANCE[slice.tone].label);
++      expect(slice.hex, slice.tone).toBe(TONE_APPEARANCE[slice.tone].hex);
++    }
++  });
++
++  it("marks a band as awaiting exactly when an open status maps into it", () => {
++    const fromStatuses = new Set(OPEN_STATUSES.map((s) => STATUS_TONE[s]));
++    for (const slice of countTones(DATA.projects)) {
++      expect(toneIsAwaiting(slice.tone), slice.tone).toBe(fromStatuses.has(slice.tone));
++    }
++    // Derived, never hand-listed: adding a status to OPEN_STATUSES has to light
++    // up its band without anybody editing a second list.
++    expect(toneIsAwaiting("done")).toBe(false);
++    expect(toneIsAwaiting("blocked")).toBe(false);
++    expect(toneIsAwaiting("pending")).toBe(true);
++  });
++
++  it("ignores a tone that did not come from us", () => {
++    expect(toneFor("offen")).toBeNull();
++    expect(toneFor("")).toBeNull();
++    expect(toneFor(null)).toBeNull();
++    expect(toneFor("pending")).toBe("pending");
++  });
++
++  it("builds a link the Projekte page can read", () => {
++    expect(toneHref("pending")).toBe("/projects?tone=pending&view=cards");
++  });
++});
+diff --git a/shared/handlungsbedarf.ts b/shared/handlungsbedarf.ts
+index 31d48f1..3f72225 100644
+--- a/shared/handlungsbedarf.ts
++++ b/shared/handlungsbedarf.ts
+@@ -30,7 +30,7 @@
+ import { BLOCKING_STATUSES, OPEN_STATUSES, normalizeReviewStatus } from "./review-status";
+ import { toDate } from "./date";
+ import type { PortfolioProject, PortfolioReview } from "./portfolio-metrics";
+-import type { StatusTone } from "./status-appearance";
++import { STATUS_TONE, TONE_APPEARANCE, type StatusTone } from "./status-appearance";
+ 
+ export type BedarfKey = "overdue" | "blocked" | "nachforderung" | "unassigned";
+ 
+@@ -192,3 +192,138 @@ export function bedarfHref(key: BedarfKey): string {
+ export function projectHref(id: number): string {
+   return `/projects?projekt=${id}&view=cards`;
+ }
++
++
++/* ---------------------------------------------------------------------------
++   Slices of the status pie
++   ---------------------------------------------------------------------------
++   The Dashboard's donut groups Prüfzeilen by tone — the eight bands the legend
++   names, not the twelve statuses. Making a slice clickable raises the same
++   question the Handlungsbedarf badges did: a slice that says 946 has to land
++   on a page showing exactly the set behind those 946, or the link is a
++   decoration that quietly lies.
++
++   So the predicate lives here too, beside the other one, and both sides call
++   it. A tone is a set of statuses; a project belongs to the filtered set when
++   any of its rows carries a status of that tone.
++   --------------------------------------------------------------------------- */
++
++/**
++ * Does this row's status fall in this tone band?
++ *
++ * `department` narrows it to one Gewerk, and the narrowing has to happen HERE
++ * rather than by intersecting two filters. „Projekte mit einer offenen Zeile
++ * und einer EEA-Zeile" is a different and much larger set than „Projekte mit
++ * einer offenen EEA-Zeile" — the first is what two independent filters give
++ * you, and it is not what a slice inside „Status-Verteilung für EEA" is
++ * counting.
++ */
++export function reviewMatchesTone(
++  review: PortfolioReview,
++  tone: StatusTone,
++  department?: string,
++): boolean {
++  if (department !== undefined && review.department !== department) return false;
++  const status = normalizeReviewStatus(review.status);
++  if (status === null) return false;
++  return STATUS_TONE[status] === tone;
++}
++
++/** A project belongs in the filtered set when any of its rows does. */
++export function projectMatchesTone(
++  project: PortfolioProject,
++  tone: StatusTone,
++  department?: string,
++): boolean {
++  for (const review of project.reviews ?? []) {
++    if (reviewMatchesTone(review, tone, department)) return true;
++  }
++  return false;
++}
++
++export interface ToneCount {
++  tone: StatusTone;
++  label: string;
++  hex: string;
++  /** Prüfzeilen — what the slice is sized by. */
++  rows: number;
++  /** Distinct projects those rows sit in — what a list can show. */
++  projects: number;
++}
++
++/**
++ * Every tone present in the data, largest first, with both figures.
++ *
++ * `department` scopes it to one Gewerk — the same argument the predicate takes,
++ * so the number on a slice and the set its link produces are computed by one
++ * function with one meaning.
++ */
++export function countTones(
++  projects: readonly PortfolioProject[],
++  department?: string,
++): ToneCount[] {
++  const rows = new Map<StatusTone, number>();
++  const hit = new Map<StatusTone, Set<number>>();
++  for (const project of projects) {
++    for (const review of project.reviews ?? []) {
++      if (department !== undefined && review.department !== department) continue;
++      const status = normalizeReviewStatus(review.status);
++      if (status === null) continue;
++      const tone = STATUS_TONE[status];
++      rows.set(tone, (rows.get(tone) ?? 0) + 1);
++      if (!hit.has(tone)) hit.set(tone, new Set());
++      hit.get(tone)?.add(project.id);
++    }
++  }
++  return [...rows.entries()]
++    .map(([tone, count]) => ({
++      tone,
++      label: TONE_APPEARANCE[tone].label,
++      hex: TONE_APPEARANCE[tone].hex,
++      rows: count,
++      projects: hit.get(tone)?.size ?? 0,
++    }))
++    .sort((a, b) => b.rows - a.rows);
++}
++
++/** The tones that mean "still waiting for a decision" — these get highlighted. */
++export function toneIsAwaiting(tone: StatusTone): boolean {
++  return OPEN_TONES.includes(tone);
++}
++
++/*
++ * Derived from OPEN_STATUSES, never listed by hand.
++ *
++ * „offen", „in Bearbeitung", „Nachforderung" and „prüffähig" span four
++ * different tones, and writing those four tone names into a constant here
++ * would be a second definition of "open" — the exact drift this module was
++ * created to stop. Mapping the statuses through the tone table means adding a
++ * status to OPEN_STATUSES lights up its band automatically.
++ */
++const OPEN_TONES: readonly StatusTone[] = [
++  ...new Set(OPEN_STATUSES.map((status) => STATUS_TONE[status])),
++];
++
++/**
++ * Where a slice sends the reader. Same shape as `bedarfHref`, same contract.
++ *
++ * With a Gewerk it goes to that Gewerk's own surface — BVB-EEA and PSV-ITK
++ * have their own tabs, everything else is Projekte narrowed to the department.
++ * Without one it is the whole portfolio. A slice inside „Status-Verteilung für
++ * EEA" that landed on every project with an open row anywhere would be a link
++ * that looks right and is wrong by a factor of four.
++ */
++export function toneHref(tone: StatusTone, department?: string): string {
++  const t = encodeURIComponent(tone);
++  if (!department) return `/projects?tone=${t}&view=cards`;
++  if (department === "EEA") return `/bvb-eea?tone=${t}`;
++  if (department === "ITK") return `/psv-itk?tone=${t}`;
++  return `/projects?tone=${t}&gewerk=${encodeURIComponent(department)}&view=cards`;
++}
++
++/** Reject anything that did not come from us — a hand-typed ?tone= shows all. */
++export function toneFor(value: string | null | undefined): StatusTone | null {
++  if (!value) return null;
++  const known = new Set<string>(Object.values(STATUS_TONE));
++  return known.has(value) ? (value as StatusTone) : null;
++}
+-- 
+2.43.0
+
