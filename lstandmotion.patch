@@ -1,0 +1,1091 @@
+From f19c282eef3b3286c032cc5eeb4413ccdf2ce7b1 Mon Sep 17 00:00:00 2001
+From: Vincenzo Grimaldi <vince.ceccarelli@gmail.com>
+Date: Mon, 24 Aug 2026 14:28:25 +0000
+Subject: [PATCH] Die 44-Pixel-Regression, das flackernde Gate, und LST
+ erreicht endlich jemanden
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Drei Dinge, und das dritte ist der alteste offene Punkt des Projekts.
+
+1. Der Auftritt hat Beruhrungsziele verkleinert
+----------------------------------------------
+`both table row actions are separate 44px targets on touch` ist bei mir
+durchgelaufen und bei dir gefallen. Gemessen, nicht geraten: es lag am
+`scale(0.985)` im Reveal. getBoundingClientRect liefert die
+TRANSFORMIERTE Box, also mass ein 44px-Ziel 43,34px, solange die
+Animation lief — und die tippbare Flache war wirklich so klein.
+
+Meine Behauptung war, ein Reveal andere nur `opacity` und `transform` und
+damit nichts, was ein Element IST. Fur Layout stimmt das, fur die
+gerenderte Grosse nicht. 1,5 % von 44 liegt unter dem Minimum. Die
+Skalierung ist raus; ein Reveal verschiebt jetzt nur noch.
+
+Ein neues Gate liest das gebaute CSS und scheitert, wenn irgendeine
+Reveal- oder Stream-Regel `scale`, `zoom`, `width` oder `height` anfasst
+— inklusive der Keyframes.
+
+2. Ein Gate, dessen Ergebnis von der Maschine abhangt, ist kein Gate
+-------------------------------------------------------------------
+Dass derselbe Code hier grun und dort rot war, ist der eigentliche
+Befund. Die Prufung mass nach festen 800 ms, und ob der Defekt sichtbar
+war, hing davon ab, wie schnell der Rechner gemalt hat.
+
+`settled()` wartet jetzt auf die tatsachliche Bedingung — kein Element im
+Sichtfeld mehr unter voller Deckkraft, keine streamende Zeile mehr
+unterwegs — statt auf eine geratene Dauer. `go()` ruft es nach jeder
+Navigation auf, also misst jede Prufung darunter eine fertig
+angekommene Seite, auf jeder Maschine.
+
+3. LST erreicht jemanden
+------------------------
+52 Prufungen, 22 offen, beide Empfangerzeilen der Hilfsdatei leer. Das
+Excel-Makro hat an einen leeren String geschickt und Erfolg gemeldet.
+Diese Anwendung weiss es seit der Transkription:
+`departmentsWithoutRecipients()` gibt seit jeher ["LST"] zuruck — und
+wurde von einem Skript und einem Test aufgerufen und von nichts, was ein
+Mensch je zu sehen bekam.
+
+Eine Lucke zu erkennen und sie niemandem zu zeigen, der sie schliessen
+konnte, ist kaum besser, als sie nicht zu erkennen.
+
+Die Adresse wird weiterhin nicht erfunden. `vorname.nachname@
+deutschebahn.com` stimmt oft genug, dass die wahrscheinlichere Folge
+eine Benachrichtigung an die falsche echte Person ware — schlimmer als
+gar keine. Neu ist, dass Schritt 5 die Lucke benennt und ein Feld
+danebenstellt: wer die Adresse kennt, tragt sie ein. Der Eintrag halt
+fest, wer sie wann hinterlegt hat, er landet in der Anderungshistorie,
+und die Hilfsdatei bleibt unberuhrt.
+
+Ein Override kann NIE eine Adresse uberschreiben, die die Hilfsdatei hat
+— nur eine fullen, die sie nicht hat. Eine Umleitung echter
+Benachrichtigungen ist keine Macht, die das hier braucht.
+Platzhalteradressen werden namentlich abgelehnt.
+
+Zwei Defekte, die erst das Gate gefunden hat
+--------------------------------------------
+  — Die eingetragene Adresse verschwand in dem Moment, in dem sie
+    gespeichert wurde: die Liste war auf das gerade offene Formular
+    gefiltert, und das schliesst sich beim Absenden. Ein Formular, das
+    danach nichts zeigt, ist von einem gescheiterten nicht zu
+    unterscheiden.
+  — Schritt 5 und das Panel darin hielten je eine eigene Kopie der
+    Liste, also raumte die Eingabe die Warnung nicht ab, die sie
+    abraumen sollte. `storage`-Events helfen nicht — der Browser feuert
+    sie nur fur ANDERE Dokumente. Jetzt ein Modul-Store mit
+    useSyncExternalStore: eine Liste, ein Snapshot, alle Leser.
+
+Und ein Gate, das quer uber alle Seiten prueft, dass nirgends eine
+konstruierte deutschebahn.com-Adresse auftaucht.
+
+Gates, seriell, gegen dist/ von diesem Stand:
+  vitest       289 bestanden, 6 uebersprungen (vorher 281)
+  e2e-smoke    104 bestanden, 0 fehlgeschlagen (vorher 102)
+  check-ui      UI CLEAN
+  stress-test    8 bestanden, 0 fehlgeschlagen
+  biome         71 Warnungen, unveraendert
+  tsc           sauber
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01GJwENjMMPe6PSZBdrXkzBj
+---
+ .../src/components/anmeldung/RecipientGap.tsx | 190 ++++++++++++++++++
+ .../anmeldung/Step5Bestaetigung.tsx           |  35 +++-
+ client/src/hooks/useRecipientOverrides.ts     | 111 ++++++++++
+ client/src/index.css                          |  19 +-
+ scripts/check-ui.mjs                          |  34 ++++
+ scripts/e2e-smoke.mjs                         | 164 ++++++++++++++-
+ scripts/status.mjs                            |   5 +-
+ shared/contact-overrides.test.ts              | 113 +++++++++++
+ shared/contact-overrides.ts                   | 184 +++++++++++++++++
+ 9 files changed, 838 insertions(+), 17 deletions(-)
+ create mode 100644 client/src/components/anmeldung/RecipientGap.tsx
+ create mode 100644 client/src/hooks/useRecipientOverrides.ts
+ create mode 100644 shared/contact-overrides.test.ts
+ create mode 100644 shared/contact-overrides.ts
+
+diff --git a/client/src/components/anmeldung/RecipientGap.tsx b/client/src/components/anmeldung/RecipientGap.tsx
+new file mode 100644
+index 0000000..5beb1bd
+--- /dev/null
++++ b/client/src/components/anmeldung/RecipientGap.tsx
+@@ -0,0 +1,190 @@
++/**
++ * The one place a missing recipient can be fixed instead of only reported.
++ *
++ * ---------------------------------------------------------------------------
++ * Why this exists at all
++ * ---------------------------------------------------------------------------
++ * LST has 52 Prüfungen, 22 of them open, and both of its recipient rows in the
++ * Hilfsdatei are empty. The Excel macro sent to an empty string and reported a
++ * successful send. This app has known about it since the workbook was
++ * transcribed — `departmentsWithoutRecipients()` has returned ["LST"] the whole
++ * time — and used that knowledge in one script and one test and nowhere a
++ * reader could see it.
++ *
++ * Detecting a gap and never showing it to somebody who could close it is
++ * barely better than not detecting it. So this says plainly that nobody will
++ * be reached, and offers the only thing that can actually change that: a field
++ * for the person who knows the address.
++ *
++ * The address is never derived. `vorname.nachname@deutschebahn.com` is right
++ * often enough to be dangerous, and a notification that reaches the wrong real
++ * person is worse than one that reaches nobody. It comes from a human, and the
++ * entry records which human and when.
++ */
++import { useState } from "react";
++import { Button } from "@/components/ui/button";
++import { Input } from "@/components/ui/input";
++import { AlertTriangle, Check, Plus, X } from "lucide-react";
++import { useRecipientOverrides } from "@/hooks/useRecipientOverrides";
++import { useAuditTrail } from "@/hooks/useAuditTrail";
++import { OVERRIDE_PROBLEM_TEXT, type OverrideProblem } from "@shared/contact-overrides";
++
++export function RecipientGap({
++  departments,
++  onChanged,
++}: {
++  /** Departments that would notify nobody, after the workbook and any supplied. */
++  departments: readonly string[];
++  onChanged?: () => void;
++}) {
++  const { overrides, add, remove } = useRecipientOverrides();
++  const { recordDocument } = useAuditTrail();
++  const [open, setOpen] = useState<string | null>(null);
++  const [name, setName] = useState("");
++  const [mail, setMail] = useState("");
++  const [problem, setProblem] = useState<OverrideProblem | null>(null);
++
++  /*
++   * Everything recorded, not just the department whose form happens to be open.
++   *
++   * It was filtered on `open`, which is set to null the instant an address is
++   * saved — so the entry vanished at exactly the moment somebody wanted to see
++   * that it had worked. Submitting into a form that then shows nothing is
++   * indistinguishable from submitting into a form that failed.
++   */
++  const supplied = overrides;
++
++  if (departments.length === 0 && overrides.length === 0) return null;
++
++  const submit = (department: string) => {
++    const failure = add({ department, name, mail }, "Angemeldeter Benutzer");
++    setProblem(failure);
++    if (failure) return;
++    /* Recorded like every other change on this site: an address that routes a
++       Fachprüfung is not a preference, it is data. */
++    recordDocument(
++      `Empfänger für ${department} ergänzt`,
++      `${name.trim()} <${mail.trim().toLowerCase()}> — in der Hilfsdatei ist für ${department} keine Adresse hinterlegt.`,
++    );
++    setName("");
++    setMail("");
++    setOpen(null);
++    onChanged?.();
++  };
++
++  return (
++    <div
++      data-recipient-gap={departments.join(",")}
++      className="mt-2 rounded-lg border border-primary/40 bg-primary/5 px-3 py-2.5"
++    >
++      {departments.length > 0 && (
++        <p className="flex items-start gap-1.5 text-2xs font-bold text-primary-strong">
++          <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden="true" />
++          <span>
++            Für {departments.join(", ")} ist in der Hilfsdatei keine E-Mail-Adresse hinterlegt.
++            Die Prüfung wird angelegt, aber es kann niemand benachrichtigt werden.
++          </span>
++        </p>
++      )}
++
++      {departments.map((department) => (
++        <div key={department} className="mt-2">
++          {open === department ? (
++            <form
++              onSubmit={(e) => {
++                e.preventDefault();
++                submit(department);
++              }}
++              className="space-y-2"
++            >
++              <div className="flex flex-wrap gap-2">
++                <Input
++                  value={name}
++                  onChange={(e) => setName(e.target.value)}
++                  placeholder="Name der Person"
++                  aria-label={`Name des Empfängers für ${department}`}
++                  data-gap-name={department}
++                  className="h-9 min-w-[10rem] flex-1 text-xs"
++                />
++                <Input
++                  value={mail}
++                  onChange={(e) => setMail(e.target.value)}
++                  placeholder="E-Mail-Adresse"
++                  type="email"
++                  aria-label={`E-Mail-Adresse des Empfängers für ${department}`}
++                  data-gap-mail={department}
++                  className="h-9 min-w-[12rem] flex-1 text-xs"
++                />
++                <Button type="submit" size="sm" className="h-9 gap-1.5 text-2xs">
++                  <Check className="h-3.5 w-3.5" aria-hidden="true" />
++                  Eintragen
++                </Button>
++                <Button
++                  type="button"
++                  size="sm"
++                  variant="ghost"
++                  onClick={() => {
++                    setOpen(null);
++                    setProblem(null);
++                  }}
++                  className="h-9 gap-1 text-2xs"
++                >
++                  <X className="h-3.5 w-3.5" aria-hidden="true" />
++                  Abbrechen
++                </Button>
++              </div>
++              {problem && (
++                <p data-gap-problem={problem} className="text-2xs font-bold text-primary-strong">
++                  {OVERRIDE_PROBLEM_TEXT[problem]}
++                </p>
++              )}
++              <p className="text-2xs text-muted-foreground">
++                Die Adresse wird hier ergänzt, nicht erzeugt — sie stammt von Ihnen, und der
++                Eintrag hält fest, wer sie wann hinterlegt hat. Die Hilfsdatei bleibt
++                unverändert.
++              </p>
++            </form>
++          ) : (
++            <Button
++              type="button"
++              size="sm"
++              variant="outline"
++              data-gap-open={department}
++              onClick={() => {
++                setOpen(department);
++                setProblem(null);
++              }}
++              className="h-8 gap-1.5 text-2xs"
++            >
++              <Plus className="h-3.5 w-3.5" aria-hidden="true" />
++              Empfänger für {department} eintragen
++            </Button>
++          )}
++        </div>
++      ))}
++
++      {supplied.length > 0 && (
++        <ul className="mt-2 space-y-1">
++          {supplied.map((o) => (
++            <li key={o.mail} className="flex items-center gap-2 text-2xs">
++              <span className="font-semibold">{o.name}</span>
++              <span className="text-muted-foreground">{o.mail}</span>
++              <span className="text-muted-foreground">
++                — ergänzt von {o.addedBy} am {new Date(o.addedAt).toLocaleDateString("de-DE")}
++              </span>
++              <button
++                type="button"
++                onClick={() => remove(o.department, o.mail)}
++                className="rounded px-1 underline decoration-dotted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
++              >
++                entfernen
++              </button>
++            </li>
++          ))}
++        </ul>
++      )}
++    </div>
++  );
++}
++
++export default RecipientGap;
+diff --git a/client/src/components/anmeldung/Step5Bestaetigung.tsx b/client/src/components/anmeldung/Step5Bestaetigung.tsx
+index dc5c1ac..fddaf72 100644
+--- a/client/src/components/anmeldung/Step5Bestaetigung.tsx
++++ b/client/src/components/anmeldung/Step5Bestaetigung.tsx
+@@ -10,6 +10,9 @@ import {
+   recipientsFor,
+ } from "@shared/contacts";
+ import { Printer } from "lucide-react";
++import { effectiveRecipients } from "@shared/contact-overrides";
++import { useRecipientOverrides } from "@/hooks/useRecipientOverrides";
++import { RecipientGap } from "./RecipientGap";
+ 
+ function Row({ label, value }: { label: string; value: string }) {
+   return (
+@@ -31,9 +34,19 @@ export function Step5Bestaetigung({ draft }: { draft: ChecklistDraft }) {
+   // the ITK off-by-two survived: the mail went out, and nobody could see that
+   // it went to a Brandschutz specialist instead of the two busiest ITK
+   // reviewers. shared/contacts.ts has the corrected ranges.
++  const { overrides } = useRecipientOverrides();
+   const openDepartments = reviews.filter((r) => r.status === "offen").map((r) => r.department);
+   const mailCount = mailListFor(openDepartments).length;
+-  const unreachable = openDepartments.filter((d) => recipientsFor(d).length === 0);
++  /*
++   * Unreachable AFTER everything, not just after the workbook.
++   *
++   * It used to ask the Hilfsdatei alone, so a department stayed flagged even
++   * once somebody had supplied the missing address — the warning could never
++   * be cleared, which is the fastest way to teach a reader to ignore it.
++   */
++  const unreachable = openDepartments.filter(
++    (d) => effectiveRecipients(d, recipientsFor(d), overrides).length === 0,
++  );
+   const bmContact = bahnhofsmanagementContact(header.bahnhofsmanagement);
+ 
+   return (
+@@ -139,16 +152,16 @@ export function Step5Bestaetigung({ draft }: { draft: ChecklistDraft }) {
+                   {mailCount} {mailCount === 1 ? "Empfänger" : "Empfänger"} insgesamt
+                   {bmContact ? ` · BM ${bmContact.group}: ${bmContact.name}` : ""}
+                 </p>
+-                {unreachable.length > 0 && (
+-                  // Named rather than swallowed: the Excel macro reported a
+-                  // successful send for these too, which is how LST went 52
+-                  // reviews without anyone being told.
+-                  <p className="mt-2 rounded border border-primary/40 bg-primary/5 px-3 py-2 text-2xs font-bold text-primary-strong">
+-                    Für {unreachable.join(", ")} ist in der Hilfsdatei keine
+-                    E-Mail-Adresse hinterlegt. Diese Prüfung wird angelegt, aber es
+-                    kann niemand benachrichtigt werden.
+-                  </p>
+-                )}
++                {/*
++                  Named, and now fixable.
++                  
++                  The Excel macro reported a successful send for these too,
++                  which is how LST went 52 reviews without one person being
++                  told. Saying so was the first half; the second half is a
++                  field for whoever knows the address, because a gap nobody can
++                  close is a gap that stays open.
++                */}
++                <RecipientGap departments={unreachable} />
+               </>
+             )}
+           </section>
+diff --git a/client/src/hooks/useRecipientOverrides.ts b/client/src/hooks/useRecipientOverrides.ts
+new file mode 100644
+index 0000000..21a3d9f
+--- /dev/null
++++ b/client/src/hooks/useRecipientOverrides.ts
+@@ -0,0 +1,111 @@
++/**
++ * Addresses an operator supplied for a department the workbook left empty.
++ *
++ * Persisted the same way every other edit on this site is — localStorage, with
++ * an entry in the Änderungshistorie — so supplying one is as traceable and as
++ * reversible as changing a status. The address never comes from here; it comes
++ * from a person who knows it, and the record says who and when.
++ *
++ * ---------------------------------------------------------------------------
++ * One store, every subscriber
++ * ---------------------------------------------------------------------------
++ * The first version kept the list in `useState` per hook instance. The wizard's
++ * step 5 and the panel inside it each called the hook, so each had its own
++ * copy: entering an address updated the panel and localStorage, and the step
++ * around it went on reporting LST as unreachable — the warning could not be
++ * cleared by the control built to clear it. `storage` events do not help,
++ * because the browser fires them for OTHER documents only.
++ *
++ * A module-level store with `useSyncExternalStore` is the fix: one list, one
++ * snapshot, and every component that reads it re-renders on a write, wherever
++ * in the tree it sits.
++ */
++import { useCallback, useSyncExternalStore } from "react";
++import {
++  normalizeOverride,
++  validateOverride,
++  type OverrideProblem,
++  type RecipientOverride,
++} from "@shared/contact-overrides";
++
++const KEY = "bahn-recipient-overrides";
++
++function readStorage(): RecipientOverride[] {
++  if (typeof window === "undefined") return [];
++  try {
++    const raw = window.localStorage.getItem(KEY);
++    const parsed = raw ? JSON.parse(raw) : [];
++    return Array.isArray(parsed) ? (parsed as RecipientOverride[]) : [];
++  } catch {
++    /* A corrupted store must not take the page down with it. An empty list is
++       the honest answer: it reports "reaches nobody", which is the state the
++       workbook is in anyway. */
++    return [];
++  }
++}
++
++const listeners = new Set<() => void>();
++/* Cached, because useSyncExternalStore compares snapshots by identity and
++   parsing JSON on every render would hand it a new array every time. */
++let snapshot: RecipientOverride[] = readStorage();
++
++function publish(next: RecipientOverride[]) {
++  snapshot = next;
++  window.localStorage.setItem(KEY, JSON.stringify(next));
++  for (const l of listeners) l();
++}
++
++function subscribe(onChange: () => void) {
++  listeners.add(onChange);
++  /* Another tab supplying an address is the same event as this one doing it. */
++  const onStorage = (e: StorageEvent) => {
++    if (e.key !== KEY) return;
++    snapshot = readStorage();
++    onChange();
++  };
++  window.addEventListener("storage", onStorage);
++  return () => {
++    listeners.delete(onChange);
++    window.removeEventListener("storage", onStorage);
++  };
++}
++
++const EMPTY: RecipientOverride[] = [];
++
++export function useRecipientOverrides() {
++  const overrides = useSyncExternalStore(
++    subscribe,
++    () => snapshot,
++    () => EMPTY,
++  );
++
++  const add = useCallback(
++    (
++      input: { department: string; name: string; mail: string },
++      addedBy: string,
++    ): OverrideProblem | null => {
++      const problem = validateOverride(input);
++      if (problem) return problem;
++      const entry = normalizeOverride(input, addedBy, new Date().toISOString());
++      publish([
++        ...readStorage().filter(
++          (o) => !(o.department === entry.department && o.mail === entry.mail),
++        ),
++        entry,
++      ]);
++      return null;
++    },
++    [],
++  );
++
++  const remove = useCallback((department: string, mail: string) => {
++    publish(
++      readStorage().filter((o) => !(o.department === department && o.mail === mail)),
++    );
++  }, []);
++
++  /** For tests and for a reader who wants to start over. */
++  const clear = useCallback(() => publish([]), []);
++
++  return { overrides, add, remove, clear };
++}
+diff --git a/client/src/index.css b/client/src/index.css
+index 688ab0d..1f967eb 100644
+--- a/client/src/index.css
++++ b/client/src/index.css
+@@ -802,10 +802,25 @@
+    revealed occupies exactly the space it will occupy, which is why nothing
+    below it jumps when it lands.
+    --------------------------------------------------------------------------- */
++/*
++ * Translate and opacity. No scale — and that is a correctness rule, not taste.
++ *
++ * The first version rose from `scale(0.985)`, and a touch gate caught what
++ * that costs: getBoundingClientRect returns the TRANSFORMED box, so a 44px
++ * row action measured 43.34px for as long as the animation ran, and the hit
++ * area really was that small. It passed on a fast machine and failed on a
++ * slower one, which is the worst kind of defect — one whose presence depends
++ * on how quickly the reader's laptop happened to paint.
++ *
++ * The promise this whole system rests on is that a reveal never changes what
++ * an element IS, only how visible it is. A scale breaks that promise by 1.5%,
++ * and 1.5% of 44 is under the accessible minimum. A translate does not: the
++ * element moves, and stays exactly its own size the whole way.
++ */
+ @keyframes bpm-reveal {
+   from {
+     opacity: 0;
+-    transform: translate3d(0, 18px, 0) scale(0.985);
++    transform: translate3d(0, 20px, 0);
+   }
+   to {
+     opacity: 1;
+@@ -816,7 +831,7 @@
+ /* Not yet seen: held back, and only while something exists to release it. */
+ [data-motion="on"] .reveal[data-revealed="false"] {
+   opacity: 0;
+-  transform: translate3d(0, 18px, 0) scale(0.985);
++  transform: translate3d(0, 20px, 0);
+ }
+ 
+ [data-motion="on"] .reveal[data-revealed="true"] {
+diff --git a/scripts/check-ui.mjs b/scripts/check-ui.mjs
+index 6c4a89e..8a50bbc 100644
+--- a/scripts/check-ui.mjs
++++ b/scripts/check-ui.mjs
+@@ -887,6 +887,40 @@ console.log("== palette ==");
+     console.log("✅ every reveal rule is scoped under the motion switch");
+   }
+ 
++  /*
++   * A reveal may move an element. It may never resize one.
++   *
++   * The first version rose from `scale(0.985)`, and getBoundingClientRect
++   * returns the transformed box — so a 44px touch target measured 43.34px for
++   * as long as the animation ran, and the tappable area really was that small.
++   * It passed on a fast machine and failed on a slow one, because whether the
++   * defect was visible depended on how quickly the page happened to paint.
++   *
++   * Anything that changes an element's rendered size during an arrival is the
++   * same defect wearing different numbers, so the stylesheet is checked rather
++   * than trusted.
++   */
++  const RESIZING = /(scale[3dXYZ]*\s*\(|zoom\s*:|width\s*:|height\s*:)/;
++  const resizes = [];
++  for (const rule of css.split("}")) {
++    const [selector, body] = rule.split("{");
++    if (!selector || !body) continue;
++    if (!/\.reveal|data-stream|bpm-reveal|bpm-stream/.test(selector)) continue;
++    if (RESIZING.test(body)) resizes.push(`${selector.trim().slice(0, 60)} → ${body.trim().slice(0, 60)}`);
++  }
++  // Keyframe blocks are named, not selected, so they are checked separately.
++  for (const name of ["bpm-reveal", "bpm-stream-cell"]) {
++    const block = new RegExp(`@keyframes\\s+${name}\\s*\\{([\\s\\S]*?)\\}\\s*\\}`).exec(css);
++    if (block && RESIZING.test(block[1])) resizes.push(`@keyframes ${name}`);
++  }
++  if (resizes.length) {
++    failures++;
++    console.log(`❌ ${resizes.length} reveal rules change an element's size:`);
++    for (const r of resizes) console.log(`     ${r}`);
++  } else {
++    console.log("✅ no reveal rule changes an element's size");
++  }
++
+   /*
+    * There was a third check here — every `var(--x)` in the stylesheet having a
+    * matching declaration — and it is gone on purpose.
+diff --git a/scripts/e2e-smoke.mjs b/scripts/e2e-smoke.mjs
+index af9a411..4e9612d 100644
+--- a/scripts/e2e-smoke.mjs
++++ b/scripts/e2e-smoke.mjs
+@@ -119,7 +119,48 @@ page.on("console", (m) => {
+ });
+ 
+ const U = (r) => `http://localhost:${PORT}${r}`;
+-const go = async (r) => { await page.goto(U(r), { waitUntil: "networkidle" }); await page.waitForTimeout(800); };
++
++/**
++ * Wait until nothing on screen is still arriving.
++ *
++ * Sections fade in as they are scrolled to and table rows stream in behind
++ * them. Neither changes what an element is — that invariant is enforced in the
++ * stylesheet and gated in check-ui — but both take time, and a measurement
++ * taken mid-arrival is a measurement of a moving thing.
++ *
++ * This is why "both table row actions are separate 44px targets" passed on one
++ * machine and failed on another: it measured at a fixed 800ms and the answer
++ * depended on how fast the machine painted. A gate whose result depends on the
++ * hardware is not a gate. Waiting for the actual condition, rather than for a
++ * duration somebody guessed, is the fix.
++ */
++const settled = async (target = page) => {
++  await target
++    .waitForFunction(
++      () => {
++        const moving = [...document.querySelectorAll(".reveal")].some((el) => {
++          const r = el.getBoundingClientRect();
++          const onScreen = r.bottom > 0 && r.top < window.innerHeight;
++          return onScreen && Number.parseFloat(getComputedStyle(el).opacity) < 0.99;
++        });
++        const rows = [...document.querySelectorAll("tbody[data-stream] > tr")].slice(0, 30);
++        const streaming = rows.some(
++          (r) => Number.parseFloat(getComputedStyle(r).opacity) < 0.99,
++        );
++        return !moving && !streaming;
++      },
++      null,
++      { timeout: 15000 },
++    )
++    .catch(() => {});
++};
++const go = async (r) => {
++  await page.goto(U(r), { waitUntil: "networkidle" });
++  // Settled, not "800ms and hope": every check below this line measures a page
++  // that has finished arriving, on any machine.
++  await settled();
++  await page.waitForTimeout(150);
++};
+ 
+ let passed = 0;
+ const failures = [];
+@@ -776,7 +817,9 @@ await check("both table row actions are separate 44px targets on touch", async (
+   const tp = await touch.newPage();
+   await tp.goto(U("/projects"), { waitUntil: "networkidle" });
+   await tp.waitForSelector("table tbody tr", { timeout: 15000 });
+-  await tp.waitForTimeout(800);
++  // The actual condition, not a guessed duration — see `settled`.
++  await settled(tp);
++  await tp.waitForTimeout(150);
+   const r = await tp.evaluate(() => {
+     const cell = [...document.querySelectorAll("td")].find(
+       (td) => td.querySelectorAll("button").length >= 2,
+@@ -2514,6 +2557,123 @@ await check("the open lane of the relief breathes and the others do not", async
+   console.log(`     ${open.length} open columns breathing, ${rest.length} others still`);
+ });
+ 
++console.log("\n== the department that reached nobody ==");
++
++await check("LST is named as unreachable, and the gap can be closed", async () => {
++  /*
++   * The oldest open item in this project, and the one it refused to fake.
++   *
++   * LST carries 52 Prüfungen — 22 still open — and both of its recipient rows
++   * in the Hilfsdatei are empty. The Excel macro sent to an empty string and
++   * reported success. This app has known since the workbook was transcribed:
++   * `departmentsWithoutRecipients()` has returned ["LST"] the whole time, and
++   * was called by one script and one test and by nothing anybody could see.
++   *
++   * The address is still never invented. What changed is that the gap is shown
++   * to the person who could close it, and that they can.
++   */
++  await page.evaluate(() => localStorage.removeItem("bahn-recipient-overrides"));
++  await go("/anmeldung");
++
++  /*
++   * Answer the question that opens LST, rather than assuming it is open.
++   *
++   * Step 3 is derived, not set: which of the fourteen Prüfungen are „offen"
++   * comes out of the checklist answers in step 2. A fresh draft answers „Nein"
++   * to all of them, so nothing is open and nothing can be unreachable —
++   * a version of this check that skipped straight to step 5 reported "the
++   * wizard does not name any unreachable Gewerk" and was right to.
++   *
++   * Question 19 (`lst`) is the one: Leit- und Sicherungstechnik, Signalanlagen,
++   * Bahnübergänge.
++   */
++  await page.getByRole("button", { name: /^Schritt 2:/ }).click();
++  await page.waitForTimeout(600);
++  const answered = await page.evaluate(() => {
++    const row = [...document.querySelectorAll("main table tbody tr")].find((r) =>
++      /Leit- und Sicherungstechnik/.test(r.textContent ?? ""),
++    );
++    const ja = row?.querySelector('input[value="Ja"]');
++    if (!ja) return false;
++    ja.click();
++    return true;
++  });
++  assert(answered, "the checklist has no Leit- und Sicherungstechnik question");
++  await page.waitForTimeout(500);
++
++  await page.getByRole("button", { name: /Bestätigung/ }).click();
++  await page.waitForTimeout(900);
++
++  const panel = page.locator("[data-recipient-gap]");
++  assert(await panel.count() > 0, "the wizard does not name any unreachable Gewerk");
++  const named = (await panel.getAttribute("data-recipient-gap")) ?? "";
++  assert(named.includes("LST"), `the unreachable list is "${named}" — LST is not in it`);
++
++  const body = await page.locator("main").innerText();
++  assert(
++    /kann niemand benachrichtigt werden/.test(body),
++    "the wizard does not say that nobody will be notified",
++  );
++
++  // A placeholder is refused, by name, rather than accepted and never answered.
++  await page.click('[data-gap-open="LST"]');
++  await page.fill('[data-gap-name="LST"]', "Test");
++  await page.fill('[data-gap-mail="LST"]', "test@test.de");
++  await page.getByRole("button", { name: "Eintragen" }).click();
++  await page.waitForTimeout(300);
++  assert(
++    (await page.$$('[data-gap-problem="placeholder-mail"]')).length === 1,
++    "a placeholder address was accepted as a recipient",
++  );
++
++  // A real one closes the gap, and the entry records who supplied it.
++  await page.fill('[data-gap-name="LST"]', "A. Beispiel");
++  await page.fill('[data-gap-mail="LST"]', "a.beispiel@example.org");
++  await page.getByRole("button", { name: "Eintragen" }).click();
++  await page.waitForTimeout(600);
++
++  const after = await page.locator("main").innerText();
++  assert(/a\.beispiel@example\.org/.test(after), "the supplied address is not shown");
++  assert(/ergänzt von/.test(after), "the supplied address carries no provenance");
++  const stillNamed = (await page.locator("[data-recipient-gap]").getAttribute("data-recipient-gap")) ?? "";
++  assert(
++    !stillNamed.split(",").includes("LST"),
++    "LST is still listed as unreachable after an address was supplied",
++  );
++
++  // And it is recorded like every other change on this site.
++  await go("/audit");
++  const audit = await page.locator("main").innerText();
++  assert(
++    /Empfänger für LST ergänzt/.test(audit),
++    "supplying a recipient was not written to the Änderungshistorie",
++  );
++
++  await page.evaluate(() => localStorage.removeItem("bahn-recipient-overrides"));
++});
++
++await check("no page anywhere shows a constructed deutschebahn.com address", async () => {
++  /*
++   * The rule this project has held since the beginning, checked across every
++   * surface rather than trusted per file.
++   *
++   * The Hilfsdatei's real addresses are the only ones allowed on screen. A
++   * `vorname.nachname@deutschebahn.com` appearing anywhere means something
++   * built one from a name, which is the single most dangerous thing this app
++   * could do: it looks right, it reaches a real person, and it is the wrong
++   * one.
++   */
++  for (const route of ["/", "/projects", "/bvb-eea", "/psv-itk", "/anmeldung", "/audit"]) {
++    await go(route);
++    const text = await page.locator("body").innerText();
++    const constructed = [...text.matchAll(/([a-zä-ü-]+)\.([a-zä-ü-]+)@deutschebahn\.com/gi)];
++    assert(
++      constructed.length === 0,
++      `${route} shows a constructed address: ${constructed[0]?.[0]}`,
++    );
++  }
++});
++
+ console.log("\n== the page arrives, and never withholds ==");
+ 
+ await check("a section that has not arrived yet is still fully rendered", async () => {
+diff --git a/scripts/status.mjs b/scripts/status.mjs
+index 3efd278..298f2c3 100644
+--- a/scripts/status.mjs
++++ b/scripts/status.mjs
+@@ -55,6 +55,7 @@ const FEATURES = [
+   ["Tabellen stromen Zeile fur Zeile", "client/src/hooks/useTableStream.ts", "export function useTableStream"],
+   ["3D-Donut, jede Bande anklickbar", "client/src/components/dashboard/Pie3D.tsx", "export function Pie3D"],
+   ["Tonband-Filter uber alle Flachen", "shared/handlungsbedarf.ts", "export function toneHref"],
++  ["LST-Lucke sichtbar und schliessbar", "client/src/components/anmeldung/RecipientGap.tsx", "data-recipient-gap"],
+   ["Alle acht Bahnhofsmanagements", "client/src/pages/Dashboard.tsx", "Regionale Verteilung — alle"],
+ ];
+ 
+@@ -160,8 +161,8 @@ let unpushed = 0;
+ 
+ console.log(bold("\nErwartete Zahlen der Gates"));
+ for (const line of [
+-  "pnpm exec vitest run          281 passed, 6 skipped",
+-  "node scripts/e2e-smoke.mjs    102 passed, 0 failed",
++  "pnpm exec vitest run          289 passed, 6 skipped",
++  "node scripts/e2e-smoke.mjs    104 passed, 0 failed",
+   "node scripts/check-ui.mjs      UI CLEAN",
+   "node scripts/stress-test.mjs    8 passed, 0 failed",
+   "pnpm exec biome check .        71 warnings",
+diff --git a/shared/contact-overrides.test.ts b/shared/contact-overrides.test.ts
+new file mode 100644
+index 0000000..0a7a344
+--- /dev/null
++++ b/shared/contact-overrides.test.ts
+@@ -0,0 +1,113 @@
++import { describe, it, expect } from "vitest";
++import {
++  effectiveRecipients,
++  normalizeOverride,
++  overridesFor,
++  reachesNobody,
++  validateOverride,
++  type RecipientOverride,
++} from "./contact-overrides";
++import { departmentsWithoutRecipients, recipientsFor } from "./contacts";
++
++const NOW = "2026-08-24T10:00:00.000Z";
++const lst = (mail: string): RecipientOverride => ({
++  department: "LST",
++  name: "A. Person",
++  mail,
++  addedBy: "Vincenzo Grimaldi",
++  addedAt: NOW,
++});
++
++describe("the address the workbook does not have", () => {
++  it("still reaches nobody for LST out of the box", () => {
++    // The state this exists to close, asserted rather than assumed.
++    expect(departmentsWithoutRecipients()).toEqual(["LST"]);
++    expect(recipientsFor("LST")).toEqual([]);
++    expect(reachesNobody(effectiveRecipients("LST", recipientsFor("LST"), []))).toBe(true);
++  });
++
++  it("reaches somebody once a person supplies one", () => {
++    const supplied = [lst("s.beispiel@example.org")];
++    const who = effectiveRecipients("LST", recipientsFor("LST"), supplied);
++    expect(reachesNobody(who)).toBe(false);
++    expect(who).toHaveLength(1);
++    expect(who[0]?.source).toBe("ergaenzt");
++    // Provenance travels with it: an address nobody can trace is an address
++    // nobody can check.
++    expect(who[0]?.addedBy).toBe("Vincenzo Grimaldi");
++    expect(who[0]?.addedAt).toBe(NOW);
++  });
++
++  it("never lets a supplied address shadow one the workbook has", () => {
++    const real = recipientsFor("ITK");
++    expect(real.length).toBeGreaterThan(0);
++    const hijack: RecipientOverride = {
++      department: "ITK",
++      name: "Nicht Emin",
++      mail: real[0]?.mail ?? "x@y.de",
++      addedBy: "jemand",
++      addedAt: NOW,
++    };
++    const who = effectiveRecipients("ITK", real, [hijack]);
++    // Same count, and every workbook address still labelled as such: an
++    // override that could redirect a real notification is a power this must
++    // not have.
++    expect(who).toHaveLength(real.length);
++    expect(who.every((c) => c.source === "hilfsdatei")).toBe(true);
++  });
++
++  it("adds alongside the workbook rather than replacing it", () => {
++    const real = recipientsFor("ITK");
++    const who = effectiveRecipients("ITK", real, [
++      { ...lst("zusatz@example.org"), department: "ITK" },
++    ]);
++    expect(who).toHaveLength(real.length + 1);
++    expect(who.filter((c) => c.source === "hilfsdatei")).toHaveLength(real.length);
++  });
++
++  it("refuses everything that is not an address a person would answer", () => {
++    expect(validateOverride({ department: "LST", name: "A", mail: "s.b@example.org" })).toBeNull();
++    expect(validateOverride({ department: "", name: "A", mail: "s.b@example.org" })).toBe("empty-department");
++    expect(validateOverride({ department: "LST", name: " ", mail: "s.b@example.org" })).toBe("empty-name");
++    expect(validateOverride({ department: "LST", name: "A", mail: "" })).toBe("empty-mail");
++    for (const bad of ["kein-at", "a@b", "a@@b.de", "a b@c.de", "a@b.d", "a@b,c.de"]) {
++      expect(validateOverride({ department: "LST", name: "A", mail: bad }), bad).toBe("malformed-mail");
++    }
++    for (const placeholder of ["test@test.de", "noreply@deutschebahn.com", "A@A.de"]) {
++      expect(
++        validateOverride({ department: "LST", name: "A", mail: placeholder }),
++        placeholder,
++      ).toBe("placeholder-mail");
++    }
++  });
++
++  it("normalises so one address cannot be stored two ways", () => {
++    const a = normalizeOverride(
++      { department: " LST ", name: "  Anna   Beispiel ", mail: "  Anna.Beispiel@Example.ORG " },
++      "  ",
++      NOW,
++    );
++    expect(a).toEqual({
++      department: "LST",
++      name: "Anna Beispiel",
++      mail: "anna.beispiel@example.org",
++      addedBy: "unbekannt",
++      addedAt: NOW,
++    });
++  });
++
++  it("keeps one department's addresses out of another's", () => {
++    const mixed = [lst("a@example.org"), { ...lst("b@example.org"), department: "BIM" }];
++    expect(overridesFor(mixed, "LST").map((o) => o.mail)).toEqual(["a@example.org"]);
++    expect(overridesFor(mixed, "BIM").map((o) => o.mail)).toEqual(["b@example.org"]);
++    expect(overridesFor(mixed, "EEA")).toEqual([]);
++  });
++
++  it("never invents an address for a department that has none", () => {
++    // The rule the whole project turns on: no derivation, no pattern, no
++    // vorname.nachname@deutschebahn.com. Empty in, empty out.
++    for (const d of departmentsWithoutRecipients()) {
++      expect(effectiveRecipients(d, recipientsFor(d), [])).toEqual([]);
++    }
++  });
++});
+diff --git a/shared/contact-overrides.ts b/shared/contact-overrides.ts
+new file mode 100644
+index 0000000..3b680dd
+--- /dev/null
++++ b/shared/contact-overrides.ts
+@@ -0,0 +1,184 @@
++/**
++ * Addresses the workbook does not have, supplied by the people who do.
++ *
++ * ---------------------------------------------------------------------------
++ * The problem this closes
++ * ---------------------------------------------------------------------------
++ * Six departments carry recipient rows in `Hilfsdatei` with a group label and
++ * no address. LST is the worst of them: both its rows are empty, so its 52
++ * reviews — 22 of them still open — have never produced a notification that
++ * reached a person. The macro sent to an empty string and reported success.
++ *
++ * `departmentsWithoutRecipients()` has named this since the transcription, and
++ * for all that time it was called by one script and one test and by nothing a
++ * reader ever sees. Detecting a gap and never showing it to anybody who could
++ * close it is not much better than not detecting it.
++ *
++ * ---------------------------------------------------------------------------
++ * Why an override store and not a constant
++ * ---------------------------------------------------------------------------
++ * The address is not knowable from here. It cannot be derived, guessed, or
++ * built from a pattern — `vorname.nachname@deutschebahn.com` is right often
++ * enough to be genuinely dangerous, and a notification that goes to the wrong
++ * real person is worse than one that goes nowhere.
++ *
++ * So the missing data is captured rather than invented: an operator who knows
++ * the address types it, and the entry records who supplied it and when. The
++ * Hilfsdatei stays the source of truth for everything it actually contains;
++ * this only ever fills a hole the workbook left, and it says on screen that it
++ * is doing so.
++ */
++
++import type { Department } from "./types";
++
++export interface RecipientOverride {
++  department: string;
++  name: string;
++  mail: string;
++  /** Who typed it. Provenance is the whole point — this is not workbook data. */
++  addedBy: string;
++  /** ISO timestamp. */
++  addedAt: string;
++}
++
++/**
++ * Deliberately strict, and deliberately not RFC 5322.
++ *
++ * A full-grammar validator accepts `a@b`, quoted locals and bracketed IP
++ * literals — all legal, none of them something anyone is typing into a form
++ * that routes a Deutsche Bahn Fachprüfung. What has to be caught here is the
++ * typo and the placeholder, so the rule is: a local part, one @, a domain with
++ * a dot, and a TLD of at least two letters.
++ */
++const MAIL = /^[^\s@,;]+@[^\s@,;]+\.[A-Za-z]{2,}$/;
++
++/** Addresses that look like a person and are not one. */
++const PLACEHOLDERS = new Set([
++  "test@test.de",
++  "a@a.de",
++  "x@x.de",
++  "mail@mail.de",
++  "noreply@deutschebahn.com",
++  "no-reply@deutschebahn.com",
++]);
++
++export type OverrideProblem =
++  | "empty-department"
++  | "empty-mail"
++  | "malformed-mail"
++  | "placeholder-mail"
++  | "empty-name";
++
++/**
++ * What is wrong with this entry, or null when nothing is.
++ *
++ * Returns the reason rather than a boolean so the form can say which of the
++ * five things it is instead of "ungültig".
++ */
++export function validateOverride(input: {
++  department?: string;
++  name?: string;
++  mail?: string;
++}): OverrideProblem | null {
++  const department = (input.department ?? "").trim();
++  const name = (input.name ?? "").trim();
++  const mail = (input.mail ?? "").trim().toLowerCase();
++  if (!department) return "empty-department";
++  if (!name) return "empty-name";
++  if (!mail) return "empty-mail";
++  if (!MAIL.test(mail)) return "malformed-mail";
++  if (PLACEHOLDERS.has(mail)) return "placeholder-mail";
++  return null;
++}
++
++export const OVERRIDE_PROBLEM_TEXT: Record<OverrideProblem, string> = {
++  "empty-department": "Kein Gewerk angegeben.",
++  "empty-name": "Bitte den Namen der Person eintragen, nicht nur die Adresse.",
++  "empty-mail": "Bitte eine E-Mail-Adresse eintragen.",
++  "malformed-mail": "Das ist keine vollständige E-Mail-Adresse.",
++  "placeholder-mail": "Das ist eine Platzhalter-Adresse — sie erreicht niemanden.",
++};
++
++/** Normalise before storing, so two spellings of one address cannot both exist. */
++export function normalizeOverride(
++  input: { department: string; name: string; mail: string },
++  addedBy: string,
++  now: string,
++): RecipientOverride {
++  return {
++    department: input.department.trim(),
++    name: input.name.trim().replace(/\s+/g, " "),
++    mail: input.mail.trim().toLowerCase(),
++    addedBy: addedBy.trim() || "unbekannt",
++    addedAt: now,
++  };
++}
++
++/** Everything recorded for one department, newest last. */
++export function overridesFor(
++  all: readonly RecipientOverride[],
++  department: string,
++): RecipientOverride[] {
++  return all.filter((o) => o.department === department);
++}
++
++export interface EffectiveRecipient {
++  name: string;
++  mail: string;
++  /**
++   * Where this address came from. The UI must be able to say "aus der
++   * Hilfsdatei" or "von <Person> am <Datum> ergänzt" — an address whose
++   * provenance is invisible is an address nobody can check.
++   */
++  source: "hilfsdatei" | "ergaenzt";
++  addedBy?: string;
++  addedAt?: string;
++}
++
++/**
++ * Who a department actually reaches: the workbook first, then anything an
++ * operator supplied to fill a gap the workbook left.
++ *
++ * The workbook always wins for addresses it has. This can only ever ADD, never
++ * replace — an override that could shadow a real Hilfsdatei address would be a
++ * way to silently redirect a notification, and that is not a power this needs.
++ */
++export function effectiveRecipients(
++  department: Department | string,
++  fromWorkbook: ReadonlyArray<{ name: string; mail: string }>,
++  overrides: readonly RecipientOverride[],
++): EffectiveRecipient[] {
++  const out: EffectiveRecipient[] = fromWorkbook
++    .filter((c) => c.mail.trim() !== "")
++    .map((c) => ({ name: c.name, mail: c.mail, source: "hilfsdatei" as const }));
++  /*
++   * Compared lowercase on BOTH sides.
++   *
++   * Write-time normalisation lowercases an address, but this function also
++   * reads entries stored before that existed and addresses straight out of the
++   * workbook, which are written however the workbook writes them. Comparing a
++   * normalised override against an un-normalised workbook address let a
++   * duplicate through — and a duplicate here is a second copy of a real
++   * recipient sitting under an "ergänzt" label, which is exactly the shadowing
++   * this function refuses to allow.
++   */
++  const known = new Set(out.map((c) => c.mail.trim().toLowerCase()));
++  for (const o of overridesFor(overrides, String(department))) {
++    const mail = o.mail.trim().toLowerCase();
++    if (known.has(mail)) continue;
++    known.add(mail);
++    out.push({
++      name: o.name,
++      mail,
++      source: "ergaenzt",
++      addedBy: o.addedBy,
++      addedAt: o.addedAt,
++    });
++  }
++  return out;
++}
++
++/** Still nobody, after the workbook and every supplied address. */
++export function reachesNobody(recipients: readonly EffectiveRecipient[]): boolean {
++  return recipients.length === 0;
++}
+-- 
+2.43.0
+
