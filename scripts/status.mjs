@@ -51,6 +51,10 @@ const FEATURES = [
   ["Gewerke-Karussell statt Leerzustand", "client/src/components/dashboard/GewerkeCarousel.tsx", "export const ROTATE_MS"],
   ["Relief als Gebirge, dreht sich selbst", "client/src/index.css", "bpm-relief-sweep"],
   ["Relief hat echte Hohe (kein <table>)", "client/src/components/dashboard/PortfolioRelief.tsx", "export const MAX_LIFT_PX"],
+  ["Kinematischer Auftritt beim Scrollen", "client/src/lib/motion.ts", "export function installMotionSwitch"],
+  ["Tabellen stromen Zeile fur Zeile", "client/src/hooks/useTableStream.ts", "export function useTableStream"],
+  ["3D-Donut, jede Bande anklickbar", "client/src/components/dashboard/Pie3D.tsx", "export function Pie3D"],
+  ["Tonband-Filter uber alle Flachen", "shared/handlungsbedarf.ts", "export function toneHref"],
   ["Alle acht Bahnhofsmanagements", "client/src/pages/Dashboard.tsx", "Regionale Verteilung — alle"],
 ];
 
@@ -156,11 +160,11 @@ let unpushed = 0;
 
 console.log(bold("\nErwartete Zahlen der Gates"));
 for (const line of [
-  "pnpm exec vitest run          275 passed, 6 skipped",
-  "node scripts/e2e-smoke.mjs     95 passed, 0 failed",
+  "pnpm exec vitest run          281 passed, 6 skipped",
+  "node scripts/e2e-smoke.mjs    102 passed, 0 failed",
   "node scripts/check-ui.mjs      UI CLEAN",
   "node scripts/stress-test.mjs    8 passed, 0 failed",
-  "pnpm exec biome check .        72 warnings (unverandert)",
+  "pnpm exec biome check .        71 warnings",
 ]) console.log(dim(`  ${line}`));
 
 /*

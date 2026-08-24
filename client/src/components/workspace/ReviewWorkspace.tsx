@@ -22,7 +22,12 @@
  * keep true.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useReveal } from "@/hooks/useReveal";
 import { useLocation, useSearch as useRouteSearch } from "wouter";
+import { useTableStream } from "@/hooks/useTableStream";
+import { toneFor } from "@shared/handlungsbedarf";
+import { STATUS_TONE, type StatusTone } from "@shared/status-appearance";
+import type { ReviewStatus } from "@shared/review-status";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -143,6 +148,9 @@ export function ReviewWorkspace({
   const { data, isLoading, isError } = useAllData();
   const [, setLocation] = useLocation();
   const routeSearch = useRouteSearch();
+  const streamRef = useTableStream();
+  /** Set from ?tone=, when a slice of this Gewerk's donut sent the reader here. */
+  const [toneFocus, setToneFocus] = useState<StatusTone | null>(null);
   const { recordDocument } = useAuditTrail();
 
   // Seeded from ?q= for the same reason the Projekte page is: the header search
@@ -162,6 +170,8 @@ export function ReviewWorkspace({
   const [pruefer, setPruefer] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [viewMode, setViewMode] = useState<"table" | "cards" | "map">("table");
+  /* Section-by-section arrival, replayed when the view changes. */
+  const revealRef = useReveal(viewMode);
   const [stationFocus, setStationFocus] = useState<StationSelection | null>(null);
   const [focusProjectId, setFocusProjectId] = useState<number | null>(null);
   const [detailProjectId, setDetailProjectId] = useState<number | null>(null);
@@ -187,6 +197,7 @@ export function ReviewWorkspace({
 
   useEffect(() => {
     const params = new URLSearchParams(routeSearch);
+    setToneFocus(toneFor(params.get("tone")));
     const q = (params.get("q") ?? "").trim();
     if (q) {
       setSearchInput(q);
@@ -243,6 +254,14 @@ export function ReviewWorkspace({
     return scoped.filter(({ project, review, status: s }) => {
       if (region && project.bahnhofsmanagement !== region) return false;
       if (status && s !== status) return false;
+      /*
+       * `?tone=pending` — arrived from a slice of this Gewerk's own donut.
+       *
+       * Every row here already belongs to this department, so the tone alone
+       * is the whole filter: the slice counted „offene EEA-Zeilen" and this
+       * lists exactly those.
+       */
+      if (toneFocus && STATUS_TONE[s as ReviewStatus] !== toneFocus) return false;
       if (pruefer && (review.prueferName ?? "") !== pruefer) return false;
       if (terms.length === 0) return true;
       const haystack = [
@@ -261,7 +280,7 @@ export function ReviewWorkspace({
         .join(" ");
       return terms.every((t) => haystack.includes(t));
     });
-  }, [scoped, search, region, status, pruefer]);
+  }, [scoped, search, region, status, pruefer, toneFocus]);
 
   /** Station focus is an id filter layered on top of the rest. */
   const focused = useMemo(() => {
@@ -440,7 +459,7 @@ export function ReviewWorkspace({
   const anyFilter = Boolean(search || region || status || pruefer || stationFocus);
 
   return (
-    <div className="min-h-screen space-y-8 bg-background p-6">
+    <div ref={revealRef} className="min-h-screen space-y-8 bg-background p-6">
       <div>
         <h1 className="page-title">{title}</h1>
         <p className="mt-2 text-muted-foreground">
@@ -720,7 +739,7 @@ export function ReviewWorkspace({
                     </th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody ref={streamRef}>
                   {visible.map(({ project, review }, index) => (
                     <tr key={project.id} className="border-b transition-colors hover:bg-muted/30">
                       <td className="sticky left-0 z-10 w-[52px] min-w-[52px] whitespace-nowrap bg-card px-3 py-3 tabular-nums text-muted-foreground">

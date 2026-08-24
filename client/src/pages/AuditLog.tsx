@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useReveal } from "@/hooks/useReveal";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -7,6 +8,7 @@ import {
   AlertOctagon, Undo2, CornerUpLeft,
 } from "lucide-react";
 import { useAuditLog } from "@/hooks/useDataQuery";
+import { useTableStream } from "@/hooks/useTableStream";
 import { useAuditUndo } from "@/hooks/useAuditUndo";
 import { auditTone, type AuditTone } from "@shared/audit-actions";
 import {
@@ -94,6 +96,10 @@ const WINDOWS: ReadonlyArray<{ key: string; label: string; hours: number | null 
 
 export default function AuditLogPage() {
   const { data: entries, isLoading } = useAuditLog();
+  const streamRef = useTableStream();
+  /* The page arrives a section at a time. Decoration only —
+     see client/src/lib/motion.ts. */
+  const revealRef = useReveal(null);
   const undo = useAuditUndo();
   const [query, setQuery] = useState("");
   const [onlyCritical, setOnlyCritical] = useState(false);
@@ -153,7 +159,7 @@ export default function AuditLogPage() {
   );
 
   return (
-    <div className="space-y-6">
+    <div ref={revealRef} className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="page-title">Änderungshistorie</h1>
@@ -282,7 +288,7 @@ export default function AuditLogPage() {
                   </th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody ref={streamRef}>
                 {filtered.map((e) => {
                   const { Icon, tone } = actionStyle(e.action);
                   const toneName = auditTone(e.action);

@@ -9,7 +9,15 @@ import {
   projectMatchesBedarf,
   reviewMatchesBedarf,
 } from "./handlungsbedarf";
-import { OPEN_STATUSES, BLOCKING_STATUSES } from "./review-status";
+import {
+  countTones,
+  projectMatchesTone,
+  toneFor,
+  toneHref,
+  toneIsAwaiting,
+} from "./handlungsbedarf";
+import { normalizeReviewStatus, OPEN_STATUSES, BLOCKING_STATUSES } from "./review-status";
+import { STATUS_TONE, TONE_APPEARANCE } from "./status-appearance";
 
 const DATA = JSON.parse(fs.readFileSync("client/public/data.json", "utf8"));
 /*
@@ -87,5 +95,71 @@ describe("the four buckets are counted once, here", () => {
   it("builds links the Projekte page can actually read", () => {
     expect(bedarfHref("overdue")).toBe("/projects?bedarf=overdue&view=cards");
     expect(projectHref(42)).toBe("/projects?projekt=42&view=cards");
+  });
+});
+
+describe("a slice of the status donut lands on what it counted", () => {
+  it("counts every row that carries a recognised status, and no others", () => {
+    const slices = countTones(DATA.projects);
+    const total = slices.reduce((a, s) => a + s.rows, 0);
+    /*
+     * Normalised, not raw. 80 rows read "Niederschrift erstellt
+     * (LP05-05-01-F31)" — a canonical status with an annotation — and
+     * comparing against the raw string counts them as unrecognised while the
+     * chart correctly plots them. The comparison has to speak the same
+     * language the chart does or it is testing the wrong thing.
+     */
+    let recognised = 0;
+    for (const p of DATA.projects) {
+      for (const r of p.reviews ?? []) {
+        if (!r.status) continue;
+        if (normalizeReviewStatus(r.status) !== null) recognised++;
+      }
+    }
+    // Equal, not approximately: the donut's slices are the whole of what it
+    // claims to plot, and a row that falls out of it silently is the defect
+    // this whole file exists to prevent.
+    expect(total).toBe(recognised);
+    expect(total).toBeGreaterThan(15_000);
+    expect(total).toBeLessThanOrEqual(18_172);
+  });
+
+  it("agrees with itself: the project figure is the set the filter returns", () => {
+    for (const slice of countTones(DATA.projects)) {
+      const filtered = DATA.projects.filter((p: never) =>
+        projectMatchesTone(p, slice.tone),
+      ).length;
+      expect(filtered, slice.tone).toBe(slice.projects);
+    }
+  });
+
+  it("gives every slice a label and a colour from the one appearance table", () => {
+    for (const slice of countTones(DATA.projects)) {
+      expect(slice.label, slice.tone).toBe(TONE_APPEARANCE[slice.tone].label);
+      expect(slice.hex, slice.tone).toBe(TONE_APPEARANCE[slice.tone].hex);
+    }
+  });
+
+  it("marks a band as awaiting exactly when an open status maps into it", () => {
+    const fromStatuses = new Set(OPEN_STATUSES.map((s) => STATUS_TONE[s]));
+    for (const slice of countTones(DATA.projects)) {
+      expect(toneIsAwaiting(slice.tone), slice.tone).toBe(fromStatuses.has(slice.tone));
+    }
+    // Derived, never hand-listed: adding a status to OPEN_STATUSES has to light
+    // up its band without anybody editing a second list.
+    expect(toneIsAwaiting("done")).toBe(false);
+    expect(toneIsAwaiting("blocked")).toBe(false);
+    expect(toneIsAwaiting("pending")).toBe(true);
+  });
+
+  it("ignores a tone that did not come from us", () => {
+    expect(toneFor("offen")).toBeNull();
+    expect(toneFor("")).toBeNull();
+    expect(toneFor(null)).toBeNull();
+    expect(toneFor("pending")).toBe("pending");
+  });
+
+  it("builds a link the Projekte page can read", () => {
+    expect(toneHref("pending")).toBe("/projects?tone=pending&view=cards");
   });
 });

@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect } from "react";
+import { useReveal } from "@/hooks/useReveal";
 import { useLocation, useSearch as useRouteSearch } from "wouter";
 
 import {
@@ -16,14 +17,19 @@ import { statusBadgeClass, statusPulseClass } from "@shared/status-appearance";
 import {
   bedarfFor,
   countBedarf,
+  countTones,
   projectMatchesBedarf,
+  projectMatchesTone,
+  toneFor,
   type BedarfKey,
 } from "@shared/handlungsbedarf";
+import type { StatusTone } from "@shared/status-appearance";
 import { toast } from "sonner";
 import { MapView, type StationSelection } from "@/components/Map";
 import { ProjectDetailDialog } from "@/components/ProjectDetailDialog";
 import { documentFilename } from "@shared/generated-stamp";
 import { useAuditTrail } from "@/hooks/useAuditTrail";
+import { useTableStream } from "@/hooks/useTableStream";
 import { FilterSearch } from "@/components/workspace/FilterSearch";
 import {
   InlineEditCell,
@@ -125,6 +131,10 @@ export default function Projects() {
    */
   const [bedarfFocus, setBedarfFocus] = useState<BedarfKey | null>(null);
   const [projectFocus, setProjectFocus] = useState<number | null>(null);
+  /** ?tone=pending — a slice of the Dashboard's status donut. */
+  const [toneFocus, setToneFocus] = useState<StatusTone | null>(null);
+  /** ?gewerk=GA — set when the slice came from one Gewerk's own donut. */
+  const [toneGewerk, setToneGewerk] = useState<string | null>(null);
   const [region, setRegion] = useState<string>("");
   const [projektleiter, setProjektleiter] = useState<string>("");
   const [pruefer, setPruefer] = useState<string>("");
@@ -159,6 +169,12 @@ export default function Projects() {
 
   const { data: filterOptions } = useFilters();
   const { data: allData } = useAllData();
+  /* The wave through the 1.298 rows. Decoration only — every row is in the DOM
+     and countable from the first paint; see client/src/lib/motion.ts. */
+  const streamRef = useTableStream();
+  /* The page arrives a section at a time; keyed on the view so switching
+     between table, cards and map plays the cascade for the new one. */
+  const revealRef = useReveal(viewMode);
 
   /* Local midnight, pinned once: the same boundary the Dashboard's badge used,
      so the set here and the count there cannot disagree by a few hours. */
@@ -207,6 +223,11 @@ export default function Projects() {
     const bedarf = bedarfFor(params.get("bedarf"));
     setBedarfFocus(bedarf ? bedarf.key : null);
 
+    const tone = toneFor(params.get("tone"));
+    setToneFocus(tone);
+    const gewerk = (params.get("gewerk") ?? "").trim();
+    setToneGewerk(tone && gewerk ? gewerk : null);
+
     const projektRaw = params.get("projekt");
     const projekt = projektRaw === null ? Number.NaN : Number(projektRaw);
     setProjectFocus(Number.isInteger(projekt) && projekt > 0 ? projekt : null);
@@ -214,7 +235,7 @@ export default function Projects() {
     // Arriving with either focus clears the leftover text search: the reader
     // asked for a set, not for that set intersected with whatever was typed
     // here twenty minutes ago.
-    if (bedarf || Number.isInteger(projekt)) {
+    if (bedarf || tone || Number.isInteger(projekt)) {
       setStationFocus(null);
       if (!q) {
         setSearchInput("");
@@ -366,8 +387,22 @@ export default function Projects() {
       // date boundary and disagree with each other about "overdue".
       list = list.filter((p) => projectMatchesBedarf(p, bedarfFocus, todayMidnight));
     }
+    if (toneFocus) {
+      // The Gewerk is passed INTO the predicate, not applied as a second
+      // filter: "a project with an open row and a GA row" is a much larger set
+      // than "a project with an open GA row", and only the second is what the
+      // slice counted.
+      list = list.filter((p) => projectMatchesTone(p, toneFocus, toneGewerk ?? undefined));
+    }
     return list;
-  }, [data, stationFocus, projectFocus, bedarfFocus, todayMidnight]);
+  }, [data, stationFocus, projectFocus, bedarfFocus, toneFocus, toneGewerk, todayMidnight]);
+
+  /** The same reconciliation the Handlungsbedarf chip prints, for a slice. */
+  const toneSummary = useMemo(() => {
+    if (!toneFocus) return null;
+    const counted = countTones(allData?.projects ?? [], toneGewerk ?? undefined);
+    return counted.find((c) => c.tone === toneFocus) ?? null;
+  }, [toneFocus, toneGewerk, allData]);
 
   /**
    * The reconciliation the chip prints.
@@ -410,7 +445,7 @@ export default function Projects() {
   }, [focusProjectId, viewMode, visibleProjects]);
 
   return (
-    <div className="space-y-8 p-6 bg-background min-h-screen">
+    <div ref={revealRef} className="space-y-8 p-6 bg-background min-h-screen">
       {/* KPI cards — every figure derived in shared/project-metrics.ts */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         <Card className="border-l-4 border-l-primary shadow-sm">
@@ -690,6 +725,17 @@ export default function Projects() {
               emphasis
             />
           )}
+          {toneSummary && (
+            <FilterChip
+              label={`${toneGewerk ? `${toneGewerk} · ` : ""}${toneSummary.label}: ${toneSummary.rows.toLocaleString("de-DE")} Prüfzeilen in ${toneSummary.projects.toLocaleString("de-DE")} Projekten`}
+              onClear={() => {
+                setToneFocus(null);
+                setToneGewerk(null);
+                setLocation("/projects?view=cards");
+              }}
+              emphasis
+            />
+          )}
           {projectFocus !== null && (
             <FilterChip
               label={`Projekt #${projectFocus}`}
@@ -776,7 +822,7 @@ export default function Projects() {
                       </tr>
                     )}
                   </thead>
-                  <TableBody>
+                  <TableBody ref={streamRef}>
                     {data?.projects.map((project: Project) => {
                       const reviews = project.reviews || [];
                       return (

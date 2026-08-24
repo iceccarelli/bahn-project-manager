@@ -851,6 +851,43 @@ console.log("== palette ==");
   }
 
   /*
+   * Nothing may hide itself outside the motion switch.
+   *
+   * The cinematic arrival works by holding sections at opacity 0 until they
+   * are scrolled to. That is only safe because every such rule is scoped under
+   * `[data-motion="on"]`, an attribute client/src/lib/motion.ts adds ONLY when
+   * the reader has not asked for reduced motion — so a reduced-motion reader,
+   * a browser with JavaScript off, and this audit all see a page where nothing
+   * was ever hidden.
+   *
+   * One unscoped `opacity: 0` breaks that promise silently: the audit would
+   * still pass, because it measures with reduced motion emulated and would
+   * simply be measuring blank boxes, and a reader who asked not to be moved
+   * would get a page that never appears. So the invariant is checked in the
+   * stylesheet itself rather than trusted.
+   */
+  const HIDING = /(opacity\s*:\s*0(?![.\d])|visibility\s*:\s*hidden)/;
+  const unscoped = [];
+  for (const rule of css.split("}")) {
+    const [selector, body] = rule.split("{");
+    if (!selector || !body || !HIDING.test(body)) continue;
+    if (!/\.reveal|data-stream|data-revealed/.test(selector)) continue;
+    // The minifier strips the quotes: `[data-motion="on"]` ships as
+    // `[data-motion=on]`. Matching only the authored form made this report the
+    // one rule it exists to bless.
+    if (/\[data-motion=['"]?on['"]?\]/.test(selector)) continue;
+    if (selector.includes("prefers-reduced-motion")) continue;
+    unscoped.push(selector.trim().slice(0, 90));
+  }
+  if (unscoped.length) {
+    failures++;
+    console.log(`❌ ${unscoped.length} reveal rules hide content outside the motion switch:`);
+    for (const u of unscoped) console.log(`     ${u}`);
+  } else {
+    console.log("✅ every reveal rule is scoped under the motion switch");
+  }
+
+  /*
    * There was a third check here — every `var(--x)` in the stylesheet having a
    * matching declaration — and it is gone on purpose.
    *

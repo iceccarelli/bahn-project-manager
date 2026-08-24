@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useReveal } from "@/hooks/useReveal";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -37,6 +38,9 @@ export default function Anmeldung() {
   const [, setLocation] = useLocation();
   const draft = useChecklistDraft();
   const [step, setStep] = useState(1);
+  /* The page arrives a section at a time. Decoration only —
+     see client/src/lib/motion.ts. */
+  const revealRef = useReveal(step);
   const [submitted, setSubmitted] = useState<{ projectId: number } | null>(null);
   /**
    * The project this wizard already created, if it did.
@@ -278,7 +282,7 @@ export default function Anmeldung() {
   }
 
   return (
-    <div className="space-y-6 p-6">
+    <div ref={revealRef} className="space-y-6 p-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="page-title">Projektanmeldung</h1>

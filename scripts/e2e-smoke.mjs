@@ -2514,6 +2514,270 @@ await check("the open lane of the relief breathes and the others do not", async 
   console.log(`     ${open.length} open columns breathing, ${rest.length} others still`);
 });
 
+console.log("\n== the page arrives, and never withholds ==");
+
+await check("a section that has not arrived yet is still fully rendered", async () => {
+  await go("/");
+  await page.waitForSelector(".reveal", { timeout: 25000 });
+
+  /*
+   * The assertion the whole cinematic pass hangs on.
+   *
+   * Reveal-on-scroll is only safe because it is decoration: an unrevealed
+   * section is transparent, not absent. It occupies its space, its text is in
+   * the DOM, and it is measurable — which is what stops "1.298 Projekte
+   * gefunden" from being true only after somebody scrolled, and what stops
+   * this suite from counting rows that depend on scroll position.
+   *
+   * If anyone ever swaps the opacity for a conditional render, this fails
+   * immediately and says so.
+   */
+  const held = await page.evaluate(() => {
+    const pending = [...document.querySelectorAll('.reveal[data-revealed="false"]')];
+    return pending.slice(0, 6).map((el) => ({
+      height: Math.round(el.getBoundingClientRect().height),
+      text: (el.textContent ?? "").trim().length,
+      display: getComputedStyle(el).display,
+      visibility: getComputedStyle(el).visibility,
+    }));
+  });
+  assert(held.length > 0, "nothing was held back — the reveal is not running at all");
+  for (const h of held) {
+    assert(h.height > 0, "a section waiting to arrive occupies no space");
+    assert(h.text > 0, "a section waiting to arrive has no text in the DOM");
+    assert(h.display !== "none", `a section waiting to arrive is display:${h.display}`);
+    assert(h.visibility !== "hidden", "a section waiting to arrive is visibility:hidden");
+  }
+});
+
+await check("scrolling the page leaves nothing invisible behind it", async () => {
+  await go("/");
+  await page.waitForSelector(".reveal", { timeout: 25000 });
+  const height = await page.evaluate(() => document.body.scrollHeight);
+  for (let y = 0; y < height; y += 500) {
+    await page.evaluate((top) => window.scrollTo(0, top), y);
+    await page.waitForTimeout(90);
+  }
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await page.waitForTimeout(1200);
+
+  const stuck = await page.evaluate(() =>
+    [...document.querySelectorAll(".reveal")]
+      .filter((el) => Number.parseFloat(getComputedStyle(el).opacity) < 0.99)
+      .map((el) => (el.textContent ?? "").trim().slice(0, 48)),
+  );
+  assert(stuck.length === 0, `${stuck.length} sections never arrived, e.g. "${stuck[0]}"`);
+  const count = await page.$$eval(".reveal", (e) => e.length);
+  console.log(`     ${count} sections, all arrived`);
+});
+
+await check("reduced motion is served a page that was never hidden", async () => {
+  const quiet = await browser.newPage({
+    viewport: { width: 1440, height: 1000 },
+    reducedMotion: "reduce",
+  });
+  try {
+    await quiet.goto(U("/login"));
+    await quiet.evaluate(() =>
+      localStorage.setItem(
+        "bahn-demo-user",
+        JSON.stringify({ id: 1, openId: "e2e", name: "Vincenzo Grimaldi", email: "v@db.de", role: "admin" }),
+      ),
+    );
+    await quiet.goto(U("/"), { waitUntil: "networkidle" });
+    await quiet.waitForSelector(".reveal", { timeout: 25000 });
+    await quiet.waitForTimeout(400);
+
+    // The switch is the whole mechanism: no attribute, no hiding rule matches.
+    const motion = await quiet.evaluate(() => document.documentElement.getAttribute("data-motion"));
+    assert(motion === null, `data-motion is "${motion}" under reduced motion`);
+
+    const hidden = await quiet.evaluate(() =>
+      [...document.querySelectorAll(".reveal")].filter(
+        (el) => Number.parseFloat(getComputedStyle(el).opacity) < 0.99,
+      ).length,
+    );
+    assert(hidden === 0, `${hidden} sections are transparent for a reader who asked not to be moved`);
+
+    const streaming = await quiet.evaluate(
+      () => document.querySelectorAll("[data-stream]").length,
+    );
+    assert(streaming === 0, "a table is streaming for a reader who asked not to be moved");
+  } finally {
+    await quiet.close();
+  }
+});
+
+await check("the table streams without ever holding a row back", async () => {
+  await go("/projects");
+  await page.waitForSelector("table tbody tr", { timeout: 30000 });
+
+  /*
+   * Counted while the wave is still running, on purpose.
+   *
+   * The row count is what every other assertion in this suite and every
+   * figure on the page depends on. The stream may only change when a row
+   * appears, never whether it exists — so the count taken mid-animation has to
+   * equal the count taken after it settles.
+   */
+  const during = await page.$$eval("table tbody tr", (r) => r.length);
+  const streaming = await page.$eval("table tbody", (b) => b.getAttribute("data-stream"));
+  await page.waitForTimeout(1400);
+  const after = await page.$$eval("table tbody tr", (r) => r.length);
+  assert(during === after, `${during} rows mid-stream, ${after} after — rows are being withheld`);
+  assert(during > 100, `only ${during} rows in the table`);
+  assert(streaming === "on", "the table did not stream at all");
+
+  // And every row is opaque once the wave has passed.
+  const faded = await page.$$eval("table tbody tr", (rows) =>
+    rows.filter((r) => Number.parseFloat(getComputedStyle(r).opacity) < 0.99).length,
+  );
+  assert(faded === 0, `${faded} rows never finished arriving`);
+  console.log(`     ${after} rows, streamed, none withheld`);
+});
+
+console.log("\n== the donut is a control surface ==");
+
+await check("a slice lands on exactly the projects it counted", async () => {
+  await go("/");
+  await page.waitForSelector("[data-tone-slice]", { timeout: 25000 });
+
+  /*
+   * The portfolio donut only — `data-tone-department=""`.
+   *
+   * There are two donuts on this page and they answer different questions.
+   * The Gewerke carousel's bands are scoped to one department, so their
+   * project figures are that Gewerk's and their links go to that Gewerk's own
+   * tab. Mixing them into one assertion is how the first run of this check
+   * reported "done: 0 projects from 583 rows" — it had picked up a per-Gewerk
+   * slice and measured it against a portfolio-wide claim.
+   */
+  const slices = await page.$$eval('[data-tone-slice][data-tone-department=""]', (els) =>
+    els.map((e) => ({
+      tone: e.dataset.toneSlice,
+      rows: Number(e.dataset.toneRows),
+      projects: Number(e.dataset.toneProjects),
+    })),
+  );
+  assert(slices.length >= 5, `only ${slices.length} slices in the donut`);
+  for (const s of slices) {
+    assert(s.rows > 0, `${s.tone} is a slice of nothing`);
+    assert(s.projects > 0 && s.projects <= s.rows, `${s.tone}: ${s.projects} projects from ${s.rows} rows`);
+  }
+
+  // Two of them, end to end — the whole set would be eight page loads of a
+  // 1.298-project table for one repeated assertion.
+  for (const s of [slices[0], slices.find((x) => x.tone === "pending") ?? slices[1]]) {
+    await go("/");
+    await page.waitForSelector(`[data-tone-slice="${s.tone}"][data-tone-department=""]`, {
+      timeout: 25000,
+    });
+    await page.click(`[data-tone-slice="${s.tone}"][data-tone-department=""]`);
+    await page.waitForTimeout(1500);
+    assert(
+      new URL(page.url()).searchParams.get("tone") === s.tone,
+      `${s.tone} went to ${page.url()}`,
+    );
+    await page.waitForSelector("[data-project-card]", { timeout: 30000 });
+    const cards = await page.$$eval("[data-project-card]", (c) => c.length);
+    assert(
+      cards === s.projects,
+      `${s.tone}: the slice promised ${s.projects} Projekte, the page shows ${cards}`,
+    );
+    const main = await page.locator("main").innerText();
+    assert(
+      main.includes("Prüfzeilen in") && main.includes("Projekten"),
+      `${s.tone}: no chip reconciling the two counts`,
+    );
+  }
+});
+
+await check("a Gewerk's own slice lands on that Gewerk, not on everything", async () => {
+  await go("/");
+  await page.waitForSelector('[data-tone-slice][data-tone-department]:not([data-tone-department=""])', {
+    timeout: 25000,
+  });
+  /*
+   * Stop the carousel with its own Pause button before touching anything.
+   *
+   * It advances every four seconds and remounts its subtree when it does, so
+   * a slice read at one moment is detached from the DOM by the next — which
+   * is what this check spent three runs discovering. Hovering pauses it too,
+   * but the pointer has to arrive somewhere, and "somewhere" is a button that
+   * may already have been replaced.
+   *
+   * Using the control the panel offers is both deterministic and the thing a
+   * reader does: a rotating panel that you have to out-race to click is not a
+   * panel anybody can use, and the Pause button is the answer for both of us.
+   */
+  await page.getByRole("button", { name: "Pause" }).click();
+  await page.waitForTimeout(400);
+  assert(
+    (await page.getAttribute("[data-gewerke-carousel]", "data-rotating")) === "false",
+    "Pause did not stop the carousel",
+  );
+  const slice = await page.$eval(
+    '[data-tone-slice][data-tone-department]:not([data-tone-department=""])',
+    (e) => ({
+      tone: e.dataset.toneSlice,
+      dep: e.dataset.toneDepartment,
+      rows: Number(e.dataset.toneRows),
+      projects: Number(e.dataset.toneProjects),
+    }),
+  );
+  assert(slice.rows > 0, `${slice.dep}/${slice.tone} is a slice of nothing`);
+  assert(
+    slice.projects > 0,
+    `${slice.dep}/${slice.tone} counts ${slice.projects} projects — the per-Gewerk figure is not being computed`,
+  );
+
+  const target = page.locator(
+    `[data-tone-slice="${slice.tone}"][data-tone-department="${slice.dep}"]`,
+  );
+  await target.click({ timeout: 8000 });
+  await page.waitForTimeout(1600);
+  const url = new URL(page.url());
+  assert(url.searchParams.get("tone") === slice.tone, `it dropped the tone: ${page.url()}`);
+  const scoped =
+    url.pathname === "/bvb-eea" ||
+    url.pathname === "/psv-itk" ||
+    url.searchParams.get("gewerk") === slice.dep;
+  assert(scoped, `${slice.dep}'s slice went to ${page.url()} — not scoped to the Gewerk`);
+});
+
+await check("the donut has a body, and the open bands stand out of it", async () => {
+  await go("/");
+  await page.waitForSelector(".pie3d-top", { timeout: 25000 });
+  await page.waitForTimeout(600);
+
+  // Thickness: the stack is tilted and the layers beneath the face are real.
+  const shape = await page.evaluate(() => {
+    const stack = document.querySelector(".pie3d-stack");
+    const layers = document.querySelectorAll(".pie3d-layer");
+    return {
+      transform: getComputedStyle(stack).transform.slice(0, 9),
+      style3d: getComputedStyle(stack).transformStyle,
+      layers: layers.length,
+      layerEvents: layers.length ? getComputedStyle(layers[0]).pointerEvents : "",
+    };
+  });
+  assert(shape.transform === "matrix3d(", `the donut is not tilted: ${shape.transform}`);
+  assert(shape.style3d === "preserve-3d", "the stack does not hold a 3D context");
+  assert(shape.layers >= 5, `only ${shape.layers} depth layers — the disc has no edge`);
+  // The body carries no information and must not catch a click meant for the face.
+  assert(shape.layerEvents === "none", "the disc's body swallows clicks");
+
+  // Open bands are lit; settled ones are not.
+  const lit = await page.evaluate(() => {
+    const open = [...document.querySelectorAll(".pie3d-slice-open")].length;
+    const all = [...document.querySelectorAll(".pie3d-slice")].length;
+    return { open, all };
+  });
+  assert(lit.open > 0, "no open band is highlighted in the donut");
+  assert(lit.open < lit.all, "every band is highlighted, which highlights nothing");
+  console.log(`     ${lit.open} of ${lit.all} bands lit as open`);
+});
+
 console.log("\n== the relief is an instrument, not a picture ==");
 
 await check("dragging rotates it, and the numbers stay upright", async () => {

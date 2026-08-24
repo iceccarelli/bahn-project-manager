@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { useReveal } from "@/hooks/useReveal";
 import { GewerkePortfolio } from "@/components/dashboard/GewerkePortfolio";
 import { PortfolioRelief } from "@/components/dashboard/PortfolioRelief";
 import { PortfolioDiagnostics } from "@/components/dashboard/PortfolioDiagnostics";
@@ -9,19 +10,19 @@ import {
   reviewerConcentration,
 } from "@shared/portfolio-metrics";
 import { deriveProjectMetrics, percent } from '@shared/project-metrics';
-import { statusBadgeClass, statusHex, statusPulseClass, STATUS_TONE, TONE_APPEARANCE } from '@shared/status-appearance';
-import { bedarfHref, countBedarf, projectHref } from '@shared/handlungsbedarf';
+import { statusBadgeClass, statusPulseClass, TONE_APPEARANCE } from '@shared/status-appearance';
+import { bedarfHref, countBedarf, countTones, projectHref } from '@shared/handlungsbedarf';
+import { Pie3D } from '@/components/dashboard/Pie3D';
 import { GewerkeCarousel } from '@/components/dashboard/GewerkeCarousel';
-import { APPROVED_STATUSES, normalizeReviewStatus, OPEN_STATUSES, type ReviewStatus } from '@shared/review-status';
+import { APPROVED_STATUSES, normalizeReviewStatus, OPEN_STATUSES } from '@shared/review-status';
 import { formatGerman, toDate } from '@shared/date';
 import { projectLinkNote, projectLinkUrl } from '@shared/project-link';
 import { useLocation } from 'wouter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { 
-  PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip 
-} from 'recharts';
+/* Recharts left this file with the flat donut: the chart lives in Pie3D now,
+   and the Gewerke breakdown in GewerkeCarousel. */
 import {
   AlertTriangle,
   Bell,
@@ -210,17 +211,24 @@ export default function Dashboard() {
   // "nicht erforderlich" rows in the same pie — a completed sign-off painted
   // as irrelevant. That is verbatim the regression status-appearance.ts was
   // written to make impossible.
-  const gewerkeStatusData = GEWERKE.map(gew => {
-    const counts: Record<string, number> = {};
-    projects.forEach(p => {
-      const review = p.reviews.find(r => r.department === gew);
-      const status = normalizeReviewStatus(review?.status);
-      if (status) counts[status] = (counts[status] || 0) + 1;
-    });
+  /*
+   * Per-Gewerk tone bands, from the same counter as the portfolio donut.
+   *
+   * It used to build a raw status histogram here and let the chart fold it —
+   * two foldings of the same data, and the chart's copy had no idea which
+   * projects were behind a band, so a slice inside „Status-Verteilung für EEA"
+   * carried a project count of zero and a link to the whole portfolio.
+   *
+   * `countTones(projects, gewerk)` scopes both the count and the predicate to
+   * the department in one place, so the figure on a slice and the set its link
+   * produces cannot disagree.
+   */
+  const gewerkeStatusData = GEWERKE.map((gew) => {
+    const slices = countTones(projects, gew);
     return {
       name: gew,
-      value: Object.values(counts).reduce((a, b) => a + b, 0),
-      breakdown: counts
+      value: slices.reduce((a, s) => a + s.rows, 0),
+      slices,
     };
   });
 
@@ -239,6 +247,10 @@ export default function Dashboard() {
   const aging = useMemo(() => agingOfOpenReviews(projects, nowMs), [projects, nowMs]);
   const concentration = useMemo(() => reviewerConcentration(projects), [projects]);
   const quality = useMemo(() => dataQuality(projects), [projects]);
+
+  /* One line, and the whole page arrives a section at a time. Decoration
+     only — see client/src/lib/motion.ts. */
+  const revealRef = useReveal(projects.length);
 
   /* The per-Gewerk slices moved into GewerkeCarousel, which owns which Gewerk
      is on screen. `selectedGewerke` survives as the pin the carousel honours. */
@@ -306,58 +318,38 @@ export default function Dashboard() {
    * badges use, and a row whose status cannot be mapped is counted as
    * unbekannt instead of vanishing.
    */
-  const { visibleStatusData, unmappedStatusRows, totalStatusRows } = useMemo(() => {
-    const counts = new Map<string, number>();
+  /*
+   * The slices come from shared/handlungsbedarf.ts now, not from here.
+   *
+   * The grouping was already right — twelve statuses onto eight tones, so
+   * „Zustimmung erteilt" and „Niederschrift erstellt" are one green band
+   * rather than two slices sharing a colour. What was missing is that nothing
+   * else could reach the computation. The moment a slice became clickable, the
+   * Projekte page needed the same definition of „which rows are in this band"
+   * to decide what to list, and a second copy of that would drift on the day
+   * one side learned a status the other had not.
+   *
+   * `countTones` returns both the row count that sizes the slice and the
+   * number of distinct projects those rows sit in, so the landing page can
+   * reconcile the two on screen.
+   *
+   * Rows whose status is outside the vocabulary have no tone and therefore no
+   * band and no filter to land on. They are counted and stated in the
+   * subtitle rather than drawn as a slice that goes nowhere.
+   */
+  const { toneSlices, unmappedStatusRows, totalStatusRows } = useMemo(() => {
+    const slices = countTones(projects);
     let unmapped = 0;
     for (const p of projects) {
       for (const r of p.reviews ?? []) {
         if (!r.status) continue;
-        const s = normalizeReviewStatus(r.status);
-        if (s === null) { unmapped++; continue; }
-        counts.set(s, (counts.get(s) ?? 0) + 1);
+        if (normalizeReviewStatus(r.status) === null) unmapped++;
       }
     }
-    /*
-     * Grouped by tone, not by status.
-     *
-     * Plotting all 12 canonical statuses made the chart complete but
-     * unreadable: status-appearance.ts maps 12 statuses onto 8 tones, so
-     * "Zustimmung erteilt" and "Niederschrift erstellt" are the same green and
-     * "abgelehnt" and "gestoppt" the same red. Two slices with one colour and
-     * two legend entries with one swatch is not a legend. Grouping by tone
-     * gives 8 slices, 8 distinct colours, and still counts every row — the
-     * tooltip names the statuses inside each.
-     */
-    const byTone = new Map<string, { value: number; statuses: string[]; color: string }>();
-    for (const [status, n] of counts) {
-      const tone = STATUS_TONE[status as ReviewStatus];
-      const label = TONE_APPEARANCE[tone].label;
-      const entry = byTone.get(label) ?? {
-        value: 0,
-        statuses: [],
-        color: TONE_APPEARANCE[tone].hex,
-      };
-      entry.value += n;
-      entry.statuses.push(`${status} (${n.toLocaleString("de-DE")})`);
-      byTone.set(label, entry);
-    }
-    const data = [...byTone.entries()]
-      .sort((a, b) => b[1].value - a[1].value)
-      .map(([name, e]) => ({ name, value: e.value, color: e.color, statuses: e.statuses }));
-    if (unmapped > 0) {
-      data.push({
-        name: "unbekannter Status",
-        value: unmapped,
-        color: statusHex(null),
-        statuses: [],
-      });
-    }
     return {
-      // already filtered: a zero bucket cannot occur, since every bucket is
-      // built from a status that was actually counted
-      visibleStatusData: data,
+      toneSlices: slices,
       unmappedStatusRows: unmapped,
-      totalStatusRows: data.reduce((n, d) => n + d.value, 0),
+      totalStatusRows: slices.reduce((n, d) => n + d.rows, 0),
     };
   }, [projects]);
 
@@ -505,7 +497,7 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-8 p-6 bg-background min-h-screen">
+    <div ref={revealRef} className="space-y-8 p-6 bg-background min-h-screen">
       {/* HEADER */}
       <div className="flex items-center justify-between">
         <div>
@@ -624,34 +616,18 @@ export default function Dashboard() {
                   : ""}
               </p>
             </CardHeader>
-            <CardContent className="h-[420px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  {/* One array, used for both. Recharts matches <Cell> to slice
-                      by index, so feeding the Pie a filtered array while
-                      mapping Cells from the unfiltered one shifts every colour
-                      the moment any bucket reaches zero. */}
-                  <Pie
-                    data={visibleStatusData}
-                    cx="50%" cy="50%" innerRadius={90} outerRadius={160} paddingAngle={2} dataKey="value"
-                  >
-                    {visibleStatusData.map((entry) => (
-                      <Cell key={entry.name} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  {/* The tooltip names the statuses folded into each tone, so
-                      grouping costs no detail. */}
-                  <Tooltip
-                    formatter={(value: number, name: string, item: { payload?: { statuses?: string[] } }) => [
-                      `${value.toLocaleString("de-DE")} Prüfzeilen${
-                        item?.payload?.statuses?.length ? ` — ${item.payload.statuses.join(", ")}` : ""
-                      }`,
-                      name,
-                    ]}
-                  />
-                  <Legend formatter={(value) => <span className="text-foreground">{value}</span>} />
-                </PieChart>
-              </ResponsiveContainer>
+            <CardContent>
+              {/*
+                The donut has a body now, and every slice is a way in.
+                
+                It was a flat disc with a legend and no way to act on any of
+                it: „offen 946" and then nothing to click. Pie3D draws the same
+                data with a visible edge, lifts the open bands out of it, and
+                sends a slice to the projects behind it — counted by the same
+                function in shared/handlungsbedarf.ts that sized the slice, so
+                the number and the landing set cannot disagree.
+              */}
+              <Pie3D slices={toneSlices} label="Status-Verteilung über alle Gewerke" height={380} />
             </CardContent>
           </Card>
 

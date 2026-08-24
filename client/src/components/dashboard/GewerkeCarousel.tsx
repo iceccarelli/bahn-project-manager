@@ -27,7 +27,6 @@
  */
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -36,16 +35,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
 import { useLocation } from "wouter";
-import { statusHex, statusPulseClass } from "@shared/status-appearance";
+import type { ToneCount } from "@shared/handlungsbedarf";
+import { Pie3D } from "@/components/dashboard/Pie3D";
 import { gewerkHref } from "@shared/search-index";
 
 export interface GewerkeStatusDatum {
   name: string;
   value: number;
-  breakdown: Record<string, number>;
+  /**
+   * The tone bands for THIS Gewerk, counted by the same function that counts
+   * the portfolio donut — scoped to the department, so a slice's figure and
+   * the set its link produces are one computation.
+   */
+  slices: ToneCount[];
 }
 
 /** How long one Gewerk holds the panel. */
@@ -112,12 +116,16 @@ export function GewerkeCarousel({
     return () => window.clearInterval(id);
   }, [rotating, data.length]);
 
-  const slices = useMemo(() => {
-    if (!current) return [];
-    return Object.entries(current.breakdown)
-      .sort((a, b) => b[1] - a[1])
-      .map(([status, value]) => ({ name: status, value, color: statusHex(status) }));
-  }, [current]);
+  /*
+   * Folded to tones, the same eight bands the big donut uses.
+   *
+   * Twelve statuses onto eight tones means „Zustimmung erteilt" and
+   * „Niederschrift erstellt" stop being two slices of identical green with two
+   * legend entries sharing a swatch. It also makes every slice clickable
+   * against the same predicate — the per-Gewerk breakdown and the portfolio
+   * donut now speak one language.
+   */
+  const slices = current?.slices ?? [];
 
   if (!current) return null;
 
@@ -251,61 +259,31 @@ export function GewerkeCarousel({
              * fade plays once on mount and never again.
              */
             key={current.name}
+            /*
+             * The drift stops whenever the rotation does.
+             *
+             * Found by the click gate: a Ken Burns push that never pauses
+             * makes every button inside it a moving target, and Playwright
+             * refuses to click an element that never settles. A person aiming
+             * at a slice has exactly the same problem — the panel is still
+             * scaling under their finger — they just blame themselves for
+             * missing. `rotating` is already false on hover, on focus, when
+             * pinned and under reduced motion, so binding the drift to it
+             * makes the panel hold still in every case where somebody is
+             * reaching for something in it.
+             */
+            data-drift={rotating ? "on" : "off"}
             className="kenburns grid grid-cols-1 gap-6 lg:grid-cols-5"
           >
-            <div className="h-[380px] min-w-0 lg:col-span-3">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={slices}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={80}
-                    outerRadius={140}
-                    paddingAngle={3}
-                    dataKey="value"
-                    isAnimationActive={!reduced}
-                  >
-                    {slices.map((entry) => (
-                      <Cell key={entry.name} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                  <Legend formatter={(value) => <span className="text-foreground">{value}</span>} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="min-w-0 space-y-4 lg:col-span-2">
-              <div>
-                <div className="mb-1 text-sm text-muted-foreground">Gesamtzahl Prüfungen</div>
-                <div className="text-4xl font-bold tabular-nums">
-                  {current.value.toLocaleString("de-DE")}
-                </div>
-              </div>
-              <div className="space-y-2 border-t pt-4">
-                {slices.map((item) => (
-                  <div
-                    key={item.name}
-                    className="flex items-center justify-between gap-2 rounded-lg bg-muted/50 p-3"
-                  >
-                    <div className="flex min-w-0 items-center gap-2">
-                      <div
-                        className="h-3 w-3 shrink-0 rounded-full"
-                        style={{ backgroundColor: item.color }}
-                      />
-                      {/* Open states breathe here too — the same one function
-                          that decides it on every other status surface. */}
-                      <span className={`min-w-0 truncate rounded-full px-1 ${statusPulseClass(item.name)}`}>
-                        {item.name}
-                      </span>
-                    </div>
-                    <Badge variant="outline" className="shrink-0 tabular-nums">
-                      {item.value.toLocaleString("de-DE")}
-                    </Badge>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <Pie3D
+              slices={slices}
+              label={`Status-Verteilung für ${current.name}`}
+              department={current.name}
+              height={330}
+            />
+            <p className="mt-3 text-2xs text-muted-foreground lg:col-span-5">
+              {current.value.toLocaleString("de-DE")} Prüfungen in {current.name}.
+            </p>
           </div>
         </section>
       </CardContent>

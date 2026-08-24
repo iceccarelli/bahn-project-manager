@@ -698,6 +698,232 @@
 }
 
 /* ---------------------------------------------------------------------------
+   A donut with a body
+   ---------------------------------------------------------------------------
+   The chart is drawn several times: once as the top face and again beneath it,
+   each copy pushed a little further back and a little darker. Tilted on X, the
+   stack reads as a disc lying on a table with a visible edge.
+
+   The same rule the Portfolio-Relief keeps applies here, and for the same
+   reason: a tilt makes near slices look larger than far ones of equal size, so
+   nothing is read off the shape. Every figure the disc encodes is printed
+   upright in the list beside it. The tilt is how it looks; the list is what it
+   says.
+   --------------------------------------------------------------------------- */
+.pie3d {
+  perspective: 1100px;
+  perspective-origin: 50% 45%;
+}
+
+.pie3d-stack {
+  position: relative;
+  height: 100%;
+  width: 100%;
+  transform-style: preserve-3d;
+  transform: rotateX(46deg);
+}
+
+.pie3d-layer,
+.pie3d-top {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+}
+
+.pie3d-layer {
+  /* The body of the disc carries no information, so it must not catch a click
+     meant for the face on top of it. */
+  pointer-events: none;
+  filter: brightness(0.72);
+}
+
+/* A slice reacts to being pointed at, and the open ones stand proud of the
+   disc without waiting to be asked. */
+.pie3d-slice {
+  transition:
+    transform 220ms cubic-bezier(0.22, 0.7, 0.2, 1),
+    filter 220ms ease-out;
+  transform-origin: center;
+}
+
+.pie3d-slice-open {
+  filter: drop-shadow(0 0 8px rgb(245 158 11 / 0.55)) brightness(1.06);
+}
+
+[data-motion="on"] .pie3d-slice-open {
+  animation: bpm-slice-breathe 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes bpm-slice-breathe {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 6px rgb(245 158 11 / 0.45)) brightness(1.04);
+  }
+  50% {
+    filter: drop-shadow(0 0 14px rgb(245 158 11 / 0.7)) brightness(1.1);
+  }
+}
+
+.pie3d-top .recharts-sector {
+  cursor: pointer;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pie3d-slice,
+  .pie3d-slice-open {
+    animation: none !important;
+    transition: none;
+  }
+}
+
+/* A tilted disc on a phone is a stripe. Below the breakpoint it lies flat and
+   stays a chart. */
+@media (max-width: 640px) {
+  .pie3d-stack {
+    transform: none;
+  }
+  .pie3d-layer {
+    display: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Cinematic arrival
+   ---------------------------------------------------------------------------
+   Every rule that hides anything on this page is scoped under
+   `[data-motion="on"]`, which client/src/lib/motion.ts puts on <html> only
+   when the reader has NOT asked for reduced motion. Under reduced motion, with
+   JavaScript off, or in an audit that emulates it, the attribute never appears
+   and not one of these selectors matches — the page is simply there.
+
+   Nothing below touches layout. `opacity` and `transform` are the only
+   properties that move, so an element is measurable, hit-testable and readable
+   by a screen reader for the whole of its arrival. A section that is not yet
+   revealed occupies exactly the space it will occupy, which is why nothing
+   below it jumps when it lands.
+   --------------------------------------------------------------------------- */
+@keyframes bpm-reveal {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 18px, 0) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Not yet seen: held back, and only while something exists to release it. */
+[data-motion="on"] .reveal[data-revealed="false"] {
+  opacity: 0;
+  transform: translate3d(0, 18px, 0) scale(0.985);
+}
+
+[data-motion="on"] .reveal[data-revealed="true"] {
+  animation: bpm-reveal 560ms cubic-bezier(0.22, 0.7, 0.2, 1) both;
+  animation-delay: calc(var(--reveal-i, 0) * 65ms);
+}
+
+/* ---------------------------------------------------------------------------
+   The wave through a table
+   ---------------------------------------------------------------------------
+   Rows arrive one after another and each row fills in from the left, so a
+   table of 1.298 projects lands as a sweep rather than as a wall.
+
+   Two decisions keep it from being a performance disaster and a usability one:
+
+     — the row delay is capped at the twenty-fourth row. Beyond that the wave
+       would be scheduling animations for rows nobody will reach for minutes,
+       and the reader who scrolls fast would meet a screen of empty boxes
+       waiting their turn. The first screenful cascades; the rest is instant.
+
+     — the column delay comes from `nth-child` rules written once, not from an
+       inline style per cell. A Projekte row has 27 columns and there are 1.298
+       of them: 35.000 inline styles to animate a flourish is not a trade worth
+       making, and the stylesheet does the same job for nothing.
+
+   Same contract as the reveal: opacity and transform only. Every row is in the
+   DOM and countable from the first paint, so "1.298 Projekte gefunden" is true
+   the whole time and a row count never depends on how far anything scrolled.
+   --------------------------------------------------------------------------- */
+@keyframes bpm-stream-cell {
+  from {
+    opacity: 0;
+    transform: translate3d(-6px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+[data-motion="on"] tbody[data-stream="on"] > tr {
+  animation: bpm-stream-cell 300ms ease-out both;
+}
+
+/* The row wave: 24 steps, then nothing. */
+[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(1) { animation-delay: 0ms; }
+[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(2) { animation-delay: 26ms; }
+[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(3) { animation-delay: 52ms; }
+[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(4) { animation-delay: 78ms; }
+[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(5) { animation-delay: 104ms; }
+[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(6) { animation-delay: 130ms; }
+[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(7) { animation-delay: 156ms; }
+[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(8) { animation-delay: 182ms; }
+[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(9) { animation-delay: 208ms; }
+[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(10) { animation-delay: 234ms; }
+[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(11) { animation-delay: 260ms; }
+[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(12) { animation-delay: 286ms; }
+[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(13) { animation-delay: 312ms; }
+[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(14) { animation-delay: 338ms; }
+[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(15) { animation-delay: 364ms; }
+[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(16) { animation-delay: 390ms; }
+[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(17) { animation-delay: 416ms; }
+[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(18) { animation-delay: 442ms; }
+[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(19) { animation-delay: 468ms; }
+[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(20) { animation-delay: 494ms; }
+[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(21) { animation-delay: 520ms; }
+[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(22) { animation-delay: 546ms; }
+[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(23) { animation-delay: 572ms; }
+[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(n + 24) { animation-delay: 598ms; }
+
+/*
+ * The column sweep, on the first rows only.
+ *
+ * Cells animate on top of their row's own delay, so a cell lands at
+ * row-delay + column-delay and the whole thing reads as a diagonal wave. It is
+ * limited to the first twelve rows: past there the row is already arriving at
+ * the cap and adding a per-cell offset to hundreds of rows buys nothing a
+ * reader will ever see.
+ */
+[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(-n + 12) > * {
+  animation: bpm-stream-cell 260ms ease-out both;
+}
+[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(-n + 12) > *:nth-child(1) { animation-delay: 0ms; }
+[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(-n + 12) > *:nth-child(2) { animation-delay: 22ms; }
+[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(-n + 12) > *:nth-child(3) { animation-delay: 44ms; }
+[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(-n + 12) > *:nth-child(4) { animation-delay: 66ms; }
+[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(-n + 12) > *:nth-child(5) { animation-delay: 88ms; }
+[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(-n + 12) > *:nth-child(6) { animation-delay: 110ms; }
+[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(-n + 12) > *:nth-child(7) { animation-delay: 132ms; }
+[data-motion="on"] tbody[data-stream="on"] > tr:nth-child(-n + 12) > *:nth-child(n + 8) { animation-delay: 154ms; }
+
+/*
+ * Reduced motion is handled by the absence of `[data-motion="on"]`, so no
+ * override is needed here — but the media query is kept as a second line of
+ * defence for anything that sets the attribute by hand.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .reveal,
+  tbody[data-stream="on"] > tr,
+  tbody[data-stream="on"] > tr > * {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
    Ken Burns
    ---------------------------------------------------------------------------
    A slow push-in on the Gewerke carousel, plus a short fade as one Gewerk
@@ -734,6 +960,15 @@
   animation:
     bpm-slide-in 320ms ease-out both,
     bpm-kenburns 8s ease-in-out 320ms infinite alternate;
+}
+
+/* Freeze where it stands rather than snap back: removing the animation would
+   drop the scale in one frame, which is a jolt exactly when somebody is
+   reaching for a control. */
+.kenburns[data-drift="off"],
+.kenburns:hover,
+.kenburns:focus-within {
+  animation-play-state: paused;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -30,7 +30,7 @@
 import { BLOCKING_STATUSES, OPEN_STATUSES, normalizeReviewStatus } from "./review-status";
 import { toDate } from "./date";
 import type { PortfolioProject, PortfolioReview } from "./portfolio-metrics";
-import type { StatusTone } from "./status-appearance";
+import { STATUS_TONE, TONE_APPEARANCE, type StatusTone } from "./status-appearance";
 
 export type BedarfKey = "overdue" | "blocked" | "nachforderung" | "unassigned";
 
@@ -191,4 +191,139 @@ export function bedarfHref(key: BedarfKey): string {
 /** Where one project's card lives, addressed by id so nothing is ambiguous. */
 export function projectHref(id: number): string {
   return `/projects?projekt=${id}&view=cards`;
+}
+
+
+/* ---------------------------------------------------------------------------
+   Slices of the status pie
+   ---------------------------------------------------------------------------
+   The Dashboard's donut groups Prüfzeilen by tone — the eight bands the legend
+   names, not the twelve statuses. Making a slice clickable raises the same
+   question the Handlungsbedarf badges did: a slice that says 946 has to land
+   on a page showing exactly the set behind those 946, or the link is a
+   decoration that quietly lies.
+
+   So the predicate lives here too, beside the other one, and both sides call
+   it. A tone is a set of statuses; a project belongs to the filtered set when
+   any of its rows carries a status of that tone.
+   --------------------------------------------------------------------------- */
+
+/**
+ * Does this row's status fall in this tone band?
+ *
+ * `department` narrows it to one Gewerk, and the narrowing has to happen HERE
+ * rather than by intersecting two filters. „Projekte mit einer offenen Zeile
+ * und einer EEA-Zeile" is a different and much larger set than „Projekte mit
+ * einer offenen EEA-Zeile" — the first is what two independent filters give
+ * you, and it is not what a slice inside „Status-Verteilung für EEA" is
+ * counting.
+ */
+export function reviewMatchesTone(
+  review: PortfolioReview,
+  tone: StatusTone,
+  department?: string,
+): boolean {
+  if (department !== undefined && review.department !== department) return false;
+  const status = normalizeReviewStatus(review.status);
+  if (status === null) return false;
+  return STATUS_TONE[status] === tone;
+}
+
+/** A project belongs in the filtered set when any of its rows does. */
+export function projectMatchesTone(
+  project: PortfolioProject,
+  tone: StatusTone,
+  department?: string,
+): boolean {
+  for (const review of project.reviews ?? []) {
+    if (reviewMatchesTone(review, tone, department)) return true;
+  }
+  return false;
+}
+
+export interface ToneCount {
+  tone: StatusTone;
+  label: string;
+  hex: string;
+  /** Prüfzeilen — what the slice is sized by. */
+  rows: number;
+  /** Distinct projects those rows sit in — what a list can show. */
+  projects: number;
+}
+
+/**
+ * Every tone present in the data, largest first, with both figures.
+ *
+ * `department` scopes it to one Gewerk — the same argument the predicate takes,
+ * so the number on a slice and the set its link produces are computed by one
+ * function with one meaning.
+ */
+export function countTones(
+  projects: readonly PortfolioProject[],
+  department?: string,
+): ToneCount[] {
+  const rows = new Map<StatusTone, number>();
+  const hit = new Map<StatusTone, Set<number>>();
+  for (const project of projects) {
+    for (const review of project.reviews ?? []) {
+      if (department !== undefined && review.department !== department) continue;
+      const status = normalizeReviewStatus(review.status);
+      if (status === null) continue;
+      const tone = STATUS_TONE[status];
+      rows.set(tone, (rows.get(tone) ?? 0) + 1);
+      if (!hit.has(tone)) hit.set(tone, new Set());
+      hit.get(tone)?.add(project.id);
+    }
+  }
+  return [...rows.entries()]
+    .map(([tone, count]) => ({
+      tone,
+      label: TONE_APPEARANCE[tone].label,
+      hex: TONE_APPEARANCE[tone].hex,
+      rows: count,
+      projects: hit.get(tone)?.size ?? 0,
+    }))
+    .sort((a, b) => b.rows - a.rows);
+}
+
+/** The tones that mean "still waiting for a decision" — these get highlighted. */
+export function toneIsAwaiting(tone: StatusTone): boolean {
+  return OPEN_TONES.includes(tone);
+}
+
+/*
+ * Derived from OPEN_STATUSES, never listed by hand.
+ *
+ * „offen", „in Bearbeitung", „Nachforderung" and „prüffähig" span four
+ * different tones, and writing those four tone names into a constant here
+ * would be a second definition of "open" — the exact drift this module was
+ * created to stop. Mapping the statuses through the tone table means adding a
+ * status to OPEN_STATUSES lights up its band automatically.
+ */
+const OPEN_TONES: readonly StatusTone[] = [
+  ...new Set(OPEN_STATUSES.map((status) => STATUS_TONE[status])),
+];
+
+/**
+ * Where a slice sends the reader. Same shape as `bedarfHref`, same contract.
+ *
+ * With a Gewerk it goes to that Gewerk's own surface — BVB-EEA and PSV-ITK
+ * have their own tabs, everything else is Projekte narrowed to the department.
+ * Without one it is the whole portfolio. A slice inside „Status-Verteilung für
+ * EEA" that landed on every project with an open row anywhere would be a link
+ * that looks right and is wrong by a factor of four.
+ */
+export function toneHref(tone: StatusTone, department?: string): string {
+  const t = encodeURIComponent(tone);
+  if (!department) return `/projects?tone=${t}&view=cards`;
+  if (department === "EEA") return `/bvb-eea?tone=${t}`;
+  if (department === "ITK") return `/psv-itk?tone=${t}`;
+  return `/projects?tone=${t}&gewerk=${encodeURIComponent(department)}&view=cards`;
+}
+
+/** Reject anything that did not come from us — a hand-typed ?tone= shows all. */
+export function toneFor(value: string | null | undefined): StatusTone | null {
+  if (!value) return null;
+  const known = new Set<string>(Object.values(STATUS_TONE));
+  return known.has(value) ? (value as StatusTone) : null;
 }
