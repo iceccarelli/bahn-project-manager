@@ -567,11 +567,31 @@ await check("six sessions booting at once all reach the same totals", async () =
     await Promise.all(
       pages.map((p) => p.goto(U("/projects"), { waitUntil: "domcontentloaded" })),
     );
+    /*
+     * Waits for the figure this check compares, not for a row to be painted.
+     *
+     * `waitForSelector("table tbody tr")` waits for VISIBILITY, and visibility
+     * is a layout fact: on a loaded machine the 1,298 rows are in the DOM —
+     * Playwright said so, "locator resolved to 1298 elements" — while the
+     * first one has not been laid out yet, and the check failed after 90 s
+     * having already had its answer. A gate whose result depends on the
+     * renderer's queue is measuring the renderer, not the app.
+     */
     const totals = await Promise.all(
       pages.map(async (p) => {
-        await p.waitForSelector("table tbody tr", { timeout: 90000 });
+        await p
+          .waitForFunction(
+            () => /1\.\d{3}\s+Projekte/.test(document.body.innerText),
+            null,
+            { timeout: 120000 },
+          )
+          .catch(() => {});
+        const rows = await p.$$eval("table tbody tr", (els) => els.length);
         const text = await p.locator("body").innerText();
-        return (text.match(/1\.\d{3}\s+Projekte/) || ["(none)"])[0];
+        const total = (text.match(/1\.\d{3}\s+Projekte/) || ["(none)"])[0];
+        // The count must come with the rows behind it: a page that prints the
+        // total but rendered nothing is not the same answer.
+        return rows > 0 ? total : `(0 Zeilen, meldet ${total})`;
       }),
     );
     const distinct = new Set(totals);
