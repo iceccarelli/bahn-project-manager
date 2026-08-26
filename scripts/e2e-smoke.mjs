@@ -250,7 +250,22 @@ await check("search narrows the table", async () => {
   await page.waitForSelector("table tbody tr", { timeout: 30000 });
   const before = await page.locator("tbody tr").count();
   await page.locator('input[aria-label^="Projekte durchsuchen"]').fill("Frankfurt");
-  await page.waitForTimeout(900);
+  /*
+   * Waits for the table to be narrower, not for 900 ms.
+   *
+   * The search debounces 250 ms and then re-renders a 1,298-row table down to
+   * 334. On a loaded machine that re-render outlasts any duration somebody
+   * picks, and this gate read 1298 -> 1298 while the header above the table
+   * already said "334 Projekte gefunden" — the app was right and the clock was
+   * wrong. Third time this suite has been taught the same lesson.
+   */
+  await page
+    .waitForFunction(
+      (n) => document.querySelectorAll("tbody tr").length < n,
+      before,
+      { timeout: 20000 },
+    )
+    .catch(() => {});
   const after = await page.locator("tbody tr").count();
   assert(after > 0 && after < before, `rows ${before} -> ${after}`);
 });
@@ -1776,6 +1791,172 @@ await check("Rückgängig restores the old value and is itself recorded", async 
   assert(rows >= 2, `only ${rows} entries after a change and its undo`);
 });
 
+
+console.log("\n== where the changes actually live ==");
+
+/**
+ * The persistence layer, said out loud and defended.
+ *
+ * Every edit in this build goes into the reader's own browser. That is a fact
+ * with a limit attached — 5 MB per origin — and two ways of getting it wrong:
+ * not telling anyone how full it is, and losing a change when it overflows.
+ * These three gates cover the fact, the limit, and the overflow.
+ */
+await check("the Dashboard says how full the only store is", async () => {
+  await go("/");
+  await page.waitForSelector("text=/Belastbarkeit der Zahlen/", { timeout: 25000 });
+  const body = await page.locator("body").innerText();
+  // Label and value are siblings in a flex row, so innerText puts a newline
+  // between them — the figures are on the line after the label, not on it.
+  const shown = body.match(/lokaler Speicher\s*([\d,]+)\s*MB von ([\d,]+)\s*MB/);
+  assert(
+    shown,
+    `the trust panel does not report the storage it depends on: ${
+      (body.match(/lokaler Speicher[\s\S]{0,40}/) ?? ["(nichts)"])[0]
+    }`,
+  );
+  const used = Number(shown[1].replace(",", "."));
+  const cap = Number(shown[2].replace(",", "."));
+  assert(cap === 5, `the panel claims a ${cap} MB cap; localStorage is 5 MB per origin`);
+
+  // And it must be the real occupancy, not a constant somebody typed.
+  const measured = await page.evaluate(() => {
+    let bytes = 0;
+    for (const key of Object.keys(localStorage)) {
+      bytes += new Blob([localStorage.getItem(key) ?? ""]).size;
+    }
+    return bytes / 1024 / 1024;
+  });
+  assert(
+    Math.abs(used - measured) < 0.15,
+    `the panel says ${used} MB, the browser holds ${measured.toFixed(2)} MB`,
+  );
+});
+
+await check("no page fetches anything from GitHub", async () => {
+  // The data loader used to fall back to a raw.githubusercontent.com URL: a
+  // Deutsche Bahn application reaching a public host from every reader's
+  // browser, and a line that would have survived the move to GitLab pointing
+  // at a branch nobody watches.
+  const foreign = [];
+  const watch = (req) => {
+    const url = req.url();
+    if (!url.startsWith(`http://localhost:${PORT}`) && /github|githubusercontent/i.test(url)) {
+      foreign.push(url);
+    }
+  };
+  page.on("request", watch);
+  try {
+    for (const route of ["/", "/projects", "/bvb-eea", "/audit"]) {
+      await go(route);
+    }
+    // And the built bundle must not carry the address either.
+    const bundled = await page.evaluate(async () => {
+      const scripts = [...document.querySelectorAll("script[src]")].map((s) => s.src);
+      for (const src of scripts) {
+        const text = await (await fetch(src)).text();
+        if (/raw\.githubusercontent\.com/.test(text)) return src;
+      }
+      return null;
+    });
+    assert(!bundled, `the built bundle still carries a GitHub URL: ${bundled}`);
+  } finally {
+    page.off("request", watch);
+  }
+  assert(foreign.length === 0, `requests to GitHub: ${foreign.slice(0, 2).join(", ")}`);
+});
+
+await check("a full store refuses the change out loud, and never silently", async () => {
+  /*
+   * The failure this prevents: at the 5 MB cap setItem throws, the optimistic
+   * update rolls back, and the cell reverts to its old value with nothing said.
+   * From the reader's chair that is indistinguishable from the app dropping
+   * their typing — which is the one thing a system of record may not do.
+   *
+   * Filled with real keys rather than by stubbing setItem: a mock would test
+   * the mock. Everything below the fill runs inside try/finally, because the
+   * whole suite shares this browser and a gate that leaves the store full
+   * fails the three checks after it — which is exactly what the first version
+   * of this gate did.
+   */
+  await go("/psv-itk");
+  await page.waitForSelector("table tbody tr", { timeout: 30000 });
+
+  const clean = async () => {
+    await page.evaluate(() => {
+      for (const key of Object.keys(localStorage)) {
+        if (key.startsWith("e2e_ballast")) localStorage.removeItem(key);
+      }
+    });
+  };
+
+  try {
+    const filled = await page.evaluate(() => {
+      /*
+       * Descending chunk sizes, then measured against an app-sized write.
+       *
+       * 64 kB chunks alone leave up to 64 kB of headroom, and an app write
+       * replaces an existing key with a value of nearly the same size — the
+       * quota is charged on the difference, so it slipped through and the gate
+       * proved nothing. "Full" here means: a 1 kB write is refused, which is
+       * larger than any delta this app produces.
+       */
+      let written = 0;
+      const stillFits = (bytes) => {
+        try {
+          localStorage.setItem("e2e_ballast_probe", "x".repeat(bytes));
+          localStorage.removeItem("e2e_ballast_probe");
+          return true;
+        } catch {
+          return false;
+        }
+      };
+      for (const size of [64 * 1024, 4 * 1024, 512, 64]) {
+        const chunk = "x".repeat(size);
+        try {
+          for (let i = 0; i < 4000; i++) {
+            localStorage.setItem(`e2e_ballast_${size}_${i}`, chunk);
+            written++;
+          }
+        } catch {
+          // This size no longer fits; try a smaller one.
+        }
+      }
+      return { written, full: !stillFits(1024) };
+    });
+    assert(filled.written > 0, "could not fill the store; nothing to test");
+    assert(filled.full, `wrote ${filled.written} ballast keys and 1 kB still fits`);
+
+    const cell = "table tbody tr:first-child td:nth-child(13)";
+    const before = (await page.locator(`${cell} button`).first().innerText()).trim();
+    await page.locator(`${cell} button`).first().click();
+    const select = page.locator(`${cell} select`).first();
+    await select.waitFor({ timeout: 5000 });
+    const options = await select.locator("option").allTextContents();
+    const target = options.find(
+      (o) => o && !before.includes(o) && o !== "—" && o !== "nicht erforderlich",
+    );
+    assert(target, "no other status to choose");
+    await select.selectOption(target);
+    await page.waitForTimeout(1500);
+
+    const body = await page.locator("body").innerText();
+    assert(
+      /Speicher ist voll|NICHT gespeichert/i.test(body),
+      "the store was full and the app said nothing about it",
+    );
+
+    // And it rolled back rather than showing a value it did not keep.
+    const after = (await page.locator(`${cell} button`).first().innerText()).trim();
+    assert(
+      after === before,
+      `the cell shows "${after}" but the write was refused — it claims a change it did not keep`,
+    );
+  } finally {
+    await clean();
+    await go("/");
+  }
+});
 
 console.log("\n== the map on the Dashboard ==");
 

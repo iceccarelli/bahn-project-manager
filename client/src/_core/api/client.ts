@@ -14,6 +14,7 @@ import type { ProjectChecklist } from "@shared/validation";
 import type { Project, Review, Stats, AuditLogEntry } from "@/hooks/useDataQuery";
 import { describeIngest, ingestProjects } from "@shared/ingest";
 import { ProjectSchema, ReviewSchema } from "@shared/validation";
+import { cacheStore, writeStore } from "./localStore";
 
 export interface ProjectUpdateInput {
   id: number;
@@ -118,7 +119,7 @@ async function initializeStorage() {
           // the row itself. Writes are validated now, so a bad row here means
           // the cache was corrupted from outside the app.
           console.warn(`[data] ${describeIngest(cached)} — keeping the valid rows`);
-          localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(cached.projects));
+          cacheStore(STORAGE_KEY_PROJECTS, JSON.stringify(cached.projects));
         }
         return cached.projects;
       }
@@ -137,7 +138,7 @@ async function initializeStorage() {
       const result = ingestProjects(await res.json());
       // Cache only what validated. Writing the raw payload back would put the
       // bad rows straight into the cache we just taught ourselves to distrust.
-      localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(result.projects));
+      cacheStore(STORAGE_KEY_PROJECTS, JSON.stringify(result.projects));
       console.log(`[data] /data.json — ${describeIngest(result)}`);
       return result.projects;
     }
@@ -145,12 +146,36 @@ async function initializeStorage() {
     console.warn("Local /data.json not available, trying remote fallback...");
   }
 
-  // 2. Fallback to remote GitHub raw (original behavior)
+  /*
+   * 2. The configured fallback source, if there is one.
+   *
+   * This used to be a hard-coded raw.githubusercontent.com URL pointing at
+   * this repository's main branch. Three things were wrong with that, and all
+   * three matter more than the convenience:
+   *
+   *   — it pinned a Deutsche Bahn application to a public GitHub URL, so a
+   *     deploy with a broken /data.json silently served whatever was on a
+   *     third-party host at that moment, with no version and no audit;
+   *   — it survives a migration. Move the repo to GitLab and this line still
+   *     fetches from GitHub, from a branch nobody is watching any more;
+   *   — it is unauthenticated egress from the browser of every reader, which
+   *     is a question for a security review, not a default.
+   *
+   * VITE_DATA_FALLBACK_URL is unset in this build. Unset means: no second
+   * source, and a failure to load says so instead of reaching somewhere else.
+   */
+  const fallbackUrl = (import.meta.env.VITE_DATA_FALLBACK_URL ?? "").trim();
+  if (!fallbackUrl) {
+    console.error(
+      "[data] /data.json nicht erreichbar und keine Ersatzquelle konfiguriert (VITE_DATA_FALLBACK_URL).",
+    );
+    return [];
+  }
   try {
-    const res = await fetch("https://raw.githubusercontent.com/iceccarelli/bahn-project-manager/refs/heads/main/client/public/data.json");
+    const res = await fetch(fallbackUrl);
     const result = ingestProjects(await res.json());
-    localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(result.projects));
-    console.log(`[data] remote fallback — ${describeIngest(result)}`);
+    cacheStore(STORAGE_KEY_PROJECTS, JSON.stringify(result.projects));
+    console.log(`[data] Ersatzquelle — ${describeIngest(result)}`);
     return result.projects;
   } catch (err) {
     console.error("Failed to load any data source:", err);
@@ -173,7 +198,7 @@ function recordAudit(action: string, details: string, meta?: AuditMeta) {
     ...(meta ? { meta } : {}),
   };
   audit.unshift(entry);
-  localStorage.setItem(STORAGE_KEY_AUDIT, JSON.stringify(audit.slice(0, 1000)));
+  writeStore(STORAGE_KEY_AUDIT, JSON.stringify(audit.slice(0, 1000)));
   return entry;
 }
 
@@ -232,7 +257,7 @@ export const apiClient = {
       };
 
       projects.push(newProject);
-      localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
+      writeStore(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
       recordAudit(
         AUDIT_ACTIONS.projektAngelegt,
         `Projekt ${newProject.projektnummer} (${newProject.station}) angelegt.`,
@@ -275,7 +300,7 @@ export const apiClient = {
     }
 
     Object.assign(project, { [input.field]: input.value });
-    localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
+    writeStore(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
     recordAudit(
       AUDIT_ACTIONS.projektAktualisiert,
       `Feld ${input.field} von ${oldVal} auf ${input.value} geändert.`,
@@ -296,7 +321,7 @@ export const apiClient = {
     async delete(id: number): Promise<void> {
       const projects = await this.list();
       const filtered = projects.filter((p) => p.id !== id);
-      localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(filtered));
+      writeStore(STORAGE_KEY_PROJECTS, JSON.stringify(filtered));
       const removed = projects.find((p) => p.id === id);
       recordAudit(AUDIT_ACTIONS.projektGeloescht, `Projekt ID ${id} entfernt.`, {
         projectId: id,
@@ -338,7 +363,7 @@ export const apiClient = {
     }
 
     project.reviews[reviewIndex] = candidateReview;
-    localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
+    writeStore(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
     recordAudit(
       AUDIT_ACTIONS.pruefungAktualisiert,
       `${input.department}: ${input.field} von ${oldVal} auf ${input.value} gesetzt.`,
@@ -431,13 +456,13 @@ export const apiClient = {
         all.push(saved);
       }
 
-      localStorage.setItem(STORAGE_KEY_CHECKLISTS, JSON.stringify(all));
+      writeStore(STORAGE_KEY_CHECKLISTS, JSON.stringify(all));
       return saved;
     },
 
     async remove(id: number): Promise<void> {
       const all = (await this.list()).filter((c) => c.id !== id);
-      localStorage.setItem(STORAGE_KEY_CHECKLISTS, JSON.stringify(all));
+      writeStore(STORAGE_KEY_CHECKLISTS, JSON.stringify(all));
     },
   },
 

@@ -18,6 +18,7 @@
     "start": "NODE_ENV=production node dist/index.js",
     "check": "tsc --noEmit",
     "status": "node scripts/status.mjs",
+    "doctor": "node scripts/doctor.mjs",
     "format": "prettier --write .",
     "lint": "biome check .",
     "lint:staged": "lint-staged",

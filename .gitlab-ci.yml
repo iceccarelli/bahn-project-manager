@@ -1,0 +1,144 @@
+# =============================================================================
+# GitLab CI — dieselben Gates, die lokal gruen sein muessen.
+#
+# Kein zweiter Satz Regeln. Jeder Job hier ruft genau das pnpm-Skript auf, das
+# auch auf der Maschine des Entwicklers laeuft; eine Pipeline mit eigenen
+# Befehlen ist eine Pipeline, die etwas anderes prueft als die Person davor.
+#
+# Uebersetzt aus .github/workflows/ci.yml, Job fuer Job:
+#   lint-typecheck -> pruefen      test -> test       build -> build
+#   e2e            -> e2e          docker -> container
+# Der Vercel-Deploy hat keine Entsprechung: Vercel deployt aus GitHub. Was auf
+# GitLab an seine Stelle tritt, steht in docs/GITLAB-MIGRATION.md — es ist eine
+# Entscheidung, keine Zeile YAML.
+# =============================================================================
+
+default:
+  image: node:22-bookworm
+  interruptible: true
+  before_script:
+    - corepack enable
+    - corepack prepare pnpm@10.15.1 --activate
+    - pnpm install --frozen-lockfile
+  cache:
+    key:
+      files:
+        - pnpm-lock.yaml
+    paths:
+      - .pnpm-store
+
+variables:
+  # pnpm braucht einen Store, der den Job ueberlebt, sonst laedt jede Stufe alles neu.
+  PNPM_HOME: "$CI_PROJECT_DIR/.pnpm-store"
+  # Playwright laedt Chromium sonst in $HOME, das zwischen Jobs verschwindet.
+  PLAYWRIGHT_BROWSERS_PATH: "$CI_PROJECT_DIR/.playwright"
+  GIT_DEPTH: "20"
+
+stages:
+  - pruefen
+  - test
+  - build
+  - abnahme
+
+# -----------------------------------------------------------------------------
+# 1. Typen, Lint, Datenintegritaet
+# -----------------------------------------------------------------------------
+typen-und-lint:
+  stage: pruefen
+  script:
+    - pnpm check
+    - pnpm lint
+    # Kanonische Bahnhofsmanagements, Stationsstamm, abgeleitete Bloecke.
+    - pnpm verify:data
+    # Der Zustand dieses Klons in einem Bild — schlaegt fehl, wenn eine
+    # Transfer-Patch-Datei im Baum liegt oder eine GitHub-URL im Code steht.
+    - node scripts/doctor.mjs
+
+# -----------------------------------------------------------------------------
+# 2. Unit-Tests mit Abdeckung
+# -----------------------------------------------------------------------------
+unit:
+  stage: test
+  script:
+    - pnpm test:cov
+  coverage: '/All files[^|]*\|[^|]*\s+([\d\.]+)/'
+  artifacts:
+    when: always
+    expire_in: 2 weeks
+    paths:
+      - coverage/
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage/cobertura-coverage.xml
+
+# -----------------------------------------------------------------------------
+# 3. Produktionsbuild
+# -----------------------------------------------------------------------------
+build:
+  stage: build
+  needs: [typen-und-lint, unit]
+  script:
+    - NODE_ENV=production pnpm build:client
+  artifacts:
+    expire_in: 1 week
+    paths:
+      - dist/
+
+# -----------------------------------------------------------------------------
+# 4. Die Gates, die den gebauten Stand pruefen
+#
+# Sie laufen gegen dist/ aus der Stufe davor, seriell und in einem Job: jedes
+# startet seinen eigenen Server auf einem eigenen Port, und zwei parallele
+# Chromium-Fleets auf einem Shared Runner messen die Warteschlange des
+# Renderers statt der Anwendung.
+# -----------------------------------------------------------------------------
+abnahme:
+  stage: abnahme
+  needs: [build]
+  timeout: 40m
+  script:
+    - pnpm exec playwright install --with-deps chromium
+    - node scripts/e2e-smoke.mjs
+    - pnpm check:responsive
+    - pnpm check:map
+    - pnpm check:ui
+    - node scripts/stress-test.mjs
+  artifacts:
+    when: on_failure
+    expire_in: 1 week
+    paths:
+      - dist/
+
+# -----------------------------------------------------------------------------
+# 5. Container — baut das Image und beweist, dass es hochkommt
+#
+# Ein Dockerfile, das baut, aber einen Container erzeugt, der nie gesund wird,
+# ist kein Build-Erfolg, sondern ein Deploy-Ausfall.
+# -----------------------------------------------------------------------------
+container:
+  stage: abnahme
+  needs: [unit]
+  image: docker:27
+  services:
+    - docker:27-dind
+  before_script: []
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+  script:
+    - docker build --target runtime -t bahn-project-manager:ci .
+    - docker run -d --name bpm -p 3000:3000 bahn-project-manager:ci
+    - |
+      for i in $(seq 1 30); do
+        if wget -qO- http://docker:3000/api/health >/dev/null 2>&1 || wget -qO- http://localhost:3000/api/health >/dev/null 2>&1; then
+          echo "container healthy"; docker rm -f bpm; exit 0
+        fi
+        sleep 2
+      done
+      echo "health check never passed"; docker logs bpm; exit 1
+  rules:
+    # Nur auf main: dind ist auf vielen Runnern nicht verfuegbar, und ein Job,
+    # der bei jedem Merge Request aus Infrastrukturgruenden rot ist, wird
+    # ignoriert — und damit auch dann, wenn er recht hat.
+    - if: $CI_COMMIT_BRANCH == "main"
+      allow_failure: true

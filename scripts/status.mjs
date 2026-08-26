@@ -65,6 +65,12 @@ const FEATURES = [
   ["Karte auf dem Dashboard", "client/src/pages/Dashboard.tsx", "Alle Projekte auf der Karte"],
   ["Station per ID verlinkt, nicht per Text", "shared/handlungsbedarf.ts", "export function stationHref"],
   ["Zweiter Tab sieht Aenderungen sofort", "client/src/hooks/useCrossTabSync.ts", "export function useCrossTabSync"],
+  ["Voller Speicher wird laut abgelehnt", "client/src/_core/api/localStore.ts", "class StorageFullError"],
+  ["Speicherstand steht im Dashboard", "shared/storage-budget.ts", "export function storageBudget"],
+  ["Keine GitHub-URL im Client", "client/src/_core/api/client.ts", "VITE_DATA_FALLBACK_URL"],
+  ["GitLab-Pipeline", ".gitlab-ci.yml", "stages:"],
+  ["Migrationsanleitung", "docs/GITLAB-MIGRATION.md", "git push --mirror"],
+  ["Klon-Diagnose", "scripts/doctor.mjs", "Wo Änderungen landen"],
 ];
 
 console.log(bold("\nHEAD"));
@@ -169,8 +175,8 @@ let unpushed = 0;
 
 console.log(bold("\nErwartete Zahlen der Gates"));
 for (const line of [
-  "pnpm exec vitest run          298 passed, 6 skipped",
-  "node scripts/e2e-smoke.mjs    109 passed, 0 failed",
+  "pnpm exec vitest run          305 passed, 6 skipped",
+  "node scripts/e2e-smoke.mjs    112 passed, 0 failed",
   "node scripts/check-ui.mjs      UI CLEAN",
   "node scripts/stress-test.mjs   12 passed, 0 failed",
   "pnpm exec biome check .        70 warnings",

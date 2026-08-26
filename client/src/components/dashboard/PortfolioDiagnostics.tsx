@@ -17,6 +17,8 @@ import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { AlertTriangle, CalendarClock, ShieldCheck, Users } from "lucide-react";
 import type { Aging, Concentration, DataQuality } from "@shared/portfolio-metrics";
+import { formatBytes, storageBudget } from "@shared/storage-budget";
+import { storageEntries } from "@/_core/api/localStore";
 
 function Panel({
   title,
@@ -89,6 +91,13 @@ export function PortfolioDiagnostics({
 }) {
   const [, setLocation] = useLocation();
   const agedTotal = aging.cohorts.reduce((a, c) => a + c.count, 0);
+  /*
+   * Measured on every render of this panel, not cached: it is four calls to
+   * localStorage.getItem on a page that has already parsed 18,172 review rows,
+   * and a stale figure is exactly the figure nobody should be given about
+   * remaining space.
+   */
+  const budget = storageBudget(storageEntries());
   const overAYear = aging.cohorts.find((c) => c.key === "365+")?.count ?? 0;
 
   return (
@@ -170,6 +179,30 @@ export function PortfolioDiagnostics({
             label="nicht lesbare Datumsangaben"
             value={quality.unparseableDates}
             tone={quality.unparseableDates > 0 ? "text-amber-700 dark:text-amber-400" : undefined}
+          />
+          {/*
+            Where the changes actually live, and how much room is left.
+
+            Every edit in this build is written to this reader's own browser —
+            there is no server in the deployed app. localStorage is capped at
+            5 MB per origin, the shipped data occupies 2,1 MB of it before
+            anyone types anything, and at the cap a write throws and the change
+            is refused. That is a number people are entitled to see coming.
+          */}
+          <Row
+            label="lokaler Speicher"
+            value={
+              budget.usedBytes === 0
+                ? "nicht messbar"
+                : `${formatBytes(budget.usedBytes)} von ${formatBytes(budget.capBytes)}`
+            }
+            tone={
+              budget.level === "kritisch"
+                ? "text-red-700 dark:text-red-400"
+                : budget.level === "eng"
+                  ? "text-amber-700 dark:text-amber-400"
+                  : undefined
+            }
           />
           <Row
             label="Status außerhalb der Vokabulare"
