@@ -43,13 +43,16 @@ import { gewerkHref } from "@shared/search-index";
 
 export interface GewerkeStatusDatum {
   name: string;
-  value: number;
   /**
-   * The tone bands for THIS Gewerk, counted by the same function that counts
-   * the portfolio donut — scoped to the department, so a slice's figure and
-   * the set its link produces are one computation.
+   * The tone bands for THIS Gewerk that represent work, counted by the same
+   * function that counts the portfolio donut — scoped to the department, so a
+   * slice's figure and the set its link produces are one computation.
    */
   slices: ToneCount[];
+  /** Matches `required` on the Gewerke card and in the relief. */
+  required: number;
+  /** „nicht erforderlich" rows, stated rather than silently dropped. */
+  notRequired: number;
 }
 
 /** How long one Gewerk holds the panel. */
@@ -273,7 +276,17 @@ export function GewerkeCarousel({
              * reaching for something in it.
              */
             data-drift={rotating ? "on" : "off"}
-            className="kenburns grid grid-cols-1 gap-6 lg:grid-cols-5"
+            /*
+              A block, not a grid.
+              
+              Pie3D lays itself out as a five-column grid. Wrapping it in
+              another five-column grid made the whole chart ONE column of that
+              outer grid: the donut rendered about fifty pixels across in the
+              bottom-left corner with its legend stranded beside it. A
+              container that imposes a layout on a component that already has
+              one is not a wrapper, it is a second opinion.
+            */
+            className="kenburns"
           >
             <Pie3D
               slices={slices}
@@ -281,8 +294,24 @@ export function GewerkeCarousel({
               department={current.name}
               height={330}
             />
-            <p className="mt-3 text-2xs text-muted-foreground lg:col-span-5">
-              {current.value.toLocaleString("de-DE")} Prüfungen in {current.name}.
+            {/*
+              Stated, because the donut no longer plots it.
+              
+              „866 Prüfungen in BIM" sat directly beside a card reading „125
+              Prüfungen erforderlich". Both were true — 741 BIM rows say the
+              department is not involved — and on one screen they read as a
+              contradiction. The chart shows the work; this line accounts for
+              the rest.
+            */}
+            <p className="mt-3 text-2xs text-muted-foreground">
+              <strong className="font-bold text-foreground">
+                {current.required.toLocaleString("de-DE")}
+              </strong>{" "}
+              erforderliche Prüfungen in {current.name}
+              {current.notRequired > 0
+                ? ` · ${current.notRequired.toLocaleString("de-DE")} Zeilen „nicht erforderlich" sind nicht dargestellt`
+                : ""}
+              .
             </p>
           </div>
         </section>

@@ -228,6 +228,26 @@ export default function Projects() {
     const gewerk = (params.get("gewerk") ?? "").trim();
     setToneGewerk(tone && gewerk ? gewerk : null);
 
+    /*
+     * ?station=<Name>&projekte=1,2,3 — a station group from a map marker.
+     *
+     * The ids are what makes this exact: the page cannot re-derive the group,
+     * because the grouping lives in the map's buildStationGeo and folds
+     * ambiguous and region-fallback matches together. Ids that are not
+     * integers are dropped rather than guessed at, and a link with no usable
+     * id at all is treated as no station link — never as "show everything".
+     */
+    const stationName = (params.get("station") ?? "").trim();
+    const stationIds = (params.get("projekte") ?? "")
+      .split(",")
+      .map((raw) => Number(raw.trim()))
+      .filter((id) => Number.isInteger(id) && id > 0);
+    if (stationName && stationIds.length > 0) {
+      setStationFocus({ name: stationName, projectIds: stationIds });
+      setSearchInput("");
+      setSearch("");
+    }
+
     const projektRaw = params.get("projekt");
     const projekt = projektRaw === null ? Number.NaN : Number(projektRaw);
     setProjectFocus(Number.isInteger(projekt) && projekt > 0 ? projekt : null);
@@ -236,7 +256,7 @@ export default function Projects() {
     // asked for a set, not for that set intersected with whatever was typed
     // here twenty minutes ago.
     if (bedarf || tone || Number.isInteger(projekt)) {
-      setStationFocus(null);
+      if (!(stationName && stationIds.length > 0)) setStationFocus(null);
       if (!q) {
         setSearchInput("");
         setSearch("");

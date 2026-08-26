@@ -122,8 +122,54 @@ export default defineConfig({
         // path fixes that and gives the browser vendor bundles that only
         // change when the dependency does.
         manualChunks(id: string) {
+          /*
+           * Rollup's own interop shim, before the node_modules guard.
+           *
+           * `getDefaultExportFromCjs` is a generated module, not a package, so
+           * its id carries no node_modules and the guard below skipped it —
+           * leaving Rollup to place it wherever it liked. It chose
+           * vendor-charts, and because react-dom is CommonJS and needs the
+           * shim, vendor-react then statically imported vendor-charts. That
+           * one eight-line helper was the last edge keeping 370 kB of charting
+           * in the preload of every route.
+           */
+          if (id.includes("commonjsHelpers")) return "vendor-utils";
           if (!id.includes("node_modules")) return undefined;
           const p = id.replace(/\\/g, "/");
+          /*
+           * React first, and precisely.
+           *
+           * Measured: the entry chunk statically imported `{r as x, R as vf}`
+           * from vendor-charts — React itself. Rollup had put React in the
+           * first chunk that claimed a module needing it, and every route was
+           * therefore downloading 382 kB of charting to get React. Projekte
+           * has no chart on it at all.
+           *
+           * The earlier attempt at this produced "Cannot access 'React' before
+           * initialization", and the reason is visible in that failure: a
+           * partial split. react, react-dom, scheduler and the JSX runtime are
+           * one runtime and have to travel together; separating any of them
+           * makes two chunks that each need the other. Anchored on
+           * /node_modules/<pkg>/ so react-leaflet, react-pdf and react-day-
+           * picker cannot be swept in with them.
+           */
+          if (/\/node_modules\/(react|react-dom|scheduler|use-sync-external-store)\//.test(p))
+            return "vendor-react";
+          /*
+           * The tiny shared utilities, before anything big can adopt them.
+           *
+           * With React split out, the entry still statically imported ONE
+           * symbol from vendor-charts: `clsx` — the 200-byte class-name joiner
+           * behind `cn()`, used by every component in the app. Rollup had
+           * parked it in the charts chunk because recharts wanted it too, and
+           * that one function was dragging 370 kB of charting into the preload
+           * of every single route.
+           *
+           * Naming them here costs one 3 kB chunk and takes recharts off the
+           * critical path of five of the six routes.
+           */
+          if (/\/node_modules\/(clsx|tailwind-merge|class-variance-authority)\//.test(p))
+            return "vendor-utils";
           if (/\/(recharts|d3-[a-z]+|victory-vendor|decimal\.js-light)\//.test(p))
             return "vendor-charts";
           if (/\/(leaflet|react-leaflet|@react-leaflet)\//.test(p)) return "vendor-leaflet";

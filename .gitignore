@@ -143,5 +143,9 @@ _one.mjs
 _audit.mjs
 _diag*.mjs
 
-# Patch artifacts are transfer files, never repository content.
-*.patch
+# Patch artifacts are transfer files, never repository content — but only the
+# ones dropped at the root. `*.patch` also matched patches/wouter@3.7.1.patch,
+# a pnpm patchedDependency the build genuinely needs: it was already tracked,
+# so nothing broke, but an update to it would have been silently skipped by
+# `git add`. Anchored to the root, which is the only place transfer files land.
+/*.patch

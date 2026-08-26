@@ -219,12 +219,15 @@ const SCENARIOS = [
     },
   },
   {
-    name: "Dashboard · Präsentationsmodus",
+    name: "Dashboard · Gewerke-Kette",
     route: "/",
     async run(page) {
       await page.waitForSelector("[data-gewerk]", { timeout: 20000 });
-      await page.getByRole("button", { name: /Präsentationsmodus/ }).click();
-      await page.waitForTimeout(900);
+      // Under reduced motion — which this audit emulates — the chain never
+      // runs and all fourteen stand still, so this measures the reel instead:
+      // hover a card and audit the panel it puts over the figures.
+      await page.hover('[data-gewerk="EEA"]');
+      await page.waitForTimeout(600);
     },
   },
   {
@@ -937,6 +940,46 @@ console.log("== palette ==");
    * and then it catches nothing at all. REQUIRED_UTILITIES above covers the
    * failure that actually happened, exactly, with no false positives.
    */
+}
+
+/*
+ * What every route has to download before it can show anything.
+ *
+ * Measured, and then fixed: index.html preloaded `vendor-charts` — 370 kB of
+ * recharts and d3 — on every single route, including Projekte, which has no
+ * chart on it. Three separate edges put it there and each had to be found by
+ * reading the built entry chunk rather than by reasoning about imports:
+ *
+ *   1. React itself had been merged into vendor-charts, because Rollup places
+ *      a shared dependency in the first chunk that claims a module needing it.
+ *      The entry's static import read `{r as x, R as vf}`.
+ *   2. `clsx` — the 200-byte class-name joiner behind cn() — likewise.
+ *   3. Rollup's own `getDefaultExportFromCjs` interop shim, which react-dom
+ *      needs and which carries no node_modules in its id, so the chunking
+ *      function had skipped it entirely.
+ *
+ * The check is on the artefact, not on the intent: whatever the config says,
+ * the entry must not statically import a chunk that only one route needs.
+ */
+console.log("== critical path ==");
+{
+  const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8");
+  const preloaded = [...html.matchAll(/href="\/assets\/([^"]+\.js)"/g)].map((m) => m[1]);
+  const ROUTE_ONLY = ["vendor-charts", "vendor-leaflet", "react-pdf"];
+  const leaked = preloaded.filter((f) => ROUTE_ONLY.some((r) => f.startsWith(r)));
+  if (leaked.length) {
+    failures++;
+    console.log(`❌ ${leaked.length} route-only bundles are on every route's critical path:`);
+    for (const l of leaked) console.log(`     ${l}`);
+  } else {
+    const bytes = preloaded.reduce(
+      (n, f) => n + fs.statSync(path.join(ROOT, "assets", f)).size,
+      0,
+    );
+    console.log(
+      `✅ critical path is ${preloaded.length} chunks, ${(bytes / 1024).toFixed(0)} kB — no route-only bundle in it`,
+    );
+  }
 }
 
 console.log("\n== rendering ==");

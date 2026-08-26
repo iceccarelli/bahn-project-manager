@@ -19,6 +19,7 @@ import { chromium } from "playwright";
 import { createServer } from "node:http";
 import { readFileSync, existsSync, statSync } from "node:fs";
 import path from "node:path";
+import os from "node:os";
 
 const PORT = Number(process.env.PORT || 4183);
 const ROOT = path.resolve("dist/public");
@@ -195,8 +196,15 @@ await check("forty route changes leave no Leaflet container and no listener behi
     await page.waitForTimeout(120);
   }
   await go("/");
-  const leftovers = await page.$$eval(".leaflet-container", (els) => els.length);
-  assert(leftovers === 0, `${leftovers} map containers survived onto the Dashboard`);
+  // The Dashboard has a map of its own now (the Netz-Explorer between the
+  // counters and the relief), so the invariant is "exactly one", not "none":
+  // a second container is a map that outlived the route that mounted it.
+  await page.waitForSelector(".leaflet-container", { timeout: 30000 });
+  const containers = await page.$$eval(".leaflet-container", (els) => els.length);
+  assert(
+    containers === 1,
+    `${containers} map containers on the Dashboard — ${containers - 1} survived a route change`,
+  );
 
   const nodes = await page.evaluate(() => document.getElementsByTagName("*").length);
   assert(nodes < 6000, `the Dashboard carries ${nodes} elements — something is accumulating`);
@@ -326,6 +334,255 @@ await check("thirty rapid status changes all persist and all reach the log", asy
     reviewEntries >= Math.min(written.length, 10),
     `${written.length} changes produced only ${reviewEntries} log entries`,
   );
+});
+
+console.log("\n== many people at once ==");
+
+const cores = os.cpus().length;
+
+/**
+ * The app is client-side, so "many simultaneous users" is many browsers, each
+ * with its own storage, all working the same 1,298 projects at the same time.
+ *
+ * Two failure modes this catches that one page never can:
+ *   1. a query that is answered from module-level state rather than from the
+ *      caller's argument — six sessions asking six different things and one
+ *      of them getting somebody else's answer;
+ *   2. an index built once per process rather than once per session, which
+ *      looks fine alone and collapses when six of them build it at once.
+ */
+const seedSession = async (context, name) => {
+  const p = await context.newPage();
+  await p.goto(U("/login"));
+  await p.evaluate(
+    (who) =>
+      localStorage.setItem(
+        "bahn-demo-user",
+        JSON.stringify({ id: 1, openId: who, name: who, email: "s@db.de", role: "admin" }),
+      ),
+    name,
+  );
+  return p;
+};
+
+/**
+ * Drive the site-wide search on an already-loaded page and read what it found.
+ *
+ * Waits for the list to arrive rather than for a duration somebody guessed.
+ * This container has 2 cores and these checks run six browsers at once, so a
+ * fixed sleep measures the scheduler, not the search — the same mistake the
+ * 44-pixel gate made, and it fails the same way: green here, red on the
+ * reader's machine, or the reverse.
+ */
+const searchOn = (p, term, budgetMs = 8000) =>
+  p.evaluate(
+    async ([word, budget]) => {
+      const input = document.querySelector('[role="combobox"]');
+      if (!input) throw new Error("no combobox on the page");
+      const setter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype,
+        "value",
+      )?.set;
+      const started = performance.now();
+      setter?.call(input, word);
+      input?.dispatchEvent(new Event("input", { bubbles: true }));
+      const read = () =>
+        [...document.querySelectorAll('[role="option"]')].map((o) =>
+          (o.textContent || "").slice(0, 80),
+        );
+      let hits = [];
+      while (performance.now() - started < budget) {
+        await new Promise((r) => requestAnimationFrame(() => r(null)));
+        hits = read();
+        if (hits.length > 0) break;
+      }
+      return { took: performance.now() - started, hits };
+    },
+    [term, budgetMs],
+  );
+
+await check("six sessions search at the same time and each gets its own answer", async () => {
+  // Six distinct terms, each with an unmistakable fingerprint in the result.
+  const work = [
+    { term: "Bensheim", expect: /bensheim/i },
+    { term: "Wetzlar", expect: /wetzlar/i },
+    { term: "Fulda", expect: /fulda/i },
+    { term: "Kassel", expect: /kassel/i },
+    { term: "Wiesbaden", expect: /wiesbaden/i },
+    { term: "Darmstadt", expect: /darmstadt/i },
+  ];
+
+  const contexts = [];
+  const pages = [];
+  let slowest = 0;
+  try {
+    for (let i = 0; i < work.length; i++) {
+      const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+      contexts.push(ctx);
+      pages.push(await seedSession(ctx, `stress-${i}`));
+    }
+    // All six on the Dashboard, then all six typing at once — not one after
+    // the other, which would prove nothing about simultaneity.
+    await Promise.all(
+      pages.map((p) => p.goto(U("/"), { waitUntil: "networkidle" })),
+    );
+    await Promise.all(pages.map((p) => p.waitForSelector('[role="combobox"]', { timeout: 25000 })));
+
+    const results = await Promise.all(pages.map((p, i) => searchOn(p, work[i].term)));
+
+    for (let i = 0; i < work.length; i++) {
+      const { term, expect } = work[i];
+      const { hits, took } = results[i];
+      assert(hits.length > 0, `session ${i} searching "${term}" found nothing`);
+      assert(
+        hits.some((h) => expect.test(h)),
+        `session ${i} searched "${term}" and got: ${hits.slice(0, 3).join(" | ")}`,
+      );
+      // Nobody else's term may appear in this session's list.
+      for (let j = 0; j < work.length; j++) {
+        if (j === i) continue;
+        assert(
+          !hits.some((h) => work[j].expect.test(h)),
+          `session ${i} ("${term}") is showing results for "${work[j].term}"`,
+        );
+      }
+      // Not a latency SLA: six browsers on two cores contend for a CPU no real
+      // pair of users shares. What must hold is that every one of them
+      // eventually answers, and answers its own question.
+      slowest = Math.max(slowest, took);
+    }
+    console.log(`       six sessions answered; slowest ${slowest.toFixed(0)} ms on ${cores} cores`);
+  } finally {
+    for (const ctx of contexts) await ctx.close();
+  }
+});
+
+await check("two tabs of one session keep their own search, and share one store", async () => {
+  // Same context means one localStorage: the recipient overrides and the audit
+  // trail are deliberately shared between tabs, and the search deliberately is
+  // not. A tab that adopts the other tab's query has confused the two.
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  try {
+    const a = await seedSession(ctx, "tab-a");
+    const b = await ctx.newPage();
+    await Promise.all([
+      a.goto(U("/"), { waitUntil: "networkidle" }),
+      b.goto(U("/"), { waitUntil: "networkidle" }),
+    ]);
+    await Promise.all([
+      a.waitForSelector('[role="combobox"]', { timeout: 25000 }),
+      b.waitForSelector('[role="combobox"]', { timeout: 25000 }),
+    ]);
+
+    const [ra, rb] = await Promise.all([searchOn(a, "Bensheim"), searchOn(b, "Kassel")]);
+    assert(ra.hits.some((h) => /bensheim/i.test(h)), "tab A lost its own search");
+    assert(rb.hits.some((h) => /kassel/i.test(h)), "tab B lost its own search");
+    assert(!ra.hits.some((h) => /kassel/i.test(h)), "tab A adopted tab B's query");
+    assert(!rb.hits.some((h) => /bensheim/i.test(h)), "tab B adopted tab A's query");
+
+    // And the shared half is genuinely shared: what tab A writes, tab B reads
+    // after a reload. This is the store the audit trail lives in.
+    await a.evaluate(() => localStorage.setItem("stress_shared_probe", "written-by-a"));
+    await b.reload({ waitUntil: "networkidle" });
+    const seen = await b.evaluate(() => localStorage.getItem("stress_shared_probe"));
+    assert(seen === "written-by-a", `tab B reads "${seen}" from the shared store`);
+    await a.evaluate(() => localStorage.removeItem("stress_shared_probe"));
+  } finally {
+    await ctx.close();
+  }
+});
+
+await check("a change in one tab reaches the other tab without a reload", async () => {
+  /*
+   * Two tabs share one localStorage but not one query cache. Before
+   * useCrossTabSync, tab B kept showing the old status until it was reloaded —
+   * two people at one desk reading figures that had already been overwritten.
+   *
+   * This is one browser, deliberately: two machines still do not see each
+   * other's edits, because nothing is written to a server. The hook says so in
+   * its own header, and this check does not pretend otherwise.
+   */
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  try {
+    const a = await seedSession(ctx, "sync-a");
+    const b = await ctx.newPage();
+    await a.goto(U("/psv-itk"), { waitUntil: "domcontentloaded" });
+    await b.goto(U("/psv-itk"), { waitUntil: "domcontentloaded" });
+    await a.waitForSelector("table tbody tr", { timeout: 40000 });
+    await b.waitForSelector("table tbody tr", { timeout: 40000 });
+
+    const cell = "table tbody tr:first-child td:nth-child(13)";
+    const before = (await b.locator(`${cell} button`).first().innerText()).trim();
+
+    await a.locator(`${cell} button`).first().click();
+    const select = a.locator(`${cell} select`).first();
+    await select.waitFor({ timeout: 10000 });
+    const current = await select.inputValue();
+    const options = await select.locator("option").allTextContents();
+    const next = options.find(
+      (o) => o && o !== current && o !== "—" && o !== "nicht erforderlich",
+    );
+    assert(next, "no other status to choose");
+    await select.selectOption(next);
+
+    // No reload on B — the whole point. Waits for the value, not for a guessed
+    // number of milliseconds.
+    await b
+      .waitForFunction(
+        (want) => {
+          const el = document.querySelector(
+            "table tbody tr:first-child td:nth-child(13) button",
+          );
+          return (el?.textContent ?? "").includes(want);
+        },
+        next,
+        { timeout: 15000 },
+      )
+      .catch(() => {});
+    const after = (await b.locator(`${cell} button`).first().innerText()).trim();
+    assert(
+      after.includes(next),
+      `tab B still reads "${after}" after tab A wrote "${next}" (was "${before}")`,
+    );
+  } finally {
+    await ctx.close();
+  }
+});
+
+await check("six sessions booting at once all reach the same totals", async () => {
+  // The figure every page derives independently. Six cold boots in parallel
+  // must produce six identical answers — a differing one means a race between
+  // the data load and the first render, and that is a defect whatever the
+  // machine. "networkidle" is deliberately not the wait here: with six
+  // browsers on two cores it times out on contention alone, which says
+  // nothing about the app. The table arriving is the actual condition.
+  const contexts = [];
+  try {
+    const pages = [];
+    for (let i = 0; i < 6; i++) {
+      const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+      contexts.push(ctx);
+      pages.push(await seedSession(ctx, `boot-${i}`));
+    }
+    await Promise.all(
+      pages.map((p) => p.goto(U("/projects"), { waitUntil: "domcontentloaded" })),
+    );
+    const totals = await Promise.all(
+      pages.map(async (p) => {
+        await p.waitForSelector("table tbody tr", { timeout: 90000 });
+        const text = await p.locator("body").innerText();
+        return (text.match(/1\.\d{3}\s+Projekte/) || ["(none)"])[0];
+      }),
+    );
+    const distinct = new Set(totals);
+    assert(
+      distinct.size === 1 && !distinct.has("(none)"),
+      `six simultaneous boots reported: ${[...distinct].join(" / ")}`,
+    );
+    console.log(`       six simultaneous boots all read ${[...distinct][0]}`);
+  } finally {
+    for (const ctx of contexts) await ctx.close();
+  }
 });
 
 console.log("\n== summary ==");

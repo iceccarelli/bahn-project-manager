@@ -8,6 +8,7 @@ import { QueryClientProvider } from "@/_core/query/QueryProvider";
 import AuthGate from "@/components/AuthGate";
 import DashboardLayout from "@/components/DashboardLayout";
 import Login from "@/pages/Login";
+import { useCrossTabSync } from "@/hooks/useCrossTabSync";
 
 /**
  * Route-level code splitting.
@@ -46,10 +47,22 @@ function RouteFallback() {
   );
 }
 
+/**
+ * Inside the provider, because it needs the query client — and mounted once,
+ * because a second listener would refetch twice for every event another tab
+ * fires. See useCrossTabSync for what it does and what it deliberately does
+ * not.
+ */
+function CrossTabSync() {
+  useCrossTabSync();
+  return null;
+}
+
 function App() {
   return (
     <ErrorBoundary>
       <QueryClientProvider>
+        <CrossTabSync />
         <ThemeProvider>
           <TooltipProvider>
             <Toaster />

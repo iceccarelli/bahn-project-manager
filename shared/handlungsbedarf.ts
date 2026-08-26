@@ -193,6 +193,26 @@ export function projectHref(id: number): string {
   return `/projects?projekt=${id}&view=cards`;
 }
 
+/**
+ * One station's projects, addressed by the exact ids the map counted.
+ *
+ * Not `?q=<Stationsname>`: the map groups by resolved station geometry, which
+ * folds "Frankfurt (Main) Süd" together with the rows that only carry a
+ * Bahnhofsmanagement and were placed on a regional centroid. A text search for
+ * the name finds a different set — usually a smaller one — and a marker that
+ * says "12 Projekte" landing on 9 is the same class of defect as a badge that
+ * counts one thing and links to another.
+ *
+ * The ids travel in the URL so the result set is linkable and survives a
+ * reload. Station groups are small (the largest in the shipped data holds 12),
+ * so this stays a short address rather than a query string with 1,298 numbers
+ * in it.
+ */
+export function stationHref(station: { name: string; projectIds: readonly number[] }): string {
+  const ids = station.projectIds.filter((id) => Number.isInteger(id) && id > 0).join(",");
+  return `/projects?view=cards&station=${encodeURIComponent(station.name)}&projekte=${ids}`;
+}
+
 
 /* ---------------------------------------------------------------------------
    Slices of the status pie
@@ -326,4 +346,50 @@ export function toneFor(value: string | null | undefined): StatusTone | null {
   if (!value) return null;
   const known = new Set<string>(Object.values(STATUS_TONE));
   return known.has(value) ? (value as StatusTone) : null;
+}
+
+/* ---------------------------------------------------------------------------
+   The part of the portfolio that is actually work
+   ---------------------------------------------------------------------------
+   `countTones` counts every row with a recognised status, which is the honest
+   primitive and the wrong chart.
+
+   Measured on BIM: 866 rows, of which 741 are „nicht erforderlich". The donut
+   was 86 % one grey band meaning „this department is not involved", and it
+   printed „866 Prüfungen in BIM" directly beside a card reading „125 Prüfungen
+   erforderlich". Both numbers were true and they contradicted each other on
+   one screen, which is the exact drift this project exists to remove.
+
+   Every other surface — the Gewerke cards, the relief, the Gewerk tabs, Ask
+   Bahn — defines the workload as the required rows: 814 EEA, 510 ITK, 125 BIM.
+   The donuts now do too, and they state what they left out rather than
+   silently dropping it.
+   --------------------------------------------------------------------------- */
+
+export interface RequiredTones {
+  /** The bands that represent work, largest first. */
+  slices: ToneCount[];
+  /** Prüfzeilen in those bands — matches `required` in portfolio-metrics. */
+  required: number;
+  /** Rows excluded because the department is not involved. Always stated. */
+  notRequired: number;
+}
+
+/**
+ * The tone bands worth charting, and an honest account of what was dropped.
+ *
+ * "neutral" is exactly one status — „nicht erforderlich" — so this drops a
+ * category, never a judgement about which rows matter.
+ */
+export function requiredTones(
+  projects: readonly PortfolioProject[],
+  department?: string,
+): RequiredTones {
+  const all = countTones(projects, department);
+  const slices = all.filter((t) => t.tone !== "neutral");
+  return {
+    slices,
+    required: slices.reduce((n, t) => n + t.rows, 0),
+    notRequired: all.find((t) => t.tone === "neutral")?.rows ?? 0,
+  };
 }

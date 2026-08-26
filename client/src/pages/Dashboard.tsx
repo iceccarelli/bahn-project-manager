@@ -1,5 +1,20 @@
-import React, { useMemo, useState } from 'react';
+import React, { lazy, Suspense, useMemo, useState } from 'react';
 import { useReveal } from "@/hooks/useReveal";
+/*
+ * Leaflet is 150 kB and the Dashboard is the landing page.
+ *
+ * Imported statically it would join the Dashboard's own chunk and be parsed
+ * before the first KPI is painted, on every visit, for a panel that sits below
+ * the fold. Lazily it is a separate request that starts immediately and lands
+ * while the reader is still reading the four counters above it — same map,
+ * same moment it is actually looked at, nothing blocking the numbers.
+ *
+ * The fallback reserves the exact height the map will occupy, so nothing below
+ * it moves when it arrives.
+ */
+const MapView = lazy(() =>
+  import("@/components/Map").then((m) => ({ default: m.MapView })),
+);
 import { GewerkePortfolio } from "@/components/dashboard/GewerkePortfolio";
 import { PortfolioRelief } from "@/components/dashboard/PortfolioRelief";
 import { PortfolioDiagnostics } from "@/components/dashboard/PortfolioDiagnostics";
@@ -11,7 +26,7 @@ import {
 } from "@shared/portfolio-metrics";
 import { deriveProjectMetrics, percent } from '@shared/project-metrics';
 import { statusBadgeClass, statusPulseClass, TONE_APPEARANCE } from '@shared/status-appearance';
-import { bedarfHref, countBedarf, countTones, projectHref } from '@shared/handlungsbedarf';
+import { bedarfHref, countBedarf, projectHref, requiredTones, stationHref } from '@shared/handlungsbedarf';
 import { Pie3D } from '@/components/dashboard/Pie3D';
 import { GewerkeCarousel } from '@/components/dashboard/GewerkeCarousel';
 import { APPROVED_STATUSES, normalizeReviewStatus, OPEN_STATUSES } from '@shared/review-status';
@@ -224,12 +239,8 @@ export default function Dashboard() {
    * produces cannot disagree.
    */
   const gewerkeStatusData = GEWERKE.map((gew) => {
-    const slices = countTones(projects, gew);
-    return {
-      name: gew,
-      value: slices.reduce((a, s) => a + s.rows, 0),
-      slices,
-    };
+    const { slices, required, notRequired } = requiredTones(projects, gew);
+    return { name: gew, slices, required, notRequired };
   });
 
   /*
@@ -337,8 +348,8 @@ export default function Dashboard() {
    * band and no filter to land on. They are counted and stated in the
    * subtitle rather than drawn as a slice that goes nowhere.
    */
-  const { toneSlices, unmappedStatusRows, totalStatusRows } = useMemo(() => {
-    const slices = countTones(projects);
+  const { toneSlices, unmappedStatusRows, totalStatusRows, notRequiredRows } = useMemo(() => {
+    const { slices, required, notRequired } = requiredTones(projects);
     let unmapped = 0;
     for (const p of projects) {
       for (const r of p.reviews ?? []) {
@@ -349,7 +360,8 @@ export default function Dashboard() {
     return {
       toneSlices: slices,
       unmappedStatusRows: unmapped,
-      totalStatusRows: slices.reduce((n, d) => n + d.rows, 0),
+      totalStatusRows: required,
+      notRequiredRows: notRequired,
     };
   }, [projects]);
 
@@ -584,6 +596,55 @@ export default function Dashboard() {
         </Card>
       </div>
 
+      {/*
+        The whole network, between the counters and the relief.
+
+        Same component, same props shape and same behaviour as the map on
+        Projekte — one MapView, not a Dashboard copy of one, because a second
+        implementation is a second set of station-matching rules to keep in
+        step. It is handed every project, not a filtered set: this is the
+        overview, and its own Netz-Explorer card states how many of them could
+        be placed and how many could not.
+
+        Clicking lands on exactly what was clicked. A project opens that
+        project; a station header opens that station's group by id, not by a
+        text search for its name — see stationHref.
+      */}
+      <Card>
+        <CardContent className="space-y-3 p-5">
+          <div className="min-w-0">
+            {/* Not "Netz-Explorer": the map paints a card with that name and the
+                real counts on it, and two identical titles stacked on top of
+                each other read as a rendering fault. */}
+            <h2 className="text-lg font-bold">Alle Projekte auf der Karte</h2>
+            <p className="mt-0.5 text-2xs text-muted-foreground">
+              Jedes Projekt an seiner Station. Farbe zeigt den Arbeitsstand, der Rand die Genauigkeit
+              der Verortung. Ein Klick auf ein Projekt öffnet es, ein Klick auf die Station zeigt
+              genau deren Projekte.
+            </p>
+          </div>
+          <Suspense
+            fallback={
+              <div
+                data-map-placeholder
+                className="grid h-[65vh] min-h-[380px] w-full place-items-center rounded-lg border border-border bg-muted/30 text-2xs text-muted-foreground sm:h-[560px] lg:h-[600px]"
+              >
+                Karte wird geladen …
+              </div>
+            }
+          >
+            <MapView
+              projects={projects}
+              initialCenter={{ lat: 51.1657, lng: 10.4515 }}
+              initialZoom={6}
+              className="relative h-[65vh] min-h-[380px] w-full sm:h-[560px] lg:h-[600px]"
+              onProjectSelect={(id) => setLocation(projectHref(id))}
+              onStationSelect={(station) => setLocation(stationHref(station))}
+            />
+          </Suspense>
+        </CardContent>
+      </Card>
+
       {/* MAIN CONTENT */}
       {/*
         The relief is full width, and that is a measurement rather than a
@@ -608,11 +669,28 @@ export default function Dashboard() {
               {/* Says which Prüfzeilen: the panel below counts all 18.172 rows,
                   this pie only the ones that carry a status. Two different
                   numbers under the same word on one screen is drift. */}
+              {/*
+                What the donut plots, and everything it does not.
+                
+                It used to chart all 15.646 rows that carry a status, and the
+                single biggest band — by a distance — was „nicht relevant":
+                rows saying a department is not involved. A status chart whose
+                largest slice means „does not apply" answers no question, and
+                it disagreed with every workload figure on the site, all of
+                which exclude those rows. Now it plots the work and accounts
+                for the remainder in full.
+              */}
               <p className="text-2xs text-muted-foreground">
-                {totalStatusRows.toLocaleString("de-DE")} von{" "}
-                {metrics.totalReviews.toLocaleString("de-DE")} Prüfzeilen tragen einen Status
+                <strong className="font-bold text-foreground">
+                  {totalStatusRows.toLocaleString("de-DE")}
+                </strong>{" "}
+                erforderliche Prüfungen von{" "}
+                {metrics.totalReviews.toLocaleString("de-DE")} Prüfzeilen
+                {notRequiredRows > 0
+                  ? ` · ${notRequiredRows.toLocaleString("de-DE")} „nicht erforderlich"`
+                  : ""}
                 {unmappedStatusRows > 0
-                  ? ` · ${unmappedStatusRows.toLocaleString("de-DE")} davon unbekannt`
+                  ? ` · ${unmappedStatusRows.toLocaleString("de-DE")} ohne bekannten Status`
                   : ""}
               </p>
             </CardHeader>
@@ -639,7 +717,7 @@ export default function Dashboard() {
             among the six. Every number below is derived in
             shared/portfolio-metrics.ts and agrees with the Gewerk tabs.
           */}
-          <GewerkePortfolio standings={standings} />
+          <GewerkePortfolio standings={standings} projects={projects} audit={auditEntries || []} />
 
           {/* Aging, concentration and the trustworthiness of the rows every
               other panel is built on. */}

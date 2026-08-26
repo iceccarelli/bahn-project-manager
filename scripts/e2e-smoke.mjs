@@ -696,18 +696,52 @@ await check("no page states a figure the data does not support", async () => {
   }
 });
 
-await check("the status pie plots every review row, not a hardcoded subset", async () => {
+await check("the status pie plots the work, and accounts for every row it does not", async () => {
   await go("/");
+  /*
+   * The rule changed, and for a measured reason.
+   *
+   * The donut used to plot all 15.646 rows carrying a status, and its single
+   * biggest band was „nicht relevant" — rows saying a department is not
+   * involved. For BIM that is 741 of 866, so the carousel printed „866
+   * Prüfungen in BIM" next to a card reading „125 Prüfungen erforderlich":
+   * both true, contradicting each other on one screen.
+   *
+   * So it now plots the required rows, like every other workload figure on the
+   * site, and the caption has to account for the rest — the obligation is no
+   * longer "chart everything" but "chart the work and drop nothing silently".
+   */
   const caption = await page
-    .locator("text=/von .* Prüfzeilen tragen einen Status/")
+    .locator("text=/erforderliche Prüfungen von .* Prüfzeilen/")
     .first()
     .innerText();
-  const shown = Number((caption.match(/^[\d.]+/) ?? ["0"])[0].replace(/\./g, ""));
-  // Every non-null status in the shipped data, counted independently here.
+  const numbers = [...caption.matchAll(/([\d.]+)/g)].map((m) => Number(m[1].replace(/\./g, "")));
+  const [required, total, notRequired] = numbers;
+
   const projects = JSON.parse(fs.readFileSync("client/public/data.json", "utf8")).projects;
-  let expected = 0;
-  for (const p of projects) for (const r of p.reviews ?? []) if (r.status) expected++;
-  assert(shown === expected, `pie caption says ${shown} rows, the data has ${expected}`);
+  let withStatus = 0;
+  let rows = 0;
+  let notRequiredRows = 0;
+  for (const p of projects) {
+    for (const r of p.reviews ?? []) {
+      rows++;
+      if (!r.status) continue;
+      withStatus++;
+      if (String(r.status).trim().toLowerCase().startsWith("nicht erforderlich")) notRequiredRows++;
+    }
+  }
+  assert(total === rows, `caption says ${total} Prüfzeilen, the data has ${rows}`);
+  assert(
+    notRequired === notRequiredRows,
+    `caption says ${notRequired} nicht erforderlich, the data has ${notRequiredRows}`,
+  );
+  // Nothing may go missing between the two: every row that carries a status is
+  // either charted or named in the caption.
+  assert(
+    required + notRequired === withStatus,
+    `${required} charted + ${notRequired} excluded ≠ ${withStatus} rows with a status`,
+  );
+  console.log(`     ${required} charted, ${notRequired} excluded, ${withStatus} with a status`);
 });
 
 await check("truncated lists say how much they are hiding", async () => {
@@ -1743,6 +1777,326 @@ await check("Rückgängig restores the old value and is itself recorded", async 
 });
 
 
+console.log("\n== the map on the Dashboard ==");
+
+/**
+ * The same map, not a second one.
+ *
+ * The Dashboard's map is the component Projekte renders, handed every project
+ * rather than a filtered set. These read both surfaces and compare them: a
+ * Dashboard copy that drifted — its own station matching, its own counts —
+ * would show here as two different answers to "how many of the 1,298 could be
+ * placed".
+ */
+const netzExplorerText = async () => {
+  await page.waitForSelector(".leaflet-container", { timeout: 30000 });
+  await page.locator(".leaflet-container").first().scrollIntoViewIfNeeded();
+  await page.waitForTimeout(1200);
+  // The Netz-Explorer card is a sibling of the Leaflet pane, not a child of
+  // it, so this reads the page rather than the container.
+  const body = await page.locator("body").innerText();
+  const m = body.match(/([\d.]+)\s*STATIONEN\s*·\s*([\d.]+)\s*EXAKT\s*·\s*([\d.]+)\/([\d.]+)\s*VERORTET/i);
+  const markers = await page.$$eval(".db-dot-marker", (els) => els.length);
+  return { raw: m ? m[0] : "(keine Netz-Explorer-Karte)", markers };
+};
+
+await check("the Dashboard map is the whole network, and the same one Projekte draws", async () => {
+  await go("/");
+  const dash = await netzExplorerText();
+  assert(
+    /VERORTET/i.test(dash.raw),
+    `the Dashboard map states no coverage: ${dash.raw}`,
+  );
+  assert(dash.markers > 100, `the Dashboard map drew ${dash.markers} markers`);
+
+  // Exactly one map. A second would mean the section was mounted twice.
+  const containers = await page.$$eval(".leaflet-container", (els) => els.length);
+  assert(containers === 1, `${containers} maps on the Dashboard`);
+
+  await go("/projects?view=map");
+  const tab = await netzExplorerText();
+  assert(
+    dash.raw === tab.raw,
+    `the two maps disagree about the network:\n  Dashboard: ${dash.raw}\n  Projekte:  ${tab.raw}`,
+  );
+  assert(
+    dash.markers === tab.markers,
+    `Dashboard drew ${dash.markers} markers, Projekte ${tab.markers} — not the same set`,
+  );
+
+  // And it is the whole set, not a filtered one: the total in the card is the
+  // project count the rest of the Dashboard reports.
+  const total = dash.raw.match(/\/([\d.]+)\s*VERORTET/i)?.[1];
+  assert(total === "1.298", `the map covers ${total} projects, the Dashboard has 1.298`);
+});
+
+await check("a station on the Dashboard map opens exactly the projects it counted", async () => {
+  await go("/");
+  await page.waitForSelector(".leaflet-container", { timeout: 30000 });
+  await page.locator(".leaflet-container").scrollIntoViewIfNeeded();
+  await page.waitForTimeout(1500);
+
+  // A marker carrying a number is a station with more than one project — the
+  // case where "the popup says N" and "the page shows N" can disagree.
+  const markers = page.locator(".leaflet-marker-icon");
+  const count = await markers.count();
+  let opened = false;
+  for (let i = 0; i < count && !opened; i++) {
+    const text = ((await markers.nth(i).innerText().catch(() => "")) || "").trim();
+    if (/^\d+$/.test(text) && Number(text) > 1) {
+      await markers.nth(i).click({ force: true });
+      opened = true;
+    }
+  }
+  assert(opened, "no multi-project station on the map to open");
+  await page.waitForSelector(".leaflet-popup", { timeout: 10000 });
+
+  const action = page.getByRole("button", { name: /Alle \d+ Projekte als Karten anzeigen/ });
+  const promised = Number(
+    (await action.innerText()).match(/Alle (\d+) Projekte/)?.[1] ?? "0",
+  );
+  assert(promised > 1, `the popup promises ${promised} projects`);
+
+  await action.click();
+  await page.waitForTimeout(1800);
+
+  // Addressed by id, not by a text search for the station name — see
+  // stationHref in shared/handlungsbedarf.ts.
+  const url = new URL(page.url());
+  assert(url.pathname === "/projects", `landed on ${url.pathname}`);
+  const ids = (url.searchParams.get("projekte") ?? "").split(",").filter(Boolean);
+  assert(
+    ids.length === promised,
+    `the popup promised ${promised} projects, the link carries ${ids.length} ids`,
+  );
+  assert(url.searchParams.get("station"), "the link carries no station name to show the reader");
+
+  const body = await page.locator("body").innerText();
+  const found = Number((body.match(/([\d.]+) Projekte gefunden/) ?? ["", "0"])[1].replace(/\./g, ""));
+  assert(
+    found === promised,
+    `the popup promised ${promised} projects and the page shows ${found}`,
+  );
+  assert(
+    body.includes(`Station: ${url.searchParams.get("station")}`),
+    "the page does not say which station it is filtered to",
+  );
+});
+
+await check("a project in the Dashboard popup opens that project", async () => {
+  await go("/");
+  await page.waitForSelector(".leaflet-container", { timeout: 30000 });
+  await page.locator(".leaflet-container").scrollIntoViewIfNeeded();
+  await page.waitForTimeout(1500);
+  await page.locator(".leaflet-marker-icon").first().click({ force: true });
+  await page.waitForSelector(".leaflet-popup", { timeout: 10000 });
+
+  // The project entries sit under the station header action.
+  const entries = page.locator(".leaflet-popup button");
+  const total = await entries.count();
+  assert(total > 1, "the popup offers no project to open");
+  await entries.nth(total - 1).click();
+  await page.waitForTimeout(1800);
+
+  const url = new URL(page.url());
+  assert(url.pathname === "/projects", `landed on ${url.pathname}`);
+  const projekt = url.searchParams.get("projekt");
+  assert(projekt && Number(projekt) > 0, `no project in the address: ${url.search}`);
+  const rows = await page.locator("[data-project-card], article").count();
+  assert(rows >= 1, "the project link landed on an empty set");
+});
+
+console.log("\n== one change, every surface ==");
+
+/**
+ * The chain of custody for a single value.
+ *
+ * Every other gate proves one surface works. This one proves they cannot
+ * disagree: a status is changed once, and the Gewerk tab, the Projekte table,
+ * the Dashboard's counters, the card's own reel and the Änderungshistorie are
+ * all read afterwards and must tell the same story. Then it is taken back, and
+ * every one of them must return to exactly the figure it started from —
+ * exactly, because "roughly back" is data drift with a nicer name.
+ */
+const OPEN_SET = ["offen", "in Bearbeitung", "Nachforderung", "prüffähig"];
+const APPROVED_SET = ["Zustimmung erteilt", "Niederschrift erstellt"];
+const BLOCKED_SET = ["abgelehnt", "gestoppt"];
+/** The same four buckets shared/portfolio-metrics.ts counts into. */
+const bucketOf = (status) =>
+  OPEN_SET.includes(status)
+    ? "open"
+    : APPROVED_SET.includes(status)
+      ? "approved"
+      : BLOCKED_SET.includes(status)
+        ? "blocked"
+        : "other";
+
+/** The Dashboard's own arithmetic for one Gewerk, read off the card. */
+const readGewerkCard = async (department) => {
+  await go("/");
+  await page.waitForSelector("[data-gewerk]", { timeout: 25000 });
+  await page.getByRole("button", { name: "Alle 14 zeigen" }).click();
+  await page.waitForTimeout(300);
+  const label = await page.$eval(
+    `[data-gewerk="${department}"] [role="img"]`,
+    (el) => el.getAttribute("aria-label") ?? "",
+  );
+  const m = label.match(
+    /(\d+) zugestimmt, (\d+) offen, (\d+) blockiert, (\d+) sonstige von (\d+)/,
+  );
+  if (!m) throw new Error(`the ${department} card carries no readable figures: "${label}"`);
+  return {
+    approved: Number(m[1]),
+    open: Number(m[2]),
+    blocked: Number(m[3]),
+    other: Number(m[4]),
+    required: Number(m[5]),
+  };
+};
+
+await check("one change reaches every surface, and Rückgängig puts every one back", async () => {
+  const before = await readGewerkCard("EEA");
+  assert(
+    before.open + before.approved + before.blocked + before.other === before.required,
+    `the EEA card does not add up: ${JSON.stringify(before)}`,
+  );
+
+  // --- the change, made where a Fachspezialist would make it ----------------
+  await go("/bvb-eea");
+  await page.waitForSelector("table tbody tr", { timeout: 30000 });
+  const projektnummer = (
+    await page.locator("table tbody tr:first-child td:nth-child(2)").innerText()
+  ).trim();
+  assert(projektnummer.length > 0, "the first EEA row carries no Projektnummer to follow");
+
+  // The accessible name is the same on both surfaces, so it is the one handle
+  // that identifies this exact review wherever it is rendered.
+  const handle = `button[aria-label^="Status EEA für Projekt ${projektnummer} ändern"]`;
+  const badge = page.locator(handle).first();
+  await badge.waitFor({ timeout: 10000 });
+  const original = (await badge.innerText()).replace(/[▾\s]+$/, "").trim();
+
+  // Cross a bucket boundary, so the Dashboard has to move a row from one
+  // counter to another. Never "nicht erforderlich": that changes `required`
+  // and is a different test (it has its own gate).
+  const target = bucketOf(original) === "open" ? "Zustimmung erteilt" : "offen";
+  assert(target !== original, `nothing to change: the row already reads ${original}`);
+
+  await badge.click();
+  const select = page.locator('table tbody tr:first-child td select').first();
+  await select.waitFor({ timeout: 5000 });
+  await select.selectOption(target);
+  await page.waitForTimeout(1200);
+
+  const onTab = (await page.locator(handle).first().innerText()).replace(/[▾\s]+$/, "").trim();
+  assert(onTab === target, `the Gewerk tab reads "${onTab}" after writing "${target}"`);
+
+  // --- surface 2: the Projekte table, filtered to that project -------------
+  await go(`/projects?q=${encodeURIComponent(projektnummer)}`);
+  await page.waitForSelector("table tbody tr", { timeout: 30000 });
+  await settled();
+  const onProjects = (await page.locator(handle).first().innerText())
+    .replace(/[▾\s]+$/, "")
+    .trim();
+  assert(
+    onProjects === target,
+    `Projekte reads "${onProjects}" while the Gewerk tab reads "${target}"`,
+  );
+
+  // --- surface 3: the Dashboard counters -----------------------------------
+  const after = await readGewerkCard("EEA");
+  assert(
+    after.required === before.required,
+    `the workload changed from ${before.required} to ${after.required} on a status edit`,
+  );
+  assert(
+    after.open + after.approved + after.blocked + after.other === after.required,
+    `the EEA card stopped adding up: ${JSON.stringify(after)}`,
+  );
+  const from = bucketOf(original);
+  const to = bucketOf(target);
+  for (const b of ["open", "approved", "blocked", "other"]) {
+    const expected = before[b] + (b === to ? 1 : 0) - (b === from ? 1 : 0);
+    assert(
+      after[b] === expected,
+      `EEA ${b}: expected ${expected} after ${original} → ${target}, the Dashboard says ${after[b]}`,
+    );
+  }
+
+  // --- surface 4: the card's own reel plays the change it just counted -----
+  await page.hover('[data-gewerk="EEA"]');
+  await page.waitForSelector('[data-reel="EEA"]', { timeout: 10000 });
+  const newest = await page.$eval(
+    '[data-reel="EEA"] [data-reel-entry]',
+    (el) => ({ source: el.getAttribute("data-reel-source"), text: el.textContent ?? "" }),
+  );
+  assert(
+    newest.source === "historie",
+    `the EEA reel opens with a ${newest.source} entry, not the change just made`,
+  );
+  assert(
+    newest.text.includes(projektnummer),
+    `the reel's newest entry does not name ${projektnummer}: ${newest.text.slice(0, 90)}`,
+  );
+  await page.mouse.move(5, 5);
+
+  // --- surface 5: the Änderungshistorie ------------------------------------
+  await go("/audit");
+  const trail = await page.locator("body").innerText();
+  assert(trail.includes(projektnummer), `the trail does not name ${projektnummer}`);
+  assert(trail.includes(target), `the trail does not record the new value "${target}"`);
+  assert(
+    trail.includes(original),
+    `the trail records no previous value — an entry that cannot be reversed`,
+  );
+
+  // --- and back ------------------------------------------------------------
+  const undo = page.getByRole("button", { name: /^Änderung zurücknehmen/ }).first();
+  await undo.waitFor({ timeout: 10000 });
+  await undo.click();
+  await page.waitForTimeout(1500);
+
+  await go("/bvb-eea");
+  await page.waitForSelector("table tbody tr", { timeout: 30000 });
+  const restoredTab = (await page.locator(handle).first().innerText())
+    .replace(/[▾\s]+$/, "")
+    .trim();
+  assert(
+    restoredTab === original,
+    `after the undo the Gewerk tab reads "${restoredTab}", expected "${original}"`,
+  );
+
+  await go(`/projects?q=${encodeURIComponent(projektnummer)}`);
+  await page.waitForSelector("table tbody tr", { timeout: 30000 });
+  await settled();
+  const restoredProjects = (await page.locator(handle).first().innerText())
+    .replace(/[▾\s]+$/, "")
+    .trim();
+  assert(
+    restoredProjects === original,
+    `after the undo Projekte reads "${restoredProjects}", expected "${original}"`,
+  );
+
+  const back = await readGewerkCard("EEA");
+  for (const b of ["open", "approved", "blocked", "other", "required"]) {
+    assert(
+      back[b] === before[b],
+      `EEA ${b} did not return: started ${before[b]}, ended ${back[b]}`,
+    );
+  }
+
+  // Reversible, not erasable: the undo is a third entry, and the two it
+  // reverses are still on file. A trail that forgets is not evidence.
+  await go("/audit");
+  const afterUndo = await page.locator("body").innerText();
+  assert(
+    afterUndo.includes(projektnummer),
+    "the undo removed the project from the trail instead of appending to it",
+  );
+  const entries = await page.$$eval("[data-audit-action]", (els) => els.length);
+  assert(entries >= 2, `only ${entries} entries after a change and its undo`);
+});
+
 console.log("\n== the Dashboard reports the workload, not the row count ==");
 
 await check("every Gewerk shows its own figure, and it matches its own tab", async () => {
@@ -1750,6 +2104,10 @@ await check("every Gewerk shows its own figure, and it matches its own tab", asy
   // 814 EEA checks and /psv-itk says 510, and the Dashboard has to agree.
   await go("/");
   await page.waitForSelector("[data-gewerk]", { timeout: 25000 });
+  // The strip runs as a chain of four; "Alle 14 zeigen" is the control that
+  // stops it and puts every Gewerk on screen at once.
+  await page.getByRole("button", { name: "Alle 14 zeigen" }).click();
+  await page.waitForTimeout(300);
   const cards = await page.$$eval("[data-gewerk]", (els) =>
     els.map((e) => ({
       dept: e.getAttribute("data-gewerk"),
@@ -1773,6 +2131,8 @@ await check("every Gewerk shows its own figure, and it matches its own tab", asy
 await check("a Gewerk card opens that Gewerk", async () => {
   await go("/");
   await page.waitForSelector("[data-gewerk]", { timeout: 25000 });
+  await page.getByRole("button", { name: "Alle 14 zeigen" }).click();
+  await page.waitForTimeout(300);
   await page.click('[data-gewerk="EEA"]');
   await page.waitForTimeout(1200);
   assert(/\/bvb-eea/.test(page.url()), `the EEA card went to ${page.url()}`);
@@ -1958,35 +2318,124 @@ await check("nothing is clipped out of the relief at its default camera", async 
   assert(!spill.scrolls, "the relief needs a horizontal scrollbar at its default camera");
 });
 
-await check("Präsentationsmodus is opt-in, advances, and pauses when read", async () => {
+await check("the Gewerke chain advances, and stops dead when somebody reads it", async () => {
   await go("/");
   await page.waitForSelector("[data-gewerk]", { timeout: 25000 });
+
+  // Four in frame, fourteen in the chain. The panel says both.
+  const framed = await page.$$eval("[data-gewerk]", (e) => e.length);
+  assert(framed === 4, `the chain shows ${framed} cards, expected a window of 4`);
+  const caption = await page.locator("output").allInnerTexts();
   assert(
-    (await page.$$eval("[data-gewerk]", (e) => e.length)) === 14,
-    "rotation is on before anyone asked for it",
+    caption.some((t) => /von 14/.test(t) && /wechselt alle \d+ Sekunden/.test(t)),
+    "the chain does not say how many Gewerke it is cycling, or how fast",
   );
 
-  const toggle = page.getByRole("button", { name: /Präsentationsmodus/ });
-  await toggle.click();
-  await page.waitForTimeout(500);
-  const windowed = await page.$$eval("[data-gewerk]", (e) => e.length);
-  assert(windowed < 14, `Präsentationsmodus still shows ${windowed} cards`);
+  const listed = () =>
+    page.$$eval("[data-gewerk]", (els) => els.map((e) => e.getAttribute("data-gewerk")).join(","));
 
-  const before = await page.$$eval("[data-gewerk]", (els) =>
-    els.map((e) => e.getAttribute("data-gewerk")).join(","),
-  );
+  // It moves on its own — no click required.
+  const first = await listed();
+  await page.waitForTimeout(5600);
+  const second = await listed();
+  assert(first !== second, `the chain never advanced: still ${first}`);
+
+  // And the arrows drive it by hand.
   await page.getByRole("button", { name: "Nächstes Gewerk" }).click();
   await page.waitForTimeout(400);
-  const after = await page.$$eval("[data-gewerk]", (els) =>
-    els.map((e) => e.getAttribute("data-gewerk")).join(","),
-  );
-  assert(before !== after, "the next-Gewerk control changed nothing");
+  assert((await listed()) !== second, "the next-Gewerk control changed nothing");
 
-  // Reading it must stop it moving.
-  await page.hover("[data-gewerk]");
+  // Reading it must stop it moving — and keep it stopped for longer than one
+  // rotation, because a card that slides out from under the pointer takes its
+  // reel with it.
+  const held = await page.$eval("[data-gewerk]", (e) => e.getAttribute("data-gewerk"));
+  await page.hover(`[data-gewerk="${held}"]`);
   await page.waitForTimeout(400);
   const body = await page.locator("body").innerText();
-  assert(body.includes("pausiert"), "hovering a card did not pause the rotation");
+  assert(body.includes("pausiert"), "reading a card did not pause the chain");
+  const during = await listed();
+  await page.waitForTimeout(5600);
+  assert((await listed()) === during, "the chain kept moving while a card was being read");
+
+  // Let go, and it resumes.
+  await page.mouse.move(5, 5);
+  await page.waitForTimeout(5600);
+  assert((await listed()) !== during, "the chain did not resume after the pointer left");
+});
+
+await check("a Gewerk card plays its own latest Einträge, and every frame is a record", async () => {
+  await go("/");
+  await page.waitForSelector("[data-gewerk]", { timeout: 25000 });
+  await page.getByRole("button", { name: "Alle 14 zeigen" }).click();
+  await page.waitForTimeout(300);
+
+  await page.hover('[data-gewerk="EEA"]');
+  await page.waitForSelector("[data-reel]", { timeout: 10000 });
+
+  const reel = await page.$eval("[data-reel]", (el) => ({
+    dept: el.getAttribute("data-reel"),
+    count: Number(el.getAttribute("data-reel-count")),
+    frame: Number(el.getAttribute("data-reel-frame")),
+    entries: [...el.querySelectorAll("[data-reel-entry]")].map((e) => ({
+      source: e.getAttribute("data-reel-source"),
+      text: e.textContent ?? "",
+    })),
+  }));
+
+  assert(reel.dept === "EEA", `hovering EEA played ${reel.dept}`);
+  assert(reel.count > 0, "the EEA card has nothing to play, and EEA has 814 required rows");
+  assert(reel.entries.length === reel.count, "the reel and its own count disagree");
+
+  // Every frame states which record it is and when it is dated. No frame may
+  // carry an unlabelled figure — that is exactly how a stored 2024 review gets
+  // read as something that happened this morning.
+  for (const e of reel.entries) {
+    assert(
+      e.source === "historie" || e.source === "bestand",
+      `a reel frame carries no source: ${e.text.slice(0, 60)}`,
+    );
+    assert(
+      /\d{2}\.\d{2}\.\d{4}/.test(e.text),
+      `a reel frame carries no date: ${e.text.slice(0, 60)}`,
+    );
+    assert(
+      /Änderung|Bestand/.test(e.text),
+      `a reel frame does not say what kind of record it is: ${e.text.slice(0, 60)}`,
+    );
+  }
+
+  // It plays: the visible frame changes on its own.
+  const visible = () =>
+    page.$eval("[data-reel]", (el) =>
+      [...el.querySelectorAll("[data-reel-entry]")].findIndex(
+        (e) => Number.parseFloat(getComputedStyle(e).opacity) > 0.9,
+      ),
+    );
+  const before = await visible();
+  await page.waitForTimeout(2600);
+  const after = await visible();
+  assert(before !== after, `the reel is frozen on frame ${before}`);
+
+  // One card at a time, and only the card under the pointer.
+  const open = await page.$$eval("[data-reel]", (els) => els.length);
+  assert(open === 1, `${open} cards are playing at once`);
+
+  // The reel belongs to the card. Leaving takes it away rather than leaving a
+  // stale EEA reel sitting on a card that is not EEA.
+  await page.mouse.move(5, 5);
+  await page.waitForTimeout(500);
+  assert((await page.$$eval("[data-reel]", (e) => e.length)) === 0, "a reel outlived its hover");
+
+  // A different card plays a different Gewerk's records.
+  await page.hover('[data-gewerk="ITK"]');
+  await page.waitForSelector('[data-reel="ITK"]', { timeout: 10000 });
+  const itk = await page.$eval('[data-reel="ITK"]', (el) => el.textContent ?? "");
+  await page.mouse.move(5, 5);
+  await page.waitForTimeout(300);
+  await page.hover('[data-gewerk="EEA"]');
+  await page.waitForSelector('[data-reel="EEA"]', { timeout: 10000 });
+  const eea = await page.$eval('[data-reel="EEA"]', (el) => el.textContent ?? "");
+  assert(itk !== eea, "two Gewerke play the same reel");
 });
 
 await check("the diagnostics say what they cannot measure", async () => {
