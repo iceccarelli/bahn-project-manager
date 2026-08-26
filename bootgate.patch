@@ -1,0 +1,74 @@
+From 6cda2ff07a0f3e842a3e6cb4680e98e9870f54d3 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 26 Aug 2026 18:13:29 +0000
+Subject: [PATCH] Das Boot-Gate wartete auf Layout, nicht auf die Zahl, die es
+ vergleicht
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Auf deiner Maschine ist es nach 90 Sekunden gescheitert — mit der Antwort
+bereits in der Hand. Playwright sagte es selbst:
+
+  waiting for locator('table tbody tr') to be visible
+  locator resolved to 1298 elements
+
+Die 1.298 Zeilen waren da. `waitForSelector` wartet aber auf SICHTBARKEIT,
+und Sichtbarkeit ist eine Layout-Tatsache: sechs Chromium-Kontexte auf zwei
+Kernen, direkt nach der kompletten Suite, und die erste Zeile war noch nicht
+gelayoutet. Ein Gate, dessen Ergebnis von der Warteschlange des Renderers
+abhaengt, misst den Renderer und nicht die Anwendung — derselbe Fehler wie
+beim 44-Pixel-Gate, nur andersherum.
+
+Gewartet wird jetzt auf genau die Zahl, die verglichen wird, und zusaetzlich
+gezaehlt, dass Zeilen dahinterstehen: eine Seite, die den Gesamtwert druckt
+und nichts gerendert hat, ist nicht dieselbe Antwort.
+
+Gemessen nach der Aenderung: 12 passed, 0 failed. Sechs gleichzeitige
+Kaltstarts lesen alle 1.298 Projekte, langsamste Suchantwort 902 ms auf zwei
+Kernen.
+---
+ scripts/stress-test.mjs | 24 ++++++++++++++++++++++--
+ 1 file changed, 22 insertions(+), 2 deletions(-)
+
+diff --git a/scripts/stress-test.mjs b/scripts/stress-test.mjs
+index 8777bce..4fd03ad 100644
+--- a/scripts/stress-test.mjs
++++ b/scripts/stress-test.mjs
+@@ -567,11 +567,31 @@ await check("six sessions booting at once all reach the same totals", async () =
+     await Promise.all(
+       pages.map((p) => p.goto(U("/projects"), { waitUntil: "domcontentloaded" })),
+     );
++    /*
++     * Waits for the figure this check compares, not for a row to be painted.
++     *
++     * `waitForSelector("table tbody tr")` waits for VISIBILITY, and visibility
++     * is a layout fact: on a loaded machine the 1,298 rows are in the DOM —
++     * Playwright said so, "locator resolved to 1298 elements" — while the
++     * first one has not been laid out yet, and the check failed after 90 s
++     * having already had its answer. A gate whose result depends on the
++     * renderer's queue is measuring the renderer, not the app.
++     */
+     const totals = await Promise.all(
+       pages.map(async (p) => {
+-        await p.waitForSelector("table tbody tr", { timeout: 90000 });
++        await p
++          .waitForFunction(
++            () => /1\.\d{3}\s+Projekte/.test(document.body.innerText),
++            null,
++            { timeout: 120000 },
++          )
++          .catch(() => {});
++        const rows = await p.$$eval("table tbody tr", (els) => els.length);
+         const text = await p.locator("body").innerText();
+-        return (text.match(/1\.\d{3}\s+Projekte/) || ["(none)"])[0];
++        const total = (text.match(/1\.\d{3}\s+Projekte/) || ["(none)"])[0];
++        // The count must come with the rows behind it: a page that prints the
++        // total but rendered nothing is not the same answer.
++        return rows > 0 ? total : `(0 Zeilen, meldet ${total})`;
+       }),
+     );
+     const distinct = new Set(totals);
+-- 
+2.43.0
+
