@@ -391,7 +391,7 @@ const seedSession = async (context, name) => {
  * 44-pixel gate made, and it fails the same way: green here, red on the
  * reader's machine, or the reverse.
  */
-const searchOn = (p, term, budgetMs = 8000) =>
+const searchOn = (p, term, budgetMs = 25000) =>
   p.evaluate(
     async ([word, budget]) => {
       const input = document.querySelector('[role="combobox"]');
@@ -443,14 +443,36 @@ await check("six sessions search at the same time and each gets its own answer",
     await Promise.all(
       pages.map((p) => p.goto(U("/"), { waitUntil: "networkidle" })),
     );
+    /*
+     * The box, and then the data behind it.
+     *
+     * `[role="combobox"]` exists from the first paint; the index it searches
+     * does not — 1,298 projects have to be read and validated first. Six cold
+     * boots on two cores made that gap wide enough to type into: session 3
+     * asked for "Kassel" against an empty index, got nothing, and the gate
+     * called it cross-contamination. Waiting for the project count is waiting
+     * for the thing that makes the answer possible.
+     */
     await Promise.all(pages.map((p) => p.waitForSelector('[role="combobox"]', { timeout: 25000 })));
+    await Promise.all(
+      pages.map((p) =>
+        p
+          .waitForFunction(() => /1\.\d{3}\s+Projekte/.test(document.body.innerText), null, {
+            timeout: 120000,
+          })
+          .catch(() => {}),
+      ),
+    );
 
     const results = await Promise.all(pages.map((p, i) => searchOn(p, work[i].term)));
 
     for (let i = 0; i < work.length; i++) {
       const { term, expect } = work[i];
       const { hits, took } = results[i];
-      assert(hits.length > 0, `session ${i} searching "${term}" found nothing`);
+      assert(
+        hits.length > 0,
+        `session ${i} searching "${term}" found nothing in ${took.toFixed(0)} ms — the index was not ready, or the search is broken`,
+      );
       assert(
         hits.some((h) => expect.test(h)),
         `session ${i} searched "${term}" and got: ${hits.slice(0, 3).join(" | ")}`,
@@ -490,6 +512,16 @@ await check("two tabs of one session keep their own search, and share one store"
       a.waitForSelector('[role="combobox"]', { timeout: 25000 }),
       b.waitForSelector('[role="combobox"]', { timeout: 25000 }),
     ]);
+    // Same reason as above: the index has to exist before it can be searched.
+    await Promise.all(
+      [a, b].map((p) =>
+        p
+          .waitForFunction(() => /1\.\d{3}\s+Projekte/.test(document.body.innerText), null, {
+            timeout: 120000,
+          })
+          .catch(() => {}),
+      ),
+    );
 
     const [ra, rb] = await Promise.all([searchOn(a, "Bensheim"), searchOn(b, "Kassel")]);
     assert(ra.hits.some((h) => /bensheim/i.test(h)), "tab A lost its own search");
