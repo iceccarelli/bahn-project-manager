@@ -1,5 +1,6 @@
 import React, { lazy, Suspense, useMemo, useState } from 'react';
 import { useReveal } from "@/hooks/useReveal";
+import { useNearViewport } from "@/hooks/useNearViewport";
 /*
  * Leaflet is 150 kB and the Dashboard is the landing page.
  *
@@ -146,6 +147,7 @@ interface WorkloadItem {
 
 export default function Dashboard() {
   const [, setLocation] = useLocation();
+  const [mapAnchor, mapNear] = useNearViewport<HTMLDivElement>();
   const queryClient = useQueryClient();
   const { data: allData, isLoading: dataLoading, isError: dataError } = useAllData();
   const { data: auditEntries } = useAuditLog();
@@ -623,25 +625,44 @@ export default function Dashboard() {
               genau deren Projekte.
             </p>
           </div>
-          <Suspense
-            fallback={
-              <div
-                data-map-placeholder
-                className="grid h-[65vh] min-h-[380px] w-full place-items-center rounded-lg border border-border bg-muted/30 text-2xs text-muted-foreground sm:h-[560px] lg:h-[600px]"
-              >
-                Karte wird geladen …
-              </div>
-            }
+          {/*
+            Mounted when the reader is on their way down to it, not on load.
+
+            425 marker elements make every keystroke in the search box at the
+            top of this page twice as expensive — measured at 68–80 ms worst
+            with the map in the DOM against 34–41 ms without it. See
+            useNearViewport. The box below reserves the exact height either
+            way, so nothing moves when the map arrives.
+          */}
+          <div
+            ref={mapAnchor}
+            data-map-mount={mapNear ? "on" : "warten"}
+            className="h-[65vh] min-h-[380px] w-full sm:h-[560px] lg:h-[600px]"
           >
-            <MapView
-              projects={projects}
-              initialCenter={{ lat: 51.1657, lng: 10.4515 }}
-              initialZoom={6}
-              className="relative h-[65vh] min-h-[380px] w-full sm:h-[560px] lg:h-[600px]"
-              onProjectSelect={(id) => setLocation(projectHref(id))}
-              onStationSelect={(station) => setLocation(stationHref(station))}
-            />
-          </Suspense>
+            {mapNear ? (
+              <Suspense
+                fallback={
+                  <div className="grid h-full w-full place-items-center rounded-lg border border-border bg-muted/30 text-2xs text-muted-foreground">
+                    Karte wird geladen …
+                  </div>
+                }
+              >
+                <MapView
+                  projects={projects}
+                  initialCenter={{ lat: 51.1657, lng: 10.4515 }}
+                  initialZoom={6}
+                  className="relative h-full w-full"
+                  onProjectSelect={(id) => setLocation(projectHref(id))}
+                  onStationSelect={(station) => setLocation(stationHref(station))}
+                />
+              </Suspense>
+            ) : (
+              <div className="grid h-full w-full place-items-center rounded-lg border border-border bg-muted/30 px-4 text-center text-2xs text-muted-foreground">
+                Die Karte wird geladen, sobald sie in den Blick kommt —{" "}
+                {totalProjects.toLocaleString("de-DE")} Projekte an ihren Stationen.
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
 

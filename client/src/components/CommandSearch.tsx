@@ -179,6 +179,30 @@ export function CommandSearch({ id = "app-search" }: { id?: string }) {
   const showPanel = open && (query.trim().length > 0 || recent.length > 0);
   const listboxId = `${id}-listbox`;
 
+  /*
+   * While this list is open, the map stops pulsing.
+   *
+   * The Dashboard draws 425 station markers and about half of them animate,
+   * because a pulse means an open Prüfung. That animation runs whether or not
+   * anybody is looking at it, and it competes for the same frames as typing:
+   * measured on the Dashboard, "Langenselbold" character by character cost a
+   * median of 24,6 ms per keystroke with the pulse running and 18,6 ms with it
+   * stopped — a quarter of the cost of every keystroke spent animating a panel
+   * the reader has just covered with a result list.
+   *
+   * The attribute goes on <html>, the rule that reads it is in index.css next
+   * to the pulse itself, and it is removed the moment the list closes. Nothing
+   * is hidden and no information is withheld — the markers keep their colour,
+   * their count and their legend entry. Only the animation pauses.
+   */
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const root = document.documentElement;
+    if (showPanel) root.setAttribute("data-searching", "on");
+    else root.removeAttribute("data-searching");
+    return () => root.removeAttribute("data-searching");
+  }, [showPanel]);
+
   return (
     <div className="relative w-full">
       <div className="group relative">
