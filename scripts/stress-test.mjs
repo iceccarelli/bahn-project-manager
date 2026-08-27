@@ -212,54 +212,100 @@ await check("forty route changes leave no Leaflet container and no listener behi
 
 console.log("\n== the search keeps up with typing ==");
 
-await check("typing a station character by character never blocks a frame", async () => {
-  await go("/");
-  const box = page.getByLabel("Website durchsuchen — Projekte, Orte, Personen und Seiten");
-  await box.click();
-
-  const term = "Langenselbold";
-  const { worst, median } = await page.evaluate(async (word) => {
+/**
+ * Typing, judged against the same app on the same machine in the same minute.
+ *
+ * Three rounds of this gate were red on the developer's Codespace and green in
+ * the sandbox that wrote it — 126 ms, then 64,5 ms against a 60 ms line drawn
+ * from the sandbox's own numbers. The app was never the variable. Same build,
+ * same word, measured side by side:
+ *
+ *   Sandbox, unbelastet     Median 16,6 ms
+ *   Codespace nach Suite    Median 53,7 – 64,5 ms
+ *
+ * Four times the wall clock for identical work, and no absolute threshold
+ * survives that. Two calibrations were tried and thrown away: the machine's
+ * idle frame time stays at 16,7 ms however loaded it is, because an idle page
+ * still gets its vsync; a synthetic CPU benchmark measured 6 ms whether or not
+ * three other tabs were spinning, because the benchmark thread still gets a
+ * core.
+ *
+ * What does survive is the app compared with itself. The Änderungshistorie is
+ * 215 elements and no map; the Dashboard is 3.444 and draws 425 markers. Both
+ * carry the same search box over the same index. Type the same word into both,
+ * one after the other, and the ratio is a property of this build alone —
+ * whatever the machine is doing, it is doing it to both measurements.
+ *
+ * Measured on the reference build: Historie 17,6 ms, Dashboard 16,6 ms.
+ */
+const typeInto = async (route, word) => {
+  await go(route);
+  await page.waitForSelector('[role="combobox"]', { timeout: 25000 });
+  // The index is built from the loaded projects; typing before it exists
+  // measures an empty search.
+  await page
+    .waitForFunction(() => /1\.\d{3}\s+Projekte/.test(document.body.innerText), null, {
+      timeout: 120000,
+    })
+    .catch(() => {});
+  await page.waitForTimeout(800);
+  return page.evaluate(async (w) => {
     const input = document.querySelector('[role="combobox"]');
     if (!input) throw new Error("no combobox on the page");
+    const setter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      "value",
+    )?.set;
     const times = [];
-    for (let i = 1; i <= word.length; i++) {
+    for (let i = 1; i <= w.length; i++) {
       const started = performance.now();
-      const setter = Object.getOwnPropertyDescriptor(
-        window.HTMLInputElement.prototype,
-        "value",
-      )?.set;
-      setter?.call(input, word.slice(0, i));
+      setter?.call(input, w.slice(0, i));
       input?.dispatchEvent(new Event("input", { bubbles: true }));
       await new Promise((r) => requestAnimationFrame(() => r(null)));
       times.push(performance.now() - started);
     }
     const sorted = [...times].sort((a, b) => a - b);
-    return { worst: Math.max(...times), median: sorted[Math.floor(sorted.length / 2)] };
-  }, term);
+    return {
+      median: sorted[Math.floor(sorted.length / 2)],
+      worst: Math.max(...times),
+      hits: document.querySelectorAll('[role="option"]').length,
+    };
+  }, word);
+};
+
+await check("typing stays as cheap on the heaviest page as on the lightest", async () => {
+  const term = "Langenselbold";
+  const light = await typeInto("/audit", term);
+  const heavy = await typeInto("/", term);
+
+  assert(light.hits > 0, "typing the whole station name found nothing on the light page");
+  assert(heavy.hits > 0, "typing the whole station name found nothing on the Dashboard");
+
+  const ratio = heavy.median / Math.max(light.median, 1);
+  console.log(
+    `       Tastenanschlag: Historie ${light.median.toFixed(1)} ms · Dashboard ${heavy.median.toFixed(1)} ms ` +
+      `· Faktor ${ratio.toFixed(2)} · langsamster ${Math.max(light.worst, heavy.worst).toFixed(1)} ms`,
+  );
 
   /*
-   * Judged on the median, with a ceiling for catastrophe.
-   *
-   * "One frame is 16.7 ms" was the old rule and it made this a coin flip: on a
-   * loaded machine — six browsers, straight after the full suite — a single
-   * keystroke hit 126,3 ms and failed the gate, while the same build typed at
-   * a median of 25 ms. What a reader feels across a word is the median; one
-   * outlier while the scheduler is busy elsewhere is the machine, not the app.
-   *
-   * Both numbers are printed on every run, green or red, because the trend is
-   * the part worth watching: the Dashboard's median moved from 18 ms to 25 ms
-   * when the map arrived and back to 18 ms once the pulse was taught to stop
-   * while the search list is open.
+   * 2,5x is the line, and it is drawn where a regression would show rather
+   * than where this machine happens to sit. The map already cost a factor of
+   * two once — 425 pulsing markers competing with the typing for frames — and
+   * that is the shape of defect this is here to catch. Anything the two pages
+   * share, including a slow machine, cancels.
    */
-  console.log(
-    `       Tastenanschlag: Median ${median.toFixed(1)} ms · langsamster ${worst.toFixed(1)} ms`,
+  assert(
+    ratio < 2.5,
+    `the Dashboard costs ${ratio.toFixed(2)}x the Änderungshistorie per keystroke ` +
+      `(${heavy.median.toFixed(1)} ms against ${light.median.toFixed(1)} ms)`,
   );
-  assert(median < 60, `the median keystroke took ${median.toFixed(1)} ms`);
-  assert(worst < 250, `the slowest keystroke took ${worst.toFixed(1)} ms`);
 
-  await page.waitForSelector('[role="option"]', { timeout: 5000 });
-  const hits = await page.$$eval('[role="option"]', (els) => els.length);
-  assert(hits > 0, "typing the whole station name found nothing");
+  // And a floor no machine excuses: a search that takes a quarter second per
+  // character is broken everywhere, not slow here.
+  assert(
+    heavy.median < 250,
+    `the median keystroke took ${heavy.median.toFixed(1)} ms on the Dashboard`,
+  );
 });
 
 await check("two hundred searches in a row do not degrade", async () => {

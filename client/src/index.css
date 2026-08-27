@@ -674,6 +674,19 @@
    18,6 ms with it stopped. The attribute is set by CommandSearch while its
    list is open and removed the moment it closes; the markers keep their
    colour, their count and their legend entry throughout. */
+[data-searching="on"] .db-pulse::after,
+[data-searching="on"] .pie3d-slice-open,
+[data-searching="on"] .relief-open,
+[data-searching="on"] .kenburns,
+[data-searching="on"] .pulse-open,
+[data-searching="on"] .pulse-open-soft,
+[data-searching="on"] .relief-orbit {
+  animation-play-state: paused;
+}
+
+/* The map's ring is a pseudo-element on hundreds of markers, and pausing it
+   still leaves each one composited mid-expansion. Stopping it outright is both
+   cheaper and calmer, and it comes back the moment the list closes. */
 [data-searching="on"] .db-pulse::after {
   animation: none;
 }
