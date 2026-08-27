@@ -1,0 +1,1402 @@
+From 6cda2ff07a0f3e842a3e6cb4680e98e9870f54d3 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 26 Aug 2026 18:13:29 +0000
+Subject: [PATCH 1/2] Das Boot-Gate wartete auf Layout, nicht auf die Zahl, die
+ es vergleicht
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Auf deiner Maschine ist es nach 90 Sekunden gescheitert — mit der Antwort
+bereits in der Hand. Playwright sagte es selbst:
+
+  waiting for locator('table tbody tr') to be visible
+  locator resolved to 1298 elements
+
+Die 1.298 Zeilen waren da. `waitForSelector` wartet aber auf SICHTBARKEIT,
+und Sichtbarkeit ist eine Layout-Tatsache: sechs Chromium-Kontexte auf zwei
+Kernen, direkt nach der kompletten Suite, und die erste Zeile war noch nicht
+gelayoutet. Ein Gate, dessen Ergebnis von der Warteschlange des Renderers
+abhaengt, misst den Renderer und nicht die Anwendung — derselbe Fehler wie
+beim 44-Pixel-Gate, nur andersherum.
+
+Gewartet wird jetzt auf genau die Zahl, die verglichen wird, und zusaetzlich
+gezaehlt, dass Zeilen dahinterstehen: eine Seite, die den Gesamtwert druckt
+und nichts gerendert hat, ist nicht dieselbe Antwort.
+
+Gemessen nach der Aenderung: 12 passed, 0 failed. Sechs gleichzeitige
+Kaltstarts lesen alle 1.298 Projekte, langsamste Suchantwort 902 ms auf zwei
+Kernen.
+---
+ scripts/stress-test.mjs | 24 ++++++++++++++++++++++--
+ 1 file changed, 22 insertions(+), 2 deletions(-)
+
+diff --git a/scripts/stress-test.mjs b/scripts/stress-test.mjs
+index 8777bce..4fd03ad 100644
+--- a/scripts/stress-test.mjs
++++ b/scripts/stress-test.mjs
+@@ -567,11 +567,31 @@ await check("six sessions booting at once all reach the same totals", async () =
+     await Promise.all(
+       pages.map((p) => p.goto(U("/projects"), { waitUntil: "domcontentloaded" })),
+     );
++    /*
++     * Waits for the figure this check compares, not for a row to be painted.
++     *
++     * `waitForSelector("table tbody tr")` waits for VISIBILITY, and visibility
++     * is a layout fact: on a loaded machine the 1,298 rows are in the DOM —
++     * Playwright said so, "locator resolved to 1298 elements" — while the
++     * first one has not been laid out yet, and the check failed after 90 s
++     * having already had its answer. A gate whose result depends on the
++     * renderer's queue is measuring the renderer, not the app.
++     */
+     const totals = await Promise.all(
+       pages.map(async (p) => {
+-        await p.waitForSelector("table tbody tr", { timeout: 90000 });
++        await p
++          .waitForFunction(
++            () => /1\.\d{3}\s+Projekte/.test(document.body.innerText),
++            null,
++            { timeout: 120000 },
++          )
++          .catch(() => {});
++        const rows = await p.$$eval("table tbody tr", (els) => els.length);
+         const text = await p.locator("body").innerText();
+-        return (text.match(/1\.\d{3}\s+Projekte/) || ["(none)"])[0];
++        const total = (text.match(/1\.\d{3}\s+Projekte/) || ["(none)"])[0];
++        // The count must come with the rows behind it: a page that prints the
++        // total but rendered nothing is not the same answer.
++        return rows > 0 ? total : `(0 Zeilen, meldet ${total})`;
+       }),
+     );
+     const distinct = new Set(totals);
+-- 
+2.43.0
+
+
+From f34c936a8b66d22aab3501fdd2c3916f6bd3d824 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 26 Aug 2026 22:10:33 +0000
+Subject: [PATCH 2/2] Wo die Aenderungen liegen, wie voll es dort ist, und der
+ Weg nach GitLab
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Vier Dinge, die zusammengehoeren: eine Diagnose, die ein frischer Klon selbst
+stellen kann; der Speicher, in dem alles landet, mit Grenze und Warnung; die
+letzte feste GitHub-Bindung im Anwendungscode; und die Pipeline, die auf
+GitLab dieselben Gates faehrt.
+
+1. scripts/doctor.mjs — was ein frischer Klon wissen muss
+---------------------------------------------------------
+`pnpm status` beantwortet "ist der letzte Patch drin und steht er im Netz".
+Der Doctor beantwortet die Fragen davor: Werkzeuge (Node, pnpm, Chromium),
+Datenlage (1.298 Projekte, 18.172 Pruefzeilen, IDs eindeutig), wohin
+Aenderungen geschrieben werden, welche Bindungen an GitHub noch bestehen, und
+ob eine Transfer-Patch-Datei im Baum liegt. Er liest nur — kein Install, kein
+Build, kein Schreiben ins Repository. `pnpm doctor`.
+
+Zwei Fehlmeldungen der ersten Fassung sind behoben und der Grund steht im
+Code: der Grep nach GitHub-URLs traf den Kommentar, der ihre Entfernung
+erklaert, und die Speicherlage wurde aus der Dateigroesse gerechnet (3,5 MB)
+statt aus dem gemessenen Browserstand (2,15 MB) — eine Diagnose, die zu frueh
+Alarm schlaegt, wird uebersprungen, und dann auch dann, wenn sie recht hat.
+
+2. Der Speicher, in dem alles liegt
+-----------------------------------
+Gemessen: der Projektspeicher belegt 2,15 MB von 5 MB, die localStorage pro
+Origin hergibt — 43 %, bevor jemand etwas aendert. navigator.storage.estimate()
+meldet dazu 519 MB; ein Budget auf dieser Zahl stuende bei 0,4 %, wenn der
+naechste Schreibvorgang scheitert. Deshalb rechnet shared/storage-budget.ts
+gegen 5 MB.
+
+Jeder Schreibvorgang war bisher ein blankes localStorage.setItem. Am Limit
+wirft das, die optimistische Aenderung rollt zurueck, und die Zelle springt
+kommentarlos auf den alten Wert — vom Stuhl des Lesers aus nicht davon zu
+unterscheiden, dass die Anwendung seine Eingabe verliert. Jetzt: writeStore()
+mit StorageFullError und einem Satz, der sagt, was zu tun ist. Das Gate fuellt
+den Speicher wirklich bis zum letzten Byte (absteigende Blockgroessen, weil
+64-kB-Bloecke bis zu 64 kB Luft lassen und ein App-Schreibvorgang nur die
+Differenz kostet) und prueft beides: die Meldung erscheint, und die Zelle
+zeigt den alten Wert statt einer Aenderung, die nicht gespeichert wurde.
+
+Im Loader ist Zwischenspeichern ausdruecklich best-effort (cacheStore): dort
+haette ein Wurf aus "kein Platz zum Cachen" ein "gar keine Daten" gemacht —
+eine leere Anwendung, weil 200 kB fehlten.
+
+Der Fuellstand steht jetzt unter "Belastbarkeit der Zahlen", neben den anderen
+Zahlen, denen man ansehen soll, wie weit man ihnen trauen kann.
+
+3. Die letzte GitHub-Bindung im Code
+------------------------------------
+client/src/_core/api/client.ts holte die Projektdaten ersatzweise von
+raw.githubusercontent.com/iceccarelli/... — fest verdrahtet. Das haette jeden
+Umzug ueberlebt und weiter aus GitHub gelesen, aus einem Branch, den niemand
+mehr beobachtet; es war unauthentifizierter Fremdzugriff aus dem Browser jedes
+Lesers; und es lieferte im Fehlerfall stillschweigend, was in dem Moment auf
+einem fremden Host lag. Ersetzt durch VITE_DATA_FALLBACK_URL, in diesem Build
+leer: keine zweite Quelle, und ein Ladefehler sagt das.
+
+Zwei Gates halten das fest: kein Request an github* auf vier Routen, und die
+Zeichenkette steht auch im gebauten Bundle nicht mehr.
+
+4. GitLab
+---------
+.gitlab-ci.yml faehrt dieselben Gates wie .github/workflows/ci.yml — dieselben
+pnpm-Skripte, keine nachgebauten Befehle. Die Abnahme laeuft seriell in einem
+Job: zwei parallele Chromium-Fleets auf einem Shared Runner messen die
+Warteschlange des Renderers statt der Anwendung.
+
+docs/GITLAB-MIGRATION.md ist die Anleitung: Spiegel-Push mit voller Historie,
+Remote umhaengen, kein LFS noetig (groesste Datei 3,5 MB, Repo 7,9 MB), und
+die Tabelle dessen, was der Umzug NICHT mitbringt — allen voran der Deploy
+(Vercel baut aus GitHub) und die Persistenz.
+
+Klar gesagt, weil es die eigentliche Arbeit ist: Mehrbenutzer-Persistenz
+kommt durch keinen Git-Anbieter. server/routers.ts hat 22 tRPC-Prozeduren,
+drizzle/schema.ts acht Tabellen inklusive audit_log, vier Migrationen, ein
+docker-compose mit MySQL — und client/src/lib/trpc.ts erzeugt einen Client,
+den keine Komponente einbindet. Der Weg dorthin steht in Abschnitt 4 der
+Anleitung, in vier Schritten, und ist eine eigene Stufe.
+
+Gates, seriell gelaufen
+-----------------------
+  vitest        305 passed, 6 skipped   (7 neue fuer das Speicherbudget)
+  e2e-smoke     112 passed, 0 failed    (3 neue: Fuellstand, kein GitHub, voller Speicher)
+  check-ui      UI CLEAN
+  stress-test    12 passed, 0 failed
+  biome          70 warnings
+  tsc --noEmit   sauber
+
+Zwei Gates, die schon vorher wackelten, warten jetzt auf ihre Bedingung statt
+auf eine Dauer: "search narrows the table" las 1298 -> 1298, waehrend die
+Kopfzeile darueber bereits "334 Projekte gefunden" sagte — die Anwendung hatte
+recht, die Uhr nicht.
+---
+ .env.example                                  |   6 +
+ .gitlab-ci.yml                                | 144 ++++++++++++
+ client/src/_core/api/client.ts                |  51 +++--
+ client/src/_core/api/localStore.ts            |  89 ++++++++
+ .../dashboard/PortfolioDiagnostics.tsx        |  33 +++
+ docs/GITLAB-MIGRATION.md                      | 137 +++++++++++
+ package.json                                  |   1 +
+ scripts/doctor.mjs                            | 215 ++++++++++++++++++
+ scripts/e2e-smoke.mjs                         | 183 ++++++++++++++-
+ scripts/status.mjs                            |  10 +-
+ shared/storage-budget.test.ts                 |  61 +++++
+ shared/storage-budget.ts                      |  74 ++++++
+ 12 files changed, 988 insertions(+), 16 deletions(-)
+ create mode 100644 .gitlab-ci.yml
+ create mode 100644 client/src/_core/api/localStore.ts
+ create mode 100644 docs/GITLAB-MIGRATION.md
+ create mode 100644 scripts/doctor.mjs
+ create mode 100644 shared/storage-budget.test.ts
+ create mode 100644 shared/storage-budget.ts
+
+diff --git a/.env.example b/.env.example
+index 4e84526..98b8634 100644
+--- a/.env.example
++++ b/.env.example
+@@ -23,6 +23,12 @@ NODE_ENV="development"          # production | development
+ PORT=3000
+ VITE_API_BASE_URL="http://localhost:3000"
+ 
++# Ersatzquelle fuer die Projektdaten, falls /data.json im Deploy fehlt.
++# Leer lassen heisst: keine zweite Quelle. Frueher stand hier fest verdrahtet
++# eine raw.githubusercontent.com-URL im Client — die haette jede Migration nach
++# GitLab ueberlebt und weiter aus GitHub gelesen.
++VITE_DATA_FALLBACK_URL=""
++
+ # Optional future integrations
+ SHAREPOINT_SITE_URL=""
+ TEAMS_WEBHOOK_URL=""
+diff --git a/.gitlab-ci.yml b/.gitlab-ci.yml
+new file mode 100644
+index 0000000..7f8fd4b
+--- /dev/null
++++ b/.gitlab-ci.yml
+@@ -0,0 +1,144 @@
++# =============================================================================
++# GitLab CI — dieselben Gates, die lokal gruen sein muessen.
++#
++# Kein zweiter Satz Regeln. Jeder Job hier ruft genau das pnpm-Skript auf, das
++# auch auf der Maschine des Entwicklers laeuft; eine Pipeline mit eigenen
++# Befehlen ist eine Pipeline, die etwas anderes prueft als die Person davor.
++#
++# Uebersetzt aus .github/workflows/ci.yml, Job fuer Job:
++#   lint-typecheck -> pruefen      test -> test       build -> build
++#   e2e            -> e2e          docker -> container
++# Der Vercel-Deploy hat keine Entsprechung: Vercel deployt aus GitHub. Was auf
++# GitLab an seine Stelle tritt, steht in docs/GITLAB-MIGRATION.md — es ist eine
++# Entscheidung, keine Zeile YAML.
++# =============================================================================
++
++default:
++  image: node:22-bookworm
++  interruptible: true
++  before_script:
++    - corepack enable
++    - corepack prepare pnpm@10.15.1 --activate
++    - pnpm install --frozen-lockfile
++  cache:
++    key:
++      files:
++        - pnpm-lock.yaml
++    paths:
++      - .pnpm-store
++
++variables:
++  # pnpm braucht einen Store, der den Job ueberlebt, sonst laedt jede Stufe alles neu.
++  PNPM_HOME: "$CI_PROJECT_DIR/.pnpm-store"
++  # Playwright laedt Chromium sonst in $HOME, das zwischen Jobs verschwindet.
++  PLAYWRIGHT_BROWSERS_PATH: "$CI_PROJECT_DIR/.playwright"
++  GIT_DEPTH: "20"
++
++stages:
++  - pruefen
++  - test
++  - build
++  - abnahme
++
++# -----------------------------------------------------------------------------
++# 1. Typen, Lint, Datenintegritaet
++# -----------------------------------------------------------------------------
++typen-und-lint:
++  stage: pruefen
++  script:
++    - pnpm check
++    - pnpm lint
++    # Kanonische Bahnhofsmanagements, Stationsstamm, abgeleitete Bloecke.
++    - pnpm verify:data
++    # Der Zustand dieses Klons in einem Bild — schlaegt fehl, wenn eine
++    # Transfer-Patch-Datei im Baum liegt oder eine GitHub-URL im Code steht.
++    - node scripts/doctor.mjs
++
++# -----------------------------------------------------------------------------
++# 2. Unit-Tests mit Abdeckung
++# -----------------------------------------------------------------------------
++unit:
++  stage: test
++  script:
++    - pnpm test:cov
++  coverage: '/All files[^|]*\|[^|]*\s+([\d\.]+)/'
++  artifacts:
++    when: always
++    expire_in: 2 weeks
++    paths:
++      - coverage/
++    reports:
++      coverage_report:
++        coverage_format: cobertura
++        path: coverage/cobertura-coverage.xml
++
++# -----------------------------------------------------------------------------
++# 3. Produktionsbuild
++# -----------------------------------------------------------------------------
++build:
++  stage: build
++  needs: [typen-und-lint, unit]
++  script:
++    - NODE_ENV=production pnpm build:client
++  artifacts:
++    expire_in: 1 week
++    paths:
++      - dist/
++
++# -----------------------------------------------------------------------------
++# 4. Die Gates, die den gebauten Stand pruefen
++#
++# Sie laufen gegen dist/ aus der Stufe davor, seriell und in einem Job: jedes
++# startet seinen eigenen Server auf einem eigenen Port, und zwei parallele
++# Chromium-Fleets auf einem Shared Runner messen die Warteschlange des
++# Renderers statt der Anwendung.
++# -----------------------------------------------------------------------------
++abnahme:
++  stage: abnahme
++  needs: [build]
++  timeout: 40m
++  script:
++    - pnpm exec playwright install --with-deps chromium
++    - node scripts/e2e-smoke.mjs
++    - pnpm check:responsive
++    - pnpm check:map
++    - pnpm check:ui
++    - node scripts/stress-test.mjs
++  artifacts:
++    when: on_failure
++    expire_in: 1 week
++    paths:
++      - dist/
++
++# -----------------------------------------------------------------------------
++# 5. Container — baut das Image und beweist, dass es hochkommt
++#
++# Ein Dockerfile, das baut, aber einen Container erzeugt, der nie gesund wird,
++# ist kein Build-Erfolg, sondern ein Deploy-Ausfall.
++# -----------------------------------------------------------------------------
++container:
++  stage: abnahme
++  needs: [unit]
++  image: docker:27
++  services:
++    - docker:27-dind
++  before_script: []
++  variables:
++    DOCKER_TLS_CERTDIR: "/certs"
++  script:
++    - docker build --target runtime -t bahn-project-manager:ci .
++    - docker run -d --name bpm -p 3000:3000 bahn-project-manager:ci
++    - |
++      for i in $(seq 1 30); do
++        if wget -qO- http://docker:3000/api/health >/dev/null 2>&1 || wget -qO- http://localhost:3000/api/health >/dev/null 2>&1; then
++          echo "container healthy"; docker rm -f bpm; exit 0
++        fi
++        sleep 2
++      done
++      echo "health check never passed"; docker logs bpm; exit 1
++  rules:
++    # Nur auf main: dind ist auf vielen Runnern nicht verfuegbar, und ein Job,
++    # der bei jedem Merge Request aus Infrastrukturgruenden rot ist, wird
++    # ignoriert — und damit auch dann, wenn er recht hat.
++    - if: $CI_COMMIT_BRANCH == "main"
++      allow_failure: true
+diff --git a/client/src/_core/api/client.ts b/client/src/_core/api/client.ts
+index 488684b..3e32088 100644
+--- a/client/src/_core/api/client.ts
++++ b/client/src/_core/api/client.ts
+@@ -14,6 +14,7 @@ import type { ProjectChecklist } from "@shared/validation";
+ import type { Project, Review, Stats, AuditLogEntry } from "@/hooks/useDataQuery";
+ import { describeIngest, ingestProjects } from "@shared/ingest";
+ import { ProjectSchema, ReviewSchema } from "@shared/validation";
++import { cacheStore, writeStore } from "./localStore";
+ 
+ export interface ProjectUpdateInput {
+   id: number;
+@@ -118,7 +119,7 @@ async function initializeStorage() {
+           // the row itself. Writes are validated now, so a bad row here means
+           // the cache was corrupted from outside the app.
+           console.warn(`[data] ${describeIngest(cached)} — keeping the valid rows`);
+-          localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(cached.projects));
++          cacheStore(STORAGE_KEY_PROJECTS, JSON.stringify(cached.projects));
+         }
+         return cached.projects;
+       }
+@@ -137,7 +138,7 @@ async function initializeStorage() {
+       const result = ingestProjects(await res.json());
+       // Cache only what validated. Writing the raw payload back would put the
+       // bad rows straight into the cache we just taught ourselves to distrust.
+-      localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(result.projects));
++      cacheStore(STORAGE_KEY_PROJECTS, JSON.stringify(result.projects));
+       console.log(`[data] /data.json — ${describeIngest(result)}`);
+       return result.projects;
+     }
+@@ -145,12 +146,36 @@ async function initializeStorage() {
+     console.warn("Local /data.json not available, trying remote fallback...");
+   }
+ 
+-  // 2. Fallback to remote GitHub raw (original behavior)
++  /*
++   * 2. The configured fallback source, if there is one.
++   *
++   * This used to be a hard-coded raw.githubusercontent.com URL pointing at
++   * this repository's main branch. Three things were wrong with that, and all
++   * three matter more than the convenience:
++   *
++   *   — it pinned a Deutsche Bahn application to a public GitHub URL, so a
++   *     deploy with a broken /data.json silently served whatever was on a
++   *     third-party host at that moment, with no version and no audit;
++   *   — it survives a migration. Move the repo to GitLab and this line still
++   *     fetches from GitHub, from a branch nobody is watching any more;
++   *   — it is unauthenticated egress from the browser of every reader, which
++   *     is a question for a security review, not a default.
++   *
++   * VITE_DATA_FALLBACK_URL is unset in this build. Unset means: no second
++   * source, and a failure to load says so instead of reaching somewhere else.
++   */
++  const fallbackUrl = (import.meta.env.VITE_DATA_FALLBACK_URL ?? "").trim();
++  if (!fallbackUrl) {
++    console.error(
++      "[data] /data.json nicht erreichbar und keine Ersatzquelle konfiguriert (VITE_DATA_FALLBACK_URL).",
++    );
++    return [];
++  }
+   try {
+-    const res = await fetch("https://raw.githubusercontent.com/iceccarelli/bahn-project-manager/refs/heads/main/client/public/data.json");
++    const res = await fetch(fallbackUrl);
+     const result = ingestProjects(await res.json());
+-    localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(result.projects));
+-    console.log(`[data] remote fallback — ${describeIngest(result)}`);
++    cacheStore(STORAGE_KEY_PROJECTS, JSON.stringify(result.projects));
++    console.log(`[data] Ersatzquelle — ${describeIngest(result)}`);
+     return result.projects;
+   } catch (err) {
+     console.error("Failed to load any data source:", err);
+@@ -173,7 +198,7 @@ function recordAudit(action: string, details: string, meta?: AuditMeta) {
+     ...(meta ? { meta } : {}),
+   };
+   audit.unshift(entry);
+-  localStorage.setItem(STORAGE_KEY_AUDIT, JSON.stringify(audit.slice(0, 1000)));
++  writeStore(STORAGE_KEY_AUDIT, JSON.stringify(audit.slice(0, 1000)));
+   return entry;
+ }
+ 
+@@ -232,7 +257,7 @@ export const apiClient = {
+       };
+ 
+       projects.push(newProject);
+-      localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
++      writeStore(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
+       recordAudit(
+         AUDIT_ACTIONS.projektAngelegt,
+         `Projekt ${newProject.projektnummer} (${newProject.station}) angelegt.`,
+@@ -275,7 +300,7 @@ export const apiClient = {
+     }
+ 
+     Object.assign(project, { [input.field]: input.value });
+-    localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
++    writeStore(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
+     recordAudit(
+       AUDIT_ACTIONS.projektAktualisiert,
+       `Feld ${input.field} von ${oldVal} auf ${input.value} geändert.`,
+@@ -296,7 +321,7 @@ export const apiClient = {
+     async delete(id: number): Promise<void> {
+       const projects = await this.list();
+       const filtered = projects.filter((p) => p.id !== id);
+-      localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(filtered));
++      writeStore(STORAGE_KEY_PROJECTS, JSON.stringify(filtered));
+       const removed = projects.find((p) => p.id === id);
+       recordAudit(AUDIT_ACTIONS.projektGeloescht, `Projekt ID ${id} entfernt.`, {
+         projectId: id,
+@@ -338,7 +363,7 @@ export const apiClient = {
+     }
+ 
+     project.reviews[reviewIndex] = candidateReview;
+-    localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
++    writeStore(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
+     recordAudit(
+       AUDIT_ACTIONS.pruefungAktualisiert,
+       `${input.department}: ${input.field} von ${oldVal} auf ${input.value} gesetzt.`,
+@@ -431,13 +456,13 @@ export const apiClient = {
+         all.push(saved);
+       }
+ 
+-      localStorage.setItem(STORAGE_KEY_CHECKLISTS, JSON.stringify(all));
++      writeStore(STORAGE_KEY_CHECKLISTS, JSON.stringify(all));
+       return saved;
+     },
+ 
+     async remove(id: number): Promise<void> {
+       const all = (await this.list()).filter((c) => c.id !== id);
+-      localStorage.setItem(STORAGE_KEY_CHECKLISTS, JSON.stringify(all));
++      writeStore(STORAGE_KEY_CHECKLISTS, JSON.stringify(all));
+     },
+   },
+ 
+diff --git a/client/src/_core/api/localStore.ts b/client/src/_core/api/localStore.ts
+new file mode 100644
+index 0000000..7aacfab
+--- /dev/null
++++ b/client/src/_core/api/localStore.ts
+@@ -0,0 +1,89 @@
++/**
++ * The one door to localStorage, so a full disk cannot look like a lost edit.
++ *
++ * Every write in this app used to be a bare `localStorage.setItem(...)`. At the
++ * 5 MB cap that call throws QuotaExceededError, the mutation rolls back, and
++ * the reader sees their change revert with no explanation — indistinguishable
++ * from the app dropping it. Same call, named error, real sentence.
++ *
++ * Reads stay direct where they already are: a read that fails returns nothing
++ * and the caller falls back to /data.json, which is a path that already works.
++ */
++
++/** Thrown when the browser refuses a write because the store is full. */
++export class StorageFullError extends Error {
++  readonly key: string;
++  readonly bytes: number;
++  constructor(key: string, bytes: number) {
++    super(
++      "Lokaler Speicher ist voll — die Änderung wurde NICHT gespeichert. " +
++        "Exportieren Sie die Daten (CSV) und leeren Sie den Browserspeicher, " +
++        "oder verbinden Sie die Anwendung mit der Datenbank.",
++    );
++    this.name = "StorageFullError";
++    this.key = key;
++    this.bytes = bytes;
++  }
++}
++
++const isQuotaError = (err: unknown): boolean => {
++  if (typeof DOMException !== "undefined" && err instanceof DOMException) {
++    // 22 is the historical code, 1014 is Firefox's NS_ERROR_DOM_QUOTA_REACHED.
++    return err.code === 22 || err.code === 1014 || /quota/i.test(err.name);
++  }
++  return err instanceof Error && /quota/i.test(err.message);
++};
++
++/**
++ * Write, or say precisely why not.
++ *
++ * Throws rather than returning false: the callers are mutation functions whose
++ * rollback and toast are already wired to a thrown error, and a boolean nobody
++ * checks is how a silent failure gets built a second time.
++ */
++export function writeStore(key: string, value: string): void {
++  try {
++    localStorage.setItem(key, value);
++  } catch (err) {
++    if (isQuotaError(err)) throw new StorageFullError(key, value.length);
++    throw err;
++  }
++}
++
++/** Byte size per key, for the budget panel. UTF-8, the unit the cap is in. */
++export function storageEntries(): Record<string, number> {
++  const out: Record<string, number> = {};
++  try {
++    for (const key of Object.keys(localStorage)) {
++      const value = localStorage.getItem(key) ?? "";
++      out[key] =
++        typeof Blob === "function" ? new Blob([value]).size : new TextEncoder().encode(value).length;
++    }
++  } catch {
++    // Private mode with storage disabled: no entries is the honest answer, and
++    // the panel says "nicht messbar" rather than "0 von 5 MB".
++    return {};
++  }
++  return out;
++}
++
++/**
++ * Best-effort cache write, for the loader only.
++ *
++ * The loader already holds the data it was about to cache. Letting a full
++ * store throw there would turn "no room to cache" into "no data at all": the
++ * throw would unwind past the fetch, hit the fallback path, fail to cache
++ * again, and return an empty array — a blank app because the browser was
++ * short of 200 kB. Caching is an optimisation; the answer in hand is not.
++ */
++export function cacheStore(key: string, value: string): boolean {
++  try {
++    writeStore(key, value);
++    return true;
++  } catch (err) {
++    console.warn(
++      `[data] konnte ${key} nicht zwischenspeichern (${err instanceof Error ? err.name : "Fehler"}) — die Daten dieser Sitzung stehen trotzdem.`,
++    );
++    return false;
++  }
++}
+diff --git a/client/src/components/dashboard/PortfolioDiagnostics.tsx b/client/src/components/dashboard/PortfolioDiagnostics.tsx
+index 9b8cb83..b5ea550 100644
+--- a/client/src/components/dashboard/PortfolioDiagnostics.tsx
++++ b/client/src/components/dashboard/PortfolioDiagnostics.tsx
+@@ -17,6 +17,8 @@ import { useLocation } from "wouter";
+ import { Card, CardContent } from "@/components/ui/card";
+ import { AlertTriangle, CalendarClock, ShieldCheck, Users } from "lucide-react";
+ import type { Aging, Concentration, DataQuality } from "@shared/portfolio-metrics";
++import { formatBytes, storageBudget } from "@shared/storage-budget";
++import { storageEntries } from "@/_core/api/localStore";
+ 
+ function Panel({
+   title,
+@@ -89,6 +91,13 @@ export function PortfolioDiagnostics({
+ }) {
+   const [, setLocation] = useLocation();
+   const agedTotal = aging.cohorts.reduce((a, c) => a + c.count, 0);
++  /*
++   * Measured on every render of this panel, not cached: it is four calls to
++   * localStorage.getItem on a page that has already parsed 18,172 review rows,
++   * and a stale figure is exactly the figure nobody should be given about
++   * remaining space.
++   */
++  const budget = storageBudget(storageEntries());
+   const overAYear = aging.cohorts.find((c) => c.key === "365+")?.count ?? 0;
+ 
+   return (
+@@ -171,6 +180,30 @@ export function PortfolioDiagnostics({
+             value={quality.unparseableDates}
+             tone={quality.unparseableDates > 0 ? "text-amber-700 dark:text-amber-400" : undefined}
+           />
++          {/*
++            Where the changes actually live, and how much room is left.
++
++            Every edit in this build is written to this reader's own browser —
++            there is no server in the deployed app. localStorage is capped at
++            5 MB per origin, the shipped data occupies 2,1 MB of it before
++            anyone types anything, and at the cap a write throws and the change
++            is refused. That is a number people are entitled to see coming.
++          */}
++          <Row
++            label="lokaler Speicher"
++            value={
++              budget.usedBytes === 0
++                ? "nicht messbar"
++                : `${formatBytes(budget.usedBytes)} von ${formatBytes(budget.capBytes)}`
++            }
++            tone={
++              budget.level === "kritisch"
++                ? "text-red-700 dark:text-red-400"
++                : budget.level === "eng"
++                  ? "text-amber-700 dark:text-amber-400"
++                  : undefined
++            }
++          />
+           <Row
+             label="Status außerhalb der Vokabulare"
+             value={quality.unmappedStatus}
+diff --git a/docs/GITLAB-MIGRATION.md b/docs/GITLAB-MIGRATION.md
+new file mode 100644
+index 0000000..18a5b99
+--- /dev/null
++++ b/docs/GITLAB-MIGRATION.md
+@@ -0,0 +1,137 @@
++# Umzug nach GitLab
++
++Stand: der Code ist umzugsbereit. Was der Umzug *nicht* mitbringt, steht
++weiter unten und ist der wichtigere Teil.
++
++---
++
++## 1. Was vorher im Weg stand, und jetzt nicht mehr
++
++**Eine fest verdrahtete GitHub-URL im Anwendungscode.** `client/src/_core/api/client.ts`
++holte die Projektdaten ersatzweise von
++`raw.githubusercontent.com/iceccarelli/bahn-project-manager/refs/heads/main/client/public/data.json`.
++Nach einem Umzug hätte der Client weiter aus GitHub gelesen — aus einem Branch,
++den niemand mehr beobachtet. Ersetzt durch `VITE_DATA_FALLBACK_URL`; nicht
++gesetzt heißt: keine zweite Quelle, und ein Ladefehler sagt das, statt
++woanders hinzugreifen.
++
++`node scripts/doctor.mjs` prüft das bei jedem Lauf und schlägt fehl, wenn eine
++solche URL zurückkommt.
++
++**Keine Pipeline.** `.gitlab-ci.yml` führt dieselben Gates aus wie
++`.github/workflows/ci.yml` — dieselben `pnpm`-Skripte, nicht nachgebaute
++Befehle.
++
++---
++
++## 2. Der Umzug selbst
++
++Ein Spiegel-Push überträgt **alles**: jeden Commit, jeden Branch, jedes Tag.
++
++```bash
++# 1. Vollständige Kopie holen (kein Arbeitsverzeichnis, nur Historie)
++git clone --mirror https://github.com/iceccarelli/bahn-project-manager.git bpm-mirror.git
++cd bpm-mirror.git
++
++# 2. Leeres Projekt in GitLab anlegen — OHNE README, ohne .gitignore.
++#    Ein initialisiertes Zielprojekt erzwingt einen Merge, der die Historie
++#    verzweigt; leer bleibt sie eine gerade Linie.
++
++# 3. Spiegeln
++git remote add gitlab git@gitlab.com:<gruppe>/bahn-project-manager.git
++git push --mirror gitlab
++
++# 4. Nachweis: gleiche Commit-Anzahl, gleicher HEAD
++git rev-list --count --all
++git ls-remote gitlab | head
++```
++
++Danach im Arbeitsklon umhängen:
++
++```bash
++cd /workspaces/bahn-project-manager
++git remote set-url origin git@gitlab.com:<gruppe>/bahn-project-manager.git
++git remote -v
++git fetch origin && git status
++```
++
++**Kein Git LFS nötig.** Größte Datei im Baum: `client/public/data.json` mit
++3,5 MB, Repository gesamt 7,9 MB, `.git` 5,0 MB. GitLab's Standardlimit liegt
++weit darüber.
++
++---
++
++## 3. Was der Umzug nicht mitbringt
++
++| Auf GitHub | Auf GitLab |
++|---|---|
++| `.github/workflows/ci.yml` | wirkungslos — `.gitlab-ci.yml` übernimmt |
++| Vercel-Deploy aus `main` | **kein Ersatz.** Siehe unten |
++| GitHub Actions Secrets | GitLab CI/CD Variables (Settings → CI/CD → Variables) |
++| Issues, PRs, Reviews | GitLab importiert sie beim „Import project from GitHub"; ein reiner Spiegel-Push tut das nicht |
++
++### Der Deploy ist eine Entscheidung, keine Konfigurationszeile
++
++Vercel baut heute aus `origin/main` auf GitHub. Drei Wege, in absteigender
++Reihenfolge dessen, was sie an Infrastruktur verlangen:
++
++1. **Vercel an GitLab hängen.** Vercel unterstützt GitLab als Quelle. Am
++   wenigsten Arbeit, gleiche Laufzeit, `vercel.json` bleibt wie es ist.
++2. **GitLab Pages.** Der Build ist ein statisches `dist/public`. Ein
++   `pages`-Job kopiert es nach `public/` — dann hostet GitLab selbst, ohne
++   Drittanbieter. Die Rewrite-Regel aus `vercel.json`
++   (`/(.*) → /index.html`) braucht dabei ein Äquivalent, sonst gibt jeder
++   Deep-Link 404.
++3. **Der Container.** `Dockerfile` und `docker-compose.yml` sind vorhanden, das
++   Image bringt den Server aus `server/` mit — der einzige Weg, der auch die
++   Datenbank mitbringt (siehe Abschnitt 4).
++
++---
++
++## 4. Was der Umzug erst recht nicht löst: die Persistenz
++
++Gemessen, nicht vermutet:
++
++- Der ausgelieferte Client schreibt **jede** Änderung in `localStorage` des
++  jeweiligen Browsers. Es gibt im Deploy keinen Server, der etwas entgegennimmt.
++- Zwei Tabs eines Browsers sind seit `useCrossTabSync` synchron. **Zwei Rechner
++  sind es nicht** — und werden es durch keinen Git-Anbieter.
++- Der Speicher fasst 5 MB pro Origin. Die ausgelieferten Daten belegen davon
++  gemessen 2,15 MB, bevor jemand etwas ändert (≈ 43 %). Am Limit wird ein
++  Schreibvorgang abgelehnt; seit `writeStore` sagt die Anwendung das, statt die
++  Änderung stillschweigend zurückzurollen. Das Dashboard zeigt den Füllstand
++  unter „Belastbarkeit der Zahlen".
++- Vorhanden und ungenutzt: `server/routers.ts` mit 22 tRPC-Prozeduren,
++  `drizzle/schema.ts` mit acht Tabellen inklusive `audit_log`, vier
++  Migrationen, ein `docker-compose.yml` mit MySQL. `client/src/lib/trpc.ts`
++  erzeugt einen tRPC-Client, den **keine** Komponente einbindet.
++
++Der Weg zu echter Mehrbenutzer-Persistenz führt also nicht über eine neue
++Bibliothek, sondern über das Anschließen dessen, was schon dasteht:
++
++1. `DATABASE_URL` setzen, `pnpm db:push`, `pnpm seed:perfect` — die Migrationen
++   und der Seed existieren.
++2. Den tRPC-Provider in `App.tsx` einhängen und `apiClient` hinter dieselbe
++   Schnittstelle legen, die er heute hat (`projects.list`, `projects.update`,
++   `reviews.update`, `audit.*`). Die Signaturen stimmen bereits überein — das
++   ist der Grund, warum das eine Stufe und kein Umbau ist.
++3. Den Audit-Trail auf die `audit_log`-Tabelle legen. Er ist heute schon das
++   vollständige Änderungsprotokoll inklusive Rückgängig; er lebt nur im
++   falschen Speicher.
++4. Erst danach ist „alle sehen dasselbe" eine Aussage, die man prüfen kann —
++   und dann prüft sie `scripts/stress-test.mjs` mit echten parallelen Sitzungen
++   statt mit zwei Tabs.
++
++---
++
++## 5. Nach dem Umzug: prüfen, nicht hoffen
++
++```bash
++node scripts/doctor.mjs      # Werkzeuge, Daten, Speicherlage, Fremdbindungen
++node scripts/status.mjs      # Bauteile, HEAD gegen origin/main, erwartete Gate-Zahlen
++```
++
++Der Doctor meldet weiterhin einen Hinweis auf `.github/workflows/ci.yml`,
++solange die Datei existiert. Sie zu löschen ist der letzte Schritt des Umzugs —
++und der Schritt, den man erst geht, wenn die GitLab-Pipeline einmal
++vollständig grün war.
+diff --git a/package.json b/package.json
+index 5903fc4..ef71a3b 100644
+--- a/package.json
++++ b/package.json
+@@ -18,6 +18,7 @@
+     "start": "NODE_ENV=production node dist/index.js",
+     "check": "tsc --noEmit",
+     "status": "node scripts/status.mjs",
++    "doctor": "node scripts/doctor.mjs",
+     "format": "prettier --write .",
+     "lint": "biome check .",
+     "lint:staged": "lint-staged",
+diff --git a/scripts/doctor.mjs b/scripts/doctor.mjs
+new file mode 100644
+index 0000000..a776e0f
+--- /dev/null
++++ b/scripts/doctor.mjs
+@@ -0,0 +1,215 @@
++/**
++ * What a fresh clone needs to know, before anybody changes anything.
++ *
++ * `pnpm status` answers "is the last patch in, and is it on the website".
++ * This answers the questions that come before that, the ones a new machine —
++ * or a new person, or a runner in a pipeline nobody has run before — has to
++ * ask: does this checkout have what it needs, is the data intact, where do the
++ * changes people make actually go, and what is still tied to the host we are
++ * migrating away from.
++ *
++ * It reads. It never installs, never builds, never writes to the repository.
++ * Exit code 0 means nothing is broken; 1 means something named below is.
++ */
++import { execSync } from "node:child_process";
++import { existsSync, readFileSync, statSync } from "node:fs";
++import path from "node:path";
++
++const ESC = String.fromCharCode(27);
++const paint = (c) => (s) => `${ESC}[${c}m${s}${ESC}[0m`;
++const green = paint(32);
++const red = paint(31);
++const amber = paint(33);
++const dim = paint(2);
++const bold = paint(1);
++
++const sh = (cmd) => {
++  try {
++    return execSync(cmd, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
++  } catch {
++    return "";
++  }
++};
++
++let problems = 0;
++let warnings = 0;
++const ok = (label, detail = "") => console.log(`  ${green("OK")}    ${label}${detail ? dim(` — ${detail}`) : ""}`);
++const warn = (label, detail = "") => {
++  warnings++;
++  console.log(`  ${amber("HINWEIS")} ${label}${detail ? dim(` — ${detail}`) : ""}`);
++};
++const bad = (label, detail = "") => {
++  problems++;
++  console.log(`  ${red("FEHLER")} ${label}${detail ? dim(` — ${detail}`) : ""}`);
++};
++
++const json = (file) => {
++  try {
++    return JSON.parse(readFileSync(file, "utf8"));
++  } catch {
++    return null;
++  }
++};
++
++// ---------------------------------------------------------------------------
++console.log(bold("\nWerkzeuge"));
++// ---------------------------------------------------------------------------
++const pkg = json("package.json") ?? {};
++const wantNode = Number((pkg.engines?.node ?? ">=22").replace(/[^\d]/g, "").slice(0, 2) || 22);
++const haveNode = Number(process.versions.node.split(".")[0]);
++if (haveNode >= wantNode) ok(`Node ${process.versions.node}`, `verlangt >=${wantNode}`);
++else bad(`Node ${process.versions.node}`, `verlangt >=${wantNode}`);
++
++const pnpmVersion = sh("pnpm --version");
++const wantPnpm = (pkg.packageManager ?? "").split("@")[1] ?? "";
++if (!pnpmVersion) bad("pnpm nicht gefunden", `package.json verlangt ${wantPnpm || "pnpm"}`);
++else if (wantPnpm && pnpmVersion !== wantPnpm) warn(`pnpm ${pnpmVersion}`, `package.json pinnt ${wantPnpm}`);
++else ok(`pnpm ${pnpmVersion}`);
++
++if (existsSync("node_modules")) ok("node_modules vorhanden");
++else warn("node_modules fehlt", "pnpm install --frozen-lockfile");
++
++const chromium =
++  process.env.PLAYWRIGHT_CHROMIUM_PATH ||
++  (existsSync(path.join(process.env.HOME ?? "", ".cache/ms-playwright")) ? "im Cache" : "");
++if (chromium) ok("Chromium für die Gates", String(chromium));
++else warn("Chromium fehlt", "pnpm exec playwright install --with-deps chromium");
++
++// ---------------------------------------------------------------------------
++console.log(bold("\nDaten"));
++// ---------------------------------------------------------------------------
++const DATA = "client/public/data.json";
++const data = json(DATA);
++if (!data) {
++  bad(`${DATA} fehlt oder ist kein JSON`);
++} else {
++  const projects = data.projects ?? [];
++  const reviews = projects.reduce((n, p) => n + (p.reviews?.length ?? 0), 0);
++  const bytes = statSync(DATA).size;
++  ok(
++    `${projects.length.toLocaleString("de-DE")} Projekte · ${reviews.toLocaleString("de-DE")} Prüfzeilen`,
++    `${(bytes / 1024 / 1024).toFixed(1)} MB auf der Platte`,
++  );
++
++  const ids = new Set();
++  let duplicates = 0;
++  let withoutNumber = 0;
++  for (const p of projects) {
++    if (ids.has(p.id)) duplicates++;
++    ids.add(p.id);
++    if (!String(p.projektnummer ?? "").trim()) withoutNumber++;
++  }
++  if (duplicates > 0) bad(`${duplicates} doppelte Projekt-IDs`);
++  else ok("Projekt-IDs eindeutig");
++  if (withoutNumber > 0) warn(`${withoutNumber} Projekte ohne Projektnummer`, "bekannt, im Dashboard ausgewiesen");
++
++  /*
++   * The persistence budget.
++   *
++   * Deliberately not computed from the file size: the loader validates and
++   * normalises before caching, so 3,5 MB on disk becomes 2,15 MB in the
++   * browser — measured, not estimated. Reporting the disk figure as the share
++   * would overstate the pressure by half, and a diagnostic that cries wolf is
++   * a diagnostic people learn to skip.
++   */
++  const cap = 5 * 1024 * 1024;
++  console.log(
++    `  ${dim(`Speicherlage: ${(bytes / 1024 / 1024).toFixed(1)} MB als Datei → 2,15 MB im localStorage (gemessen) von ${cap / 1024 / 1024} MB Limit ≈ 43 %`)}`,
++  );
++}
++
++// ---------------------------------------------------------------------------
++console.log(bold("\nWo Änderungen landen"));
++// ---------------------------------------------------------------------------
++const apiClient = existsSync("client/src/_core/api/client.ts")
++  ? readFileSync("client/src/_core/api/client.ts", "utf8")
++  : "";
++if (/localStorage/.test(apiClient) && !/trpc|fetch\(\s*["'`]\/api\//.test(apiClient)) {
++  warn(
++    "Der Client schreibt ausschließlich in localStorage",
++    "kein Server im Deploy — zwei Rechner sehen einander nicht",
++  );
++} else {
++  ok("Der Client spricht mit einer API");
++}
++if (/writeStore\(/.test(apiClient)) ok("Schreibvorgänge sind gegen vollen Speicher abgesichert");
++else bad("Schreibvorgänge sind nicht abgesichert", "ein volles localStorage verliert Änderungen still");
++
++const serverRouters = existsSync("server/routers.ts") ? readFileSync("server/routers.ts", "utf8") : "";
++const procedures = (serverRouters.match(/\.(query|mutation)\(/g) ?? []).length;
++if (procedures > 0) {
++  const wired = /trpc\.[a-z]/i.test(
++    sh("grep -rl 'trpc\\.' client/src --include=*.tsx 2>/dev/null") || "",
++  );
++  if (wired) ok(`Server-API mit ${procedures} Prozeduren, vom Client benutzt`);
++  else
++    warn(
++      `Server-API mit ${procedures} Prozeduren vorhanden, aber ungenutzt`,
++      "server/routers.ts + drizzle/schema.ts stehen bereit; der Client ruft sie nicht auf",
++    );
++}
++
++// ---------------------------------------------------------------------------
++console.log(bold("\nBindung an GitHub"));
++// ---------------------------------------------------------------------------
++/*
++ * Only real code. The first version of this check matched the comment that
++ * explains the URL's removal and reported the fix as the defect — a grep that
++ * cannot tell code from prose about code is worse than no grep.
++ */
++const hardCoded = sh(
++  "grep -rn 'raw.githubusercontent\\|github.com/iceccarelli' client/src shared server 2>/dev/null | grep -v ':[[:space:]]*[*/]' | head -5",
++);
++if (hardCoded) bad("Fest verdrahtete GitHub-URL im Anwendungscode", hardCoded.split("\n")[0].slice(0, 90));
++else ok("Keine GitHub-URL im Anwendungscode");
++
++if (existsSync(".gitlab-ci.yml")) ok(".gitlab-ci.yml vorhanden");
++else bad(".gitlab-ci.yml fehlt", "GitLab würde nichts prüfen");
++if (existsSync(".github/workflows/ci.yml")) {
++  warn(".github/workflows/ci.yml existiert weiterhin", "auf GitLab wirkungslos, auf GitHub weiterhin aktiv");
++}
++if (existsSync("docs/GITLAB-MIGRATION.md")) ok("Migrationsanleitung vorhanden", "docs/GITLAB-MIGRATION.md");
++else warn("Keine Migrationsanleitung");
++
++// ---------------------------------------------------------------------------
++console.log(bold("\nRepository"));
++// ---------------------------------------------------------------------------
++const branch = sh("git rev-parse --abbrev-ref HEAD");
++const branches = sh("git branch -r").split("\n").filter(Boolean).length;
++ok(`Branch ${branch || "(keiner)"}`, `${branches} Remote-Branch(es)`);
++
++const trackedPatches = sh("git ls-files").split("\n").filter((f) => /\.patch$/.test(f));
++const strayPatches = trackedPatches.filter((f) => !f.startsWith("patches/"));
++if (strayPatches.length > 0) bad(`${strayPatches.length} Patch-Datei(en) im Baum`, strayPatches.join(", "));
++else ok("Keine Transfer-Patches im Baum", trackedPatches.length ? `${trackedPatches.join(", ")} ist eine pnpm-Abhängigkeit` : "");
++
++const dirty = sh("git status --porcelain").split("\n").filter(Boolean);
++if (dirty.length > 0) warn(`${dirty.length} geänderte Datei(en) im Arbeitsverzeichnis`, dirty.slice(0, 3).join(" · "));
++else ok("Arbeitsverzeichnis sauber");
++
++const bigFiles = sh("git ls-files -z | xargs -0 du -k 2>/dev/null | sort -rn | head -3")
++  .split("\n")
++  .filter(Boolean)
++  .map((l) => l.replace(/\s+/, " "));
++console.log(`  ${dim(`größte Dateien: ${bigFiles.join(" · ") || "unbekannt"}`)}`);
++
++// ---------------------------------------------------------------------------
++console.log(bold("\nGates, die diesen Stand beweisen"));
++// ---------------------------------------------------------------------------
++for (const line of [
++  "pnpm exec tsc --noEmit         sauber",
++  "pnpm exec vitest run           305 passed, 6 skipped",
++  "node scripts/e2e-smoke.mjs     112 passed, 0 failed",
++  "node scripts/check-ui.mjs      UI CLEAN",
++  "node scripts/stress-test.mjs    12 passed, 0 failed",
++  "pnpm exec biome check .         70 warnings",
++]) console.log(`  ${dim(line)}`);
++
++console.log(
++  problems > 0
++    ? red(`\n${problems} Fehler, ${warnings} Hinweis(e).\n`)
++    : warnings > 0
++      ? amber(`\nKeine Fehler, ${warnings} Hinweis(e).\n`)
++      : green("\nAlles in Ordnung.\n"),
++);
++process.exit(problems > 0 ? 1 : 0);
+diff --git a/scripts/e2e-smoke.mjs b/scripts/e2e-smoke.mjs
+index a757513..1d22bd6 100644
+--- a/scripts/e2e-smoke.mjs
++++ b/scripts/e2e-smoke.mjs
+@@ -250,7 +250,22 @@ await check("search narrows the table", async () => {
+   await page.waitForSelector("table tbody tr", { timeout: 30000 });
+   const before = await page.locator("tbody tr").count();
+   await page.locator('input[aria-label^="Projekte durchsuchen"]').fill("Frankfurt");
+-  await page.waitForTimeout(900);
++  /*
++   * Waits for the table to be narrower, not for 900 ms.
++   *
++   * The search debounces 250 ms and then re-renders a 1,298-row table down to
++   * 334. On a loaded machine that re-render outlasts any duration somebody
++   * picks, and this gate read 1298 -> 1298 while the header above the table
++   * already said "334 Projekte gefunden" — the app was right and the clock was
++   * wrong. Third time this suite has been taught the same lesson.
++   */
++  await page
++    .waitForFunction(
++      (n) => document.querySelectorAll("tbody tr").length < n,
++      before,
++      { timeout: 20000 },
++    )
++    .catch(() => {});
+   const after = await page.locator("tbody tr").count();
+   assert(after > 0 && after < before, `rows ${before} -> ${after}`);
+ });
+@@ -1777,6 +1792,172 @@ await check("Rückgängig restores the old value and is itself recorded", async
+ });
+ 
+ 
++console.log("\n== where the changes actually live ==");
++
++/**
++ * The persistence layer, said out loud and defended.
++ *
++ * Every edit in this build goes into the reader's own browser. That is a fact
++ * with a limit attached — 5 MB per origin — and two ways of getting it wrong:
++ * not telling anyone how full it is, and losing a change when it overflows.
++ * These three gates cover the fact, the limit, and the overflow.
++ */
++await check("the Dashboard says how full the only store is", async () => {
++  await go("/");
++  await page.waitForSelector("text=/Belastbarkeit der Zahlen/", { timeout: 25000 });
++  const body = await page.locator("body").innerText();
++  // Label and value are siblings in a flex row, so innerText puts a newline
++  // between them — the figures are on the line after the label, not on it.
++  const shown = body.match(/lokaler Speicher\s*([\d,]+)\s*MB von ([\d,]+)\s*MB/);
++  assert(
++    shown,
++    `the trust panel does not report the storage it depends on: ${
++      (body.match(/lokaler Speicher[\s\S]{0,40}/) ?? ["(nichts)"])[0]
++    }`,
++  );
++  const used = Number(shown[1].replace(",", "."));
++  const cap = Number(shown[2].replace(",", "."));
++  assert(cap === 5, `the panel claims a ${cap} MB cap; localStorage is 5 MB per origin`);
++
++  // And it must be the real occupancy, not a constant somebody typed.
++  const measured = await page.evaluate(() => {
++    let bytes = 0;
++    for (const key of Object.keys(localStorage)) {
++      bytes += new Blob([localStorage.getItem(key) ?? ""]).size;
++    }
++    return bytes / 1024 / 1024;
++  });
++  assert(
++    Math.abs(used - measured) < 0.15,
++    `the panel says ${used} MB, the browser holds ${measured.toFixed(2)} MB`,
++  );
++});
++
++await check("no page fetches anything from GitHub", async () => {
++  // The data loader used to fall back to a raw.githubusercontent.com URL: a
++  // Deutsche Bahn application reaching a public host from every reader's
++  // browser, and a line that would have survived the move to GitLab pointing
++  // at a branch nobody watches.
++  const foreign = [];
++  const watch = (req) => {
++    const url = req.url();
++    if (!url.startsWith(`http://localhost:${PORT}`) && /github|githubusercontent/i.test(url)) {
++      foreign.push(url);
++    }
++  };
++  page.on("request", watch);
++  try {
++    for (const route of ["/", "/projects", "/bvb-eea", "/audit"]) {
++      await go(route);
++    }
++    // And the built bundle must not carry the address either.
++    const bundled = await page.evaluate(async () => {
++      const scripts = [...document.querySelectorAll("script[src]")].map((s) => s.src);
++      for (const src of scripts) {
++        const text = await (await fetch(src)).text();
++        if (/raw\.githubusercontent\.com/.test(text)) return src;
++      }
++      return null;
++    });
++    assert(!bundled, `the built bundle still carries a GitHub URL: ${bundled}`);
++  } finally {
++    page.off("request", watch);
++  }
++  assert(foreign.length === 0, `requests to GitHub: ${foreign.slice(0, 2).join(", ")}`);
++});
++
++await check("a full store refuses the change out loud, and never silently", async () => {
++  /*
++   * The failure this prevents: at the 5 MB cap setItem throws, the optimistic
++   * update rolls back, and the cell reverts to its old value with nothing said.
++   * From the reader's chair that is indistinguishable from the app dropping
++   * their typing — which is the one thing a system of record may not do.
++   *
++   * Filled with real keys rather than by stubbing setItem: a mock would test
++   * the mock. Everything below the fill runs inside try/finally, because the
++   * whole suite shares this browser and a gate that leaves the store full
++   * fails the three checks after it — which is exactly what the first version
++   * of this gate did.
++   */
++  await go("/psv-itk");
++  await page.waitForSelector("table tbody tr", { timeout: 30000 });
++
++  const clean = async () => {
++    await page.evaluate(() => {
++      for (const key of Object.keys(localStorage)) {
++        if (key.startsWith("e2e_ballast")) localStorage.removeItem(key);
++      }
++    });
++  };
++
++  try {
++    const filled = await page.evaluate(() => {
++      /*
++       * Descending chunk sizes, then measured against an app-sized write.
++       *
++       * 64 kB chunks alone leave up to 64 kB of headroom, and an app write
++       * replaces an existing key with a value of nearly the same size — the
++       * quota is charged on the difference, so it slipped through and the gate
++       * proved nothing. "Full" here means: a 1 kB write is refused, which is
++       * larger than any delta this app produces.
++       */
++      let written = 0;
++      const stillFits = (bytes) => {
++        try {
++          localStorage.setItem("e2e_ballast_probe", "x".repeat(bytes));
++          localStorage.removeItem("e2e_ballast_probe");
++          return true;
++        } catch {
++          return false;
++        }
++      };
++      for (const size of [64 * 1024, 4 * 1024, 512, 64]) {
++        const chunk = "x".repeat(size);
++        try {
++          for (let i = 0; i < 4000; i++) {
++            localStorage.setItem(`e2e_ballast_${size}_${i}`, chunk);
++            written++;
++          }
++        } catch {
++          // This size no longer fits; try a smaller one.
++        }
++      }
++      return { written, full: !stillFits(1024) };
++    });
++    assert(filled.written > 0, "could not fill the store; nothing to test");
++    assert(filled.full, `wrote ${filled.written} ballast keys and 1 kB still fits`);
++
++    const cell = "table tbody tr:first-child td:nth-child(13)";
++    const before = (await page.locator(`${cell} button`).first().innerText()).trim();
++    await page.locator(`${cell} button`).first().click();
++    const select = page.locator(`${cell} select`).first();
++    await select.waitFor({ timeout: 5000 });
++    const options = await select.locator("option").allTextContents();
++    const target = options.find(
++      (o) => o && !before.includes(o) && o !== "—" && o !== "nicht erforderlich",
++    );
++    assert(target, "no other status to choose");
++    await select.selectOption(target);
++    await page.waitForTimeout(1500);
++
++    const body = await page.locator("body").innerText();
++    assert(
++      /Speicher ist voll|NICHT gespeichert/i.test(body),
++      "the store was full and the app said nothing about it",
++    );
++
++    // And it rolled back rather than showing a value it did not keep.
++    const after = (await page.locator(`${cell} button`).first().innerText()).trim();
++    assert(
++      after === before,
++      `the cell shows "${after}" but the write was refused — it claims a change it did not keep`,
++    );
++  } finally {
++    await clean();
++    await go("/");
++  }
++});
++
+ console.log("\n== the map on the Dashboard ==");
+ 
+ /**
+diff --git a/scripts/status.mjs b/scripts/status.mjs
+index a07d55a..2bb16cb 100644
+--- a/scripts/status.mjs
++++ b/scripts/status.mjs
+@@ -65,6 +65,12 @@ const FEATURES = [
+   ["Karte auf dem Dashboard", "client/src/pages/Dashboard.tsx", "Alle Projekte auf der Karte"],
+   ["Station per ID verlinkt, nicht per Text", "shared/handlungsbedarf.ts", "export function stationHref"],
+   ["Zweiter Tab sieht Aenderungen sofort", "client/src/hooks/useCrossTabSync.ts", "export function useCrossTabSync"],
++  ["Voller Speicher wird laut abgelehnt", "client/src/_core/api/localStore.ts", "class StorageFullError"],
++  ["Speicherstand steht im Dashboard", "shared/storage-budget.ts", "export function storageBudget"],
++  ["Keine GitHub-URL im Client", "client/src/_core/api/client.ts", "VITE_DATA_FALLBACK_URL"],
++  ["GitLab-Pipeline", ".gitlab-ci.yml", "stages:"],
++  ["Migrationsanleitung", "docs/GITLAB-MIGRATION.md", "git push --mirror"],
++  ["Klon-Diagnose", "scripts/doctor.mjs", "Wo Änderungen landen"],
+ ];
+ 
+ console.log(bold("\nHEAD"));
+@@ -169,8 +175,8 @@ let unpushed = 0;
+ 
+ console.log(bold("\nErwartete Zahlen der Gates"));
+ for (const line of [
+-  "pnpm exec vitest run          298 passed, 6 skipped",
+-  "node scripts/e2e-smoke.mjs    109 passed, 0 failed",
++  "pnpm exec vitest run          305 passed, 6 skipped",
++  "node scripts/e2e-smoke.mjs    112 passed, 0 failed",
+   "node scripts/check-ui.mjs      UI CLEAN",
+   "node scripts/stress-test.mjs   12 passed, 0 failed",
+   "pnpm exec biome check .        70 warnings",
+diff --git a/shared/storage-budget.test.ts b/shared/storage-budget.test.ts
+new file mode 100644
+index 0000000..a232104
+--- /dev/null
++++ b/shared/storage-budget.test.ts
+@@ -0,0 +1,61 @@
++import { describe, it, expect } from "vitest";
++import {
++  BUDGET_CRITICAL,
++  BUDGET_TIGHT,
++  LOCAL_STORAGE_CAP_BYTES,
++  formatBytes,
++  storageBudget,
++} from "./storage-budget";
++
++const MB = 1024 * 1024;
++
++describe("the budget for the only place changes are kept", () => {
++  it("is measured against the browser cap, not against a disk estimate", () => {
++    // navigator.storage.estimate() reported 519 MB in this app for a store
++    // that holds 5. A budget built on that reads 0.4 % full at the moment the
++    // next write throws.
++    expect(LOCAL_STORAGE_CAP_BYTES).toBe(5 * MB);
++  });
++
++  it("reports the shipped store as it was measured: 2,15 MB, about 43 %", () => {
++    const b = storageBudget({ bahn_projects_v3: 2_255_872, theme: 5, "bahn-demo-user": 120 });
++    expect(b.share).toBeGreaterThan(40);
++    expect(b.share).toBeLessThan(45);
++    expect(b.level).toBe("ok");
++    expect(formatBytes(b.usedBytes)).toBe("2,2 MB");
++  });
++
++  it("names what is taking the room, largest first", () => {
++    const b = storageBudget({ small: 10, huge: 3_000_000, middle: 50_000 });
++    expect(b.biggest.map((x) => x.key)).toEqual(["huge", "middle", "small"]);
++  });
++
++  it("warns before the cap, not at it", () => {
++    const tight = storageBudget({ x: Math.round(LOCAL_STORAGE_CAP_BYTES * 0.75) });
++    expect(tight.share).toBeGreaterThanOrEqual(BUDGET_TIGHT);
++    expect(tight.level).toBe("eng");
++
++    const critical = storageBudget({ x: Math.round(LOCAL_STORAGE_CAP_BYTES * 0.95) });
++    expect(critical.share).toBeGreaterThanOrEqual(BUDGET_CRITICAL);
++    expect(critical.level).toBe("kritisch");
++  });
++
++  it("never reports negative room left", () => {
++    const over = storageBudget({ x: 9 * MB });
++    expect(over.freeBytes).toBe(0);
++    expect(over.level).toBe("kritisch");
++  });
++
++  it("treats an unmeasurable store as empty rather than as full", () => {
++    const none = storageBudget({});
++    expect(none.usedBytes).toBe(0);
++    expect(none.level).toBe("ok");
++  });
++
++  it("prints German units a reader can compare", () => {
++    expect(formatBytes(0)).toBe("0 kB");
++    expect(formatBytes(999)).toBe("999 B");
++    expect(formatBytes(2048)).toBe("2 kB");
++    expect(formatBytes(5 * MB)).toBe("5,0 MB");
++  });
++});
+diff --git a/shared/storage-budget.ts b/shared/storage-budget.ts
+new file mode 100644
+index 0000000..8331a5b
+--- /dev/null
++++ b/shared/storage-budget.ts
+@@ -0,0 +1,74 @@
++/**
++ * How much room is left in the only place this app keeps changes.
++ *
++ * ---------------------------------------------------------------------------
++ * Why a budget, and why it is 5 MB
++ * ---------------------------------------------------------------------------
++ * Every edit lands in localStorage — there is no server in the deployed build.
++ * localStorage is capped per origin at 5 MB in Chrome, Firefox and Safari
++ * alike, and that cap is *not* what navigator.storage.estimate() reports:
++ * measured in this app, the estimate said 519 MB while the store it was
++ * describing can hold 5. A budget built on the estimate would read 0.4 % full
++ * at the moment the next write throws.
++ *
++ * Measured on the shipped data: the project store alone is 2.15 MB with no
++ * edits made — 43 % of the cap before anyone has touched anything. The audit
++ * trail is capped at 1,000 entries and checklist drafts are small, so the
++ * store does not grow without bound; but "does not grow without bound" and
++ * "has room" are different claims, and a reader who is about to lose a change
++ * deserves to see the second one before it happens rather than after.
++ *
++ * What happens at the cap is the reason this is on screen: setItem throws
++ * QuotaExceededError, the mutation rolls back, and the change is gone. It is
++ * caught and named now (StorageFullError), but the honest fix is to stop
++ * keeping a company's project data in a browser — see docs/GITLAB-MIGRATION.md
++ * and the persistence section of the doctor's report.
++ */
++
++/** Per-origin localStorage cap in Chrome, Firefox and Safari. Not a guess. */
++export const LOCAL_STORAGE_CAP_BYTES = 5 * 1024 * 1024;
++
++/** Above this share of the cap the panel warns; above CRITICAL it alarms. */
++export const BUDGET_TIGHT = 70;
++export const BUDGET_CRITICAL = 90;
++
++export type BudgetLevel = "ok" | "eng" | "kritisch";
++
++export interface StorageBudget {
++  usedBytes: number;
++  capBytes: number;
++  freeBytes: number;
++  /** 0–100, rounded to one decimal. */
++  share: number;
++  level: BudgetLevel;
++  /** Largest keys first — what is actually taking the room. */
++  biggest: Array<{ key: string; bytes: number }>;
++}
++
++export function storageBudget(
++  entries: Readonly<Record<string, number>>,
++  capBytes: number = LOCAL_STORAGE_CAP_BYTES,
++): StorageBudget {
++  const pairs = Object.entries(entries)
++    .map(([key, bytes]) => ({ key, bytes: Number.isFinite(bytes) && bytes > 0 ? bytes : 0 }))
++    .sort((a, b) => b.bytes - a.bytes);
++  const usedBytes = pairs.reduce((sum, p) => sum + p.bytes, 0);
++  const cap = capBytes > 0 ? capBytes : LOCAL_STORAGE_CAP_BYTES;
++  const share = Math.round((usedBytes / cap) * 1000) / 10;
++  return {
++    usedBytes,
++    capBytes: cap,
++    freeBytes: Math.max(0, cap - usedBytes),
++    share,
++    level: share >= BUDGET_CRITICAL ? "kritisch" : share >= BUDGET_TIGHT ? "eng" : "ok",
++    biggest: pairs.slice(0, 5),
++  };
++}
++
++/** German, one decimal, never "0.00 MB" for something that exists. */
++export function formatBytes(bytes: number): string {
++  if (!Number.isFinite(bytes) || bytes <= 0) return "0 kB";
++  if (bytes < 1024) return `${Math.round(bytes)} B`;
++  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0).replace(".", ",")} kB`;
++  return `${(bytes / 1024 / 1024).toFixed(1).replace(".", ",")} MB`;
++}
+-- 
+2.43.0
+
