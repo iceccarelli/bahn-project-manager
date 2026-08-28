@@ -12,9 +12,23 @@ ARG NODE_VERSION=22.14.0
 ARG PNPM_VERSION=10.15.1
 
 # ---------------------------------------------------------------- deps ------
-# Separate stage, and only the two manifests are copied, so the (slow) install
-# layer is cached until a dependency actually changes — editing a .tsx file
-# does not reinstall 1,200 packages.
+# Separate stage, and only the manifests are copied, so the (slow) install layer
+# is cached until a dependency actually changes — editing a .tsx file does not
+# reinstall 1,200 packages.
+#
+# `patches/` is part of the manifest, not of the sources.
+#
+#   package.json declares
+#     patchedDependencies: { "wouter@3.7.1": "patches/wouter@3.7.1.patch" }
+#
+# and pnpm hashes that file during `install`, before it looks at anything else.
+# Copying only package.json and the lockfile therefore produced
+#
+#   ENOENT: no such file or directory, open '/app/patches/wouter@3.7.1.patch'
+#
+# and the container job has failed on it since this Dockerfile was written —
+# the patched dependency predates it. The directory is two files and changes
+# about as often as the lockfile, so it belongs in the cached layer with it.
 FROM node:${NODE_VERSION}-bookworm-slim AS deps
 ARG PNPM_VERSION
 ENV PNPM_HOME=/pnpm
@@ -22,6 +36,7 @@ ENV PATH=$PNPM_HOME:$PATH
 RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 WORKDIR /app
 COPY package.json pnpm-lock.yaml ./
+COPY patches ./patches
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile
 

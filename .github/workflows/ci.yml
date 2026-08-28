@@ -22,6 +22,12 @@ jobs:
       # Data integrity: canonical Bahnhofsmanagement, station master invariants,
       # derived blocks in sync, and no regression in map coverage.
       - run: pnpm verify:data
+      # The state of this checkout in one picture: tools, data, where changes
+      # are written, foreign bindings, stray transfer patches — and the
+      # container manifest. The last one exists because the docker job failed
+      # for months on a patchedDependency the Dockerfile never copied, and a
+      # 19-second red X nobody reads is not a gate.
+      - run: node scripts/doctor.mjs
 
   test:
     runs-on: ubuntu-latest

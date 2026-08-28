@@ -172,6 +172,50 @@ if (existsSync("docs/GITLAB-MIGRATION.md")) ok("Migrationsanleitung vorhanden", 
 else warn("Keine Migrationsanleitung");
 
 // ---------------------------------------------------------------------------
+console.log(bold("\nContainer"));
+// ---------------------------------------------------------------------------
+/*
+ * The failure this catches, which ran red in CI for months without anybody
+ * reading it:
+ *
+ *   #15 [deps 5/5] RUN pnpm install --frozen-lockfile
+ *   ENOENT: no such file or directory, open '/app/patches/wouter@3.7.1.patch'
+ *
+ * package.json declares a patchedDependency; pnpm hashes that file during
+ * install, before it looks at anything else. The Dockerfile's deps stage
+ * copied only package.json and the lockfile, so the file was not in the image
+ * — and every container build has failed on it since the Dockerfile was
+ * written. A patched dependency is part of the manifest, not of the sources.
+ */
+const patched = pkg.pnpm?.patchedDependencies ?? {};
+const patchPaths = Object.values(patched).filter((v) => typeof v === "string");
+const dockerfile = existsSync("Dockerfile") ? readFileSync("Dockerfile", "utf8") : "";
+if (patchPaths.length === 0) {
+  ok("Keine gepatchten Abhängigkeiten");
+} else {
+  for (const rel of patchPaths) {
+    if (!existsSync(rel)) bad(`patchedDependency fehlt: ${rel}`, "pnpm install schlägt überall fehl");
+    else ok(`patchedDependency vorhanden: ${rel}`);
+  }
+  if (!dockerfile) {
+    warn("Kein Dockerfile — Container-Gate entfällt");
+  } else {
+    // The deps stage is everything up to the next FROM.
+    const depsStage = dockerfile.split(/^FROM .* AS build/m)[0] ?? "";
+    const dirs = [...new Set(patchPaths.map((rel) => rel.split("/")[0]))];
+    for (const dir of dirs) {
+      const copied = new RegExp(`^COPY\\s+${dir}\\b`, "m").test(depsStage);
+      if (copied) ok(`Dockerfile kopiert ${dir}/ vor dem Install`);
+      else
+        bad(
+          `Dockerfile kopiert ${dir}/ nicht vor dem Install`,
+          "pnpm install --frozen-lockfile bricht im Image mit ENOENT ab",
+        );
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 console.log(bold("\nRepository"));
 // ---------------------------------------------------------------------------
 const branch = sh("git rev-parse --abbrev-ref HEAD");
