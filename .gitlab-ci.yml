@@ -80,6 +80,11 @@ build:
   needs: [typen-und-lint, unit]
   script:
     - NODE_ENV=production pnpm build:client
+    - NODE_ENV=production pnpm build:server
+    # Auf dem Artefakt, nicht auf der Quelle: der Server-Entry darf keine
+    # Entwicklungsabhaengigkeit importieren, sonst stirbt der Container in
+    # seiner ersten Zeile.
+    - node scripts/doctor.mjs
   artifacts:
     expire_in: 1 week
     paths:

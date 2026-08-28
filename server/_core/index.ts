@@ -8,7 +8,7 @@ import { registerStorageProxy } from "./storageProxy";
 import { registerExcelRoutes } from "../excel";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
-import { serveStatic, setupVite } from "./vite";
+import { serveStatic } from "./static";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -59,6 +59,17 @@ async function startServer() {
   );
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
+    /*
+     * Loaded here, not at the top of the file.
+     *
+     * ./vite imports the bundler and vite.config.ts, both devDependencies. A
+     * static import would resolve them the moment this module loads — in the
+     * production image, where they are not installed, that is the process
+     * exiting before it binds a port. A dynamic import inside the branch that
+     * uses it never runs in production, and esbuild keeps it out of the
+     * production bundle's import graph.
+     */
+    const { setupVite } = await import("./vite");
     await setupVite(app, server);
   } else {
     serveStatic(app);

@@ -71,6 +71,8 @@ const FEATURES = [
   ["GitLab-Pipeline", ".gitlab-ci.yml", "stages:"],
   ["Migrationsanleitung", "docs/GITLAB-MIGRATION.md", "git push --mirror"],
   ["Klon-Diagnose", "scripts/doctor.mjs", "Wo Änderungen landen"],
+  ["Container: patches/ im Image", "Dockerfile", "COPY patches ./patches"],
+  ["Server-Bundle ohne Vite", "server/_core/static.ts", "export function serveStatic"],
 ];
 
 console.log(bold("\nHEAD"));

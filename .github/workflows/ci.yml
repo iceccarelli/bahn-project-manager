@@ -57,6 +57,10 @@ jobs:
           cache: 'pnpm'
       - run: pnpm install --frozen-lockfile
       - run: pnpm build:parallel
+      # The bundle is the artefact the container runs, so the checks that are
+      # about the bundle belong here: no devDependency may appear in the server
+      # entry. That import is what killed the container on its first line.
+      - run: node scripts/doctor.mjs
       - uses: actions/upload-artifact@v4
         with:
           name: dist

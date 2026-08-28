@@ -215,6 +215,57 @@ if (patchPaths.length === 0) {
   }
 }
 
+/*
+ * The second half of the same failure.
+ *
+ * With the patch file copied the image built — and the container still never
+ * became healthy:
+ *
+ *   Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'vite'
+ *   imported from /app/dist/index.js
+ *
+ * server/_core/index.ts imported ./vite, which imports the bundler and
+ * vite.config.ts at module scope. Production never calls setupVite — the
+ * branch is guarded by NODE_ENV — but an ESM import resolves when the module
+ * loads, not when the branch runs, and the runtime image installs production
+ * dependencies only. The process exited on its first line while curl retried
+ * thirty times against nothing.
+ *
+ * So: the built server entry may not import a devDependency, ever. Checked on
+ * the artefact rather than on the source, because the question is what esbuild
+ * emitted — a dynamic import of a local module gets inlined and its external
+ * imports hoisted to the top of the bundle unless --splitting is on, which is
+ * exactly how this passed review the first time.
+ */
+const serverBundle = "dist/index.js";
+if (!existsSync(serverBundle)) {
+  warn("dist/index.js fehlt — Server-Bundle nicht geprüft", "pnpm build:server");
+} else {
+  const bundle = readFileSync(serverBundle, "utf8");
+  const dev = new Set(Object.keys(pkg.devDependencies ?? {}));
+  const specifiers = new Set();
+  for (const m of bundle.matchAll(/^\s*import\s[^;]*?from\s*["']([^"']+)["']/gm)) {
+    specifiers.add(m[1]);
+  }
+  for (const m of bundle.matchAll(/^\s*import\s*["']([^"']+)["']/gm)) specifiers.add(m[1]);
+  const packageOf = (spec) => {
+    if (spec.startsWith(".") || spec.startsWith("node:")) return null;
+    const parts = spec.split("/");
+    return spec.startsWith("@") ? parts.slice(0, 2).join("/") : parts[0];
+  };
+  const leaked = [...specifiers]
+    .map(packageOf)
+    .filter((name) => name !== null && dev.has(name));
+  if (leaked.length > 0) {
+    bad(
+      `Server-Bundle importiert ${leaked.length} Entwicklungsabhängigkeit(en)`,
+      `${[...new Set(leaked)].join(", ")} — im Produktionsimage nicht installiert`,
+    );
+  } else {
+    ok("Server-Bundle importiert keine Entwicklungsabhängigkeit");
+  }
+}
+
 // ---------------------------------------------------------------------------
 console.log(bold("\nRepository"));
 // ---------------------------------------------------------------------------
