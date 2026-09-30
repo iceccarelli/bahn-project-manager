@@ -26,7 +26,10 @@ import {
   type EditableProjectField,
   type MutationResult,
   type ProjectDetail,
+  type ReviewField,
   type UpdateProjectInput,
+  type UpdateReviewInput,
+  reviewChangeKey,
 } from "@shared/project-contract";
 import type { Project } from "../../drizzle/schema";
 import { dateToWire } from "../infra/mysqlProjectStore";
@@ -34,7 +37,7 @@ import {
   ConflictError, ForbiddenError, IdempotencyKeyReuseError, NotFoundError, ValidationError,
 } from "./errors";
 import {
-  canCreateProject, canDeleteProject, canEditProject, canViewProject, type Principal,
+  canApproveReview, canCreateProject, canDeleteProject, canEditProject, canViewProject, type Principal,
 } from "./permissions";
 import { eventForPrincipal } from "./eventVisibility";
 import type { AfterCommit, AuditRow, ProjectStore, ProjectTx } from "./ports";
@@ -237,6 +240,73 @@ export class ProjectService {
     return result;
   }
 
+  /**
+   * A department review is part of the Project aggregate: editing one bumps the
+   * PROJECT version, writes audit rows and one `project.updated` event whose
+   * change keys are `review.<Gewerk>.<field>`. Same concurrency, same stream,
+   * same recovery as a field edit — no second sync system.
+   */
+  async updateReview(principal: Principal, input: UpdateReviewInput, ctx: RequestContext): Promise<MutationResult> {
+    const norm: Partial<Record<ReviewField, string | null>> = {};
+    for (const [f, v] of Object.entries(input.changes) as [ReviewField, string | null | undefined][]) {
+      if (v === undefined) continue;
+      if (f === "datum") {
+        const c = cleanStr(v);
+        if (c === null) norm[f] = null;
+        else {
+          const d = new Date(c);
+          if (Number.isNaN(d.getTime())) throw new ValidationError(`Ungültiges Datum: "${v}"`, f);
+          norm[f] = dateToWire(d);
+        }
+      } else norm[f] = cleanStr(v);
+    }
+    const hash = requestHash("project.updateReview", { p: input.projectId, d: input.department, v: input.expectedVersion, c: norm });
+
+    const result = await this.store.transaction(async tx => {
+      const claim = await tx.claimIdempotency(principal.id, input.idempotencyKey, "project.updateReview", hash);
+      if (claim.state === "mismatch") throw new IdempotencyKeyReuseError();
+      if (claim.state === "replay") return { ...(claim.response as MutationResult), replayed: true };
+
+      const current = await tx.lockProject(input.projectId);
+      if (!current || !canViewProject(principal, current)) throw new NotFoundError();
+      if (!canApproveReview(principal, current, input.department)) throw new ForbiddenError("Keine Berechtigung für dieses Gewerk");
+      const review = await tx.lockReview(input.projectId, input.department);
+      if (!review) throw new NotFoundError("Prüfung");
+      const reviewWire = (f: ReviewField): string | null => (f === "datum" ? dateToWire(review.datum) : review[f]);
+
+      const changes: Record<string, FieldChange> = {};
+      for (const [f, to] of Object.entries(norm) as [ReviewField, string | null][]) {
+        const from = reviewWire(f);
+        if (from !== to) changes[reviewChangeKey(input.department, f)] = { from, to };
+      }
+      const localValues = Object.fromEntries(Object.entries(norm).map(([f, v]) => [reviewChangeKey(input.department, f as ReviewField), v ?? null]));
+      const valueOf = (key: string) => reviewWire(key.split(".")[2] as ReviewField);
+      if (current.syncVersion !== input.expectedVersion) throw await this.conflict(tx, current, { id: input.projectId, expectedVersion: input.expectedVersion }, localValues, valueOf);
+      if (Object.keys(changes).length === 0) {
+        const res: MutationResult = { project: (await tx.detail(input.projectId))!, eventId: "", replayed: false };
+        await tx.completeIdempotency(principal.id, input.idempotencyKey, res);
+        return res;
+      }
+
+      await tx.updateReview(review.id, {
+        ...(norm.status !== undefined ? { status: norm.status } : {}),
+        ...(norm.prueferName !== undefined ? { prueferName: norm.prueferName } : {}),
+        ...(norm.datum !== undefined ? { datum: norm.datum === null ? null : new Date(norm.datum) } : {}),
+      });
+      const ok = await tx.updateVersioned(input.projectId, input.expectedVersion, {});
+      if (!ok) throw await this.conflict(tx, (await tx.lockProject(input.projectId)) ?? current, { id: input.projectId, expectedVersion: input.expectedVersion }, localValues, valueOf);
+
+      const event = this.buildEvent("project.updated", principal, ctx, input.projectId, input.expectedVersion + 1, changes, { workspace: current.bahnhofsmanagement });
+      await tx.appendAudit(this.auditRows(principal, event, "update", changes));
+      await tx.appendEvent(event);
+      const res: MutationResult = { project: (await tx.detail(input.projectId))!, eventId: event.eventId, replayed: false };
+      await tx.completeIdempotency(principal.id, input.idempotencyKey, res);
+      return res;
+    });
+    if (!result.replayed && result.eventId) this.notifyAfterCommit();
+    return result;
+  }
+
   async create(principal: Principal, input: CreateProjectInput, ctx: RequestContext): Promise<MutationResult> {
     const norm = normalizePatch(ProjectPatchSchema.parse(input.fields) as Record<string, string | null | undefined>);
     const hash = requestHash("project.create", { c: norm });
@@ -349,7 +419,8 @@ export class ProjectService {
     tx: ProjectTx,
     current: Project,
     input: { id: number; expectedVersion: number },
-    norm: Partial<Record<EditableProjectField, string | null>>,
+    norm: Partial<Record<string, string | null>>,
+    serverValueOf: (key: string) => string | null = key => currentWire(current, key as EditableProjectField),
   ): Promise<ConflictError> {
     const missed = await tx.eventsSince(input.id, input.expectedVersion, 100);
     const changedSince: Record<string, FieldChange> = {};
@@ -367,8 +438,8 @@ export class ProjectService {
       projectId: input.id,
       expectedVersion: input.expectedVersion,
       currentVersion: current.syncVersion,
-      serverValues: Object.fromEntries(fields.map(f => [f, currentWire(current, f as EditableProjectField)])),
-      localValues: Object.fromEntries(fields.map(f => [f, norm[f as EditableProjectField] ?? null])),
+      serverValues: Object.fromEntries(fields.map(f => [f, serverValueOf(f)])),
+      localValues: Object.fromEntries(fields.map(f => [f, norm[f] ?? null])),
       conflictingFields,
       changedSince,
       lastChange: last ? { actorId: last.actorId, actorName: last.actorName ?? null, at: last.timestamp } : null,

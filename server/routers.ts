@@ -6,8 +6,6 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { sdk } from "./_core/sdk";
 import {
-  updateDepartmentReview,
-  getReviewContext,
   createDepartmentReview,
   getDashboardStats,
   getBvbEeaList,
@@ -28,12 +26,13 @@ import {
   ListProjectsInputSchema,
   SyncInputSchema,
   UpdateProjectInputSchema,
+  UpdateReviewInputSchema,
   MAX_PAGE_SIZE,
 } from "@shared/project-contract";
 import { requireServices } from "./_core/services";
 import { deriveProjectMetrics } from "@shared/project-metrics";
 import { SingleFlightCache } from "./infra/singleFlightCache";
-import { canApproveReview, canViewAudit, workspaceRestriction } from "./domain/permissions";
+import { canViewAudit, workspaceRestriction } from "./domain/permissions";
 import { m } from "./observability/metrics";
 import { ConflictError } from "./domain/errors";
 
@@ -209,6 +208,21 @@ export const appRouter = router({
         return projects.sync(ctx.principal, input.known);
       }),
 
+    /** Department-review edit: versioned (project version), audited, evented. */
+    updateReview: protectedProcedure
+      .input(UpdateReviewInputSchema)
+      .mutation(async ({ input, ctx }) => {
+        const { projects } = await requireServices();
+        try {
+          const res = await projects.updateReview(ctx.principal, input, { traceId: ctx.traceId, requestId: ctx.requestId });
+          m.mutations.inc({ outcome: res.replayed ? "replay" : "ok" });
+          return res;
+        } catch (e) {
+          if (e instanceof ConflictError) { m.conflicts.inc(); m.mutations.inc({ outcome: "conflict" }); } else m.mutations.inc({ outcome: "error" });
+          throw e;
+        }
+      }),
+
     /** Global-chrome summary: replaces useAllProjects() in the shell. */
     shellSummary: protectedProcedure.query(async () => {
       const { store } = await requireServices();
@@ -224,39 +238,7 @@ export const appRouter = router({
 
   // ============= DEPARTMENT REVIEWS =============
   reviews: router({
-    update: protectedProcedure
-      .input(z.object({
-        id: z.number().int().positive(),
-        field: z.enum(["prueferName", "datum", "status"]),
-        value: z.string().max(256).nullable(),
-      }))
-      .mutation(async ({ input, ctx }) => {
-        const { id, field, value } = input;
-
-        const rctx = await getReviewContext(id);
-        if (!rctx) throw new TRPCError({ code: "NOT_FOUND" });
-        if (!canApproveReview(ctx.principal, { bahnhofsmanagement: rctx.bahnhofsmanagement }, rctx.department)) {
-          throw new TRPCError({ code: "FORBIDDEN" });
-        }
-        let column: string | Date | null = value;
-        if (field === "datum" && value !== null) {
-          column = new Date(value);
-          if (Number.isNaN(column.getTime())) throw new TRPCError({ code: "BAD_REQUEST", message: "Ungültiges Datum" });
-        }
-        await updateDepartmentReview(id, { [field]: column });
-
-        await createAuditEntry({
-          ...auditActor(ctx.principal),
-          entityType: 'review',
-          entityId: id,
-          action: 'update',
-          field,
-          oldValue: null,
-          newValue: value != null ? String(value) : null,
-        });
-
-        return { success: true };
-      }),
+    // reviews.update (unversioned, unevented) was removed: use projects.updateReview.
 
     create: protectedProcedure
       .input(z.object({

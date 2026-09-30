@@ -14,9 +14,25 @@
  *    it does not touch.
  */
 import { decideEvent, SeenEvents, type DomainEvent } from "@shared/domain-events";
-import { EDITABLE_PROJECT_FIELDS, type ConflictInfo, type ProjectDetail } from "@shared/project-contract";
+import { EDITABLE_PROJECT_FIELDS, REVIEW_KEY_RE, type ConflictInfo, type ProjectDetail } from "@shared/project-contract";
 
 export interface SyncResult { events: DomainEvent[]; snapshots: ProjectDetail[]; deleted: number[] }
+/**
+ * Apply one `changes` entry to a project object (returns a new object).
+ * `review.<Gewerk>.<field>` edits the matching review row; everything else is a project field.
+ */
+export function withChange(project: ProjectDetail, key: string, value: string | null): ProjectDetail {
+  const m = REVIEW_KEY_RE.exec(key);
+  if (!m) return { ...project, [key]: value } as ProjectDetail;
+  const [, department, field] = m;
+  const reviews = [...(project.reviews ?? [])];
+  const i = reviews.findIndex(r => r.department === department);
+  const base = i >= 0 ? reviews[i]! : { id: 0, department: department!, prueferName: null, datum: null, status: null, updatedAt: project.updatedAt };
+  const next = { ...base, [field!]: value };
+  if (i >= 0) reviews[i] = next; else reviews.push(next);
+  return { ...project, reviews };
+}
+
 export interface FeedPage { events: DomainEvent[]; cursor: number; hasMore: boolean }
 export interface EngineDeps {
   /** aggregate-level catch-up: for held versions, what did I miss? */
@@ -132,9 +148,9 @@ export class ProjectSyncEngine {
     const cur = this.server.get(id);
     const blank = Object.fromEntries(EDITABLE_PROJECT_FIELDS.map(f => [f, null]));
     const next: ProjectDetail = cur ?? ({ id, reviews: [], createdAt: e.timestamp, ...blank } as unknown as ProjectDetail);
-    const merged = { ...next, version: e.aggregateVersion, updatedAt: e.timestamp } as Record<string, unknown>;
-    for (const [f, c] of Object.entries(e.changes)) merged[f] = c.to;
-    this.server.set(id, merged as unknown as ProjectDetail);
+    let merged: ProjectDetail = { ...next, version: e.aggregateVersion, updatedAt: e.timestamp };
+    for (const [f, c] of Object.entries(e.changes)) merged = withChange(merged, f, c.to);
+    this.server.set(id, merged);
     const list = this.recent.get(id) ?? [];
     for (const [field, c] of Object.entries(e.changes)) {
       list.unshift({ field, from: c.from, to: c.to, actorId: e.actorId, actorName: e.actorName ?? null, at: e.timestamp });
@@ -302,8 +318,8 @@ export class ProjectSyncEngine {
     if (!base) return undefined;
     const overlay = this.pending.get(id);
     if (!overlay?.length) return base;
-    const out = { ...base } as Record<string, unknown>;
-    for (const p of overlay) Object.assign(out, p.changes);
-    return out as unknown as ProjectDetail;
+    let out: ProjectDetail = { ...base };
+    for (const p of overlay) for (const [k, v] of Object.entries(p.changes)) out = withChange(out, k, v);
+    return out;
   }
 }

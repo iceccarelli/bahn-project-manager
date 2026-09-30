@@ -88,8 +88,10 @@ describe.skipIf(!hasTestDb)("tRPC projects router (real DB)", () => {
     expect(page.items[0]).not.toHaveProperty("reviews");
   });
 
-  it("reviews/bvb/psv writes cannot target arbitrary columns", async () => {
-    await expect(as(editor).reviews.update({ id: 1, field: "projectId" as never, value: "9" })).rejects.toBeInstanceOf(TRPCError);
+  it("reviews/bvb/psv writes cannot target arbitrary columns; the unversioned reviews.update is gone", async () => {
+    expect((appRouter as any)._def.procedures["reviews.update"]).toBeUndefined();
+    await expect(as(editor).projects.updateReview({ projectId: 1, department: "ITK", expectedVersion: 1, changes: { projectId: 9 } as never, idempotencyKey: key() })).rejects.toBeInstanceOf(TRPCError);
+    await expect(as(editor).projects.updateReview({ projectId: 1, department: "ITK", expectedVersion: 1, changes: { id: "9" } as never, idempotencyKey: key() })).rejects.toBeInstanceOf(TRPCError);
     await expect(as(editor).bvbEea.update({ id: 1, field: "id" as never, value: "9" })).rejects.toBeInstanceOf(TRPCError);
     await expect(as(editor).psvItk.update({ id: 1, field: "createdAt" as never, value: "9" })).rejects.toBeInstanceOf(TRPCError);
   });

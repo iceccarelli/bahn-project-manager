@@ -63,6 +63,30 @@ export const UpdateProjectInputSchema = z.object({
 });
 export type UpdateProjectInput = z.infer<typeof UpdateProjectInputSchema>;
 
+export const REVIEW_FIELDS = ["status", "prueferName", "datum"] as const;
+export type ReviewField = (typeof REVIEW_FIELDS)[number];
+/** Change keys for review edits live in the same `changes` map as project fields: review.<Gewerk>.<field>. */
+export const reviewChangeKey = (department: string, field: ReviewField) => `review.${department}.${field}`;
+export const REVIEW_KEY_RE = /^review\.([^.]+)\.(status|prueferName|datum)$/;
+
+export const UpdateReviewInputSchema = z.object({
+  projectId: z.number().int().positive(),
+  department: z.string().min(1).max(64),
+  /** the PROJECT version: a review is part of the Project aggregate */
+  expectedVersion: z.number().int().min(1),
+  changes: z
+    .object({
+      status: z.string().max(128).nullable().optional(),
+      prueferName: z.string().max(256).nullable().optional(),
+      datum: z.string().max(40).nullable().optional(),
+    })
+    .strict()
+    .refine(p => Object.keys(p).length > 0, "changes must not be empty"),
+  idempotencyKey,
+  mutationId: z.string().max(64).optional(),
+});
+export type UpdateReviewInput = z.infer<typeof UpdateReviewInputSchema>;
+
 export const CreateProjectInputSchema = z.object({
   fields: ProjectPatchSchema,
   idempotencyKey,

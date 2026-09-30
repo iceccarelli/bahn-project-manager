@@ -59,6 +59,9 @@ export interface ProjectTx {
   updateVersioned(id: number, expectedVersion: number, set: Partial<Project>): Promise<boolean>;
   insertProject(values: Partial<Project>): Promise<number>;
   deleteProject(id: number): Promise<void>;
+  /** SELECT … FOR UPDATE on one department review of a project */
+  lockReview(projectId: number, department: string): Promise<{ id: number; status: string | null; prueferName: string | null; datum: Date | null } | null>;
+  updateReview(id: number, set: { status?: string | null; prueferName?: string | null; datum?: Date | null }): Promise<void>;
   detail(id: number): Promise<ProjectDetail | null>;
   appendAudit(rows: AuditRow[]): Promise<void>;
   appendEvent(event: DomainEvent): Promise<void>;

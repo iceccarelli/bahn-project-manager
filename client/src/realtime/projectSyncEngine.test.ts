@@ -233,3 +233,23 @@ describe("ProjectSyncEngine — collection-level recovery (feed cursor)", () => 
     expect(engine.metrics.applied).toBe(1);
   });
 });
+
+describe("ProjectSyncEngine — review edits ride the same stream", () => {
+  const withReviews = () => project({ reviews: [{ id: 7, department: "ITK", status: "offen", prueferName: "Alt", datum: null, updatedAt: "2026-01-01T00:00:00.000Z" }] });
+  it("applies review.<Gewerk>.<field> changes to the right review, immutably", () => {
+    const { engine } = make();
+    engine.seed(withReviews());
+    const before = engine.get(1)!.reviews;
+    engine.applyEvent(event(1, 2, { "review.ITK.status": { from: "offen", to: "Zustimmung erteilt" } }));
+    expect(engine.get(1)!.reviews[0]).toMatchObject({ id: 7, status: "Zustimmung erteilt", prueferName: "Alt" });
+    expect(before[0]!.status).toBe("offen");
+  });
+  it("optimistic review edits overlay and roll back", () => {
+    const { engine } = make();
+    engine.seed(withReviews());
+    engine.optimistic(1, "m1", { "review.ITK.prueferName": "Neu" });
+    expect(engine.get(1)!.reviews[0]!.prueferName).toBe("Neu");
+    engine.rollback(1, "m1");
+    expect(engine.get(1)!.reviews[0]!.prueferName).toBe("Alt");
+  });
+});

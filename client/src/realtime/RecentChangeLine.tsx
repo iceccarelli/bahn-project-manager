@@ -6,7 +6,11 @@ const LABELS: Record<string, string> = {
   terminProjektvorstellung: "Termin Projektvorstellung", projektnummer: "Projektnummer",
   bahnhofsnummer: "Bahnhofsnummer", streckennummer: "Streckennummer", projektLink: "Projekt-Link",
 };
-export const fieldLabel = (f: string) => LABELS[f] ?? f;
+const REVIEW_LABELS: Record<string, string> = { status: "Status", prueferName: "Prüfer", datum: "Prüfdatum" };
+export const fieldLabel = (f: string) => {
+  const m = /^review\.([^.]+)\.(status|prueferName|datum)$/.exec(f);
+  return m ? `${m[1]} · ${REVIEW_LABELS[m[2]!]}` : (LABELS[f] ?? f);
+};
 
 export function relativeTime(iso: string, now = Date.now()): string {
   const s = Math.max(0, Math.round((now - Date.parse(iso)) / 1000));

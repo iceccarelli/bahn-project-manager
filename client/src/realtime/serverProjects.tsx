@@ -9,7 +9,7 @@
  * No localStorage, no data.json, no showAll, no whole-dataset download.
  */
 import { useCallback, useEffect, useMemo } from "react";
-import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { BAHNHOFSMANAGEMENT } from "@shared/bahnhofsmanagement";
 import { scope } from "@shared/domain-events";
 import type { ProjectDetail, ProjectListItem } from "@shared/project-contract";
@@ -53,8 +53,6 @@ const PAGE = 100;
 export function useServerProjects(params: ServerProjectsParams) {
   const { engine, retain } = useRt();
   const editor = useProjectEditor();
-  const qc = useQueryClient();
-
   const sort = (PROJECT_SORTS as readonly string[]).includes(params.sortBy ?? "") ? (params.sortBy as (typeof PROJECT_SORTS)[number]) : "id";
   const input = useMemo(() => ({
     limit: PAGE,
@@ -97,15 +95,12 @@ export function useServerProjects(params: ServerProjectsParams) {
   }, [editor]);
 
   const applyReviewEdit = useCallback(async (projectId: number, department: string, field: string, value: unknown) => {
-    const review = engine.get(projectId)?.reviews.find(r => r.department === department);
-    if (!review) throw new Error(`Keine ${department}-Prüfung für Projekt ${projectId}`);
     const map: Record<string, "prueferName" | "status" | "datum"> = { prueferName: "prueferName", status: "status", pruefDatum: "datum" };
     const target = map[field];
     if (!target) throw new Error(`Feld ${field} nicht bearbeitbar`);
-    await serverApi.reviews.update.mutate({ id: review.id, field: target, value: (value as string | null) ?? null });
-    // reviews are not on the event stream yet: targeted authoritative refresh of the lists
-    await qc.invalidateQueries({ queryKey: serverKeys.lists() });
-  }, [engine, qc]);
+    // versioned + evented like every project edit: every open client updates without refetch
+    await editor.editReview(projectId, department, { [target]: (value as string | null) === "" ? null : ((value as string | null) ?? null) });
+  }, [editor]);
 
   return {
     data: { projects, total: q.data?.pages[0]?.total ?? projects.length },

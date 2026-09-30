@@ -11,7 +11,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { scope as scopeKey } from "@shared/domain-events";
-import { EDITABLE_PROJECT_FIELDS, type ConflictInfo, type ProjectDetail, type UpdateProjectInput } from "@shared/project-contract";
+import { EDITABLE_PROJECT_FIELDS, reviewChangeKey, type ConflictInfo, type ProjectDetail, type ReviewField, type UpdateProjectInput } from "@shared/project-contract";
 import { ProjectSyncEngine, type ProjectChange } from "./projectSyncEngine";
 import { RealtimeConnection, type ConnectionStatus } from "./connection";
 import { authHeaders, extractConflict, isRetryable, serverApi } from "./serverApi";
@@ -32,7 +32,7 @@ const RealtimeCtx = createContext<Ctx | null>(null);
 
 /** Every field a list row can carry that a change may touch. Reviews are not patched here (own event stream). */
 const ROW_FIELDS = [
-  ...EDITABLE_PROJECT_FIELDS, "updatedAt", "version",
+  ...EDITABLE_PROJECT_FIELDS, "updatedAt", "version", "reviews",
 ] as const;
 
 /** Patch one project into every cached list page — no refetch. */
@@ -157,10 +157,12 @@ export function useLiveProject(id: number) {
   return { ...q, recent };
 }
 
-export interface EditConflict { projectId: number; conflict: ConflictInfo; changes: UpdateProjectInput["changes"] }
+export interface EditConflict { projectId: number; conflict: ConflictInfo; changes: UpdateProjectInput["changes"]; review?: { department: string; changes: Partial<Record<ReviewField, string | null>> } }
 export interface EditorApi {
   /** optimistic, idempotent, version-checked edit; resolves to the server row or null (rolled back) */
   edit(id: number, changes: UpdateProjectInput["changes"], opts?: { expectedVersion?: number }): Promise<ProjectDetail | null>;
+  /** department-review edit: same optimistic/conflict machinery, project-version concurrency */
+  editReview(projectId: number, department: string, changes: Partial<Record<ReviewField, string | null>>): Promise<ProjectDetail | null>;
   /** the single active conflict (rendered by <ConflictHost/>) */
   conflict: EditConflict | null;
   pending: number;
@@ -177,25 +179,29 @@ function EditorProvider({ children }: { children: ReactNode }) {
   const [pending, setPending] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
-  const edit = useCallback<EditorApi["edit"]>(async (id, changes, opts = {}) => {
-    const expectedVersion = opts.expectedVersion ?? engine.serverVersion(id);
-    if (expectedVersion === undefined) { setError("Projekt nicht geladen"); return null; }
+  /** One optimistic → send → confirm | rollback cycle, shared by field edits and review edits. */
+  const run = useCallback(async (
+    id: number,
+    optimistic: Record<string, string | null>,
+    send: (ctx: { mutationId: string; idempotencyKey: string }) => Promise<{ project: unknown }>,
+    onConflict: (c: ConflictInfo) => void,
+  ): Promise<ProjectDetail | null> => {
     const mutationId = crypto.randomUUID();
     const idempotencyKey = `m-${mutationId}`; // stable across retries of THIS action
     setError(null);
     setPending(n => n + 1);
-    engine.optimistic(id, mutationId, changes as Record<string, string | null>);
+    engine.optimistic(id, mutationId, optimistic);
     try {
       for (let attempt = 1; ; attempt++) {
         try {
-          const res = await serverApi.projects.update.mutate({ id, expectedVersion, changes, idempotencyKey, mutationId });
+          const res = await send({ mutationId, idempotencyKey });
           engine.confirm(id, mutationId, res.project as ProjectDetail);
           return res.project as ProjectDetail;
         } catch (err) {
           const c = extractConflict(err);
           if (!c && attempt < 3 && isRetryable(err)) { await new Promise(r => setTimeout(r, 300 * 2 ** attempt)); continue; }
           engine.rollback(id, mutationId, c ?? undefined);
-          if (c) setConflict({ projectId: id, conflict: c, changes });
+          if (c) onConflict(c);
           else setError(err instanceof Error ? err.message : "Fehler");
           return null;
         }
@@ -205,16 +211,37 @@ function EditorProvider({ children }: { children: ReactNode }) {
     }
   }, [engine]);
 
+  const edit = useCallback<EditorApi["edit"]>(async (id, changes, opts = {}) => {
+    const expectedVersion = opts.expectedVersion ?? engine.serverVersion(id);
+    if (expectedVersion === undefined) { setError("Projekt nicht geladen"); return null; }
+    return run(id, changes as Record<string, string | null>,
+      ({ mutationId, idempotencyKey }) => serverApi.projects.update.mutate({ id, expectedVersion, changes, idempotencyKey, mutationId }),
+      c => setConflict({ projectId: id, conflict: c, changes }));
+  }, [engine, run]);
+
+  const editReview = useCallback<EditorApi["editReview"]>(async (projectId, department, changes) => {
+    const expectedVersion = engine.serverVersion(projectId);
+    if (expectedVersion === undefined) { setError("Projekt nicht geladen"); return null; }
+    const optimistic = Object.fromEntries(Object.entries(changes).map(([f, v]) => [reviewChangeKey(department, f as ReviewField), v ?? null]));
+    return run(projectId, optimistic,
+      ({ mutationId, idempotencyKey }) => serverApi.projects.updateReview.mutate({ projectId, department, expectedVersion, changes, idempotencyKey, mutationId }),
+      c => setConflict({ projectId, conflict: c, changes: {}, review: { department, changes } }));
+  }, [engine, run]);
+
   const api = useMemo<EditorApi>(() => ({
-    edit, conflict, pending, error,
+    edit, editReview, conflict, pending, error,
     takeServer: () => setConflict(null),
     rebase: async () => {
       const c = conflict;
       if (!c) return null;
       setConflict(null);
+      // the review path re-sends against the project's current version too
+      if (c.review) return run(c.projectId, Object.fromEntries(Object.entries(c.review.changes).map(([f, v]) => [reviewChangeKey(c.review!.department, f as ReviewField), v ?? null])),
+        ({ mutationId, idempotencyKey }) => serverApi.projects.updateReview.mutate({ projectId: c.projectId, department: c.review!.department, expectedVersion: c.conflict.currentVersion, changes: c.review!.changes, idempotencyKey, mutationId }),
+        next => setConflict({ ...c, conflict: next }));
       return edit(c.projectId, c.changes, { expectedVersion: c.conflict.currentVersion });
     },
-  }), [edit, conflict, pending, error]);
+  }), [edit, editReview, run, conflict, pending, error]);
 
   return <EditorCtx.Provider value={api}>{children}</EditorCtx.Provider>;
 }

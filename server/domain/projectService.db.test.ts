@@ -243,6 +243,49 @@ describe.skipIf(!hasTestDb)("ProjectService (real DB)", () => {
     expect(out.deleted).toEqual([c.id]);
   });
 
+  describe("department reviews on the project aggregate", () => {
+    const itk: import("./permissions").Principal = { ...markus, departments: ["ITK"] };
+    const addReview = async (projectId: number, department = "ITK") => {
+      await t.pool.query("INSERT INTO department_reviews (projectId, department, status, prueferName) VALUES (?, ?, 'offen', 'Alt')", [projectId, department]);
+    };
+
+    it("edit → project version +1, audit key review.ITK.status, one project.updated event; replay is free", async () => {
+      const { project } = await mk(); await addReview(project.id);
+      const k = key();
+      const input = { projectId: project.id, department: "ITK", expectedVersion: 1, changes: { status: "in Bearbeitung" }, idempotencyKey: k };
+      const r = await svc.updateReview(itk, input, ctx());
+      expect(r.project.version).toBe(2);
+      expect(r.project.reviews.find(x => x.department === "ITK")).toMatchObject({ status: "in Bearbeitung", prueferName: "Alt" });
+      const [ev] = await store.eventsSince(project.id, 1, 5);
+      expect(ev).toMatchObject({ eventType: "project.updated", aggregateVersion: 2, changes: { "review.ITK.status": { from: "offen", to: "in Bearbeitung" } } });
+      expect(await count("audit_log", `entityId=${project.id} AND field='review.ITK.status' AND oldValue='offen' AND newValue='in Bearbeitung'`)).toBe(1);
+      const again = await svc.updateReview(itk, input, ctx());
+      expect(again.replayed).toBe(true);
+      expect(await count("domain_events", `aggregateId=${project.id}`)).toBe(2);
+    });
+
+    it("stale project version → structured conflict with review-keyed values; department membership is enforced", async () => {
+      const { project } = await mk(); await addReview(project.id);
+      await svc.update(markus, { id: project.id, expectedVersion: 1, changes: { kommentar: "x" }, idempotencyKey: key() }, ctx());
+      const err = await svc.updateReview(itk, { projectId: project.id, department: "ITK", expectedVersion: 1, changes: { status: "prüffähig" }, idempotencyKey: key() }, ctx()).catch(e => e);
+      expect(err).toBeInstanceOf(ConflictError);
+      expect(err.info).toMatchObject({ currentVersion: 2, serverValues: { "review.ITK.status": "offen" }, localValues: { "review.ITK.status": "prüffähig" }, disjoint: true });
+      // lena is EEA-only: cannot touch ITK
+      await expect(svc.updateReview(lena, { projectId: project.id, department: "ITK", expectedVersion: 2, changes: { status: "x" }, idempotencyKey: key() }, ctx())).rejects.toBeInstanceOf(ForbiddenError);
+      await expect(svc.updateReview(admin, { projectId: project.id, department: "GA", expectedVersion: 2, changes: { status: "x" }, idempotencyKey: key() }, ctx())).rejects.toBeInstanceOf(NotFoundError);
+    });
+
+    it("concurrent review + field edits on one project: exactly one wins per version", async () => {
+      const { project } = await mk(); await addReview(project.id);
+      const rs = await Promise.allSettled([
+        svc.updateReview(itk, { projectId: project.id, department: "ITK", expectedVersion: 1, changes: { status: "a" }, idempotencyKey: key() }, ctx()),
+        svc.update(markus, { id: project.id, expectedVersion: 1, changes: { kommentar: "b" }, idempotencyKey: key() }, ctx()),
+      ]);
+      expect(rs.filter(r => r.status === "fulfilled")).toHaveLength(1);
+      expect((await store.detail(project.id))!.version).toBe(2);
+    });
+  });
+
   describe("list / search (server-side)", () => {
     beforeAll(async () => {
       for (let i = 0; i < 25; i++)

@@ -137,6 +137,19 @@ function txAdapter(x: Executor): ProjectTx {
       await x.delete(departmentReviews).where(eq(departmentReviews.projectId, id));
       await x.delete(projects).where(eq(projects.id, id));
     },
+    async lockReview(projectId, department) {
+      const rows = await x
+        .select()
+        .from(departmentReviews)
+        .where(and(eq(departmentReviews.projectId, projectId), eq(departmentReviews.department, department)))
+        .limit(1)
+        .for("update");
+      const r = rows[0];
+      return r ? { id: r.id, status: r.status, prueferName: r.prueferName, datum: r.datum } : null;
+    },
+    async updateReview(id, set) {
+      await x.update(departmentReviews).set(set).where(eq(departmentReviews.id, id));
+    },
     detail: id => loadDetail(x, id),
     async appendAudit(rows: AuditRow[]) {
       if (rows.length) await x.insert(auditLog).values(rows);

@@ -68,10 +68,10 @@ async function main() {
   await new Promise<void>(r => idp.listen(0, "127.0.0.1", r));
   const idpPort = (idp.address() as { port: number }).port;
   const ISS = `http://127.0.0.1:${idpPort}/`, AUD = "bahn-e2e";
-  const mint = (oid: string, name: string, roles: string[], workspaces?: string[]) =>
-    new SignJWT({ tid: "t-e2e", oid, name, preferred_username: `${oid}@e2e.test`, roles, ...(workspaces ? { workspaces } : {}) })
+  const mint = (oid: string, name: string, roles: string[], workspaces?: string[], departments?: string[]) =>
+    new SignJWT({ tid: "t-e2e", oid, name, preferred_username: `${oid}@e2e.test`, roles, ...(workspaces ? { workspaces } : {}), ...(departments ? { departments } : {}) })
       .setProtectedHeader({ alg: "RS256", kid: "e2e" }).setIssuer(ISS).setAudience(AUD).setIssuedAt().setExpirationTime("2h").sign(privateKey);
-  const tokenA = await mint("anna", "Anna (Browser A)", ["editor"], ["ALL"]);
+  const tokenA = await mint("anna", "Anna (Browser A)", ["editor"], ["ALL"], ["ITK"]);
   const tokenB = await mint("bernd", "Bernd (Browser B)", ["editor"], ["Frankfurt"]);
   const tokenNoClaims = await mint("nobody", "Nobody", []);
 
@@ -286,6 +286,25 @@ async function main() {
   };
   await step("PROOF 3a: A and B edit the same field concurrently → A commits, B gets the structured conflict, nobody is overwritten; B keeps the server value", () => conflictRun("server"));
   await step("PROOF 3b: same race → B explicitly chooses 'mine' → committed as the next version, A sees it live, audit chain intact", () => conflictRun("mine"));
+
+  // ---------------- PROOF 3c: department review edit rides the same pipeline ---------------------------
+  await step("PROOF 3c: A changes the ITK review status of 481 in the table → versioned + audited + evented → B's status badge changes live; a non-ITK editor is refused", async () => {
+    const statusBtn = (page: Page) => row(page).locator('button[aria-label^="Status ITK für Projekt"]').first();
+    const [rv] = await q("SELECT status FROM department_reviews WHERE projectId=? AND department='ITK'", [PID]);
+    if (!rv) throw new Error("project 481 has no ITK review in the seed");
+    const target = rv.status === "Zustimmung erteilt" ? "in Bearbeitung" : "Zustimmung erteilt";
+    const v0 = await ver(PID);
+    await statusBtn(A.page).click();
+    await A.page.getByLabel(/^Status ITK für Projekt/).selectOption(target);
+    await until(async () => (await statusBtn(B.page).textContent())?.trim() === target, 5000, `B shows ITK status ${target}`);
+    if ((await ver(PID)) !== v0 + 1) throw new Error("review edit did not bump the project version exactly once");
+    const [a] = await q("SELECT field,oldValue,newValue,aggregateVersion FROM audit_log WHERE entityId=? AND field LIKE 'review.%' ORDER BY id DESC LIMIT 1", [PID]);
+    if (a.field !== "review.ITK.status" || a.newValue !== target || a.aggregateVersion !== v0 + 1) throw new Error(JSON.stringify(a));
+    if (!(await noReload(B.page))) throw new Error("reloaded");
+    // B's token has no ITK department claim → the server refuses (no client-side trust)
+    const denied = await api(URLS[1]!, tokenB, "projects.updateReview", { projectId: PID, department: "ITK", expectedVersion: await ver(PID), changes: { status: "abgelehnt" }, idempotencyKey: key() });
+    if (denied.status !== 403) throw new Error(`non-ITK editor got ${denied.status}`);
+  });
 
   // ---------------- PROOF 4: workspace move Frankfurt → Kassel -----------------------------------------
   await step("PROOF 4: A moves 481 Frankfurt → Kassel; Frankfurt-only B loses the row and receives no Kassel state (stream + DOM + API)", async () => {
