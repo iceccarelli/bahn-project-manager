@@ -1,0 +1,18 @@
+# TLS is automatic (ACME). SSE needs an unbuffered, long-lived upstream: flush immediately, no read timeout.
+{$PUBLIC_HOST} {
+	encode zstd gzip
+	@sse path /api/realtime/stream
+	reverse_proxy @sse app1:3000 app2:3000 {
+		lb_policy least_conn
+		flush_interval -1
+		transport http { read_timeout 0 }
+		health_uri /api/ready
+		health_interval 10s
+	}
+	reverse_proxy app1:3000 app2:3000 {
+		lb_policy least_conn
+		health_uri /api/ready
+		health_interval 10s
+	}
+	log { output stdout; format json }
+}

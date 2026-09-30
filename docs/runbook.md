@@ -38,22 +38,44 @@ their held versions, and receive missed events or snapshots. No data repair need
 Server mode is opt-in per build/deploy; the static deployment is untouched. Migration 0004 is additive
 (new tables/columns/indexes/triggers). To roll back the app, redeploy the previous image; leave the tables.
 
+## Migrations
+
+`node dist/migrate.js` (also `pnpm db:migrate:prod`) applies `drizzle/*.sql` with drizzle's own migrator (no
+drizzle-kit in the image), under a named lock, idempotently — verified on a fresh MariaDB (7 migrations, append-only
+audit triggers and FULLTEXT index present, second run a no-op). 0004 event pipeline · 0005 change feed · 0006
+notifications. The staging compose file runs it as a one-shot `migrate` service before the app.
+
+## Deployment gate (machine-readable)
+
+`pnpm gate` → `artifacts/deployment-gate.json` (`readyToDeploy` true only if **every** check passes): typecheck, lint,
+unit, DB+Redis integration (0 skipped), security suites, client build, server-mode build, bundle inspection, container
+simulation (prod-only dependency install boots the artifact), existing Playwright suite, two-browser server-mode proof,
+fault-injection convergence, **staging smoke** (needs `STAGING_URL` https + `SMOKE_TOKEN`) and **load certification**
+(needs `artifacts/load-certification.json` from a separate generator host). The last two are `not-run` unless a real
+deployed environment exists — the gate then reports `readyToDeploy: false`. That is the intended state today.
+
 ## Testing commands (every status claim in `docs/` maps to one)
 
 ```
-pnpm check && pnpm lint && pnpm test                                    # 305 pre-existing + new unit tests
-TEST_DATABASE_URL=mysql://user:pass@127.0.0.1:3306 \
-TEST_REDIS_URL=redis://127.0.0.1:6379 pnpm test                         # + real-DB / real-Redis / e2e realtime suites
-node scripts/load/explain.mjs …   node scripts/load/realtime-fanout.mjs …   node scripts/load/api-bench.mjs …
-pnpm build:client && PLAYWRIGHT_CHROMIUM_PATH=… pnpm e2e                # existing browser suite (local mode)
+pnpm check && pnpm lint && pnpm test
+TEST_DATABASE_URL=mysql://user:pass@127.0.0.1:3306 TEST_REDIS_URL=redis://127.0.0.1:6379 pnpm test   # real-DB/Redis suites
+scripts/e2e/build-server-mode.sh && pnpm exec tsx scripts/e2e/server-mode.e2e.ts                      # two real browsers, two instances, Redis
+pnpm exec tsx scripts/load/chaos.ts --clients 300                                                     # fault injection
+node scripts/load/unique-users.mjs --users 10000 --burst-seconds 60 --spawn                          # unique-identity burst
+scripts/gate/container-sim.sh dist-e2e   |   pnpm exec tsx scripts/gate/local-smoke.ts                # artifact / smoke script self-checks
+pnpm gate                                                                                             # the whole gate
 ```
-DB-backed suites **skip** (visibly) without `TEST_DATABASE_URL`; CI provides MySQL 8.4 + Redis (see `.github/workflows/ci.yml`).
+DB-backed suites **skip** (visibly) without `TEST_DATABASE_URL`. **CI note:** `.github/workflows/ci.yml` provides MySQL 8.4 +
+Redis to the unit job, but the new suites have only been run against MariaDB 10.11 locally; CI has not yet executed
+them, and the browser/chaos/gate suites are not in CI.
 
 ## Known gaps
 
-Not on the event pipeline: department reviews, checklists, bookings, BVB-EEA, PSV-ITK, Excel import (direct writes; audited
-only for reviews). Not built: server presence, notification stream (Header bell still reads audit), viewport/cluster map
-queries, read-model tables for dashboard aggregates, `@tanstack/react-virtual` tables, offline queue/IndexedDB,
-MSAL browser login, server-side data-quality normalization of the *existing* rows (`data:normalize` script unchanged),
-Postgres migration (not needed by evidence so far), web-vitals/Sentry wiring, WCAG/responsive test additions for the new
-components, client-side conflict/connection UI is unit-tested only as pure logic (no component/E2E test in a browser).
+Not on the event pipeline: `reviews.create`, checklists, bookings, BVB-EEA, PSV-ITK, Excel import. The Dashboard,
+BVB-EEA, PSV-ITK, Projektanmeldung, Audit and the Gewerk workspaces still read the static snapshot in server mode (they are
+labelled "lokaler Datenbestand, nicht live" and their writes are disabled). Header search / Ask Bahn have no server
+search yet in server mode. The map shows the loaded rows only (no viewport/cluster queries). Handlungsbedarf/tone chips
+need the whole dataset and are not offered in server mode. Not built: read-model tables for dashboard aggregates,
+`@tanstack/react-virtual` tables, offline queue/IndexedDB, MSAL browser login, web-vitals/Sentry wiring,
+notification email/push, mention/system/deadline-reminder producers, presence rate limiting, a Postgres migration (no
+evidence it is needed). Staging and load certification: see docs/staging.md and docs/load-testing.md.

@@ -1,0 +1,63 @@
+# STAGING data plane: 2 app instances + MySQL + Redis behind Caddy (automatic HTTPS).
+# Not deployed from this repository's CI yet — see docs/staging.md for the steps and what is still manual.
+#
+#   cp deploy/staging/.env.example deploy/staging/.env   # fill in; never commit .env
+#   docker compose -f deploy/staging/docker-compose.yml --env-file deploy/staging/.env up -d --build
+#   docker compose -f deploy/staging/docker-compose.yml exec app1 node -e "..."   # migrations: see docs/staging.md
+services:
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: bahn
+      MYSQL_USER: bahn
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?}
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci", "--max-connections=200", "--innodb-buffer-pool-size=1G"]
+    volumes: [db-data:/var/lib/mysql]
+    healthcheck: { test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-p${MYSQL_ROOT_PASSWORD}"], interval: 10s, timeout: 5s, retries: 12, start_period: 30s }
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction"]
+    healthcheck: { test: ["CMD", "redis-cli", "ping"], interval: 5s, timeout: 3s, retries: 10 }
+
+  migrate:
+    build: { context: ../.., target: runtime, args: { VITE_SERVER_MODE: "1" } }
+    depends_on: { db: { condition: service_healthy } }
+    environment: { NODE_ENV: production, DATABASE_URL: "mysql://bahn:${MYSQL_PASSWORD}@db:3306/bahn" }
+    command: ["node", "dist/migrate.js"]
+    restart: "no"
+
+  app1: &app
+    build: { context: ../.., target: runtime, args: { VITE_SERVER_MODE: "1" } }
+    restart: unless-stopped
+    depends_on: { migrate: { condition: service_completed_successfully }, redis: { condition: service_healthy } }
+    environment: &appenv
+      NODE_ENV: production
+      PORT: "3000"
+      DATABASE_URL: mysql://bahn:${MYSQL_PASSWORD}@db:3306/bahn
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:?}
+      OIDC_ISSUER: ${OIDC_ISSUER:?}          # https://login.microsoftonline.com/<tenant>/v2.0
+      OIDC_AUDIENCE: ${OIDC_AUDIENCE:?}      # API application (client) id
+      METRICS_TOKEN: ${METRICS_TOKEN:?}
+      DB_POOL_SIZE: "20"
+      ALLOWED_ORIGINS: ${PUBLIC_ORIGIN:?}
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: ["no-new-privileges:true"]
+  app2:
+    <<: *app
+    environment: *appenv
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on: [app1, app2]
+    ports: ["80:80", "443:443"]
+    environment: { PUBLIC_HOST: "${PUBLIC_HOST:?}" }
+    volumes: ["./Caddyfile:/etc/caddy/Caddyfile:ro", caddy-data:/data]
+
+volumes: { db-data: {}, caddy-data: {} }

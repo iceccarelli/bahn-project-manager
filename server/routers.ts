@@ -36,12 +36,6 @@ import { canViewAudit, workspaceRestriction } from "./domain/permissions";
 import { m } from "./observability/metrics";
 import { ConflictError } from "./domain/errors";
 
-// Demo users for authentication without OAuth
-const DEMO_USERS = [
-  { openId: "demo-admin-001", name: "Admin Demo", email: "admin@bahn.de", role: "admin" as const, password: "admin" },
-  { openId: "demo-user-001", name: "Prüfer Demo", email: "pruefer@bahn.de", role: "user" as const, password: "user" },
-];
-
 /** 5 s in-process cache: the shell polls this, it must not become a COUNT(*) per tab. */
 let shellCache: { at: number; value: { projectCount: number; lastUpdatedAt: string | null } } | null = null;
 async function shellSummaryCached(load: () => Promise<{ projectCount: number; lastUpdatedAt: string | null }>) {
@@ -105,6 +99,7 @@ export const appRouter = router({
         if (process.env.NODE_ENV === "production" && process.env.ALLOW_DEMO_LOGIN !== "1") {
           throw new TRPCError({ code: "NOT_FOUND", message: "Not found" });
         }
+        const { DEMO_USERS } = await import("./_core/demoUsers");
         const demoUser = DEMO_USERS.find(u => u.email === input.email && u.password === input.password);
         if (!demoUser) {
           throw new TRPCError({ code: "UNAUTHORIZED", message: "Ungültige Anmeldedaten" });

@@ -10,7 +10,12 @@
  *  - CSRF: cookie-authenticated state-changing requests must be same-origin
  *    (Origin check). Bearer-token requests carry no ambient credentials.
  */
+import { createHash } from "node:crypto";
+import { hostname } from "node:os";
 import type { NextFunction, Request, Response } from "express";
+
+/** Opaque per-host id so a load test can PROVE its generator is not the server host. */
+export const INSTANCE_ID = createHash("sha256").update(hostname()).digest("hex").slice(0, 8);
 
 export const CSP = [
   "default-src 'self'",
@@ -39,6 +44,7 @@ export function securityHeaders(_req: Request, res: Response, next: NextFunction
   if (process.env.NODE_ENV === "production") {
     res.setHeader("Strict-Transport-Security", "max-age=63072000; includeSubDomains");
   }
+  res.setHeader("X-Instance", INSTANCE_ID);
   res.removeHeader("X-Powered-By");
   next();
 }

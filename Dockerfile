@@ -47,6 +47,10 @@ COPY . .
 # Type-check before bundling. A container that builds but does not compile is
 # worse than a build failure, because it fails in production instead of in CI.
 RUN pnpm run check
+# Server-authoritative data plane in the SPA: build with `--build-arg VITE_SERVER_MODE=1`.
+# Default 0 = the static, browser-local app (what the current Vercel deployment serves).
+ARG VITE_SERVER_MODE=0
+ENV VITE_SERVER_MODE=$VITE_SERVER_MODE
 RUN NODE_ENV=production pnpm run build:client
 RUN NODE_ENV=production pnpm run build:server
 
@@ -66,6 +70,8 @@ WORKDIR /app
 # Nothing in this image needs to write outside /tmp.
 COPY --from=prod-deps --chown=node:node /app/node_modules ./node_modules
 COPY --from=build     --chown=node:node /app/dist         ./dist
+# SQL migrations + journal: applied by `node dist/migrate.js` (no drizzle-kit in this image)
+COPY --from=build     --chown=node:node /app/drizzle      ./drizzle
 COPY --from=build     --chown=node:node /app/package.json ./package.json
 
 USER node

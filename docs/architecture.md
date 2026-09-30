@@ -38,8 +38,12 @@ cache are **derived** and can be discarded without data loss. Redis never holds 
 
 * **Static / local mode** (today's `bahn-project-manager.vercel.app`): the SPA reads `/data.json` and stores edits
   in the browser. Unchanged. This is still what production serves.
-* **Server mode** (`VITE_SERVER_MODE=1` at build time + the Node server deployed with `DATABASE_URL`): the slice
-  described in [data-plane.md](data-plane.md) and [realtime.md](realtime.md). `vercel.json` defines no functions, so
+* **Server mode** (`VITE_SERVER_MODE=1` at build time + the Node server deployed with `DATABASE_URL`): the **Projekte page**
+  (server cursor pages, server search/filters/sort, live cache), project detail, department reviews, presence and
+  notifications run on the path described in [data-plane.md](data-plane.md) and [realtime.md](realtime.md). Every other
+  page still shows the static snapshot, labelled and read-only. In server mode the local plane cannot compete: local project
+  mutations throw, cross-tab localStorage sync and localStorage presence are off, and `/data.json` is fetched only by the
+  not-yet-migrated pages. `vercel.json` defines no functions, so
   **nothing in server mode is reachable on the current Vercel deployment**. Deploying it is a separate step
   (see [scaling.md](scaling.md) → Deployment options).
 
@@ -56,6 +60,5 @@ cache are **derived** and can be discarded without data loss. Redis never holds 
 
 ## What is deliberately NOT here yet
 
-See "Known gaps" in [runbook.md](runbook.md#known-gaps). Highlights: reviews/checklists/bookings are not on the
-event pipeline, presence and notifications are not server-side, map/dashboards are not viewport/read-model
-driven, no offline queue, no MSAL login UI.
+See "Known gaps" in [runbook.md](runbook.md#known-gaps). Staging (real OIDC, HTTPS, separate hosts) and load certification
+have **not** been done — [staging.md](staging.md).

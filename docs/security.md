@@ -7,7 +7,7 @@ dependency audit (`pnpm audit`), or secret scan was performed at this stage.
 
 | Area | Change |
 |---|---|
-| Arbitrary column write | `reviews.update`, `bvbEea.update`, `psvItk.update` accepted `{field: string, value: any}` and wrote `[field]: value` — any column, including `id`/`projectId`. Now closed enums + typed values (`routers.db.test.ts`). Project writes use a strict whitelist schema; unknown/server-owned keys are rejected (400), not ignored. |
+| Arbitrary column write | `reviews.update` (now removed in favour of the versioned `projects.updateReview`), `bvbEea.update`, `psvItk.update` accepted `{field: string, value: any}` and wrote `[field]: value` — any column, including `id`/`projectId`. Now closed enums + typed values (`routers.db.test.ts`). Project writes use a strict whitelist schema; unknown/server-owned keys are rejected (400), not ignored. |
 | `z.any()` | Removed from all write inputs. |
 | Sort injection | `(projects as any)[sortBy]` (tRPC list and OData) → closed enums (`updatedAt`,`id`). Express OData router (unmounted) still has its own sort; it is not reachable. |
 | IDOR / enumeration | Invisible ≡ nonexistent (`NOT_FOUND`); realtime scopes authorized per channel. |
@@ -23,10 +23,16 @@ dependency audit (`pnpm audit`), or secret scan was performed at this stage.
 | Demo credentials | Off in production unless explicitly enabled. |
 | Unhandled rejection | Gateway boundary catches; process-level counter + log. (An escaped rejection crashed the server in the 1000-connection probe — fixed.) |
 
+| Workspace-move information leak | A project channel authorized before a move used to receive the post-move event. Every delivery path now filters per recipient (`eventForPrincipal`): old workspace gets removal-only, move-ins lose history. Regression tests + browser proof (stream, DOM, API). |
+| Authorization defaults | `workspaces: []` used to mean "all workspaces". Now default-deny: `"ALL"` is an explicit grant, `[]` is nothing; unknown roles → viewer; global aggregates (`dashboard.stats`) refuse restricted principals; `filters.options`/`metrics` are workspace-scoped. |
+| Demo credentials | moved out of the entry chunk into a dynamically imported module; the deployment gate asserts the entry chunk contains none. |
+| CSP in a real browser | The server-mode SPA loads and runs under the production CSP (`script-src 'self'`) in Chromium during the browser proof (map tiles were blocked by the sandbox network, not by CSP). |
+| Notifications / presence | recipient-only delivery; presence restricted to authorized scopes and visible projects; heartbeats validated (state enum, tab id charset, scope authorization). |
+
 ## Open (NOT DONE)
 
 Rate limiting per IP/user (only per-principal realtime connection caps and DB-queue shedding exist); upload
 validation beyond size (Excel import is admin-only but parses untrusted xlsx with `xlsx@0.18.5`, which has known
 advisories — verify/upgrade); `audit_log` PII/retention policy; secret scanning in CI; the Excel import still writes
-outside the audited/evented path (admin-only bulk tool, flagged); logging redaction review; `reviews.update` writes are
-audited but not versioned/evented yet; dependency audit; `pnpm audit` gate.
+outside the audited/evented path (admin-only bulk tool, flagged); logging redaction review; BVB-EEA/PSV-ITK/checklist/booking writes are
+not versioned/audited/evented yet (only the Project aggregate incl. its reviews is); presence heartbeats have no per-principal rate limit; dependency audit; `pnpm audit` gate.

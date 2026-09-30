@@ -64,9 +64,28 @@ At 500 VUs (before the fixes below) the service returned 81 % errors — see "De
 8. Client believed it was offline in Node (`navigator.onLine` undefined) → fixed.
 9. 10 concurrent retries of one idempotency key deadlocked (S→X lock upgrade) → shared-mode read + bounded deadlock retry.
 
-## Not yet tested (from the brief) — **NOT DONE**
+## Stage 2 additions (same sandbox, same caveats)
 
-100/500/1000/2500/5000/10000 **API** VUs (only ≤100 here); browsing/filtering/audit at scale; spike & sustained soak;
-database degradation; **Redis / realtime-provider restart**; worker (relay) restart under load; network interruption at
-scale (single-client disconnect/reconnect *is* tested); notification & presence fan-out (not built); Playwright load
-journeys; INP/LCP/CLS; the generator on separate hosts; a MySQL 8.4 run (local runs used MariaDB).
+| Script | Purpose | Ran here? |
+|---|---|---|
+| `unique-users.mjs` | N distinct tokens, ramped burst, fan-out, CPU/RSS/DB/pool | yes: 1,000 and 10,000 (60 s and 10 s bursts) |
+| `chaos.ts` | 300 real clients (production `RealtimeConnection` + `ProjectSyncEngine`) across 2 instances while a writer commits; faults: instance SIGKILL+restart, Redis restart (4 s), DB stall (SIGSTOP 6 s), both-instance restart (reconnect storm) | yes — **all scenarios converge**, outbox drained, 0 dead letters, feed gapless |
+| `certify.mjs` | staged API/realtime suite against a DEPLOYED environment; **refuses to run from the server's own host** (`X-Instance` header) and writes `artifacts/load-certification.json` | refusal verified locally; **not run against a deployment** |
+| `k6-api.js` | ramping 100→10,000 VUs with think time and SLO thresholds | no (k6 not available) |
+
+Fault-injection (chaos.ts) found a real client defect the earlier tests could not: a `catchUp` that skipped events it had
+"seen" left aggregates permanently behind after a failed recovery; the reconcile now decides by version, with a regression
+test. Local resilience evidence only — instance restarts here are `SIGKILL` + restart on the same ports.
+
+## Load certification status (item 12 of the brief): **NOT DONE**
+
+Required: API 100/500/1000/2500/5000/10000 VUs, realtime 1000/2500/5000/10000, unique users with think time, mixed
+reads/writes, simultaneous writes, reconnect storm, relay/Redis restart, DB degradation, burst, soak — **generator on a
+separate host, against a deployed staging environment**. No such environment or second host exists in this workspace, so
+none of it was run as certification. The harness above is ready; `scripts/gate/deploy-gate.mjs` reports
+`load-certification` as `not-run` until `artifacts/load-certification.json` exists with `separateHosts: true`.
+
+## Not yet tested — **NOT DONE**
+
+API stages above 100 VUs; soak; the generator on separate hosts; INP/LCP/CLS; a MySQL 8.4 run (local runs used
+MariaDB); CI has never executed the new suites (see the CI note in docs/runbook.md).

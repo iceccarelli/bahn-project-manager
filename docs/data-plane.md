@@ -32,9 +32,12 @@ offer "apply my change on top" (`useEditProject().rebase`); an overlap makes the
 
 ## Read path
 
-* `projects.list`: **cursor** (keyset) pagination on `(updatedAt,id)` or `id`; `limit ≤ 100` (validation, not
-  clamping); sort/direction from closed enums; **column projection** (9 summary columns; no `fullRowData`, no
-  reviews); `total` only when `includeTotal`. `showAll` no longer exists on the API.
+* `projects.list`: **cursor** (keyset) pagination; `limit ≤ 100` (validation, not clamping); sort from a closed enum
+  (`updatedAt`, `id` index-backed; `projektnummer`, `station`, `projektstand`, `projektleiter`, `bahnhofsmanagement`
+  via `COALESCE(col,'')` keyset); filters incl. review-based `department`/`reviewStatus`/`pruefer` (`EXISTS` on
+  `department_reviews`); **column projection** (9 summary columns; no `fullRowData`); optional `expand:
+  ["details","reviews"]` (the Projekte table asks for both; reviews are one `IN (page ids)` query); `total` only when
+  `includeTotal`; the response carries `feedHead` (see Collection recovery). `showAll` no longer exists.
 * `projects.get`: detail incl. reviews (the only place reviews are attached).
 * Search: `MATCH … AGAINST (+term*)` in BOOLEAN MODE on a FULLTEXT index; input stripped of operators; tokens < 3
   chars fall back to an index-usable **prefix** `LIKE 'x%'`. Never `%term%`.
@@ -67,3 +70,44 @@ Re-run `explain.mjs` on production-shaped data before adding any.
 `getPool()` (request traffic, `DB_POOL_SIZE` default 10, `DB_QUEUE_LIMIT` 200) and `getRelayPool()` (outbox relay,
 `RELAY_POOL_SIZE` 3). Separate on purpose: sharing them stalled realtime delivery under load (found, fixed, see
 runbook). Pool exhaustion answers **429** (`bahn_requests_shed_total`), not 500.
+
+
+## Department reviews are part of the Project aggregate
+
+`projects.updateReview` (`ProjectService.updateReview`): same transaction shape as a field edit — idempotency claim,
+project row lock, `canApproveReview` (department membership **and** workspace), review row lock, **project version
+check**, review UPDATE, project version +1, audit rows keyed `review.<Gewerk>.<field>`, one `project.updated` outbox
+event whose `changes` use the same keys. Consequences: one version sequence, one stream, one conflict model, one
+recovery path — **no second sync system**. The unversioned, unevented `reviews.update` was **removed**. Concurrency is
+project-wide (a review edit conflicts with a field edit on the same project), which is coarser than necessary and
+safe. `reviews.create`, BVB-EEA, PSV-ITK, checklists and bookings are **not** migrated yet.
+
+## Collection recovery (durable change feed)
+
+`domain_events.feedSeq` is assigned by the single outbox relay **in publication order** (gapless, commit-ordered — a
+plain auto-increment `id` is not: a slow transaction can commit after a later id). The relay persists the numbering
+before publishing, so a retry re-publishes with the same numbers and never reorders across failures.
+
+* `projects.list` returns `feedHead` **read before** the page → the client's cursor precedes its snapshot.
+* The SSE `hello` frame carries the current `headSeq` (read AFTER subscribing, coalesced by `FreshRead` so a connect burst
+  shares queries but no caller receives a value older than its own subscription).
+* `projects.changes({after, upTo})` returns visible events in feed order, filtered **per recipient**
+  (`eventForPrincipal`), plus the highest scanned `cursor` and `hasMore`. Scan budget: 5 × 500 events per call.
+* Client (`ProjectSyncEngine.catchUp/resync`): applies updates to known projects by version; **creations and move-ins
+  invalidate the list queries** (targeted refetch, no fabricated rows); deletions and move-outs remove rows. The cursor
+  advances only from authoritative responses, never from live events. A 30 s reconcile covers silent transport loss.
+* `projects.sync({known})` (per-aggregate versions) remains the gap-repair tool for projects a client holds.
+
+Proven in real browsers (scripts/e2e) and by `e2e.db.test.ts` ("RECOVERY"): while B is offline A creates, deletes,
+moves out, moves in and updates → B converges to the authoritative visible collection.
+
+## Notifications
+
+`domain event → policy → user notification → realtime → notification center`, inside the mutation transaction:
+`planNotification` (pure; kinds `critical|workflow|assignment|deadline`, plus `mention|system` reserved) decides
+whether an event notifies; recipients are the project's **watchers** (`project_watchers`, follow toggle in the detail
+dialog) minus the actor; each recipient gets one `notifications` row **and** one `notification.created` outbox event
+(delivered on `notifications:<userId>` and recoverable from the feed, both filtered to that recipient — and only while
+they can still see the project's workspace). Reads (`notifications.list/unreadCount/markRead`) re-check the caller's
+current workspace access. The Header bell in server mode reads this source, not the audit log. No email/push channels
+yet; `mention`, `deadline` reminders and `system` notifications have no producers yet.

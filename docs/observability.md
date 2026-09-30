@@ -22,6 +22,9 @@
 | `bahn_realtime_events_delivered_total` / `_dropped_total` | fan-out / slow-consumer drops |
 | `bahn_outbox_backlog`, `_published_total`, `_publish_failures_total`, `_dead_letters_total` | event backlog |
 | `bahn_realtime_gateway_errors_total`, `bahn_unhandled_rejections_total` | robustness |
+| `bahn_auth_verify_ms`, `bahn_identity_resolve_ms` | token verification / identity resolution latency (cache hits included) |
+| `bahn_user_provision_written_total`, `_failures_total` | write-behind user provisioning |
+| `bahn_outbox_dead_letters_total` | unpublishable rows quarantined (alert on > 0) |
 
 **Suggested alerts** (not configured — no monitoring stack here): `outbox_backlog > 100 for 1m`; `dead_letters > 0`;
 `unhandled_rejections > 0`; `shed_total` rate > 0 for 2m; `event_age_ms p95 > 500`; `dropped_total` rate > 0.

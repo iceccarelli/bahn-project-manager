@@ -24,6 +24,20 @@
 Consequence: **one Node process ≈ 500 read rps / 260 write rps on this hardware.** The API is stateless, so capacity is
 horizontal: N instances behind a load balancer + Redis for realtime fan-out.
 
+## Measured: 10,000 UNIQUE authenticated users (`scripts/load/unique-users.mjs`, same sandbox, co-located generator)
+
+Each connection carries its own RS256 OIDC token (distinct subject); nothing is served from the identity cache.
+
+| Burst | connected | connect p50/p95/p99 | server CPU avg/max (100 = 1 core) | RSS max | DB statements during run | fan-out of one event (p95) |
+|---|---|---|---|---|---|---|
+| 10,000 users over 60 s | 10,000 / 0 failed | 11 / 22 / 31 ms | 20 % / 79 % | 343 MB | 4,237 (≈ head reads + 20 batched user upserts) | 419 ms, 100 % delivered |
+| 10,000 users over 10 s | 10,000 / 0 failed | 54 / 125 / 157 ms | 61 % / 109 % | 352 MB | 2,942 | 388 ms, 100 % delivered |
+
+`auth_verify` mean 3.4 ms (60 s) / 9.2 ms (10 s) — dominated by event-loop queueing during the burst, not by RS256; DB
+pool `inUse 0 / queued 0`, 0 shed. Before the redesign (2 queries per first sighting, one feed-head query per connect)
+the same burst showed `pool inUse 10, queued 71` and ~11,000 statements. **This is one machine with the generator on
+the same host — not a certification.**
+
 ## Capacity model for 10,000 *users* (assumption, not a measurement)
 
 If a user issues one request every ~5–10 s, 10,000 users ≈ 1,000–2,000 rps. At ~500 rps/instance that is **3–5
