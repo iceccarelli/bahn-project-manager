@@ -74,6 +74,8 @@ export const m = {
   rtEventAgeMs: histogram("bahn_realtime_event_age_ms", "Event age (now - envelope.timestamp) when delivered to a subscriber"),
   outboxPublished: counter("bahn_outbox_published_total", "Outbox events published"),
   outboxFailures: counter("bahn_outbox_publish_failures_total", "Outbox publish failures"),
+  authVerifyMs: histogram("bahn_auth_verify_ms", "OIDC token verification (signature, claims) in ms"),
+  identityMs: histogram("bahn_identity_resolve_ms", "Total identity resolution per request in ms (cache hits included)"),
   shed: counter("bahn_requests_shed_total", "Requests rejected with 429 because the DB pool queue was full"),
   outboxDeadLetters: counter("bahn_outbox_dead_letters_total", "Outbox rows quarantined because they can never be published (alert on > 0)"),
   outboxBacklog: gauge("bahn_outbox_backlog", "Unpublished outbox events (sampled)"),

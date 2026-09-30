@@ -19,6 +19,7 @@ import { canSubscribe, canViewProject, workspaceRestriction, type Principal } fr
 import { OVERFLOW, type ProjectStore, type RealtimeSubscriber } from "../domain/ports";
 import { resolveIdentity } from "../_core/identity";
 import { eventForPrincipal } from "../domain/eventVisibility";
+import { FreshRead } from "../infra/freshRead";
 import { m } from "../observability/metrics";
 import { traceIdFrom } from "../observability/trace";
 
@@ -42,6 +43,7 @@ export function registerRealtimeGateway(app: Express, opt: GatewayOptions) {
   const perPrincipal = opt.maxConnectionsPerPrincipal ?? Number(process.env.RT_MAX_PER_PRINCIPAL ?? 20);
   const maxConnections = opt.maxConnections ?? Number(process.env.RT_MAX_CONNECTIONS ?? 50_000);
   const resolve = opt.resolve ?? (req => resolveIdentity(req));
+  const head = opt.store.feedHead ? new FreshRead(() => opt.store.feedHead!()) : null;
   const open = new Map<string, number>();
   let total = 0;
 
@@ -125,9 +127,12 @@ export function registerRealtimeGateway(app: Express, opt: GatewayOptions) {
     // Subscribe BEFORE announcing hello so nothing published after the client
     // learns it is connected can be missed.
     const iterator = opt.subscriber.subscribe({ channels: accepted, signal: abort.signal })[Symbol.asyncIterator]();
+    const subscribedAt = performance.now();
     // Read the head AFTER subscribing: anything numbered later reaches us live;
     // anything at or below it that we have not seen is fetched via projects.changes.
-    const headSeq = (await opt.store.feedHead?.().catch(() => undefined)) ?? null;
+    // Coalesced: a login burst shares a handful of queries, and every caller still
+    // gets a head read that started AFTER its own subscription.
+    const headSeq = (await head?.read(subscribedAt).catch(() => undefined)) ?? null;
     frame("hello", { serverTime: new Date().toISOString(), scopes: accepted, denied, headSeq });
 
     try {

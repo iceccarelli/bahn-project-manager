@@ -52,6 +52,12 @@ async function shellSummaryCached(load: () => Promise<{ projectCount: number; la
   return value;
 }
 
+/** audit_log.userId is the legacy numeric id when there is one; OIDC identities are recorded by name. */
+const auditActor = (p: import("./domain/permissions").Principal) => ({
+  userId: /^\d+$/.test(p.id) ? Number(p.id) : null,
+  userName: p.name || p.email || p.id,
+});
+
 const dashboardCache = new SingleFlightCache("dashboard", 30_000, () => getDashboardStats());
 /** Per-project review statuses → shared/project-metrics.ts. `workspaces` null = all. */
 async function computeMetrics(workspaces: readonly string[] | null) {
@@ -240,8 +246,7 @@ export const appRouter = router({
         await updateDepartmentReview(id, { [field]: column });
 
         await createAuditEntry({
-          userId: ctx.user.id,
-          userName: ctx.user.name || ctx.user.email || 'Unknown',
+          ...auditActor(ctx.principal),
           entityType: 'review',
           entityId: id,
           action: 'update',
@@ -268,8 +273,7 @@ export const appRouter = router({
         });
 
         await createAuditEntry({
-          userId: ctx.user.id,
-          userName: ctx.user.name || ctx.user.email || 'Unknown',
+          ...auditActor(ctx.principal),
           entityType: 'review',
           entityId: id!,
           action: 'create',

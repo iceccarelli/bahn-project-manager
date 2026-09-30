@@ -12,12 +12,30 @@ import type { IncomingMessage } from "node:http";
 import { COOKIE_NAME } from "@shared/const";
 import { parse as parseCookie } from "cookie";
 import type { User } from "../../drizzle/schema";
-import { getUserByOpenId, upsertUser } from "../db";
+import { getPool } from "../db";
+import { m } from "../observability/metrics";
+import { UserProvisioner } from "../infra/userProvisioner";
 import { roleFromLegacy, type Principal } from "../domain/permissions";
 import { oidcConfigFromEnv, verifyBearer, type OidcConfig } from "./oidc";
 import { sdk } from "./sdk";
 
-export interface Identity { user: User; principal: Principal }
+/** `user` is the legacy users row (cookie sessions only). OIDC identities have none: authorization uses `principal`. */
+export interface Identity { user: User | null; principal: Principal }
+
+let _provisioner: UserProvisioner | null = null;
+function provisioner(): UserProvisioner {
+  return (_provisioner ??= new UserProvisioner(async users => {
+    const pool = getPool();
+    if (!pool) return;
+    await pool.query(
+      `INSERT INTO users (openId, name, email, loginMethod, role, lastSignedIn) VALUES ${users.map(() => "(?, ?, ?, 'oidc', ?, NOW())").join(",")}
+       ON DUPLICATE KEY UPDATE name = VALUES(name), email = VALUES(email), role = VALUES(role), lastSignedIn = NOW()`,
+      users.flatMap(u => [u.openId, u.name, u.email, u.role]),
+    );
+  }));
+}
+/** for tests / shutdown */
+export const flushProvisioner = () => _provisioner?.flush() ?? Promise.resolve();
 
 const TTL_MS = 30_000;
 const MAX_ENTRIES = 20_000;
@@ -60,6 +78,11 @@ function singleFlight(key: string, load: () => Promise<Identity | null>): Promis
 }
 
 export async function resolveIdentity(req: Pick<IncomingMessage, "headers">): Promise<Identity | null> {
+  const t0 = performance.now();
+  try { return await resolveIdentityInner(req); } finally { m.identityMs.observe(performance.now() - t0); }
+}
+
+async function resolveIdentityInner(req: Pick<IncomingMessage, "headers">): Promise<Identity | null> {
   const auth = req.headers.authorization;
   if (auth?.startsWith("Bearer ")) {
     const cfg = getOidc();
@@ -69,18 +92,24 @@ export async function resolveIdentity(req: Pick<IncomingMessage, "headers">): Pr
     const hit = cache.get(ck);
     if (hit && Date.now() - hit.at < TTL_MS) return hit.value;
     return singleFlight(ck, async () => {
-    try {
-      const id = await verifyBearer(token, cfg);
-      const openId = `oidc:${id.subject}`.slice(0, 64);
-      await upsertUser({ openId, name: id.name, email: id.email, loginMethod: "oidc", lastSignedIn: new Date(), role: id.role === "admin" ? "admin" : "user" });
-      const user = await getUserByOpenId(openId);
-      if (!user) return null;
-      const value = { user, principal: principalFromUser(user, { role: id.role, workspaces: id.workspaces, departments: id.departments }) };
-      remember(ck, value);
-      return value;
-    } catch {
-      return null;
-    }
+      try {
+        // Pure CPU + cached JWKS: no database on the authentication path.
+        const t0 = performance.now();
+        const id = await verifyBearer(token, cfg);
+        m.authVerifyMs.observe(performance.now() - t0);
+        const openId = `oidc:${id.subject}`;
+        const principal: Principal = {
+          // stable, fits the 64-char actor columns, never a raw tenant/object id
+          id: `o${createHash("sha256").update(openId).digest("hex").slice(0, 31)}`,
+          name: id.name, email: id.email, role: id.role, workspaces: id.workspaces, departments: id.departments,
+        };
+        provisioner().enqueue({ openId: openId.slice(0, 64), name: id.name, email: id.email, role: id.role === "admin" ? "admin" : "user" });
+        const value = { user: null, principal };
+        remember(ck, value);
+        return value;
+      } catch {
+        return null;
+      }
     });
   }
 
