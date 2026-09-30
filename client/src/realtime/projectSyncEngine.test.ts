@@ -220,6 +220,22 @@ describe("ProjectSyncEngine — collection-level recovery (feed cursor)", () => 
     expect(engine.cursorValue).toBe(15);
   });
 
+  it("REGRESSION (found by fault injection): an event received live but parked behind a FAILED recovery is still applied by a later catch-up", async () => {
+    const e2 = event(1, 2, { kommentar: { from: null, to: "2" } });
+    const e3 = event(1, 3, { kommentar: { from: "2", to: "3" } });
+    let fail = true;
+    const sync = vi.fn(async () => { if (fail) throw new Error("server busy"); return { events: [e2, e3], snapshots: [], deleted: [] }; });
+    const f = feed([{ events: [e2, e3], cursor: 9, hasMore: false }]);
+    const { engine } = make(sync, f.fn);
+    engine.seed(project()); engine.initCursor(1);
+    engine.applyEvent(e3);                 // gap → recovery starts and FAILS; e3 is now "seen" but not applied
+    await flush(); await flush();
+    expect(engine.get(1)!.version).toBe(1);
+    fail = false;
+    await engine.catchUp();                // the periodic reconcile must heal it, even though e3 was seen
+    expect(engine.get(1)).toMatchObject({ version: 3, kommentar: "3" });
+  });
+
   it("concurrent catch-ups share one run; an already-applied event is not applied twice", async () => {
     const e2 = event(1, 2, { kommentar: { from: null, to: "x" } });
     const f = feed([{ events: [e2], cursor: 8, hasMore: false }]);

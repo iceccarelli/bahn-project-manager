@@ -223,14 +223,18 @@ export class ProjectSyncEngine {
         for (const e of page.events) {
           if (e.aggregateType !== "project") { if (!this.seen.seen(e.eventId)) this.deps.onOther?.(e); continue; }
           const id = Number(e.aggregateId);
-          // already processed live: neither re-applied nor re-signalled nor counted
-          if (this.seen.seen(e.eventId)) continue;
-          const before = this.server.get(id)?.version;
+          const alreadySeen = this.seen.seen(e.eventId);
           if (this.server.has(id)) {
-            const d = decideEvent(before, e);
+            // Known aggregate: VERSION is the authority, not "have I seen this id". An event that was
+            // received live but parked behind a failed recovery must still be applied here; a
+            // duplicate of an applied event is `stale` and costs nothing.
+            const d = decideEvent(this.server.get(id)?.version, e);
             if (d.kind === "apply") { this.commit(id, e); n++; }
             else if (d.kind === "gap") { this.buffer(id, e); await this.recover(id); n++; }
-          } else { this.applyUnseen(e); n++; }
+          } else if (!alreadySeen) {
+            // Unknown aggregate (created / moved in / removed): signalled once; a repeat would only re-trigger list refetches
+            this.applyUnseen(e); n++;
+          }
         }
         this.feedCursor = Math.max(this.feedCursor, page.cursor);
         if (!page.hasMore) break;
