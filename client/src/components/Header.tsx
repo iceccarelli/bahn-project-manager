@@ -1,3 +1,5 @@
+import { SERVER_MODE } from "@/realtime/serverApi";
+import { NotificationBell } from "@/realtime/notifications";
 import { useMemo } from "react";
 import { CommandSearch } from "@/components/CommandSearch";
 import { Bell, Sun, Moon, Menu } from "lucide-react";
@@ -124,6 +126,7 @@ export default function Header() {
             {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
 
+          {SERVER_MODE ? <NotificationBell /> : (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -173,6 +176,7 @@ export default function Header() {
               )}
             </DropdownMenuContent>
           </DropdownMenu>
+          )}
 
           {/* No cursor-pointer and no hover ring: there is no menu behind this,
               and an affordance that promises one is a control that lies. */}

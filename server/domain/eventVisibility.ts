@@ -15,12 +15,24 @@
  *   sees neither           nothing
  */
 import type { DomainEvent } from "@shared/domain-events";
-import { canViewProject, type Principal } from "./permissions";
+import { canSubscribe, canViewProject, type Principal } from "./permissions";
 
 /** Sentinel for "moved in from a workspace you may not know about". */
 export const HIDDEN_WORKSPACE = "*";
 
 export function eventForPrincipal(p: Principal, e: DomainEvent): DomainEvent | null {
+  // A notification reaches exactly one principal, whatever channel it travelled on.
+  // (and only while that principal can still see the project it is about)
+  if (e.aggregateType === "notification") {
+    return e.context?.recipient === p.id && canViewProject(p, { bahnhofsmanagement: e.context?.workspace ?? null }) ? e : null;
+  }
+  // Presence: visible to whoever may subscribe to the scope it describes (project scopes also
+  // require the project's workspace, carried in context by the publisher).
+  if (e.aggregateType === "presence") {
+    if (!canSubscribe(p, e.aggregateId)) return null;
+    if (e.aggregateId.startsWith("project:")) return canViewProject(p, { bahnhofsmanagement: e.context?.workspace ?? null }) ? e : null;
+    return e;
+  }
   if (e.aggregateType !== "project") return null;
   const now = e.context?.workspace ?? null;
   const before = e.context?.workspaceBefore ?? null;

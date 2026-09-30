@@ -4,6 +4,7 @@
  * deployment keeps using the local data path until the API is deployed.
  */
 import { createTRPCClient, httpBatchLink, TRPCClientError } from "@trpc/client";
+import { useQuery } from "@tanstack/react-query";
 import superjson from "superjson";
 import type { AppRouter } from "../../../server/routers";
 import type { ConflictInfo } from "@shared/project-contract";
@@ -45,6 +46,13 @@ export const serverApi = createTRPCClient<AppRouter>({
     }),
   ],
 });
+
+/** First explicitly granted workspace of the signed-in principal (null for "ALL"/none), for workspace presence. */
+export function useHomeWorkspace(): string | null {
+  const q = useQuery({ queryKey: ["server", "session"], queryFn: () => serverApi.auth.session.query(), staleTime: 60_000, enabled: SERVER_MODE });
+  const ws = q.data?.workspaces;
+  return Array.isArray(ws) && ws.length ? (ws[0] as string) : null;
+}
 
 export function extractConflict(err: unknown): ConflictInfo | null {
   if (err instanceof TRPCClientError) {

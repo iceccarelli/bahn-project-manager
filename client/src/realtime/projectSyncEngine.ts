@@ -39,6 +39,8 @@ export interface EngineDeps {
   sync(known: Array<{ id: number; version: number }>): Promise<SyncResult>;
   /** collection-level catch-up: visible changes after a feed cursor */
   changes(input: { after: number; upTo?: number }): Promise<FeedPage>;
+  /** feed events that are not project events (notifications) — forwarded, never treated as projects */
+  onOther?(e: DomainEvent): void;
 }
 
 export type ProjectChange =
@@ -219,6 +221,7 @@ export class ProjectSyncEngine {
       for (let guard = 0; guard < 50; guard++) {
         const page = await this.deps.changes({ after: this.feedCursor, ...(upTo !== undefined ? { upTo } : {}) });
         for (const e of page.events) {
+          if (e.aggregateType !== "project") { if (!this.seen.seen(e.eventId)) this.deps.onOther?.(e); continue; }
           const id = Number(e.aggregateId);
           // already processed live: neither re-applied nor re-signalled nor counted
           if (this.seen.seen(e.eventId)) continue;

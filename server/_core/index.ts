@@ -14,7 +14,7 @@ import { resolveIdentity } from "./identity";
 import { getServices } from "./services";
 import { closeDb } from "../db";
 import { canExport, isAdmin } from "../domain/permissions";
-import { registerRealtimeGateway } from "../realtime/gateway";
+import { registerPresenceRoutes, registerRealtimeGateway } from "../realtime/gateway";
 import { m, renderMetrics } from "../observability/metrics";
 
 function isPortAvailable(port: number): Promise<boolean> {
@@ -86,7 +86,10 @@ async function startServer() {
     if (!token || req.headers.authorization !== `Bearer ${token}`) { res.status(404).end(); return; }
     res.type("text/plain; version=0.0.4").send(renderMetrics());
   });
-  if (services) registerRealtimeGateway(app, { subscriber: services.subscriber, store: services.store });
+  if (services) {
+    registerRealtimeGateway(app, { subscriber: services.subscriber, store: services.store });
+    registerPresenceRoutes(app, { presence: services.presence, store: services.store, onError: e => console.error("[presence]", e) });
+  }
 
   // Bulk export/import were reachable by anyone. They are privileged now.
   const requirePrincipal = (allow: (p: import("../domain/permissions").Principal) => boolean) =>

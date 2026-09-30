@@ -223,6 +223,22 @@ export const appRouter = router({
         }
       }),
 
+    /** Follow / unfollow a project (recipient set of the notification policy). */
+    watch: protectedProcedure
+      .input(z.object({ projectId: z.number().int().positive(), on: z.boolean() }))
+      .mutation(async ({ input, ctx }) => {
+        const { store, projects } = await requireServices();
+        await projects.get(ctx.principal, input.projectId); // NOT_FOUND unless the caller may see it
+        if (input.on) await store.watch(input.projectId, ctx.principal.id); else await store.unwatch(input.projectId, ctx.principal.id);
+        return { watching: input.on };
+      }),
+    watching: protectedProcedure
+      .input(z.object({ projectId: z.number().int().positive() }))
+      .query(async ({ input, ctx }) => {
+        const { store } = await requireServices();
+        return { watching: await store.isWatching(input.projectId, ctx.principal.id) };
+      }),
+
     /** Global-chrome summary: replaces useAllProjects() in the shell. */
     shellSummary: protectedProcedure.query(async () => {
       const { store } = await requireServices();
@@ -265,6 +281,29 @@ export const appRouter = router({
         });
 
         return { id };
+      }),
+  }),
+
+  // ============= NOTIFICATIONS =============
+  // Source of truth for the bell: rows written in the same transaction as the change (see
+  // ProjectService.notifyWatchers), delivered live on notifications:<self>.
+  notifications: router({
+    list: protectedProcedure
+      .input(z.object({ cursor: z.number().int().positive().optional(), limit: z.number().int().min(1).max(100).default(30), unreadOnly: z.boolean().default(false) }))
+      .query(async ({ input, ctx }) => {
+        const { store } = await requireServices();
+        return store.listNotifications(ctx.principal.id, input, workspaceRestriction(ctx.principal));
+      }),
+    unreadCount: protectedProcedure.query(async ({ ctx }) => {
+      const { store } = await requireServices();
+      return { count: await store.unreadCount(ctx.principal.id, workspaceRestriction(ctx.principal)) };
+    }),
+    markRead: protectedProcedure
+      .input(z.object({ ids: z.union([z.literal("all"), z.array(z.number().int().positive()).min(1).max(200)]) }))
+      .mutation(async ({ input, ctx }) => {
+        const { store } = await requireServices();
+        await store.markRead(ctx.principal.id, input.ids);
+        return { ok: true as const };
       }),
   }),
 

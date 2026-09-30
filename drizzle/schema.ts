@@ -297,6 +297,39 @@ export const idempotencyKeys = mysqlTable("idempotency_keys", {
   createdAtIdx: index("idempotency_createdAt_idx").on(table.createdAt),
 }));
 
+/**
+ * User notifications, produced inside the same transaction as the change that
+ * caused them (domain event → policy → row + outbox event → realtime → center).
+ * `workspace` lets reads re-check the recipient's CURRENT workspace access.
+ */
+export const notifications = mysqlTable("notifications", {
+  id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
+  /** principal id of the recipient */
+  userId: varchar("userId", { length: 64 }).notNull(),
+  kind: mysqlEnum("kind", ["critical", "workflow", "assignment", "mention", "deadline", "system"]).notNull(),
+  title: varchar("title", { length: 256 }).notNull(),
+  body: varchar("body", { length: 1024 }),
+  link: varchar("link", { length: 256 }),
+  workspace: varchar("workspace", { length: 128 }),
+  /** the domain event that caused it */
+  eventId: varchar("eventId", { length: 36 }).notNull(),
+  createdAt: datetime("createdAt", { fsp: 3 }).notNull(),
+  readAt: datetime("readAt", { fsp: 3 }),
+}, (table) => ({
+  userIdx: index("notifications_user_idx").on(table.userId, table.id),
+  userEventUnique: uniqueIndex("notifications_user_event_uq").on(table.userId, table.eventId),
+}));
+
+/** Who follows which project (the recipient set of the current notification policy). */
+export const projectWatchers = mysqlTable("project_watchers", {
+  projectId: int("projectId").notNull(),
+  userId: varchar("userId", { length: 64 }).notNull(),
+  createdAt: datetime("createdAt", { fsp: 3 }).notNull(),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.projectId, table.userId] }),
+  userIdx: index("watchers_user_idx").on(table.userId),
+}));
+
 // Relations
 export const projectsRelations = relations(projects, ({ many }) => ({
   reviews: many(departmentReviews),

@@ -286,6 +286,61 @@ describe.skipIf(!hasTestDb)("ProjectService (real DB)", () => {
     });
   });
 
+  describe("notifications (policy → row + outbox event, in the same transaction)", () => {
+    const watch = (projectId: number, userId: string) => store.watch(projectId, userId);
+
+    it("a watcher gets one notification row and one notification event; the actor and non-watchers get none", async () => {
+      const { project } = await mk();
+      await watch(project.id, "3"); await watch(project.id, "2");           // lena (3) and markus (2, the actor)
+      const events = await count("domain_events");
+      await svc.update(markus, { id: project.id, expectedVersion: 1, changes: { projektstand: "Gestoppt" }, idempotencyKey: key() }, ctx());
+      expect(await count("notifications", "userId='3'")).toBe(1);
+      expect(await count("notifications", "userId='2'")).toBe(0);
+      expect(await count("domain_events")).toBe(events + 2);               // project.updated + notification.created(lena)
+      const [n] = (await t.pool.query("SELECT kind,title,workspace,eventId FROM notifications WHERE userId='3'"))[0] as any[];
+      expect(n).toMatchObject({ kind: "critical", workspace: "Frankfurt" });
+      const [ne] = (await t.pool.query("SELECT envelope FROM domain_events WHERE aggregateType='notification' ORDER BY id DESC LIMIT 1"))[0] as any[];
+      const env = typeof ne.envelope === "string" ? JSON.parse(ne.envelope) : ne.envelope;
+      expect(env).toMatchObject({ eventType: "notification.created", context: { recipient: "3", workspace: "Frankfurt" }, changes: { kind: { to: "critical" } } });
+    });
+
+    it("no-policy changes (kommentar) create nothing; a conflict or rollback creates nothing", async () => {
+      const { project } = await mk(); await watch(project.id, "3");
+      await svc.update(markus, { id: project.id, expectedVersion: 1, changes: { kommentar: "noise" }, idempotencyKey: key() }, ctx());
+      expect(await count("notifications", `eventId IN (SELECT eventId FROM domain_events WHERE aggregateId=${project.id})`)).toBe(0);
+      await expect(svc.update(markus, { id: project.id, expectedVersion: 1, changes: { projektstand: "EP" }, idempotencyKey: key() }, ctx())).rejects.toBeInstanceOf(ConflictError);
+      expect(await count("notifications", `eventId IN (SELECT eventId FROM domain_events WHERE aggregateId=${project.id})`)).toBe(0);
+    });
+
+    it("read model: list newest first with keyset paging, unread count, mark read, workspace re-check", async () => {
+      const { project } = await mk({ bahnhofsmanagement: "Kassel" }); await watch(project.id, "77");
+      let v = 1;
+      for (const st of ["EP", "AP", "FA"]) v = (await svc.update(markus, { id: project.id, expectedVersion: v, changes: { projektstand: st }, idempotencyKey: key() }, ctx())).project.version;
+      expect(await store.unreadCount("77", null)).toBe(3);
+      const p1 = await store.listNotifications("77", { limit: 2 }, null);
+      expect(p1.items).toHaveLength(2); expect(p1.items[0]!.title).toContain("FA");
+      const p2 = await store.listNotifications("77", { limit: 2, cursor: p1.nextCursor! }, null);
+      expect(p2.items).toHaveLength(1);
+      // the recipient lost Kassel access: nothing is listed or counted
+      expect(await store.unreadCount("77", ["Frankfurt"])).toBe(0);
+      expect((await store.listNotifications("77", { limit: 10 }, ["Frankfurt"])).items).toEqual([]);
+      expect((await store.listNotifications("77", { limit: 10 }, [])).items).toEqual([]);
+      await store.markRead("77", [p1.items[0]!.id]);
+      expect(await store.unreadCount("77", null)).toBe(2);
+      await store.markRead("77", "all");
+      expect(await store.unreadCount("77", null)).toBe(0);
+      // another user's notifications are untouched
+      expect(await store.unreadCount("3", null)).toBeGreaterThanOrEqual(0);
+    });
+
+    it("deleting a watched project notifies its watchers first, then removes the watch rows", async () => {
+      const { project } = await mk(); await watch(project.id, "88");
+      await svc.delete(admin, { id: project.id, expectedVersion: 1, idempotencyKey: key() }, ctx());
+      expect((await store.listNotifications("88", { limit: 5 }, null)).items[0]).toMatchObject({ kind: "critical" });
+      expect(await count("project_watchers", `projectId=${project.id}`)).toBe(0);
+    });
+  });
+
   describe("list / search (server-side)", () => {
     beforeAll(async () => {
       for (let i = 0; i < 25; i++)

@@ -15,6 +15,7 @@ import { m } from "../observability/metrics";
 import { InProcessBus } from "../realtime/hub";
 import { RedisBus } from "../realtime/redisBus";
 import { OutboxRelay } from "../realtime/relay";
+import { MemoryPresenceStore, PresenceService, RedisPresenceStore, type PresenceStore } from "../realtime/presence";
 
 export interface Services {
   store: MysqlProjectStore;
@@ -22,6 +23,7 @@ export interface Services {
   publisher: RealtimePublisher;
   subscriber: RealtimeSubscriber;
   relay: OutboxRelay;
+  presence: PresenceService;
   pool: Pool;
   shutdown(): Promise<void>;
 }
@@ -36,6 +38,8 @@ export async function getServices(log: (msg: string, e?: unknown) => void = cons
   if (!db || !pool || !relayPool) return null;
 
   let bus: RealtimePublisher & RealtimeSubscriber;
+  let presenceStore: PresenceStore = new MemoryPresenceStore();
+  let sweepLock: (() => Promise<boolean>) | null = null;
   const closers: Array<() => Promise<unknown>> = [];
   if (process.env.REDIS_URL) {
     const { default: IORedis } = await import("ioredis");
@@ -44,6 +48,9 @@ export async function getServices(log: (msg: string, e?: unknown) => void = cons
     pub.on("error", e => log("[redis:pub]", e));
     sub.on("error", e => log("[redis:sub]", e));
     bus = new RedisBus(pub, sub, e => log("[redis:bus]", e));
+    presenceStore = new RedisPresenceStore(pub);
+    // one sweeper cluster-wide: SET NX PX
+    sweepLock = async () => (await pub.set("bahn:pres:sweeper", "1", "PX", 9000, "NX")) === "OK";
     closers.push(() => pub.quit(), () => sub.quit());
   } else {
     bus = new InProcessBus();
@@ -67,11 +74,18 @@ export async function getServices(log: (msg: string, e?: unknown) => void = cons
   }, 5000);
   sampler.unref();
 
+  const presence = new PresenceService(presenceStore, bus);
+  const sweeper = setInterval(async () => {
+    try { if (!sweepLock || (await sweepLock())) await presence.sweep(); } catch (e) { log("[presence:sweep]", e); }
+  }, 10_000);
+  sweeper.unref();
+
   relay.start();
   services = {
-    store, projects: svc, publisher: bus, subscriber: bus, relay, pool,
+    store, projects: svc, publisher: bus, subscriber: bus, relay, presence, pool,
     async shutdown() {
       clearInterval(sampler);
+      clearInterval(sweeper);
       await relay.stop();
       await Promise.allSettled(closers.map(c => c()));
     },

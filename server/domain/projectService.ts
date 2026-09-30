@@ -40,6 +40,7 @@ import {
   canApproveReview, canCreateProject, canDeleteProject, canEditProject, canViewProject, type Principal,
 } from "./permissions";
 import { eventForPrincipal } from "./eventVisibility";
+import { planNotification } from "./notificationPolicy";
 import type { AfterCommit, AuditRow, ProjectStore, ProjectTx } from "./ports";
 
 export interface RequestContext {
@@ -230,6 +231,7 @@ export class ProjectService {
       });
       await tx.appendAudit(this.auditRows(principal, event, "update", changes));
       await tx.appendEvent(event);
+      await this.notifyWatchers(tx, principal, event, { id: input.id, projektnummer: current.projektnummer, station: "station" in changes ? changes.station!.to : current.station });
       const detail = (await tx.detail(input.id))!;
       const res: MutationResult = { project: detail, eventId: event.eventId, replayed: false };
       await tx.completeIdempotency(principal.id, input.idempotencyKey, res);
@@ -280,8 +282,8 @@ export class ProjectService {
         if (from !== to) changes[reviewChangeKey(input.department, f)] = { from, to };
       }
       const localValues = Object.fromEntries(Object.entries(norm).map(([f, v]) => [reviewChangeKey(input.department, f as ReviewField), v ?? null]));
-      const valueOf = (key: string) => reviewWire(key.split(".")[2] as ReviewField);
-      if (current.syncVersion !== input.expectedVersion) throw await this.conflict(tx, current, { id: input.projectId, expectedVersion: input.expectedVersion }, localValues, valueOf);
+      const reviewValueOf = (key: string) => reviewWire(key.split(".")[2] as ReviewField);
+      if (current.syncVersion !== input.expectedVersion) throw await this.conflict(tx, current, { id: input.projectId, expectedVersion: input.expectedVersion }, localValues, reviewValueOf);
       if (Object.keys(changes).length === 0) {
         const res: MutationResult = { project: (await tx.detail(input.projectId))!, eventId: "", replayed: false };
         await tx.completeIdempotency(principal.id, input.idempotencyKey, res);
@@ -294,11 +296,12 @@ export class ProjectService {
         ...(norm.datum !== undefined ? { datum: norm.datum === null ? null : new Date(norm.datum) } : {}),
       });
       const ok = await tx.updateVersioned(input.projectId, input.expectedVersion, {});
-      if (!ok) throw await this.conflict(tx, (await tx.lockProject(input.projectId)) ?? current, { id: input.projectId, expectedVersion: input.expectedVersion }, localValues, valueOf);
+      if (!ok) throw await this.conflict(tx, (await tx.lockProject(input.projectId)) ?? current, { id: input.projectId, expectedVersion: input.expectedVersion }, localValues, reviewValueOf);
 
       const event = this.buildEvent("project.updated", principal, ctx, input.projectId, input.expectedVersion + 1, changes, { workspace: current.bahnhofsmanagement });
       await tx.appendAudit(this.auditRows(principal, event, "update", changes));
       await tx.appendEvent(event);
+      await this.notifyWatchers(tx, principal, event, { id: input.projectId, projektnummer: current.projektnummer, station: current.station });
       const res: MutationResult = { project: (await tx.detail(input.projectId))!, eventId: event.eventId, replayed: false };
       await tx.completeIdempotency(principal.id, input.idempotencyKey, res);
       return res;
@@ -352,6 +355,8 @@ export class ProjectService {
       const event = this.buildEvent("project.deleted", principal, ctx, input.id, version, {}, {
         workspace: current.bahnhofsmanagement,
       });
+      // notify BEFORE the project (and its watcher rows) are removed
+      await this.notifyWatchers(tx, principal, event, { id: input.id, projektnummer: current.projektnummer, station: current.station });
       await tx.deleteProject(input.id);
       await tx.appendAudit(this.auditRows(principal, event, "delete", {}));
       await tx.appendEvent(event);
@@ -364,6 +369,29 @@ export class ProjectService {
   }
 
   // ---- internals ----------------------------------------------------------
+
+  /**
+   * Domain event → policy → one notification row + one outbox event per recipient, in the
+   * SAME transaction as the change. Recipients: the project's watchers except the actor.
+   */
+  private async notifyWatchers(tx: ProjectTx, principal: Principal, e: DomainEvent, project: { id: number; projektnummer: string | null; station: string | null }) {
+    const plan = planNotification(e, project);
+    if (!plan) return;
+    const workspace = e.context?.workspace ?? null;
+    for (const userId of await tx.watchersOf(project.id)) {
+      if (userId === principal.id) continue;
+      const id = await tx.insertNotification({ userId, kind: plan.kind, title: plan.title, body: plan.body, link: plan.link, workspace, eventId: e.eventId });
+      await tx.appendEvent({
+        schemaVersion: EVENT_SCHEMA_VERSION, eventId: randomUUID(), eventType: "notification.created", aggregateType: "notification",
+        aggregateId: String(id), aggregateVersion: 1, actorId: principal.id, actorName: principal.name, timestamp: this.clock().toISOString(), traceId: e.traceId,
+        changes: {
+          kind: { from: null, to: plan.kind }, title: { from: null, to: plan.title }, body: { from: null, to: plan.body },
+          link: { from: null, to: plan.link }, sourceEventId: { from: null, to: e.eventId },
+        },
+        context: { recipient: userId, workspace },
+      });
+    }
+  }
 
   private notifyAfterCommit() {
     try { this.afterCommit(); } catch { /* the relay also polls; a failed nudge is not a failed write */ }

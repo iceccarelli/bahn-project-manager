@@ -13,7 +13,7 @@ import {
   type ProjectSummary,
 } from "@shared/project-contract";
 import {
-  auditLog, departmentReviews, domainEvents, idempotencyKeys, projects, type Project,
+  auditLog, departmentReviews, domainEvents, idempotencyKeys, notifications, projects, projectWatchers, type Project,
 } from "../../drizzle/schema";
 import type { AuditRow, IdempotencyClaim, ProjectStore, ProjectTx } from "../domain/ports";
 
@@ -135,7 +135,16 @@ function txAdapter(x: Executor): ProjectTx {
     },
     async deleteProject(id) {
       await x.delete(departmentReviews).where(eq(departmentReviews.projectId, id));
+      await x.delete(projectWatchers).where(eq(projectWatchers.projectId, id));
       await x.delete(projects).where(eq(projects.id, id));
+    },
+    async watchersOf(projectId) {
+      const rows = await x.select({ u: projectWatchers.userId }).from(projectWatchers).where(eq(projectWatchers.projectId, projectId));
+      return rows.map(r => r.u);
+    },
+    async insertNotification(row) {
+      const [res] = await x.insert(notifications).values({ ...row, kind: row.kind as never, createdAt: new Date() });
+      return Number((res as unknown as { insertId: number }).insertId);
     },
     async lockReview(projectId, department) {
       const rows = await x
@@ -259,6 +268,45 @@ export class MysqlProjectStore implements ProjectStore {
       .where(inArray(projects.id, ids));
     for (const r of rows) out.set(r.id, { version: r.v, bahnhofsmanagement: r.bm });
     return out;
+  }
+
+  // ---- notifications & watching (reads/writes outside the mutation transaction) ----------------
+
+  async watch(projectId: number, userId: string) {
+    await this.db.insert(projectWatchers).ignore().values({ projectId, userId, createdAt: new Date() });
+  }
+  async unwatch(projectId: number, userId: string) {
+    await this.db.delete(projectWatchers).where(and(eq(projectWatchers.projectId, projectId), eq(projectWatchers.userId, userId)));
+  }
+  async isWatching(projectId: number, userId: string) {
+    const r = await this.db.select({ n: sql<number>`1` }).from(projectWatchers).where(and(eq(projectWatchers.projectId, projectId), eq(projectWatchers.userId, userId))).limit(1);
+    return r.length > 0;
+  }
+
+  /** Newest first, keyset on id. `workspaces`: null = unrestricted; a list re-checks the recipient's CURRENT access. */
+  async listNotifications(userId: string, o: { cursor?: number; limit: number; unreadOnly?: boolean }, workspaces: readonly string[] | null) {
+    if (workspaces !== null && workspaces.length === 0) return { items: [], nextCursor: null as number | null };
+    const conds: SQL[] = [eq(notifications.userId, userId)];
+    if (o.cursor) conds.push(lt(notifications.id, o.cursor));
+    if (o.unreadOnly) conds.push(sql`${notifications.readAt} IS NULL`);
+    if (workspaces !== null) conds.push(inArray(notifications.workspace, [...workspaces]));
+    const rows = await this.db.select().from(notifications).where(and(...conds)).orderBy(desc(notifications.id)).limit(o.limit + 1);
+    const page = rows.slice(0, o.limit);
+    return {
+      items: page.map(r => ({ id: r.id, kind: r.kind, title: r.title, body: r.body, link: r.link, createdAt: r.createdAt.toISOString(), read: r.readAt !== null })),
+      nextCursor: rows.length > o.limit ? page[page.length - 1]!.id : null,
+    };
+  }
+  async unreadCount(userId: string, workspaces: readonly string[] | null) {
+    if (workspaces !== null && workspaces.length === 0) return 0;
+    const conds: SQL[] = [eq(notifications.userId, userId), sql`${notifications.readAt} IS NULL`];
+    if (workspaces !== null) conds.push(inArray(notifications.workspace, [...workspaces]));
+    const [r] = await this.db.select({ n: sql<number>`COUNT(*)` }).from(notifications).where(and(...conds));
+    return Number(r?.n ?? 0);
+  }
+  async markRead(userId: string, ids: number[] | "all") {
+    const cond = ids === "all" ? eq(notifications.userId, userId) : and(eq(notifications.userId, userId), inArray(notifications.id, ids));
+    await this.db.update(notifications).set({ readAt: new Date() }).where(and(cond, sql`${notifications.readAt} IS NULL`));
   }
 
   async filterOptions(workspaces: readonly string[]) {

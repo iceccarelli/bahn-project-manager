@@ -10,9 +10,11 @@
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { scope as scopeKey } from "@shared/domain-events";
+import { scope as scopeKey, type DomainEvent } from "@shared/domain-events";
 import { EDITABLE_PROJECT_FIELDS, reviewChangeKey, type ConflictInfo, type ProjectDetail, type ReviewField, type UpdateProjectInput } from "@shared/project-contract";
 import { ProjectSyncEngine, type ProjectChange } from "./projectSyncEngine";
+import { PresenceClientStore } from "./presence";
+import { NotificationClientStore } from "./notifications";
 import { RealtimeConnection, type ConnectionStatus } from "./connection";
 import { authHeaders, extractConflict, isRetryable, serverApi } from "./serverApi";
 
@@ -27,6 +29,10 @@ interface Ctx {
   connection: RealtimeConnection;
   /** register interest in scopes for the lifetime of a component; returns release */
   retain(scopes: string[]): () => void;
+  /** ephemeral presence snapshots received over the stream */
+  presence: PresenceClientStore;
+  /** live notifications received over the stream */
+  notifications: NotificationClientStore;
 }
 const RealtimeCtx = createContext<Ctx | null>(null);
 
@@ -60,14 +66,22 @@ function patchLists(qc: QueryClient, c: Extract<ProjectChange, { kind: "upsert" 
 export function RealtimeProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
   const ctx = useMemo<Ctx>(() => {
+    const presence = new PresenceClientStore();
+    const notifications = new NotificationClientStore();
+    // show it immediately, and let the server-owned unread count / list catch up with one small refetch
+    const onNotification = (e: DomainEvent) => { notifications.apply(e); void qc.invalidateQueries({ queryKey: ["server", "notifications"] }); };
     const engine = new ProjectSyncEngine({
       sync: known => serverApi.projects.sync.mutate({ known }) as never,
       changes: input => serverApi.projects.changes.query(input) as never,
+      // notifications missed while offline arrive through the same feed
+      onOther: e => onNotification(e),
     });
     const connection = new RealtimeConnection({
       url: "/api/realtime/stream",
       getHeaders: authHeaders,
       onEvent: e => {
+        if (e.aggregateType === "presence") { presence.apply(e); return; }
+        if (e.aggregateType === "notification") { onNotification(e); return; }
         engine.applyEvent(e);
         // creations/deletions/moves change the shell count; plain updates do not
         if (e.eventType !== "project.updated") void qc.invalidateQueries({ queryKey: serverKeys.shell() });
@@ -82,7 +96,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       timer = setTimeout(() => connection.setScopes([...wanted.keys()]), 250); // coalesce mounts
     };
     return {
-      engine, connection,
+      engine, connection, presence, notifications,
       retain(scopes) {
         for (const s of scopes) wanted.set(s, (wanted.get(s) ?? 0) + 1);
         apply();

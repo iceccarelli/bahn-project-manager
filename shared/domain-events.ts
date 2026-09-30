@@ -13,7 +13,12 @@ import { z } from "zod";
 
 export const EVENT_SCHEMA_VERSION = 1 as const;
 
-export const AGGREGATE_TYPES = ["project"] as const;
+/**
+ * `project` events are durable (outbox + feed). `presence` and `notification` ride the SAME
+ * envelope and transport: presence is ephemeral (published directly, never stored in SQL);
+ * notifications are delivered from the same outbox as the change that caused them.
+ */
+export const AGGREGATE_TYPES = ["project", "presence", "notification"] as const;
 export type AggregateType = (typeof AGGREGATE_TYPES)[number];
 
 export const EVENT_TYPES = [
@@ -25,6 +30,10 @@ export const EVENT_TYPES = [
    * project before the move but not after: it carries no field values.
    */
   "project.removed",
+  /** ephemeral: a full snapshot of who is present in `aggregateId` (a scope key) */
+  "presence.changed",
+  /** a user notification; `context.recipient` is the only principal that may receive it */
+  "notification.created",
 ] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
 
@@ -60,6 +69,8 @@ export const DomainEventSchema = z.object({
     .object({
       workspace: z.string().nullable().optional(),
       workspaceBefore: z.string().nullable().optional(),
+      /** notification.created: principal id of the sole recipient */
+      recipient: z.string().max(64).optional(),
     })
     .optional(),
 });
@@ -99,6 +110,8 @@ export const scopeKind = (s: ScopeKey): string => s.slice(0, s.indexOf(":"));
  */
 export function scopesForEvent(event: DomainEvent): ScopeKey[] {
   const out = new Set<ScopeKey>();
+  if (event.aggregateType === "presence") return isValidScope(event.aggregateId) ? [event.aggregateId] : [];
+  if (event.aggregateType === "notification") return event.context?.recipient ? [scope.notifications(event.context.recipient)] : [];
   if (event.aggregateType === "project") {
     out.add(scope.project(event.aggregateId));
     const ws = event.context?.workspace;

@@ -306,6 +306,53 @@ async function main() {
     if (denied.status !== 403) throw new Error(`non-ITK editor got ${denied.status}`);
   });
 
+  // ---------------- PROOF 7/8: presence + notifications ---------------------------------------------------
+  const openDetail = async (page: Page) => { await page.getByRole("button", { name: new RegExp(`Details zu Projekt ${PNR.replace(".", "\\.")}`) }).first().click(); await page.getByRole("dialog").waitFor(); };
+  const closeDetail = async (page: Page) => { await page.keyboard.press("Escape"); await page.getByRole("dialog").waitFor({ state: "hidden" }); };
+  const strip = (page: Page) => page.locator('[data-testid="presence-strip"]').first();
+  await step("PRESENCE: both open project 481 → each sees the other in the project strip (Redis TTL presence, pushed over the stream); leaving clears it; workspace presence counts B", async () => {
+    await openDetail(A.page); await openDetail(B.page);
+    await until(async () => /Anna \(Browser A\) sieht zu/.test((await strip(B.page).textContent()) ?? ""), 8000, "B sees Anna viewing");
+    await until(async () => /Bernd \(Browser B\) sieht zu/.test((await strip(A.page).textContent()) ?? ""), 8000, "A sees Bernd viewing");
+    const wp = await B.page.locator('[data-testid="workspace-presence"]').first().textContent().catch(() => null);
+    measurements.workspace_presence_B = wp?.trim() ?? "";
+    await closeDetail(A.page);
+    await until(async () => /Nur Sie sehen/.test((await strip(B.page).textContent()) ?? ""), 8000, "B sees Anna gone");
+    await closeDetail(B.page);
+    // ephemeral: nothing about presence in SQL
+    const tables = await q("SELECT table_name t FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name LIKE '%presence%'");
+    if (tables.length) throw new Error("presence table exists in SQL");
+    if (!(await noReload(B.page))) throw new Error("reloaded");
+  });
+  await step("NOTIFICATIONS: B watches 481; A changes Projektstand → B's bell shows an unread workflow notification live (no reload); a stop is 'critical'; reading clears it; the bell reads the real notification source", async () => {
+    await openDetail(B.page);
+    await B.page.getByTestId("watch-toggle").click();
+    await until(async () => (await B.page.getByTestId("watch-toggle").getAttribute("aria-pressed")) === "true", 5000, "watching");
+    await closeDetail(B.page);
+    const bell = B.page.getByTestId("notification-bell");
+    const cur = await cellText(A.page, "Projektstand");
+    const next1 = cur === "EP" ? "AP" : "EP";
+    await editCell(A.page, "Projektstand", next1);
+    await until(async () => (await B.page.getByTestId("notification-badge").count()) > 0, 8000, "unread badge on B's bell");
+    await bell.click();
+    const item = B.page.getByTestId("notification-item").first();
+    await until(async () => (await item.count()) > 0, 5000, "notification item");
+    if ((await item.getAttribute("data-kind")) !== "workflow" || !/Projektstand/.test((await item.textContent()) ?? "")) throw new Error(`item: ${await item.textContent()}`);
+    await B.page.keyboard.press("Escape");
+    await editCell(A.page, "Projektstand", "Gestoppt");
+    await until(async () => (await B.page.getByTestId("notification-badge").textContent())?.trim() === "2", 8000, "second unread");
+    await bell.click();
+    if ((await B.page.getByTestId("notification-item").first().getAttribute("data-kind")) !== "critical") throw new Error("stop is not critical");
+    await B.page.getByText("Alle als gelesen markieren").click();
+    await until(async () => (await B.page.getByTestId("notification-badge").count()) === 0, 5000, "badge cleared");
+    const [{ n }] = await q("SELECT COUNT(*) n FROM notifications WHERE readAt IS NULL");
+    if (Number(n) !== 0) throw new Error(`${n} unread rows remain in SQL`);
+    await B.page.keyboard.press("Escape");
+    await editCell(A.page, "Projektstand", cur);     // restore …
+    await until(async () => (await q("SELECT projektstand p FROM projects WHERE id=?", [PID]))[0].p === cur, 5000, "restore committed");   // … and let it land before the next proof
+    if (!(await noReload(B.page))) throw new Error("reloaded");
+  });
+
   // ---------------- PROOF 4: workspace move Frankfurt → Kassel -----------------------------------------
   await step("PROOF 4: A moves 481 Frankfurt → Kassel; Frankfurt-only B loses the row and receives no Kassel state (stream + DOM + API)", async () => {
     await B.page.evaluate(() => { (window as any).__sse.length = 0; });
@@ -358,8 +405,8 @@ async function main() {
     const [c] = await q("SELECT COUNT(*) events, SUM(failedAt IS NOT NULL) dead, MIN(feedSeq) lo, MAX(feedSeq) hi, COUNT(feedSeq) seqd FROM domain_events");
     if (Number(c.dead) !== 0) throw new Error("dead-lettered events");
     if (Number(c.hi) - Number(c.lo) + 1 !== Number(c.seqd)) throw new Error("feed has gaps");
-    const [{ orphan }] = await q("SELECT COUNT(*) orphan FROM domain_events e WHERE NOT EXISTS (SELECT 1 FROM audit_log a WHERE a.eventId=e.eventId)");
-    if (Number(orphan) !== 0) throw new Error(`${orphan} events without audit rows`);
+    const [{ orphan }] = await q("SELECT COUNT(*) orphan FROM domain_events e WHERE e.aggregateType='project' AND NOT EXISTS (SELECT 1 FROM audit_log a WHERE a.eventId=e.eventId)");
+    if (Number(orphan) !== 0) throw new Error(`${orphan} project events without audit rows`);
     measurements.events = Number(c.events);
     const m = await (await fetch(`${URLS[0]}/api/metrics`, { headers: { authorization: "Bearer e2e" } })).text();
     const m2 = await (await fetch(`${URLS[1]}/api/metrics`, { headers: { authorization: "Bearer e2e" } })).text();

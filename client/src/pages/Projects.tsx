@@ -10,6 +10,8 @@ import { useProjectsPageExtras } from "@/hooks/useProjectsPage";
 import { SERVER_MODE } from "@/realtime/serverApi";
 import ConnectionBadge from "@/realtime/ConnectionBadge";
 import { ServerPager } from "@/realtime/ServerPager";
+import { WorkspacePresence } from "@/realtime/presence";
+import { useHomeWorkspace } from "@/realtime/serverApi";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -174,6 +176,7 @@ export default function Projects() {
   const pager = projectsQuery as unknown as { hasNextPage?: boolean; isFetchingNextPage?: boolean; fetchNextPage?: () => void };
 
   const { data: filterOptions } = useFilters();
+  const homeWorkspace = useHomeWorkspace();
   const extras = useProjectsPageExtras(data?.projects ?? [], detailProjectId);
   const allData = extras.corpus ? { projects: extras.corpus } : undefined;
   /* The wave through the 1.298 rows. Decoration only — every row is in the DOM
@@ -469,7 +472,8 @@ export default function Projects() {
   return (
     <div ref={revealRef} className="space-y-8 p-6 bg-background min-h-screen">
       {SERVER_MODE && (
-        <div className="flex items-center justify-end" data-testid="server-mode-bar">
+        <div className="flex items-center justify-end gap-4" data-testid="server-mode-bar">
+          <WorkspacePresence workspace={region || homeWorkspace} />
           <ConnectionBadge />
         </div>
       )}

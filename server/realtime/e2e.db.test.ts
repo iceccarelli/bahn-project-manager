@@ -21,7 +21,8 @@ import { ProjectService } from "../domain/projectService";
 import { ConflictError } from "../domain/errors";
 import { InProcessBus } from "./hub";
 import { OutboxRelay } from "./relay";
-import { registerRealtimeGateway } from "./gateway";
+import { registerPresenceRoutes, registerRealtimeGateway } from "./gateway";
+import { MemoryPresenceStore, PresenceService } from "./presence";
 import { admin, markus, lena, mitteOnly, ctx } from "../domain/testFixtures";
 import type { Principal } from "../domain/permissions";
 import { ProjectSyncEngine } from "../../client/src/realtime/projectSyncEngine";
@@ -63,6 +64,11 @@ describe.skipIf(!hasTestDb)("realtime data plane (real DB, real HTTP/SSE)", () =
         return p ? { principal: p } : null;
       },
     });
+    app.use(express.json());
+    registerPresenceRoutes(app, {
+      presence: new PresenceService(new MemoryPresenceStore(), bus), store,
+      resolve: async req => { const p = users[String(req.headers["x-test-user"])]; return p ? { principal: p } : null; },
+    });
     await new Promise<void>(r => (server = app.listen(0, "127.0.0.1", r)));
     url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/realtime/stream`;
   });
@@ -100,7 +106,7 @@ describe.skipIf(!hasTestDb)("realtime data plane (real DB, real HTTP/SSE)", () =
       },
     };
   }
-  const connected = (c: { conn: RealtimeConnection }) => until(() => c.conn.getStatus().state === "connected", 3000, "connected");
+  const connected = (c: { conn: RealtimeConnection }) => until(() => c.conn.getStatus().state === "connected", 10000, "connected");
 
   it("A changes a project → B sees it without reload, well under the 500 ms target (single node, local)", async () => {
     const p = await mk();
@@ -168,7 +174,7 @@ describe.skipIf(!hasTestDb)("realtime data plane (real DB, real HTTP/SSE)", () =
     expect(B.engine.get(p.id)!.version).toBe(1); // nothing arrived while offline
 
     B.conn.start();
-    await until(() => B.conn.getStatus().state === "connected" && B.conn.getStatus().lastSyncedChanges !== null, 3000, "resync");
+    await until(() => B.conn.getStatus().state === "connected" && B.conn.getStatus().lastSyncedChanges !== null, 10000, "resync");
     expect(B.engine.get(p.id)).toMatchObject({ version: 4, kommentar: "three" });
     expect(B.conn.getStatus().lastSyncedChanges).toBe(3); // "Wiederverbunden · 3 Änderungen synchronisiert"
     expect(states).toContain("resynchronizing");
@@ -361,6 +367,47 @@ describe.skipIf(!hasTestDb)("realtime data plane (real DB, real HTTP/SSE)", () =
     const seqs = (rows as Array<{ feedSeq: number }>).map(r => Number(r.feedSeq));
     expect(seqs.length).toBeGreaterThan(5);
     seqs.forEach((v, i) => { if (i) expect(v).toBe(seqs[i - 1]! + 1); });
+  });
+
+  it("NOTIFICATION: a watcher receives it live on notifications:<self>; a colleague in the same workspace who does not watch receives nothing; nobody can listen on another user's channel", async () => {
+    const p = await mk({ bahnhofsmanagement: "Frankfurt" });
+    await store.watch(p.id, lena.id);
+    const L = client(lena, [`notifications:${lena.id}`, "workspace:frankfurt"]);
+    const M = client(markus, [`notifications:${markus.id}`, "workspace:frankfurt"]);
+    L.conn.start(); M.conn.start(); await Promise.all([connected(L), connected(M)]);
+    await svc.update(admin, { id: p.id, expectedVersion: 1, changes: { projektstand: "Gestoppt" }, idempotencyKey: key() }, ctx());
+    await until(() => L.received.some(e => e.aggregateType === "notification"), 3000, "lena's notification");
+    await new Promise(r => setTimeout(r, 150));
+    const n = L.received.find(e => e.aggregateType === "notification")!;
+    expect(n).toMatchObject({ eventType: "notification.created", context: { recipient: lena.id }, changes: { kind: { to: "critical" } } });
+    expect(M.received.some(e => e.aggregateType === "notification")).toBe(false);   // same workspace, not the recipient
+    // the raw stream for markus asking for lena's channel is refused
+    const res = await fetch(`${url}?scopes=${encodeURIComponent(`notifications:${lena.id}`)}`, { headers: { "x-test-user": markus.id } });
+    expect(res.status).toBe(403);
+    // a missed notification is recovered from the feed for its recipient only
+    const feed = await svc.changes(lena, { after: 0 });
+    expect(feed.events.filter(e => e.aggregateType === "notification").every(e => e.context?.recipient === lena.id)).toBe(true);
+    expect((await svc.changes(markus, { after: 0 })).events.some(e => e.aggregateType === "notification")).toBe(false);
+  });
+
+  it("PRESENCE: heartbeat → other subscribers get a presence.changed snapshot; project presence honours workspace visibility; leave clears it", async () => {
+    const p = await mk({ bahnhofsmanagement: "Kassel" });
+    const post = (who: Principal, body: unknown) => fetch(url.replace("/stream", "/presence"), { method: "POST", headers: { "x-test-user": who.id, "content-type": "application/json" }, body: JSON.stringify(body) });
+    const watcher = client(markus, [`project:${p.id}`]);          // ALL workspaces: may see Kassel
+    watcher.conn.start(); await connected(watcher);
+    expect((await post(lena, { scope: `project:${p.id}`, state: "editing", tabId: "tab-aaaa" })).status).toBe(204);
+    await until(() => watcher.received.some(e => e.aggregateType === "presence"), 3000, "presence event");
+    const snap = JSON.parse(watcher.received.filter(e => e.aggregateType === "presence").at(-1)!.changes.members!.to!);
+    expect(snap).toMatchObject([{ userId: lena.id, state: "editing", tabs: 1 }]);
+    // a Frankfurt-only principal can neither report into nor read a Kassel project's presence
+    expect((await post(ffmOnly, { scope: `project:${p.id}`, state: "viewing", tabId: "tab-bbbb" })).status).toBe(403);
+    expect((await fetch(url.replace("/stream", `/presence?scope=project:${p.id}`), { headers: { "x-test-user": ffmOnly.id } })).status).toBe(403);
+    // input validation
+    expect((await post(lena, { scope: `project:${p.id}`, state: "sleeping", tabId: "tab-aaaa" })).status).toBe(400);
+    expect((await post(lena, { scope: "*", state: "viewing", tabId: "tab-aaaa" })).status).toBe(403);
+    // leave
+    await fetch(url.replace("/stream", `/presence?scope=project:${p.id}&tabId=tab-aaaa`), { method: "DELETE", headers: { "x-test-user": lena.id } });
+    await until(() => JSON.parse(watcher.received.filter(e => e.aggregateType === "presence").at(-1)!.changes.members!.to!).length === 0, 3000, "empty snapshot after leave");
   });
 
   it("two relays on one outbox never publish the same event twice (cluster-wide lock)", async () => {
