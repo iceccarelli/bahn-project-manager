@@ -22,7 +22,7 @@ JWT_SECRET=… scripts/load/run-server.sh && node scripts/load/realtime-fanout.m
 
 ## Results (sandbox: 4 vCPU/16 GB, MariaDB 10.11, Node 22, generator co-located, loopback)
 
-**Realtime fan-out** — one event → N connections on one project scope; 3 rounds each; latency = mutation sent → frame
+**Realtime fan-out** (re-measured on the final build, with per-recipient event filtering active: 10,000 → p95 319–370 ms single instance, 241–413 ms over two instances; 5,000 → 142–158 ms; 1,000 → 46–125 ms) — one event → N connections on one project scope; 3 rounds each; latency = mutation sent → frame
 read by client (includes HTTP write, DB commit, relay, bus, socket):
 
 | Connections | delivered | p50 | p95 | p99 | server RSS |
@@ -30,8 +30,8 @@ read by client (includes HTTP write, DB commit, relay, bus, socket):
 | 1,000 | 100 % ×3 | 45–83 ms | 51–116 ms | 52–117 ms | — |
 | 2,500 | 100 % ×3 | 64–95 ms | 78–112 ms | 79–115 ms | — |
 | 5,000 | 100 % ×3 | 109–153 ms | 144–207 ms | 146–211 ms | 341 MB |
-| **10,000** (1 instance, in-process bus) | **100 % ×3** | 277–348 ms | **394–446 ms** | 402–453 ms | 552 MB |
-| **10,000** (2 instances + Redis, 5,000 each; event written via instance 1) | **100 % ×3** | 183–344 ms | **312–434 ms** | 319–439 ms | — |
+| **10,000** (1 instance, in-process bus) | **100 % ×3** | 224–282 ms | **319–370 ms** | 324–376 ms | 552 MB (earlier build) |
+| **10,000** (2 instances + Redis, 5,000 each; event written via instance 1) | **100 % ×3** | 168–327 ms | **241–413 ms** | 246–422 ms | — |
 
 Instance counters after the 2-instance run: each instance delivered 15,000 = 3×5,000; only one instance relayed
 (`outbox_published_total` 3 vs 0). Caveats: one scope, one event at a time, one cached principal, loopback, shared CPU;
