@@ -172,6 +172,9 @@ describe.skipIf(!hasTestDb)("realtime data plane (real DB, real HTTP/SSE)", () =
       v = (await svc.update(lena, { id: p.id, expectedVersion: v, changes: { kommentar: c }, idempotencyKey: key() }, ctx())).project.version;
     }
     expect(B.engine.get(p.id)!.version).toBe(1); // nothing arrived while offline
+    // The relay must have PUBLISHED all three while B is away; otherwise the last one races B's new
+    // subscription and arrives live (correctly, but then it is not "synchronized", it is delivered).
+    await until(async () => Number(((await t.pool.query("SELECT COUNT(*) n FROM domain_events WHERE processedAt IS NULL")) as any)[0][0].n) === 0, 5000, "outbox drained");
 
     B.conn.start();
     await until(() => B.conn.getStatus().state === "connected" && B.conn.getStatus().lastSyncedChanges !== null, 10000, "resync");
