@@ -37,15 +37,36 @@ const run = (script, args, env = {}) => { const r = spawnSync("node", [script, .
 const firstJson = t => { const i = t.indexOf("{"); if (i < 0) return null; let d = 0; for (let j = i; j < t.length; j++) { if (t[j] === "{") d++; else if (t[j] === "}" && --d === 0) return JSON.parse(t.slice(i, j + 1)); } return null; };
 const cred = COOKIE ? ["--cookie", COOKIE] : [];
 const seconds = arg("seconds", "60");
+const ids = arg("ids", "1:1298"), thinkMs = arg("think-ms", "0");
+const METRICS_TOKEN = process.env.METRICS_TOKEN;
+// Server-side evidence sampled around every stage (needs the metrics token; absent => recorded as unavailable, never guessed).
+const scrape = async () => {
+  if (!METRICS_TOKEN) return null;
+  try {
+    const t = await (await fetch(`${BASE}/api/metrics`, { headers: { authorization: `Bearer ${METRICS_TOKEN}` } })).text();
+    const g = n => { const m = t.match(new RegExp(`^${n}(?:\\{[^}]*\\})? ([\\d.e+-]+)`, "m")); return m ? Number(m[1]) : null; };
+    return { outboxBacklog: g("bahn_outbox_backlog"), deadLetters: g("bahn_outbox_dead_letters_total"), poolInUse: g("bahn_db_pool_connections_in_use"), poolQueued: g("bahn_db_pool_queued_requests"), shed: g("bahn_requests_shed_total"), rtDropped: g("bahn_realtime_events_dropped_total"), unhandled: g("bahn_unhandled_rejections_total") };
+  } catch { return null; }
+};
+const ready = async () => { try { return (await fetch(`${BASE}/api/ready`)).status === 200; } catch { return false; } };
 
 for (const vus of arg("stages-api", "100,500,1000,2500,5000,10000").split(",")) {
-  const t = run("scripts/load/api-bench.mjs", ["--base", BASE, ...cred, "--scenario", "mixed", "--vus", vus, "--seconds", seconds]);
+  const before = await scrape();
+  const t = run("scripts/load/api-bench.mjs", ["--base", BASE, ...cred, "--ids", ids, "--think-ms", thinkMs, "--scenario", "mixed", "--vus", vus, "--seconds", seconds]);
+  const after = await scrape();
   const j = firstJson(t); const rows = [...t.matchAll(/│ (list|list\+filter|search|detail|shellSummary|write)\s+│\s+(\d+)\s+│\s+([\d.]+)\s+│\s+([\d.]+)/g)];
   const p95 = name => Number(rows.find(r => r[1] === name)?.[4] ?? NaN);
   const readP95 = Math.max(...["list", "detail", "search"].map(p95).filter(Number.isFinite)), writeP95 = p95("write");
   const errorPct = j ? parseFloat(j.errorRate) : NaN;
   const pass = !!j && readP95 < SLO.readP95 && (Number.isNaN(writeP95) || writeP95 < SLO.writeP95) && errorPct < SLO.errorPct;
-  out.stages.push({ kind: "api", vus: Number(vus), readP95, writeP95, errorPct, rps: j?.rps, pass });
+  out.stages.push({ kind: "api", scenario: "mixed", thinkMs: Number(thinkMs), ids, vus: Number(vus), readP95, writeP95, errorPct, rps: j?.rps, serverBefore: before, serverAfter: after, readyAfter: await ready(), pass });
+}
+for (const [name, scen, vus] of [["concurrent-writes", "write-distinct", 200], ["hot-project", "write-same", 200]]) {
+  const before = await scrape();
+  const t = run("scripts/load/api-bench.mjs", ["--base", BASE, ...cred, "--ids", ids, "--scenario", scen, "--vus", String(vus), "--seconds", seconds]);
+  const after = await scrape(); const j = firstJson(t);
+  const lost = j?.sameProject?.lostOrDuplicated ?? 0, other = j?.writes?.other ?? j?.sameProject?.other ?? null;
+  out.stages.push({ kind: name, vus, lostOrDuplicated: lost, unexpectedErrors: other, serverBefore: before, serverAfter: after, pass: !!j && lost === 0 && (other === 0 || other === null) });
 }
 for (const n of arg("stages-rt", "1000,2500,5000,10000").split(",")) {
   const t = run("scripts/load/realtime-fanout.mjs", ["--base", BASE, ...cred, "--connections", n, "--project", "5", "--rounds", "3", "--ramp-per-sec", "1000"]);
@@ -53,6 +74,9 @@ for (const n of arg("stages-rt", "1000,2500,5000,10000").split(",")) {
   const worstP95 = Math.max(...rows.map(r => Number(r[6])));
   const missing = rows.reduce((a, r) => a + Number(r[4]), 0);
   out.stages.push({ kind: "realtime", connections: Number(n), rounds: rows.length, worstP95, missing, pass: rows.length > 0 && missing === 0 && worstP95 < SLO.rtP95 });
+}
+for (const f of ["reconnect-storm", "redis-restart", "app-instance-restart", "relay-interruption", "db-degradation", "soak"]) {
+  out.stages.push({ kind: f, pass: false, status: "not-run", detail: f === "soak" ? "run api stage with --seconds >= 3600" : "fault injection needs orchestrator access to the staging stack (docker compose stop/start) — not reachable from a pure client; see docs/staging.md" });
 }
 out.stages.push({ kind: "unique-users", pass: false, status: "not-run", detail: "needs an IdP whose tokens the deployment trusts; run scripts/load/unique-users.mjs against staging with --base" });
 const required = out.stages.filter(s => s.status !== "not-run");

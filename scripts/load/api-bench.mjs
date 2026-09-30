@@ -14,7 +14,13 @@
 const arg = (k, d) => { const i = process.argv.indexOf(`--${k}`); return i > -1 ? process.argv[i + 1] : d; };
 const BASE = arg("base", "http://127.0.0.1:3000"), COOKIE = arg("cookie", process.env.COOKIE);
 const SCENARIO = arg("scenario", "mixed"), VUS = Number(arg("vus", 100)), SECONDS = Number(arg("seconds", 20));
-const WRITE_BASE_ID = Number(arg("write-base-id", 150000));
+// Project-id space the target actually contains. Defaults to the real dataset (1,298 rows, ids 1..1298);
+// pass --ids 1:200000 for the synthetic load database. Detail reads and write targets are drawn from it,
+// so a run against the real dataset produces no artificial 404s.
+const [ID_MIN, ID_MAX] = arg("ids", "1:1298").split(":").map(Number);
+const ID_SPAN = ID_MAX - ID_MIN + 1;
+const THINK_MS = Number(arg("think-ms", 0)); // per-VU pause between requests; 0 = closed loop with no think time
+const think = () => THINK_MS ? new Promise(r => setTimeout(r, THINK_MS * (0.5 + Math.random()))) : null;
 if (!COOKIE) { console.error("--cookie required"); process.exit(2); }
 
 const H = { cookie: `app_session_id=${COOKIE}`, "content-type": "application/json" };
@@ -45,7 +51,7 @@ const reads = [
   [30, () => q("list", "projects.list", { limit: 50 })],
   [15, () => q("list+filter", "projects.list", { limit: 50, bahnhofsmanagement: ["Frankfurt", "Kassel", "Mainz"][rnd(3)], projektstand: "EP" })],
   [15, () => q("search", "projects.list", { limit: 50, search: Math.random() < 0.7 ? stations[rnd(stations.length)] : `P-${100000 + rnd(9000)}` })],
-  [25, () => q("detail", "projects.get", { id: 1 + rnd(20000) })],
+  [25, () => q("detail", "projects.get", { id: ID_MIN + rnd(ID_SPAN) })],
   [10, () => q("shellSummary", "projects.shellSummary", undefined)],
   [5, () => q("dashboard.stats", "dashboard.stats", undefined)],
 ];
@@ -53,10 +59,11 @@ const pickRead = () => { let r = rnd(100); for (const [w, f] of reads) { if ((r 
 
 // Each write VU owns one project, tracks its version, and uses a fresh idempotency key per action.
 async function writeDistinct(vu, stop) {
-  const id = WRITE_BASE_ID + vu;
+  const id = ID_MIN + (vu % ID_SPAN); // more VUs than projects => some targets are shared (contention), reported by the server as 409s
   let version = parse((await q("detail", "projects.get", { id })).body)?.version ?? 1, ok = 0, conflicts = 0, other = 0;
   while (performance.now() < stop) {
     const r = await call("write", "POST", "/api/trpc/projects.update", JSON.stringify({ json: { id, expectedVersion: version, changes: { kommentar: `vu${vu}-${ok}` }, idempotencyKey: `bench-${vu}-${Date.now()}-${ok}-${rnd(1e9)}` } }));
+    await think();
     if (r.status === 200) { ok++; version++; } else if (r.status === 409) { conflicts++; version = parse(r.body)?.data?.conflict?.currentVersion ?? version; } else other++;
   }
   return { id, ok, conflicts, other, startVersionOk: true, endVersion: version };
@@ -78,7 +85,7 @@ let extra = {};
 if (SCENARIO === "read" || SCENARIO === "mixed") {
   const writers = SCENARIO === "mixed" ? Math.max(1, Math.floor(VUS * 0.1)) : 0;
   const results = await Promise.all([
-    ...Array.from({ length: VUS - writers }, async () => { while (performance.now() < stop) await pickRead()(); }),
+    ...Array.from({ length: VUS - writers }, async () => { while (performance.now() < stop) { await pickRead()(); await think(); } }),
     ...Array.from({ length: writers }, (_, i) => writeDistinct(i, stop)),
   ]);
   const w = results.filter(Boolean);
@@ -87,7 +94,7 @@ if (SCENARIO === "read" || SCENARIO === "mixed") {
   const w = await Promise.all(Array.from({ length: VUS }, (_, i) => writeDistinct(i, stop)));
   extra = { writes: { ok: w.reduce((a, x) => a + x.ok, 0), conflicts: w.reduce((a, x) => a + x.conflicts, 0), other: w.reduce((a, x) => a + x.other, 0) }, writers: w };
 } else if (SCENARIO === "write-same") {
-  const id = WRITE_BASE_ID - 1;
+  const id = ID_MAX; // hot project: last id in the dataset
   const before = parse((await q("detail", "projects.get", { id })).body)?.version ?? 1;
   const w = await Promise.all(Array.from({ length: VUS }, (_, i) => writeSame(i, stop, id)));
   const after = parse((await q("detail", "projects.get", { id })).body)?.version ?? 1;
