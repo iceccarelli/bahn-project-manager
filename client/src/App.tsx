@@ -9,6 +9,8 @@ import AuthGate from "@/components/AuthGate";
 import DashboardLayout from "@/components/DashboardLayout";
 import Login from "@/pages/Login";
 import { useCrossTabSync } from "@/hooks/useCrossTabSync";
+import { SERVER_MODE } from "@/realtime/serverApi";
+import { RealtimeProvider } from "@/realtime/RealtimeProvider";
 
 /**
  * Route-level code splitting.
@@ -58,6 +60,11 @@ function CrossTabSync() {
   return null;
 }
 
+/** Realtime is mounted only when the server data plane is enabled (VITE_SERVER_MODE=1). */
+function LiveData({ children }: { children: React.ReactNode }) {
+  return SERVER_MODE ? <RealtimeProvider>{children}</RealtimeProvider> : <>{children}</>;
+}
+
 function App() {
   return (
     <ErrorBoundary>
@@ -70,6 +77,7 @@ function App() {
               <Route path="/login" component={Login} />
               <Route>
                 <AuthGate>
+                  <LiveData>
                   <DashboardLayout>
                     <Suspense fallback={<RouteFallback />}>
                       <Switch>
@@ -83,6 +91,7 @@ function App() {
                       </Switch>
                     </Suspense>
                   </DashboardLayout>
+                  </LiveData>
                 </AuthGate>
               </Route>
             </Switch>

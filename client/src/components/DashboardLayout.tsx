@@ -26,7 +26,9 @@ import {
 import { type CSSProperties, useEffect, useRef, useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { useAllProjects } from "@/hooks/useDataQuery";
+import { useShellSummary } from "@/hooks/useShellSummary";
+import { SERVER_MODE } from "@/realtime/serverApi";
+import ConnectionBadge from "@/realtime/ConnectionBadge";
 import Header from "./Header";
 import Footer from "./Footer";
 
@@ -83,8 +85,7 @@ function SidebarFooterContent() {
   // The count used to be the literal string "1.299 Projekte", which was wrong
   // the moment the Projektanmeldung wizard created project 1299 (making 1,299
   // the *id*, not the total) and wrong again on every import after that.
-  const { data } = useAllProjects();
-  const projectCount = data?.projects.length ?? null;
+  const { projectCount } = useShellSummary();
 
   const handleLogout = () => {
     logout();
@@ -114,6 +115,7 @@ function SidebarFooterContent() {
           </p>
         </div>
       </div>
+      {SERVER_MODE && <div className="px-1 group-data-[collapsible=icon]:hidden"><ConnectionBadge /></div>}
       <button type="button"
         onClick={handleLogout}
         className="w-full px-3 py-2 text-sm text-left text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors flex items-center gap-2"

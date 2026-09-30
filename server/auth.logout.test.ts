@@ -27,6 +27,9 @@ function createAuthContext(): { ctx: TrpcContext; clearedCookies: CookieCall[] }
 
   const ctx: TrpcContext = {
     user,
+    principal: null,
+    traceId: "test-trace-0001",
+    requestId: "req-1",
     req: {
       protocol: "https",
       headers: {},
@@ -54,7 +57,7 @@ describe("auth.logout", () => {
     expect(clearedCookies[0]?.options).toMatchObject({
       maxAge: -1,
       secure: true,
-      sameSite: "none",
+      sameSite: "lax",
       httpOnly: true,
       path: "/",
     });

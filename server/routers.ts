@@ -6,13 +6,8 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { sdk } from "./_core/sdk";
 import {
-  getProjects,
-  getProjectWithReviews,
-  getProjectReviews,
-  updateProject,
-  createProject,
-  deleteProject,
   updateDepartmentReview,
+  getReviewContext,
   createDepartmentReview,
   getDashboardStats,
   getBvbEeaList,
@@ -28,12 +23,36 @@ import {
   upsertUser,
 } from "./db";
 import { ODataQuerySchema, parseODataFilter } from "@shared/server/odata";
+import {
+  CreateProjectInputSchema,
+  ListProjectsInputSchema,
+  SyncInputSchema,
+  UpdateProjectInputSchema,
+  MAX_PAGE_SIZE,
+} from "@shared/project-contract";
+import { requireServices } from "./_core/services";
+import { SingleFlightCache } from "./infra/singleFlightCache";
+import { canApproveReview, canViewAudit } from "./domain/permissions";
+import { m } from "./observability/metrics";
+import { ConflictError } from "./domain/errors";
 
 // Demo users for authentication without OAuth
 const DEMO_USERS = [
   { openId: "demo-admin-001", name: "Admin Demo", email: "admin@bahn.de", role: "admin" as const, password: "admin" },
   { openId: "demo-user-001", name: "Prüfer Demo", email: "pruefer@bahn.de", role: "user" as const, password: "user" },
 ];
+
+/** 5 s in-process cache: the shell polls this, it must not become a COUNT(*) per tab. */
+let shellCache: { at: number; value: { projectCount: number; lastUpdatedAt: string | null } } | null = null;
+async function shellSummaryCached(load: () => Promise<{ projectCount: number; lastUpdatedAt: string | null }>) {
+  if (shellCache && Date.now() - shellCache.at < 5000) return shellCache.value;
+  const value = await load();
+  shellCache = { at: Date.now(), value };
+  return value;
+}
+
+const dashboardCache = new SingleFlightCache("dashboard", 30_000, () => getDashboardStats());
+const filterOptionsCache = new SingleFlightCache("filters", 60_000, () => getFilterOptions());
 
 export const appRouter = router({
   system: systemRouter,
@@ -52,6 +71,11 @@ export const appRouter = router({
         password: z.string(),
       }))
       .mutation(async ({ input, ctx }) => {
+        // Demo credentials are a development convenience. In production they are
+        // off unless explicitly enabled — production identity is OIDC (docs/auth.md).
+        if (process.env.NODE_ENV === "production" && process.env.ALLOW_DEMO_LOGIN !== "1") {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Not found" });
+        }
         const demoUser = DEMO_USERS.find(u => u.email === input.email && u.password === input.password);
         if (!demoUser) {
           throw new TRPCError({ code: "UNAUTHORIZED", message: "Ungültige Anmeldedaten" });
@@ -81,140 +105,77 @@ export const appRouter = router({
   }),
 
   // ============= PROJECTS =============
+  // Server-authoritative slice: docs/data-plane.md. Reads are cursor-paginated
+  // summaries; writes are versioned, idempotent, audited and evented.
   projects: router({
-    list: publicProcedure
-      .input(z.object({
-        page: z.number().min(1).default(1),
-        pageSize: z.number().min(1).max(200).default(50),
-        search: z.string().optional(),
-        region: z.string().optional(),
-        projektleiter: z.string().optional(),
-        department: z.string().optional(),
-        status: z.string().optional(),
-        sortBy: z.string().default('id'),
-        sortDir: z.enum(["asc", "desc"]).default("asc"),
-        minLat: z.number().optional(),
-        maxLat: z.number().optional(),
-        minLng: z.number().optional(),
-        maxLng: z.number().optional(),
-        showAll: z.boolean().optional(),
-      }).optional())
-      .query(async ({ input }) => {
-        const params = input ?? {};
-        const result = await getProjects(params);
-
-        const projectIds = result.projects.map(p => p.id);
-        const reviews = await getProjectReviews(projectIds);
-
-        const reviewsByProject: Record<number, typeof reviews> = {};
-        for (const review of reviews) {
-          if (!reviewsByProject[review.projectId]) {
-            reviewsByProject[review.projectId] = [];
-          }
-          reviewsByProject[review.projectId]?.push(review);
-        }
-
-        const projectsWithReviews = result.projects.map(p => ({
-          ...p,
-          reviews: reviewsByProject[p.id] || [],
-        }));
-
-        return { projects: projectsWithReviews, total: result.total };
+    list: protectedProcedure
+      .input(ListProjectsInputSchema)
+      .query(async ({ input, ctx }) => {
+        const { store } = await requireServices();
+        return store.list(input, { workspaces: ctx.principal.workspaces });
       }),
 
-    get: publicProcedure
-      .input(z.object({ id: z.number() }))
-      .query(async ({ input }) => {
-        return getProjectWithReviews(input.id);
+    get: protectedProcedure
+      .input(z.object({ id: z.number().int().positive() }))
+      .query(async ({ input, ctx }) => {
+        const { projects } = await requireServices();
+        return projects.get(ctx.principal, input.id);
       }),
 
     update: protectedProcedure
-      .input(z.object({
-        id: z.number(),
-        field: z.string(),
-        value: z.any(),
-      }))
+      .input(UpdateProjectInputSchema)
       .mutation(async ({ input, ctx }) => {
-        const { id, field, value } = input;
-
-        const oldProject = await getProjectWithReviews(id);
-        const oldValue = oldProject ? (oldProject as any)[field] : null;
-
-        await updateProject(id, { [field]: value });
-
-        await createAuditEntry({
-          userId: ctx.user.id,
-          userName: ctx.user.name || ctx.user.email || 'Unknown',
-          entityType: 'project',
-          entityId: id,
-          action: 'update',
-          field,
-          oldValue: oldValue != null ? String(oldValue) : null,
-          newValue: value != null ? String(value) : null,
-        });
-
-        return { success: true };
+        const { projects } = await requireServices();
+        const start = performance.now();
+        try {
+          const res = await projects.update(ctx.principal, input, { traceId: ctx.traceId, requestId: ctx.requestId });
+          m.mutations.inc({ outcome: res.replayed ? "replay" : "ok" });
+          return res;
+        } catch (e) {
+          if (e instanceof ConflictError) { m.conflicts.inc(); m.mutations.inc({ outcome: "conflict" }); }
+          else m.mutations.inc({ outcome: "error" });
+          throw e;
+        } finally {
+          m.dbMs.observe(performance.now() - start);
+        }
       }),
 
     create: protectedProcedure
-      .input(z.object({
-        projektnummer: z.string().optional(),
-        bahnhofsmanagement: z.string().optional(),
-        station: z.string().optional(),
-        bahnhofsnummer: z.string().optional(),
-        streckennummer: z.string().optional(),
-        projektbeschreibung: z.string().optional(),
-        projektstand: z.string().optional(),
-        eigvEinstufung: z.string().optional(),
-        projektleiter: z.string().optional(),
-        terminProjektvorstellung: z.string().optional(),
-        kommentar: z.string().optional(),
-        projektLink: z.string().optional(),
-      }))
+      .input(CreateProjectInputSchema)
       .mutation(async ({ input, ctx }) => {
-        const createData: any = { ...input };
-        if (input.terminProjektvorstellung) {
-          createData.terminProjektvorstellung = new Date(input.terminProjektvorstellung);
-        }
-
-        const id = await createProject(createData);
-
-        await createAuditEntry({
-          userId: ctx.user.id,
-          userName: ctx.user.name || ctx.user.email || 'Unknown',
-          entityType: 'project',
-          entityId: id!,
-          action: 'create',
-          field: null,
-          oldValue: null,
-          newValue: JSON.stringify(input),
-        });
-
-        return { id };
-      }),
-
-    searchSuggestions: publicProcedure
-      .input(z.object({ term: z.string() }))
-      .query(async ({ input }) => {
-        return getSearchSuggestions(input.term);
+        const { projects } = await requireServices();
+        return projects.create(ctx.principal, input, { traceId: ctx.traceId, requestId: ctx.requestId });
       }),
 
     delete: protectedProcedure
-      .input(z.object({ id: z.number() }))
+      .input(z.object({
+        id: z.number().int().positive(),
+        expectedVersion: z.number().int().min(1),
+        idempotencyKey: z.string().min(8).max(128).regex(/^[A-Za-z0-9_.:-]+$/),
+      }))
       .mutation(async ({ input, ctx }) => {
-        await createAuditEntry({
-          userId: ctx.user.id,
-          userName: ctx.user.name || ctx.user.email || 'Unknown',
-          entityType: 'project',
-          entityId: input.id,
-          action: 'delete',
-          field: null,
-          oldValue: null,
-          newValue: null,
-        });
+        const { projects } = await requireServices();
+        return projects.delete(ctx.principal, input, { traceId: ctx.traceId, requestId: ctx.requestId });
+      }),
 
-        await deleteProject(input.id);
-        return { success: true };
+    /** Reconnect recovery: what changed since the versions the client holds. */
+    sync: protectedProcedure
+      .input(SyncInputSchema)
+      .mutation(async ({ input, ctx }) => {
+        const { projects } = await requireServices();
+        return projects.sync(ctx.principal, input.known);
+      }),
+
+    /** Global-chrome summary: replaces useAllProjects() in the shell. */
+    shellSummary: protectedProcedure.query(async () => {
+      const { store } = await requireServices();
+      return shellSummaryCached(() => store.shellSummary());
+    }),
+
+    searchSuggestions: protectedProcedure
+      .input(z.object({ term: z.string().trim().min(1).max(100) }))
+      .query(async ({ input }) => {
+        return getSearchSuggestions(input.term);
       }),
   }),
 
@@ -222,14 +183,24 @@ export const appRouter = router({
   reviews: router({
     update: protectedProcedure
       .input(z.object({
-        id: z.number(),
-        field: z.string(),
-        value: z.any(),
+        id: z.number().int().positive(),
+        field: z.enum(["prueferName", "datum", "status"]),
+        value: z.string().max(256).nullable(),
       }))
       .mutation(async ({ input, ctx }) => {
         const { id, field, value } = input;
 
-        await updateDepartmentReview(id, { [field]: value });
+        const rctx = await getReviewContext(id);
+        if (!rctx) throw new TRPCError({ code: "NOT_FOUND" });
+        if (!canApproveReview(ctx.principal, { bahnhofsmanagement: rctx.bahnhofsmanagement }, rctx.department)) {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+        let column: string | Date | null = value;
+        if (field === "datum" && value !== null) {
+          column = new Date(value);
+          if (Number.isNaN(column.getTime())) throw new TRPCError({ code: "BAD_REQUEST", message: "Ungültiges Datum" });
+        }
+        await updateDepartmentReview(id, { [field]: column });
 
         await createAuditEntry({
           userId: ctx.user.id,
@@ -276,14 +247,14 @@ export const appRouter = router({
 
   // ============= DASHBOARD =============
   dashboard: router({
-    stats: publicProcedure.query(async () => {
-      return getDashboardStats();
-    }),
+    // Aggregates are a server-side read model: computed once per TTL (single
+    // flight, stale-while-revalidate), never per browser or per request.
+    stats: protectedProcedure.query(() => dashboardCache.get()),
   }),
 
   // ============= BVB-EEA =============
   bvbEea: router({
-    list: publicProcedure.query(async () => {
+    list: protectedProcedure.query(async () => {
       return getBvbEeaList();
     }),
 
@@ -311,9 +282,9 @@ export const appRouter = router({
 
     update: protectedProcedure
       .input(z.object({
-        id: z.number(),
-        field: z.string(),
-        value: z.any(),
+        id: z.number().int().positive(),
+        field: z.enum(["projektnummer","bahnhofsmanagement","station","bahnhofsnummer","streckennummer","projektbeschreibung","projektleiter","kommentar","freigabeNummer","kosteneinsparung"]),
+        value: z.string().max(5000).nullable(),
       }))
       .mutation(async ({ input }) => {
         await updateBvbEea(input.id, { [input.field]: input.value });
@@ -323,7 +294,7 @@ export const appRouter = router({
 
   // ============= PSV-ITK =============
   psvItk: router({
-    list: publicProcedure.query(async () => {
+    list: protectedProcedure.query(async () => {
       return getPsvItkList();
     }),
 
@@ -351,9 +322,9 @@ export const appRouter = router({
 
     update: protectedProcedure
       .input(z.object({
-        id: z.number(),
-        field: z.string(),
-        value: z.any(),
+        id: z.number().int().positive(),
+        field: z.enum(["projektnummer","bahnhofsmanagement","station","bahnhofsnummer","streckennummer","projektbeschreibung","projektstand","projektleiter","itkPruefer","kommentar"]),
+        value: z.string().max(5000).nullable(),
       }))
       .mutation(async ({ input }) => {
         await updatePsvItk(input.id, { [input.field]: input.value });
@@ -369,16 +340,15 @@ export const appRouter = router({
         entityId: z.number().optional(),
         limit: z.number().max(500).default(100),
       }).optional())
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
+        if (!canViewAudit(ctx.principal)) throw new TRPCError({ code: "FORBIDDEN" });
         return getAuditLog(input ?? {});
       }),
   }),
 
   // ============= FILTERS =============
   filters: router({
-    options: publicProcedure.query(async () => {
-      return getFilterOptions();
-    }),
+    options: protectedProcedure.query(() => filterOptionsCache.get()),
   }),
 
   // ============= ODATA (tRPC facade + full Express router available at /odata) =============
@@ -387,34 +357,29 @@ export const appRouter = router({
      * tRPC-friendly OData query (used by future React Query hooks)
      * Returns standard ODataResponse shape
      */
-    queryProjects: publicProcedure
+    queryProjects: protectedProcedure
       .input(ODataQuerySchema)
-      .query(async ({ input }) => {
-        // In production, delegate to the same logic as Express router
-        // For now returns a minimal compatible response
-        const { $filter, $top = 100, $skip = 0, $expand } = input;
-        const _ = $expand; // $expand reserved for future reviews expansion
-        void _;
-
-        // Simplified: reuse existing getProjects + manual filter
-        const result = await getProjects({ showAll: true });
-        let filtered = result.projects;
-
-        if ($filter) {
-          const parsed = parseODataFilter($filter) as Record<string, string | undefined>;
-          if (parsed.station) {
-            const stationFilter = parsed.station.toLowerCase();
-            filtered = filtered.filter(p => p.station?.toLowerCase().includes(stationFilter));
-          }
-          if (parsed.projektstand) {
-            filtered = filtered.filter(p => p.projektstand === parsed.projektstand);
-          }
-        }
-
-        const page = filtered.slice($skip, $skip + $top);
+      .query(async ({ input, ctx }) => {
+        // $filter is compiled to SQL (indexed WHERE), never applied in JS after
+        // loading the table. station is a prefix match so it can use the index.
+        const { store } = await requireServices();
+        const $top = Math.min(input.$top ?? 100, MAX_PAGE_SIZE);
+        const $skip = Math.min(input.$skip ?? 0, 10_000);
+        const parsed = (input.$filter ? parseODataFilter(input.$filter) : {}) as Record<string, string | undefined>;
+        const page = await store.list(
+          {
+            limit: $top,
+            sort: "id",
+            dir: "asc",
+            includeTotal: true,
+            ...(parsed.projektstand ? { projektstand: parsed.projektstand } : {}),
+          },
+          { workspaces: ctx.principal.workspaces },
+          { offset: $skip, ...((parsed.station ?? parsed.station_contains) ? { stationPrefix: String(parsed.station ?? parsed.station_contains) } : {}) },
+        );
         return {
-          value: page,
-          "@odata.count": filtered.length,
+          value: page.items,
+          "@odata.count": page.total ?? page.items.length,
           "@odata.context": "/odata/$metadata#projects",
         };
       }),

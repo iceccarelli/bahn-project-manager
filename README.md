@@ -1,3 +1,7 @@
+> **Server-authoritative data plane (opt-in, not deployed):** a versioned, audited, realtime `Project` slice now exists
+> alongside the static SPA. What is proven and what is not is in [`docs/`](docs/architecture.md) — every number there
+> comes from a runnable command; the current Vercel deployment still serves the static local-data app.
+
 # Bahn Project Manager
 
 > Enterprise platform for managing Deutsche Bahn infrastructure and station‑development projects across 14 technical departments (*Fachbereiche*). Single‑page React app, data‑driven from a 1,298‑project dataset, deployed as a static SPA on Vercel.
