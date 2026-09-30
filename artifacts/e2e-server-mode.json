@@ -1,0 +1,81 @@
+{
+  "suite": "server-mode-browser-proof",
+  "finishedAt": "2026-09-30T15:03:17.913Z",
+  "commit": null,
+  "passed": 12,
+  "failed": 0,
+  "crashed": null,
+  "measurements": {
+    "startVersion": 2,
+    "proof1_ms_click_to_B_dom": 132,
+    "audit_actor": "Anna (Browser A)",
+    "proof2_badge": "Wiederverbunden · 3 Änderungen synchronisiert",
+    "proof5_badge": "Wiederverbunden · 4 Änderungen synchronisiert",
+    "events": 15,
+    "published_instance1": 14,
+    "published_instance2": 1,
+    "dropped": 0
+  },
+  "results": [
+    {
+      "name": "setup: project 481 (Koblenz) is moved into Frankfurt by A's account, so Frankfurt-only B may see it",
+      "ok": true,
+      "ms": 85
+    },
+    {
+      "name": "auth: server-verified identities — no token = login page; no claims = no workspace access; B sees only Frankfurt",
+      "ok": true,
+      "ms": 79
+    },
+    {
+      "name": "both browsers open the real Projekte page (server pages, no data.json, no whole-dataset download)",
+      "ok": true,
+      "ms": 2443
+    },
+    {
+      "name": "PROOF 1: A edits Projektstand of 481 → server commits N+1 → audit + outbox + relay → B's table changes, no reload",
+      "ok": true,
+      "ms": 146
+    },
+    {
+      "name": "ITEM 2: A creates a project → B (online) gets it via the event-triggered targeted list refresh, no reload",
+      "ok": true,
+      "ms": 2191
+    },
+    {
+      "name": "ITEM 2: A(editor) is denied delete; an admin deletes it → B's row disappears by targeted removal, no reload",
+      "ok": true,
+      "ms": 351
+    },
+    {
+      "name": "PROOF 2: B goes offline; A changes 481 three times in the UI; B reconnects and converges exactly to server state",
+      "ok": true,
+      "ms": 508
+    },
+    {
+      "name": "PROOF 3a: A and B edit the same field concurrently → A commits, B gets the structured conflict, nobody is overwritten; B keeps the server value",
+      "ok": true,
+      "ms": 397
+    },
+    {
+      "name": "PROOF 3b: same race → B explicitly chooses 'mine' → committed as the next version, A sees it live, audit chain intact",
+      "ok": true,
+      "ms": 400
+    },
+    {
+      "name": "PROOF 4: A moves 481 Frankfurt → Kassel; Frankfurt-only B loses the row and receives no Kassel state (stream + DOM + API)",
+      "ok": true,
+      "ms": 78
+    },
+    {
+      "name": "PROOF 5: B offline; A creates a project, deletes one, moves one out, moves one in; B reconnects and its table equals the authoritative visible collection",
+      "ok": true,
+      "ms": 2877
+    },
+    {
+      "name": "integrity: every committed change has exactly one audit set, one event, one feedSeq; feed is gapless; nothing unpublished/dead",
+      "ok": true,
+      "ms": 8
+    }
+  ]
+}

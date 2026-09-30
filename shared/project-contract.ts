@@ -129,7 +129,12 @@ export interface ConflictInfo {
   current: ProjectDetail;
 }
 
-export const PROJECT_SORTS = ["updatedAt", "id"] as const;
+/** Closed set: each maps to one column in the store. `updatedAt`/`id` are index-backed. */
+export const PROJECT_SORTS = ["updatedAt", "id", "projektnummer", "station", "projektstand", "projektleiter", "bahnhofsmanagement"] as const;
+
+/** A list row: the summary plus whatever `expand` asked for. Reviews only when expanded. */
+export type ProjectListItem = ProjectSummary &
+  Partial<Pick<ProjectDetail, "bahnhofsnummer" | "streckennummer" | "projektbeschreibung" | "eigvEinstufung" | "kommentar" | "projektLink" | "createdAt" | "reviews">>;
 export const MAX_PAGE_SIZE = 100;
 export const DEFAULT_PAGE_SIZE = 50;
 
@@ -142,6 +147,12 @@ export const ListProjectsInputSchema = z.object({
   bahnhofsmanagement: z.string().max(128).optional(),
   projektstand: z.string().max(256).optional(),
   projektleiter: z.string().max(256).optional(),
+  /** review-based filters (EXISTS on department_reviews) */
+  department: z.string().max(64).optional(),
+  reviewStatus: z.string().max(128).optional(),
+  pruefer: z.string().max(256).optional(),
+  /** optional detail expansion; the default row is the lean summary */
+  expand: z.array(z.enum(["reviews", "details"])).max(2).default([]),
   includeTotal: z.boolean().default(false),
 });
 export type ListProjectsInput = z.infer<typeof ListProjectsInputSchema>;

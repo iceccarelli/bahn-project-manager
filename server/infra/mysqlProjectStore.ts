@@ -2,13 +2,14 @@
  * MySQL/MariaDB adapter for ProjectStore. All SQL for the Project slice lives
  * here; the domain layer sees only the ProjectStore/ProjectTx ports.
  */
-import { and, asc, desc, eq, gt, inArray, lt, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, lt, lte, or, sql, type SQL } from "drizzle-orm";
 import type { MySql2Database } from "drizzle-orm/mysql2";
 import { DomainEventSchema, type DomainEvent } from "@shared/domain-events";
 import {
   MAX_PAGE_SIZE,
   type ListProjectsInput,
   type ProjectDetail,
+  type ProjectListItem,
   type ProjectSummary,
 } from "@shared/project-contract";
 import {
@@ -40,6 +41,15 @@ const SUMMARY_COLUMNS = {
   projektleiter: projects.projektleiter,
   terminProjektvorstellung: projects.terminProjektvorstellung,
   updatedAt: projects.updatedAt,
+};
+const DETAIL_COLUMNS = {
+  bahnhofsnummer: projects.bahnhofsnummer,
+  streckennummer: projects.streckennummer,
+  projektbeschreibung: projects.projektbeschreibung,
+  eigvEinstufung: projects.eigvEinstufung,
+  kommentar: projects.kommentar,
+  projektLink: projects.projektLink,
+  createdAt: projects.createdAt,
 };
 type SummaryRow = Pick<Project, keyof typeof SUMMARY_COLUMNS>;
 
@@ -238,6 +248,30 @@ export class MysqlProjectStore implements ProjectStore {
     return out;
   }
 
+  async filterOptions(workspaces: readonly string[]) {
+    if (workspaces.length === 0) return { regions: [], projektleiter: [], pruefer: [] };
+    const bm = inArray(projects.bahnhofsmanagement, [...workspaces]);
+    const leaders = await this.db.selectDistinct({ v: projects.projektleiter }).from(projects).where(and(bm, sql`${projects.projektleiter} IS NOT NULL AND ${projects.projektleiter} != ''`)).orderBy(asc(projects.projektleiter));
+    const pruefer = await this.db.selectDistinct({ v: departmentReviews.prueferName }).from(departmentReviews).innerJoin(projects, eq(projects.id, departmentReviews.projectId))
+      .where(and(bm, sql`${departmentReviews.prueferName} IS NOT NULL AND ${departmentReviews.prueferName} != '' AND ${departmentReviews.prueferName} != 'Zuordnung erforderlich'`)).orderBy(asc(departmentReviews.prueferName));
+    return { regions: [...workspaces], projektleiter: leaders.map(l => l.v!).filter(Boolean), pruefer: pruefer.map(l => l.v!).filter(Boolean) };
+  }
+
+  async feedHead() {
+    const [row] = await this.db.select({ h: sql<number>`COALESCE(MAX(${domainEvents.feedSeq}), 0)` }).from(domainEvents);
+    return Number(row?.h ?? 0);
+  }
+
+  async changesSince(after: number, limit: number, upTo?: number) {
+    const rows = await this.db
+      .select({ envelope: domainEvents.envelope, feedSeq: domainEvents.feedSeq })
+      .from(domainEvents)
+      .where(and(gt(domainEvents.feedSeq, after), ...(upTo !== undefined ? [lte(domainEvents.feedSeq, upTo)] : [])))
+      .orderBy(asc(domainEvents.feedSeq))
+      .limit(limit);
+    return rows.map(r => ({ ...parseEnvelope(r.envelope), feedSeq: Number(r.feedSeq) }));
+  }
+
   async shellSummary() {
     const [row] = await this.db
       .select({ n: sql<number>`COUNT(*)`, last: sql<Date | null>`MAX(${projects.updatedAt})` })
@@ -247,13 +281,15 @@ export class MysqlProjectStore implements ProjectStore {
 
   async list(
     input: ListProjectsInput,
-    visibility: { workspaces: readonly string[] },
+    visibility: { workspaces: readonly string[] | null },
     opts: { offset?: number; stationPrefix?: string } = {},
   ) {
     const limit = Math.min(input.limit, MAX_PAGE_SIZE);
     const conds: SQL[] = [];
 
-    if (visibility.workspaces.length) conds.push(inArray(projects.bahnhofsmanagement, [...visibility.workspaces]));
+    // null = unrestricted; [] = no workspace access (must return nothing, never everything)
+    if (visibility.workspaces !== null && visibility.workspaces.length === 0) return { items: [], nextCursor: null, ...(input.includeTotal ? { total: 0 } : {}) };
+    if (visibility.workspaces !== null) conds.push(inArray(projects.bahnhofsmanagement, [...visibility.workspaces]));
     if (input.bahnhofsmanagement) conds.push(eq(projects.bahnhofsmanagement, input.bahnhofsmanagement));
     if (input.projektstand) conds.push(eq(projects.projektstand, input.projektstand));
     if (input.projektleiter) conds.push(eq(projects.projektleiter, input.projektleiter));
@@ -276,10 +312,25 @@ export class MysqlProjectStore implements ProjectStore {
       }
     }
 
+    // review-based filters: EXISTS keeps one row per project and uses department_reviews' indexes
+    const reviewConds: SQL[] = [];
+    if (input.department) reviewConds.push(sql`r.department = ${input.department}`);
+    if (input.reviewStatus) reviewConds.push(sql`r.status = ${input.reviewStatus}`);
+    if (input.pruefer) reviewConds.push(sql`r.prueferName = ${input.pruefer}`);
+    if (reviewConds.length) {
+      conds.push(sql`EXISTS (SELECT 1 FROM department_reviews r WHERE r.projectId = ${projects.id} AND ${sql.join(reviewConds, sql` AND `)})`);
+    }
+
     // Column and direction come from closed enums, never from raw input.
-    const col = input.sort === "id" ? projects.id : projects.updatedAt;
     const desc_ = input.dir === "desc";
-    const order = desc_ ? [desc(col), desc(projects.id)] : [asc(col), asc(projects.id)];
+    const textCol = {
+      projektnummer: projects.projektnummer, station: projects.station, projektstand: projects.projektstand,
+      projektleiter: projects.projektleiter, bahnhofsmanagement: projects.bahnhofsmanagement,
+    }[input.sort as string] as typeof projects.station | undefined;
+    // text sorts order NULLs as '' so the keyset comparison is total
+    const sortExpr: SQL = textCol ? sql`COALESCE(${textCol}, '')` : input.sort === "id" ? sql`${projects.id}` : sql`${projects.updatedAt}`;
+    const dirFn = desc_ ? desc : asc;
+    const order = input.sort === "id" ? [dirFn(projects.id)] : [dirFn(sortExpr), dirFn(projects.id)];
 
     const total =
       input.includeTotal
@@ -295,14 +346,15 @@ export class MysqlProjectStore implements ProjectStore {
         if (input.sort === "id") {
           conds.push(cmp(projects.id, c.id));
         } else {
-          const at = new Date(String(c.v));
-          conds.push(or(cmp(projects.updatedAt, at), and(eq(projects.updatedAt, at), cmp(projects.id, c.id)))!);
+          const at = input.sort === "updatedAt" ? new Date(String(c.v)) : String(c.v);
+          conds.push(or(cmp(sortExpr, at), and(eq(sortExpr, at), cmp(projects.id, c.id)))!);
         }
       }
     }
 
+    const wantDetails = input.expand.includes("details");
     const rows = await this.db
-      .select(SUMMARY_COLUMNS)
+      .select(wantDetails ? { ...SUMMARY_COLUMNS, ...DETAIL_COLUMNS } : SUMMARY_COLUMNS)
       .from(projects)
       .where(conds.length ? and(...conds) : undefined)
       .orderBy(...order)
@@ -310,11 +362,37 @@ export class MysqlProjectStore implements ProjectStore {
       .offset(opts.offset ?? 0);
 
     const page = rows.slice(0, limit);
-    const last = page[page.length - 1];
-    const nextCursor =
-      rows.length > limit && last
-        ? encodeCursor({ v: input.sort === "id" ? last.id : last.updatedAt.toISOString(), id: last.id })
-        : null;
-    return { items: page.map(toSummary), nextCursor, ...(total !== undefined ? { total } : {}) };
+    const last = page[page.length - 1] as (SummaryRow & Record<string, unknown>) | undefined;
+    const cursorValue = (r: SummaryRow) =>
+      input.sort === "id" ? r.id : input.sort === "updatedAt" ? r.updatedAt.toISOString() : String(r[input.sort as keyof SummaryRow] ?? "");
+    const nextCursor = rows.length > limit && last ? encodeCursor({ v: cursorValue(last), id: last.id }) : null;
+
+    let reviewsById: Map<number, NonNullable<ProjectListItem["reviews"]>> | null = null;
+    if (input.expand.includes("reviews") && page.length) {
+      reviewsById = new Map();
+      const rr = await this.db
+        .select()
+        .from(departmentReviews)
+        .where(inArray(departmentReviews.projectId, page.map(p => p.id)))
+        .orderBy(asc(departmentReviews.department));
+      for (const r of rr) {
+        const list = reviewsById.get(r.projectId) ?? [];
+        list.push({ id: r.id, department: r.department, prueferName: r.prueferName, datum: dateToWire(r.datum), status: r.status, updatedAt: r.updatedAt.toISOString() });
+        reviewsById.set(r.projectId, list);
+      }
+    }
+    const items: ProjectListItem[] = page.map(r => {
+      const item: ProjectListItem = toSummary(r);
+      if (wantDetails) {
+        const d = r as unknown as Project;
+        Object.assign(item, {
+          bahnhofsnummer: d.bahnhofsnummer, streckennummer: d.streckennummer, projektbeschreibung: d.projektbeschreibung,
+          eigvEinstufung: d.eigvEinstufung, kommentar: d.kommentar, projektLink: d.projektLink, createdAt: d.createdAt.toISOString(),
+        });
+      }
+      if (reviewsById) item.reviews = reviewsById.get(r.id) ?? [];
+      return item;
+    });
+    return { items, nextCursor, ...(total !== undefined ? { total } : {}) };
   }
 }

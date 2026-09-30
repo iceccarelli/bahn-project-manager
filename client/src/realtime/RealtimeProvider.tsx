@@ -8,10 +8,10 @@
  * that decides whether an incoming change is applied, dropped, or triggers
  * recovery.
  */
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { scope as scopeKey } from "@shared/domain-events";
-import type { ConflictInfo, ProjectDetail, UpdateProjectInput } from "@shared/project-contract";
+import { EDITABLE_PROJECT_FIELDS, type ConflictInfo, type ProjectDetail, type UpdateProjectInput } from "@shared/project-contract";
 import { ProjectSyncEngine, type ProjectChange } from "./projectSyncEngine";
 import { RealtimeConnection, type ConnectionStatus } from "./connection";
 import { authHeaders, extractConflict, isRetryable, serverApi } from "./serverApi";
@@ -30,10 +30,13 @@ interface Ctx {
 }
 const RealtimeCtx = createContext<Ctx | null>(null);
 
-const SUMMARY_FIELDS = ["projektnummer", "bahnhofsmanagement", "station", "projektstand", "projektleiter", "terminProjektvorstellung", "updatedAt", "version"] as const;
+/** Every field a list row can carry that a change may touch. Reviews are not patched here (own event stream). */
+const ROW_FIELDS = [
+  ...EDITABLE_PROJECT_FIELDS, "updatedAt", "version",
+] as const;
 
 /** Patch one project into every cached list page — no refetch. */
-function patchLists(qc: QueryClient, c: ProjectChange) {
+function patchLists(qc: QueryClient, c: Extract<ProjectChange, { kind: "upsert" | "remove" }>) {
   qc.setQueriesData<{ pages?: Array<{ items: Array<{ id: number }> }>; items?: Array<{ id: number }> }>(
     { queryKey: serverKeys.lists() },
     old => {
@@ -43,7 +46,7 @@ function patchLists(qc: QueryClient, c: ProjectChange) {
         return items.map(i => {
           if (i.id !== c.id) return i;
           const next: Record<string, unknown> = { ...i };
-          for (const f of SUMMARY_FIELDS) next[f] = (c.project as unknown as Record<string, unknown>)[f];
+          for (const f of ROW_FIELDS) if (f in (c.project as object)) next[f] = (c.project as unknown as Record<string, unknown>)[f];
           return next as unknown as { id: number };
         });
       };
@@ -57,16 +60,20 @@ function patchLists(qc: QueryClient, c: ProjectChange) {
 export function RealtimeProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
   const ctx = useMemo<Ctx>(() => {
-    const engine = new ProjectSyncEngine({ sync: known => serverApi.projects.sync.mutate({ known }) as never });
+    const engine = new ProjectSyncEngine({
+      sync: known => serverApi.projects.sync.mutate({ known }) as never,
+      changes: input => serverApi.projects.changes.query(input) as never,
+    });
     const connection = new RealtimeConnection({
       url: "/api/realtime/stream",
       getHeaders: authHeaders,
       onEvent: e => {
         engine.applyEvent(e);
-        // creations/deletions change the shell count; nothing else does
+        // creations/deletions/moves change the shell count; plain updates do not
         if (e.eventType !== "project.updated") void qc.invalidateQueries({ queryKey: serverKeys.shell() });
       },
-      onReconnect: () => engine.resync(),
+      onSync: ({ headSeq, reconnecting }) =>
+        reconnecting ? engine.resync(headSeq ?? undefined) : engine.catchUp(headSeq ?? undefined),
     });
     const wanted = new Map<string, number>();
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -89,20 +96,33 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const unsub = ctx.engine.subscribe(c => {
-      if (c.kind === "remove") { qc.removeQueries({ queryKey: serverKeys.project(c.id) }); }
+      if (c.kind === "collection-stale") {
+        // create / move-in: targeted authoritative refresh of the list queries + the shell count
+        void qc.invalidateQueries({ queryKey: serverKeys.lists() });
+        void qc.invalidateQueries({ queryKey: serverKeys.shell() });
+        return;
+      }
+      if (c.kind === "remove") qc.removeQueries({ queryKey: serverKeys.project(c.id) });
       else qc.setQueryData(serverKeys.project(c.id), c.project);
       patchLists(qc, c);
     });
     ctx.connection.start();
+    // Safety net against silent transport loss (e.g. a Redis subscriber blip):
+    // a cheap indexed feed read reconciles anything a live stream dropped.
+    const poll = setInterval(() => { void ctx.engine.catchUp().catch(() => {}); }, 30_000);
     const on = () => ctx.connection.notifyOnline(true), off = () => ctx.connection.notifyOnline(false);
     window.addEventListener("online", on); window.addEventListener("offline", off);
-    return () => { unsub(); ctx.connection.stop(); window.removeEventListener("online", on); window.removeEventListener("offline", off); };
+    return () => { unsub(); clearInterval(poll); ctx.connection.stop(); window.removeEventListener("online", on); window.removeEventListener("offline", off); };
   }, [ctx, qc]);
 
-  return <RealtimeCtx.Provider value={ctx}>{children}</RealtimeCtx.Provider>;
+  return (
+    <RealtimeCtx.Provider value={ctx}>
+      <EditorProvider>{children}</EditorProvider>
+    </RealtimeCtx.Provider>
+  );
 }
 
-const useRt = () => {
+export const useRt = () => {
   const c = useContext(RealtimeCtx);
   if (!c) throw new Error("RealtimeProvider missing");
   return c;
@@ -137,49 +157,84 @@ export function useLiveProject(id: number) {
   return { ...q, recent };
 }
 
-export interface FieldEditState { conflict: ConflictInfo | null; error: string | null; pending: boolean }
+export interface EditConflict { projectId: number; conflict: ConflictInfo; changes: UpdateProjectInput["changes"] }
+export interface EditorApi {
+  /** optimistic, idempotent, version-checked edit; resolves to the server row or null (rolled back) */
+  edit(id: number, changes: UpdateProjectInput["changes"], opts?: { expectedVersion?: number }): Promise<ProjectDetail | null>;
+  /** the single active conflict (rendered by <ConflictHost/>) */
+  conflict: EditConflict | null;
+  pending: number;
+  error: string | null;
+  takeServer(): void;
+  rebase(): Promise<ProjectDetail | null>;
+}
 
-/** Optimistic, idempotent, version-checked edit with structured conflict handling. */
-export function useEditProject(id: number) {
+const EditorCtx = createContext<EditorApi | null>(null);
+
+function EditorProvider({ children }: { children: ReactNode }) {
   const { engine } = useRt();
-  const [state, setState] = useState<FieldEditState>({ conflict: null, error: null, pending: false });
-  const last = useRef<{ changes: UpdateProjectInput["changes"] } | null>(null);
+  const [conflict, setConflict] = useState<EditConflict | null>(null);
+  const [pending, setPending] = useState(0);
+  const [error, setError] = useState<string | null>(null);
 
-  const submit = useCallback(async (changes: UpdateProjectInput["changes"], opts: { expectedVersion?: number } = {}) => {
+  const edit = useCallback<EditorApi["edit"]>(async (id, changes, opts = {}) => {
     const expectedVersion = opts.expectedVersion ?? engine.serverVersion(id);
-    if (expectedVersion === undefined) throw new Error("Projekt nicht geladen");
+    if (expectedVersion === undefined) { setError("Projekt nicht geladen"); return null; }
     const mutationId = crypto.randomUUID();
     const idempotencyKey = `m-${mutationId}`; // stable across retries of THIS action
-    last.current = { changes };
-    setState({ conflict: null, error: null, pending: true });
+    setError(null);
+    setPending(n => n + 1);
     engine.optimistic(id, mutationId, changes as Record<string, string | null>);
-    for (let attempt = 1; ; attempt++) {
-      try {
-        const res = await serverApi.projects.update.mutate({ id, expectedVersion, changes, idempotencyKey, mutationId });
-        engine.confirm(id, mutationId, res.project as ProjectDetail);
-        setState({ conflict: null, error: null, pending: false });
-        return res;
-      } catch (err) {
-        const conflict = extractConflict(err);
-        if (!conflict && attempt < 3 && isRetryable(err)) { await new Promise(r => setTimeout(r, 300 * 2 ** attempt)); continue; }
-        engine.rollback(id, mutationId, conflict ?? undefined);
-        setState({ conflict, error: conflict ? null : err instanceof Error ? err.message : "Fehler", pending: false });
-        return null;
+    try {
+      for (let attempt = 1; ; attempt++) {
+        try {
+          const res = await serverApi.projects.update.mutate({ id, expectedVersion, changes, idempotencyKey, mutationId });
+          engine.confirm(id, mutationId, res.project as ProjectDetail);
+          return res.project as ProjectDetail;
+        } catch (err) {
+          const c = extractConflict(err);
+          if (!c && attempt < 3 && isRetryable(err)) { await new Promise(r => setTimeout(r, 300 * 2 ** attempt)); continue; }
+          engine.rollback(id, mutationId, c ?? undefined);
+          if (c) setConflict({ projectId: id, conflict: c, changes });
+          else setError(err instanceof Error ? err.message : "Fehler");
+          return null;
+        }
       }
+    } finally {
+      setPending(n => n - 1);
     }
-  }, [engine, id]);
+  }, [engine]);
 
-  return {
-    ...state,
-    submit,
-    /** discard my edit, keep the server's value */
-    takeServer: () => setState(s => ({ ...s, conflict: null })),
-    /** re-apply my edit on top of the server's current version */
+  const api = useMemo<EditorApi>(() => ({
+    edit, conflict, pending, error,
+    takeServer: () => setConflict(null),
     rebase: async () => {
-      const c = state.conflict, l = last.current;
-      if (!c || !l) return null;
-      return submit(l.changes, { expectedVersion: c.currentVersion });
+      const c = conflict;
+      if (!c) return null;
+      setConflict(null);
+      return edit(c.projectId, c.changes, { expectedVersion: c.conflict.currentVersion });
     },
+  }), [edit, conflict, pending, error]);
+
+  return <EditorCtx.Provider value={api}>{children}</EditorCtx.Provider>;
+}
+
+export function useProjectEditor(): EditorApi {
+  const c = useContext(EditorCtx);
+  if (!c) throw new Error("RealtimeProvider missing");
+  return c;
+}
+
+/** Per-project convenience over the shared editor. */
+export function useEditProject(id: number) {
+  const editor = useProjectEditor();
+  return {
+    submit: (changes: UpdateProjectInput["changes"], opts?: { expectedVersion?: number }) => editor.edit(id, changes, opts),
+    conflict: editor.conflict?.projectId === id ? editor.conflict.conflict : null,
+    error: editor.error,
+    pending: editor.pending > 0,
+    takeServer: editor.takeServer,
+    rebase: editor.rebase,
   };
 }
 

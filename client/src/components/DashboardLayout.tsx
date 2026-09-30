@@ -29,6 +29,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { useShellSummary } from "@/hooks/useShellSummary";
 import { SERVER_MODE } from "@/realtime/serverApi";
 import ConnectionBadge from "@/realtime/ConnectionBadge";
+import LegacyPlaneNotice from "@/realtime/LegacyPlaneNotice";
 import Header from "./Header";
 import Footer from "./Footer";
 
@@ -272,6 +273,7 @@ function DashboardLayoutContent({
 
         <SidebarInset className="flex flex-col flex-1 min-w-0 bg-background overflow-hidden">
           <Header />
+          <LegacyPlaneNotice />
           {/* No mt-[60px] any more: the header is sticky inside this column
               rather than fixed to the viewport, so it occupies real space. */}
           {/* Vertical padding here, horizontal padding on `app-shell` only.

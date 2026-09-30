@@ -10,11 +10,12 @@
  *
  * Authorization data comes from token claims:
  *   roles        app roles: "admin" | "editor" | "viewer" (highest wins)
- *   workspaces   optional string[] restricting Bahnhofsmanagement access
+ *   workspaces   string[] of Bahnhofsmanagement names, or containing "ALL" for an explicit
+ *                all-workspaces grant. Missing/empty = NO workspace access (default-deny).
  *   departments  optional string[] enabling department review actions
  */
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from "jose";
-import type { Role } from "../domain/permissions";
+import type { Role, WorkspaceAccess } from "../domain/permissions";
 
 export interface VerifiedIdentity {
   /** stable subject: `${tid}:${oid}` for Entra, `sub` otherwise */
@@ -22,7 +23,7 @@ export interface VerifiedIdentity {
   name: string | null;
   email: string | null;
   role: Role;
-  workspaces: string[];
+  workspaces: WorkspaceAccess;
   departments: string[];
 }
 
@@ -36,6 +37,12 @@ export function oidcConfigFromEnv(env: NodeJS.ProcessEnv = process.env): OidcCon
   return { issuer, audience, jwks: createRemoteJWKSet(new URL(uri), { cooldownDuration: 30_000, cacheMaxAge: 10 * 60_000 }) };
 }
 
+/** Explicit grant only: the literal "ALL" (any case) or a list of names. Anything else is no access. */
+export function workspacesFromClaim(v: unknown): WorkspaceAccess {
+  const list = strings(v).map(s => s.trim()).filter(Boolean);
+  return list.some(s => s.toUpperCase() === "ALL") ? "ALL" : list;
+}
+
 const strings = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
 
 export async function verifyBearer(token: string, cfg: OidcConfig): Promise<VerifiedIdentity> {
@@ -46,7 +53,7 @@ export async function verifyBearer(token: string, cfg: OidcConfig): Promise<Veri
     clockTolerance: 30,
   });
   const roles = strings(payload.roles).map(r => r.toLowerCase());
-  const role: Role = roles.includes("admin") ? "admin" : roles.includes("editor") ? "editor" : "viewer"; // least privilege by default
+  const role: Role = roles.includes("admin") ? "admin" : roles.includes("editor") ? "editor" : "viewer"; // unknown/missing roles = least privilege
   const tid = typeof payload.tid === "string" ? payload.tid : null;
   const oid = typeof payload.oid === "string" ? payload.oid : null;
   const subject = tid && oid ? `${tid}:${oid}` : String(payload.sub ?? "");
@@ -56,7 +63,7 @@ export async function verifyBearer(token: string, cfg: OidcConfig): Promise<Veri
     name: typeof payload.name === "string" ? payload.name : null,
     email: typeof payload.email === "string" ? payload.email : typeof payload.preferred_username === "string" ? payload.preferred_username : null,
     role,
-    workspaces: strings(payload.workspaces),
+    workspaces: workspacesFromClaim(payload.workspaces),
     departments: strings(payload.departments),
   };
 }

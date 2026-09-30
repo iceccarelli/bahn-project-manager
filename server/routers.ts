@@ -31,8 +31,9 @@ import {
   MAX_PAGE_SIZE,
 } from "@shared/project-contract";
 import { requireServices } from "./_core/services";
+import { deriveProjectMetrics } from "@shared/project-metrics";
 import { SingleFlightCache } from "./infra/singleFlightCache";
-import { canApproveReview, canViewAudit } from "./domain/permissions";
+import { canApproveReview, canViewAudit, workspaceRestriction } from "./domain/permissions";
 import { m } from "./observability/metrics";
 import { ConflictError } from "./domain/errors";
 
@@ -52,12 +53,35 @@ async function shellSummaryCached(load: () => Promise<{ projectCount: number; la
 }
 
 const dashboardCache = new SingleFlightCache("dashboard", 30_000, () => getDashboardStats());
+/** Per-project review statuses → shared/project-metrics.ts. `workspaces` null = all. */
+async function computeMetrics(workspaces: readonly string[] | null) {
+  const { pool } = await requireServices();
+  if (workspaces !== null && workspaces.length === 0) return deriveProjectMetrics([]);
+  const [rows] = (await pool.query(
+    `SELECT p.id AS id, r.status AS status FROM projects p LEFT JOIN department_reviews r ON r.projectId = p.id${workspaces ? " WHERE p.bahnhofsmanagement IN (?)" : ""}`,
+    workspaces ? [workspaces] : [],
+  )) as unknown as [Array<{ id: number; status: string | null }>];
+  const by = new Map<number, Array<{ status: string | null }>>();
+  for (const r of rows) {
+    const list = by.get(r.id) ?? [];
+    if (r.status !== null) list.push({ status: r.status }); // LEFT JOIN: review-less projects yield one null row
+    by.set(r.id, list);
+  }
+  return deriveProjectMetrics([...by.values()].map(reviews => ({ reviews })));
+}
+const metricsCache = new SingleFlightCache("metrics", 30_000, () => computeMetrics(null));
 const filterOptionsCache = new SingleFlightCache("filters", 60_000, () => getFilterOptions());
 
 export const appRouter = router({
   system: systemRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
+    /** The verified principal (what authorization actually uses): role, workspaces, departments. */
+    session: publicProcedure.query(({ ctx }) =>
+      ctx.principal
+        ? { id: ctx.principal.id, name: ctx.principal.name, email: ctx.principal.email, role: ctx.principal.role, workspaces: ctx.principal.workspaces, departments: [...ctx.principal.departments] }
+        : null,
+    ),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
@@ -112,7 +136,12 @@ export const appRouter = router({
       .input(ListProjectsInputSchema)
       .query(async ({ input, ctx }) => {
         const { store } = await requireServices();
-        return store.list(input, { workspaces: ctx.principal.workspaces });
+        // Read the feed head BEFORE the page: any change committed after this
+        // number is delivered live or by projects.changes, so nothing falls
+        // between the list snapshot and the subscription.
+        const feedHead = await store.feedHead();
+        const page = await store.list(input, { workspaces: workspaceRestriction(ctx.principal) });
+        return { ...page, feedHead };
       }),
 
     get: protectedProcedure
@@ -156,6 +185,14 @@ export const appRouter = router({
       .mutation(async ({ input, ctx }) => {
         const { projects } = await requireServices();
         return projects.delete(ctx.principal, input, { traceId: ctx.traceId, requestId: ctx.requestId });
+      }),
+
+    /** Collection recovery: visible changes after a feed cursor (see docs/data-plane.md). */
+    changes: protectedProcedure
+      .input(z.object({ after: z.number().int().min(0), upTo: z.number().int().min(0).optional(), limit: z.number().int().min(1).max(500).optional() }))
+      .query(async ({ input, ctx }) => {
+        const { projects } = await requireServices();
+        return projects.changes(ctx.principal, input);
       }),
 
     /** Reconnect recovery: what changed since the versions the client holds. */
@@ -249,7 +286,16 @@ export const appRouter = router({
   dashboard: router({
     // Aggregates are a server-side read model: computed once per TTL (single
     // flight, stale-while-revalidate), never per browser or per request.
-    stats: protectedProcedure.query(() => dashboardCache.get()),
+    stats: protectedProcedure.query(({ ctx }) => {
+      // Global aggregates would leak other workspaces' figures to a restricted principal.
+      if (workspaceRestriction(ctx.principal) !== null) throw new TRPCError({ code: "FORBIDDEN", message: "Dashboard nur mit Zugriff auf alle Workspaces" });
+      return dashboardCache.get();
+    }),
+    /** KPI cards: shared/project-metrics.ts run server-side over (project, status) rows. */
+    metrics: protectedProcedure.query(({ ctx }) => {
+      const restriction = workspaceRestriction(ctx.principal);
+      return restriction === null ? metricsCache.get() : computeMetrics(restriction);
+    }),
   }),
 
   // ============= BVB-EEA =============
@@ -348,7 +394,13 @@ export const appRouter = router({
 
   // ============= FILTERS =============
   filters: router({
-    options: protectedProcedure.query(() => filterOptionsCache.get()),
+    options: protectedProcedure.query(async ({ ctx }) => {
+      const restriction = workspaceRestriction(ctx.principal);
+      if (restriction === null) return filterOptionsCache.get();
+      // Restricted principals: only their own workspaces' options; names from other workspaces stay hidden.
+      const { store } = await requireServices();
+      return store.filterOptions(restriction);
+    }),
   }),
 
   // ============= ODATA (tRPC facade + full Express router available at /odata) =============
@@ -372,9 +424,10 @@ export const appRouter = router({
             sort: "id",
             dir: "asc",
             includeTotal: true,
+            expand: [],
             ...(parsed.projektstand ? { projektstand: parsed.projektstand } : {}),
           },
-          { workspaces: ctx.principal.workspaces },
+          { workspaces: workspaceRestriction(ctx.principal) },
           { offset: $skip, ...((parsed.station ?? parsed.station_contains) ? { stationPrefix: String(parsed.station ?? parsed.station_contains) } : {}) },
         );
         return {

@@ -4,8 +4,9 @@ import { event, project } from "./testUtils";
 import type { ConflictInfo } from "@shared/project-contract";
 
 const empty: SyncResult = { events: [], snapshots: [], deleted: [] };
-const make = (sync = vi.fn(async () => empty)) => {
-  const engine = new ProjectSyncEngine({ sync });
+const noFeed = async () => ({ events: [], cursor: 0, hasMore: false });
+const make = (sync = vi.fn(async () => empty), feedFn: (i: { after: number; upTo?: number }) => Promise<{ events: never[] | import("@shared/domain-events").DomainEvent[]; cursor: number; hasMore: boolean }> = noFeed) => {
+  const engine = new ProjectSyncEngine({ sync, changes: feedFn });
   const changes: ProjectChange[] = [];
   engine.subscribe(c => changes.push(c));
   return { engine, sync, changes };
@@ -88,11 +89,22 @@ describe("ProjectSyncEngine — ordering", () => {
     expect(engine.get(1)).toMatchObject({ version: 3, kommentar: "3" });
   });
 
-  it("ignores events for aggregates it does not hold; accepts a creation event", () => {
-    const { engine } = make();
+  it("ignores plain updates for aggregates it does not hold; a creation/move-in signals a targeted list refresh (no fabricated row)", () => {
+    const { engine, changes } = make();
     expect(engine.applyEvent(event(9, 5, { kommentar: { from: null, to: "x" } }))).toBe("ignored");
     expect(engine.applyEvent(event(9, 1, { station: { from: null, to: "Neu" } }, { eventType: "project.created" }))).toBe("applied");
-    expect(engine.get(9)).toMatchObject({ version: 1, station: "Neu", kommentar: null });
+    expect(engine.get(9)).toBeUndefined();
+    expect(changes.at(-1)).toEqual({ kind: "collection-stale", reason: "created", id: 9 });
+    engine.applyEvent(event(10, 4, { bahnhofsmanagement: { from: null, to: "Kassel" } }, { context: { workspace: "Kassel", workspaceBefore: "*" } }));
+    expect(changes.at(-1)).toEqual({ kind: "collection-stale", reason: "moved-in", id: 10 });
+  });
+
+  it("project.removed (moved out of my workspace) removes the row like a delete", () => {
+    const { engine, changes } = make();
+    engine.seed(project());
+    engine.applyEvent(event(1, 2, {}, { eventType: "project.removed", context: { workspace: null, workspaceBefore: "Frankfurt" } }));
+    expect(engine.get(1)).toBeUndefined();
+    expect(changes.at(-1)).toEqual({ kind: "remove", id: 1 });
   });
 
   it("delete event removes the aggregate; resync reports deletions", async () => {
@@ -159,5 +171,65 @@ describe("ProjectSyncEngine — optimistic edits and conflicts", () => {
     engine.seed(project());
     engine.applyEvent(event(1, 2, { projektstand: { from: "EP", to: "AP" } }));
     expect(engine.recentChanges(1)[0]).toMatchObject({ field: "projektstand", from: "EP", to: "AP", actorName: "Markus" });
+  });
+});
+
+describe("ProjectSyncEngine — collection-level recovery (feed cursor)", () => {
+  const feed = (pages: Array<{ events: import("@shared/domain-events").DomainEvent[]; cursor: number; hasMore: boolean }>) => {
+    const calls: Array<{ after: number; upTo?: number }> = [];
+    let i = 0;
+    return { calls, fn: async (input: { after: number; upTo?: number }) => { calls.push(input); return pages[Math.min(i++, pages.length - 1)]!; } };
+  };
+
+  it("does nothing without a cursor; the cursor moves only on authoritative reads", async () => {
+    const f = feed([{ events: [], cursor: 9, hasMore: false }]);
+    const { engine } = make(undefined, f.fn);
+    expect(await engine.catchUp()).toBe(0);
+    expect(f.calls).toHaveLength(0);
+    engine.initCursor(5);
+    engine.initCursor(2); // first writer wins
+    expect(engine.cursorValue).toBe(5);
+    engine.applyEvent(event(1, 2, {})); // a live event must not advance it
+    expect(engine.cursorValue).toBe(5);
+    await engine.catchUp();
+    expect(f.calls[0]).toEqual({ after: 5 });
+    expect(engine.cursorValue).toBe(9);
+  });
+
+  it("recovers new, deleted, moved-out and updated projects in one pass, paging while hasMore", async () => {
+    const e = {
+      created: event(20, 1, { station: { from: null, to: "Neu" } }, { eventType: "project.created" }),
+      deleted: event(2, 2, {}, { eventType: "project.deleted" }),
+      movedOut: event(3, 2, {}, { eventType: "project.removed", context: { workspace: null, workspaceBefore: "Frankfurt" } }),
+      updated: event(1, 2, { projektstand: { from: "EP", to: "FA" } }),
+      movedIn: event(30, 4, { bahnhofsmanagement: { from: null, to: "Frankfurt" } }, { context: { workspace: "Frankfurt", workspaceBefore: "*" } }),
+    };
+    const f = feed([
+      { events: [e.created, e.deleted], cursor: 12, hasMore: true },
+      { events: [e.movedOut, e.updated, e.movedIn], cursor: 15, hasMore: false },
+    ]);
+    const { engine, changes } = make(undefined, f.fn);
+    engine.seed(project({ id: 1 })); engine.seed(project({ id: 2 })); engine.seed(project({ id: 3 }));
+    engine.initCursor(10);
+    expect(await engine.catchUp(15)).toBe(5);
+    expect(f.calls).toEqual([{ after: 10, upTo: 15 }, { after: 12, upTo: 15 }]);
+    expect(engine.get(1)).toMatchObject({ version: 2, projektstand: "FA" });
+    expect(engine.get(2)).toBeUndefined();
+    expect(engine.get(3)).toBeUndefined();
+    expect(changes.filter(c => c.kind === "collection-stale").map(c => (c as { reason: string }).reason).sort()).toEqual(["created", "moved-in"]);
+    expect(engine.cursorValue).toBe(15);
+  });
+
+  it("concurrent catch-ups share one run; an already-applied event is not applied twice", async () => {
+    const e2 = event(1, 2, { kommentar: { from: null, to: "x" } });
+    const f = feed([{ events: [e2], cursor: 8, hasMore: false }]);
+    const { engine } = make(undefined, f.fn);
+    engine.seed(project()); engine.initCursor(1);
+    engine.applyEvent(e2); // arrived live first
+    const [a, b] = await Promise.all([engine.catchUp(), engine.catchUp()]);
+    expect(f.calls).toHaveLength(1);
+    expect(a).toBe(b);
+    expect(engine.get(1)!.version).toBe(2);
+    expect(engine.metrics.applied).toBe(1);
   });
 });

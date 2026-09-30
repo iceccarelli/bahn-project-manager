@@ -1,12 +1,24 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useAuth, loginDemo } from "@/_core/hooks/useAuth";
+import { SERVER_MODE, serverApi } from "@/realtime/serverApi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+
+/** Server mode: the server decides (cookie session from auth.demoLogin, which is off in production). */
+async function attemptLogin(email: string, password: string): Promise<boolean> {
+  if (!SERVER_MODE) return loginDemo(email, password);
+  try {
+    await serverApi.auth.demoLogin.mutate({ email, password });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export default function Login() {
   const { isAuthenticated, loading: authLoading } = useAuth();
@@ -31,10 +43,10 @@ export default function Login() {
     // Simulate network delay
     await new Promise(resolve => setTimeout(resolve, 800));
 
-    const success = loginDemo(email, password);
+    const success = await attemptLogin(email, password);
     if (success) {
       setSuccess(true);
-      setTimeout(() => setLocation("/"), 500);
+      setTimeout(() => (SERVER_MODE ? window.location.assign("/") : setLocation("/")), 500);
     } else {
       setError("Ungültige E-Mail oder Passwort. Bitte versuchen Sie es erneut.");
       setIsLoading(false);
@@ -53,10 +65,10 @@ export default function Login() {
 
     await new Promise(resolve => setTimeout(resolve, 800));
     
-    const success = loginDemo(demoEmail, demoPass);
+    const success = await attemptLogin(demoEmail, demoPass);
     if (success) {
       setSuccess(true);
-      setTimeout(() => setLocation("/"), 500);
+      setTimeout(() => (SERVER_MODE ? window.location.assign("/") : setLocation("/")), 500);
     } else {
       setError("Demo-Login fehlgeschlagen.");
       setIsLoading(false);

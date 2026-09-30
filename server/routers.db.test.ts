@@ -15,7 +15,7 @@ const user = (id: number, role: "admin" | "user") => ({
   createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date(),
 });
 const principal = (id: number, role: Principal["role"], extra: Partial<Principal> = {}): Principal =>
-  ({ id: String(id), name: `User ${id}`, email: null, role, workspaces: [], departments: [], ...extra });
+  ({ id: String(id), name: `User ${id}`, email: null, role, workspaces: "ALL", departments: [], ...extra });
 const ctxFor = (p: Principal | null): TrpcContext => ({
   user: p ? user(Number(p.id), p.role === "admin" ? "admin" : "user") : null,
   principal: p,

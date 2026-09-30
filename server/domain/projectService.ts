@@ -36,6 +36,7 @@ import {
 import {
   canCreateProject, canDeleteProject, canEditProject, canViewProject, type Principal,
 } from "./permissions";
+import { eventForPrincipal } from "./eventVisibility";
 import type { AfterCommit, AuditRow, ProjectStore, ProjectTx } from "./ports";
 
 export interface RequestContext {
@@ -147,13 +148,39 @@ export class ProjectService {
       const missed = cur.version - k.version;
       const evs = missed <= MAX_REPLAY_EVENTS ? await this.store.eventsSince(k.id, k.version, MAX_REPLAY_EVENTS) : [];
       const contiguous = evs.length === missed && evs.every((e, i) => e.aggregateVersion === k.version + 1 + i);
-      if (contiguous) events.push(...evs);
+      // Replay goes through the same recipient filter as the live stream.
+      if (contiguous) events.push(...evs.map(e => eventForPrincipal(principal, e)).filter((e): e is DomainEvent => e !== null));
       else {
         const d = await this.store.detail(k.id);
         if (d) snapshots.push(d);
       }
     }
     return { events, snapshots, deleted };
+  }
+
+  /**
+   * Collection-level recovery: everything this principal may see that was
+   * published after `after`, in feed order, recipient-filtered. `cursor` is the
+   * highest feedSeq SCANNED (visible or not), so the next call never rescans.
+   * `hasMore` means the scan budget ran out; the caller should ask again.
+   */
+  async changes(principal: Principal, input: { after: number; upTo?: number; limit?: number }) {
+    const page = Math.min(input.limit ?? 200, 500);
+    const events: DomainEvent[] = [];
+    let cursor = input.after;
+    let hasMore = false;
+    for (let scans = 0; scans < 5; scans++) {
+      const raw = await this.store.changesSince(cursor, page, input.upTo);
+      for (const e of raw) {
+        const out = eventForPrincipal(principal, e);
+        if (out) events.push(out);
+        cursor = e.feedSeq ?? cursor;
+      }
+      if (raw.length < page) return { events, cursor, hasMore: false };
+      if (events.length >= page) { hasMore = true; break; }
+      hasMore = scans === 4;
+    }
+    return { events, cursor, hasMore };
   }
 
   // ---- writes -------------------------------------------------------------

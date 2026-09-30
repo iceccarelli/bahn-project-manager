@@ -17,14 +17,23 @@ import { decideEvent, SeenEvents, type DomainEvent } from "@shared/domain-events
 import { EDITABLE_PROJECT_FIELDS, type ConflictInfo, type ProjectDetail } from "@shared/project-contract";
 
 export interface SyncResult { events: DomainEvent[]; snapshots: ProjectDetail[]; deleted: number[] }
+export interface FeedPage { events: DomainEvent[]; cursor: number; hasMore: boolean }
 export interface EngineDeps {
-  /** server-side catch-up: for held versions, what did I miss? */
+  /** aggregate-level catch-up: for held versions, what did I miss? */
   sync(known: Array<{ id: number; version: number }>): Promise<SyncResult>;
+  /** collection-level catch-up: visible changes after a feed cursor */
+  changes(input: { after: number; upTo?: number }): Promise<FeedPage>;
 }
 
 export type ProjectChange =
   | { kind: "upsert"; id: number; project: ProjectDetail; source: "server" | "optimistic" | "rollback" }
-  | { kind: "remove"; id: number };
+  | { kind: "remove"; id: number }
+  /**
+   * The collection changed in a way a patch cannot express for arbitrary
+   * filtered/sorted pages (a project appeared here). Owners refetch the
+   * affected list queries — a targeted authoritative refresh, not a reload.
+   */
+  | { kind: "collection-stale"; reason: "created" | "moved-in"; id: number };
 export type ApplyOutcome = "applied" | "duplicate" | "stale" | "recovering" | "ignored";
 
 /** A recent remote change, for "Projektstand EP → AP · Markus · vor 2 Sekunden". */
@@ -39,6 +48,9 @@ export class ProjectSyncEngine {
   private recovering = new Map<number, Promise<void>>();
   private seen = new SeenEvents(4096);
   private listeners = new Set<(c: ProjectChange) => void>();
+  /** resume position in the change feed; advanced ONLY by authoritative reads, never by live events */
+  private feedCursor: number | null = null;
+  private catching: Promise<number> | null = null;
   private recent = new Map<number, RecentChange[]>();
   readonly metrics = { applied: 0, duplicates: 0, stale: 0, gaps: 0, recoveries: 0, snapshots: 0 };
 
@@ -57,12 +69,18 @@ export class ProjectSyncEngine {
   pendingCount() { let n = 0; for (const p of this.pending.values()) n += p.length; return n; }
 
   /** Load authoritative state (query result or mutation response). Never moves a version backwards. */
-  seed(project: ProjectDetail): void {
+  seed(project: ProjectDetail, opts: { silent?: boolean } = {}): void {
     const cur = this.server.get(project.id);
     if (cur && cur.version >= project.version) return;
     this.server.set(project.id, project);
-    this.emit({ kind: "upsert", id: project.id, project: this.view(project.id)!, source: "server" });
+    if (!opts.silent) this.emit({ kind: "upsert", id: project.id, project: this.view(project.id)!, source: "server" });
   }
+
+  /** The feed position captured BEFORE an authoritative list read. First writer wins; only ever moves forward. */
+  initCursor(feedHead: number): void {
+    if (this.feedCursor === null || feedHead > this.feedCursor) this.feedCursor = this.feedCursor === null ? feedHead : this.feedCursor;
+  }
+  get cursorValue() { return this.feedCursor; }
 
   // ---- events ------------------------------------------------------------
 
@@ -73,6 +91,18 @@ export class ProjectSyncEngine {
     // While an aggregate is being recovered, park events; they replay afterwards.
     if (this.recovering.has(id)) { this.buffer(id, event); return "recovering"; }
 
+    // A project entering this client's collection cannot be patched into
+    // arbitrary filtered/sorted pages: signal a targeted list refresh instead of
+    // fabricating a half-known row.
+    if (!this.server.has(id)) {
+      if (event.eventType === "project.created") { this.emit({ kind: "collection-stale", reason: "created", id }); return "applied"; }
+      if (event.eventType === "project.updated" && event.context?.workspaceBefore) {
+        this.emit({ kind: "collection-stale", reason: "moved-in", id });
+        return "applied";
+      }
+      if (event.eventType === "project.deleted" || event.eventType === "project.removed") { this.emit({ kind: "remove", id }); return "applied"; }
+      return "ignored";
+    }
     const decision = decideEvent(this.server.get(id)?.version, event);
     switch (decision.kind) {
       case "apply": this.commit(id, event); return "applied";
@@ -94,7 +124,7 @@ export class ProjectSyncEngine {
 
   private commit(id: number, e: DomainEvent) {
     this.metrics.applied++;
-    if (e.eventType === "project.deleted") {
+    if (e.eventType === "project.deleted" || e.eventType === "project.removed") {
       this.server.delete(id); this.pending.delete(id);
       this.emit({ kind: "remove", id });
       return;
@@ -142,9 +172,54 @@ export class ProjectSyncEngine {
 
   private replay(e: DomainEvent) {
     const id = Number(e.aggregateId);
+    if (!this.server.has(id)) { this.applyUnseen(e); return; }
     const d = decideEvent(this.server.get(id)?.version, e);
     if (d.kind === "apply") this.commit(id, e);
     else if (d.kind === "gap") { this.buffer(id, e); void this.recover(id); }
+  }
+
+  /** feed events skip the eventId de-dupe (they are replays by design) but keep version discipline */
+  private applyUnseen(e: DomainEvent) {
+    const id = Number(e.aggregateId);
+    if (this.server.has(id)) { this.replay(e); return; }
+    if (e.eventType === "project.created") this.emit({ kind: "collection-stale", reason: "created", id });
+    else if (e.eventType === "project.updated" && e.context?.workspaceBefore) this.emit({ kind: "collection-stale", reason: "moved-in", id });
+    else if (e.eventType === "project.deleted" || e.eventType === "project.removed") this.emit({ kind: "remove", id });
+  }
+
+  /**
+   * Collection-level recovery. Reads the feed from the cursor to `upTo` (or the
+   * end), applying every visible change: updates to known projects go through
+   * normal version discipline; creations / move-ins signal a list refresh;
+   * deletions / move-outs remove. Advances the cursor from authoritative
+   * responses only. Concurrent calls share one run. Returns the number of
+   * visible changes processed.
+   */
+  catchUp(upTo?: number): Promise<number> {
+    if (this.catching) return this.catching;
+    const run = (async () => {
+      if (this.feedCursor === null) return 0;
+      let n = 0;
+      for (let guard = 0; guard < 50; guard++) {
+        const page = await this.deps.changes({ after: this.feedCursor, ...(upTo !== undefined ? { upTo } : {}) });
+        for (const e of page.events) {
+          const id = Number(e.aggregateId);
+          // already processed live: neither re-applied nor re-signalled nor counted
+          if (this.seen.seen(e.eventId)) continue;
+          const before = this.server.get(id)?.version;
+          if (this.server.has(id)) {
+            const d = decideEvent(before, e);
+            if (d.kind === "apply") { this.commit(id, e); n++; }
+            else if (d.kind === "gap") { this.buffer(id, e); await this.recover(id); n++; }
+          } else { this.applyUnseen(e); n++; }
+        }
+        this.feedCursor = Math.max(this.feedCursor, page.cursor);
+        if (!page.hasMore) break;
+      }
+      return n;
+    })().finally(() => { this.catching = null; });
+    this.catching = run;
+    return run;
   }
 
   private applyRecovery(res: SyncResult) {
@@ -169,10 +244,10 @@ export class ProjectSyncEngine {
    * Full reconnect recovery for every tracked aggregate. Returns how many
    * aggregates changed, for "Wiederverbunden · 3 Änderungen synchronisiert".
    */
-  async resync(): Promise<number> {
+  async resync(upTo?: number): Promise<number> {
+    let changed = await this.catchUp(upTo).catch(() => 0);
     const known = this.cursor();
-    if (known.length === 0) return 0;
-    let changed = 0;
+    if (known.length === 0) return changed;
     this.buffered.clear(); // anything parked is covered by the snapshot/events below
     for (let i = 0; i < known.length; i += 200) {
       const chunk = known.slice(i, i + 200);

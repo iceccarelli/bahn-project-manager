@@ -15,15 +15,16 @@
  */
 import type { Express, Request, Response } from "express";
 import { isValidScope } from "@shared/domain-events";
-import { canSubscribe, canViewProject, type Principal } from "../domain/permissions";
+import { canSubscribe, canViewProject, workspaceRestriction, type Principal } from "../domain/permissions";
 import { OVERFLOW, type ProjectStore, type RealtimeSubscriber } from "../domain/ports";
 import { resolveIdentity } from "../_core/identity";
+import { eventForPrincipal } from "../domain/eventVisibility";
 import { m } from "../observability/metrics";
 import { traceIdFrom } from "../observability/trace";
 
 export interface GatewayOptions {
   subscriber: RealtimeSubscriber;
-  store: Pick<ProjectStore, "versions">;
+  store: Pick<ProjectStore, "versions"> & Partial<Pick<ProjectStore, "feedHead">>;
   resolve?: (req: Request) => Promise<{ principal: Principal } | null>;
   heartbeatMs?: number;
   /** connections older than this are closed so token expiry/revocation is re-evaluated */
@@ -74,7 +75,7 @@ export function registerRealtimeGateway(app: Express, opt: GatewayOptions) {
     // Project channels are authorized against the project's workspace.
     // Only workspace-restricted principals need the row; everyone else may
     // subscribe to any project channel (a channel for a missing project is inert).
-    const restricted = principal.role !== "admin" && principal.workspaces.length > 0;
+    const restricted = workspaceRestriction(principal) !== null;
     const projectIds = restricted ? requested.filter(s => s.startsWith("project:")).map(s => Number(s.slice(8))).filter(Number.isInteger) : [];
     const known = projectIds.length ? await opt.store.versions(projectIds) : new Map<number, { version: number; bahnhofsmanagement: string | null }>();
     const accepted: string[] = [];
@@ -124,16 +125,24 @@ export function registerRealtimeGateway(app: Express, opt: GatewayOptions) {
     // Subscribe BEFORE announcing hello so nothing published after the client
     // learns it is connected can be missed.
     const iterator = opt.subscriber.subscribe({ channels: accepted, signal: abort.signal })[Symbol.asyncIterator]();
-    frame("hello", { serverTime: new Date().toISOString(), scopes: accepted, denied });
+    // Read the head AFTER subscribing: anything numbered later reaches us live;
+    // anything at or below it that we have not seen is fetched via projects.changes.
+    const headSeq = (await opt.store.feedHead?.().catch(() => undefined)) ?? null;
+    frame("hello", { serverTime: new Date().toISOString(), scopes: accepted, denied, headSeq });
 
     try {
       for (;;) {
         const { value, done } = await iterator.next();
         if (done || finished) break;
         if (value === OVERFLOW) { frame("resync", { reason: "overflow" }); break; }
-        m.rtEventAgeMs.observe(Math.max(0, Date.now() - Date.parse(value.timestamp)));
+        // Channels only route. What THIS recipient may see is decided per event,
+        // per recipient — a project channel opened before a workspace move must
+        // not receive the post-move state.
+        const visible = eventForPrincipal(principal, value);
+        if (!visible) continue;
+        m.rtEventAgeMs.observe(Math.max(0, Date.now() - Date.parse(visible.timestamp)));
         m.rtDelivered.inc();
-        const ok = frame("domain", value, value.eventId);
+        const ok = frame("domain", visible, visible.eventId);
         if (!ok) await new Promise<void>(r => res.once("drain", r).once("close", r));
       }
     } finally {

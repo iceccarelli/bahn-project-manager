@@ -16,7 +16,16 @@ export const EVENT_SCHEMA_VERSION = 1 as const;
 export const AGGREGATE_TYPES = ["project"] as const;
 export type AggregateType = (typeof AGGREGATE_TYPES)[number];
 
-export const EVENT_TYPES = ["project.created", "project.updated", "project.deleted"] as const;
+export const EVENT_TYPES = [
+  "project.created",
+  "project.updated",
+  "project.deleted",
+  /**
+   * Recipient-safe form of a workspace move, sent ONLY to principals who could see the
+   * project before the move but not after: it carries no field values.
+   */
+  "project.removed",
+] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
 
 /** One changed field: the value before and after the commit. */
@@ -29,6 +38,8 @@ export type FieldChange = z.infer<typeof FieldChangeSchema>;
 export const DomainEventSchema = z.object({
   schemaVersion: z.literal(EVENT_SCHEMA_VERSION),
   eventId: z.string().uuid(),
+  /** position in the change feed; set by the outbox relay, absent on unpublished rows */
+  feedSeq: z.number().int().positive().optional(),
   eventType: z.enum(EVENT_TYPES),
   aggregateType: z.enum(AGGREGATE_TYPES),
   /** string on the wire so the contract survives a change of key type */

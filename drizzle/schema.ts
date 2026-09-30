@@ -259,6 +259,13 @@ export const domainEvents = mysqlTable("domain_events", {
    * Clients detect the resulting version gap and recover from state.
    */
   failedAt: datetime("failedAt", { fsp: 3 }),
+  /**
+   * Position in the authoritative change feed. Assigned by the (single) outbox
+   * relay in publication order, so it is gapless and commit-ordered — unlike
+   * `id`, where a slow transaction can commit after a later id. Clients keep it
+   * as their resume cursor; see docs/data-plane.md "Collection recovery".
+   */
+  feedSeq: bigint("feedSeq", { mode: "number" }),
   failureReason: varchar("failureReason", { length: 512 }),
 }, (table) => ({
   eventIdUnique: uniqueIndex("domain_events_eventId_uq").on(table.eventId),
@@ -267,6 +274,9 @@ export const domainEvents = mysqlTable("domain_events", {
   ),
   // (processedAt, id): measured 0.8 ms vs 26 ms at a 100k backlog — the relay orders by id,
   // and (processedAt, createdAt, id) forced a filesort of the whole backlog every poll.
+  feedSeqUnique: uniqueIndex("domain_events_feedSeq_uq").on(table.feedSeq),
+  // relay: resume rows that already have a sequence, in sequence order, without scanning processed history
+  pendingSeqIdx: index("domain_events_pending_seq_idx").on(table.processedAt, table.feedSeq),
   outboxIdx: index("domain_events_outbox_idx").on(table.processedAt, table.id),
 }));
 

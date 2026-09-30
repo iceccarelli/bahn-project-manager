@@ -254,7 +254,7 @@ describe.skipIf(!hasTestDb)("ProjectService (real DB)", () => {
       let cursor: string | undefined;
       let pages = 0;
       do {
-        const r = await store.list({ limit: 10, sort: "updatedAt", dir: "desc", cursor, includeTotal: pages === 0 }, { workspaces: [] });
+        const r = await store.list({ expand: [], limit: 10, sort: "updatedAt", dir: "desc", cursor, includeTotal: pages === 0 }, { workspaces: null });
         if (pages === 0) expect(r.total).toBeGreaterThan(25);
         for (const it of r.items) { expect(seen.has(it.id)).toBe(false); seen.add(it.id); expect(it).not.toHaveProperty("reviews"); }
         cursor = r.nextCursor ?? undefined;
@@ -265,21 +265,21 @@ describe.skipIf(!hasTestDb)("ProjectService (real DB)", () => {
     });
 
     it("fulltext search matches word prefixes; short input uses prefix LIKE", async () => {
-      const r = await store.list({ limit: 50, sort: "id", dir: "asc", search: "marbu", includeTotal: false }, { workspaces: [] });
+      const r = await store.list({ expand: [], limit: 50, sort: "id", dir: "asc", search: "marbu", includeTotal: false }, { workspaces: null });
       expect(r.items.length).toBe(5);
-      const r2 = await store.list({ limit: 50, sort: "id", dir: "asc", search: "Ma", includeTotal: false }, { workspaces: [] });
+      const r2 = await store.list({ expand: [], limit: 50, sort: "id", dir: "asc", search: "Ma", includeTotal: false }, { workspaces: null });
       expect(r2.items.length).toBeGreaterThanOrEqual(5);
     });
 
     it("search input is inert: operators and SQL metacharacters cannot change the query", async () => {
-      const r = await store.list({ limit: 50, sort: "id", dir: "asc", search: `x'; DROP TABLE projects; --`, includeTotal: false }, { workspaces: [] });
+      const r = await store.list({ expand: [], limit: 50, sort: "id", dir: "asc", search: `x'; DROP TABLE projects; --`, includeTotal: false }, { workspaces: null });
       expect(r.items).toEqual([]);
       expect(await count("projects")).toBeGreaterThan(0);
     });
 
     it("workspace visibility restricts rows server-side", async () => {
       await mk({ bahnhofsmanagement: "Kassel", station: "Nur Kassel" });
-      const r = await store.list({ limit: 100, sort: "id", dir: "asc", includeTotal: false }, { workspaces: ["Kassel"] });
+      const r = await store.list({ expand: [], limit: 100, sort: "id", dir: "asc", includeTotal: false }, { workspaces: ["Kassel"] });
       expect(r.items.every(i => i.bahnhofsmanagement === "Kassel")).toBe(true);
     });
   });

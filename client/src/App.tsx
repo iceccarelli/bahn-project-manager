@@ -11,6 +11,7 @@ import Login from "@/pages/Login";
 import { useCrossTabSync } from "@/hooks/useCrossTabSync";
 import { SERVER_MODE } from "@/realtime/serverApi";
 import { RealtimeProvider } from "@/realtime/RealtimeProvider";
+import { ConflictHost } from "@/realtime/serverProjects";
 
 /**
  * Route-level code splitting.
@@ -62,7 +63,14 @@ function CrossTabSync() {
 
 /** Realtime is mounted only when the server data plane is enabled (VITE_SERVER_MODE=1). */
 function LiveData({ children }: { children: React.ReactNode }) {
-  return SERVER_MODE ? <RealtimeProvider>{children}</RealtimeProvider> : <>{children}</>;
+  return SERVER_MODE ? (
+    <RealtimeProvider>
+      {children}
+      <ConflictHost />
+    </RealtimeProvider>
+  ) : (
+    <>{children}</>
+  );
 }
 
 function App() {

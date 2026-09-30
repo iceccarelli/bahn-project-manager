@@ -5,14 +5,18 @@ import { useLocation, useSearch as useRouteSearch } from "wouter";
 import {
   TableBody,
 } from "@/components/ui/table";
-import { useProjects, useFilters, useAllData, type Project, type Review } from "@/hooks/useDataQuery";
+import { useProjects, useFilters, type Project, type Review } from "@/hooks/useDataQuery";
+import { useProjectsPageExtras } from "@/hooks/useProjectsPage";
+import { SERVER_MODE } from "@/realtime/serverApi";
+import ConnectionBadge from "@/realtime/ConnectionBadge";
+import { ServerPager } from "@/realtime/ServerPager";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Download, Table, LayoutGrid, MapPin, Filter, X, MessageSquare, Loader2 } from "lucide-react";
 import { DEPARTMENTS, REVIEW_STATUSES } from "@shared/types";
-import { deriveProjectMetrics, percent } from "@shared/project-metrics";
+import { percent } from "@shared/project-metrics";
 import { statusBadgeClass, statusPulseClass } from "@shared/status-appearance";
 import {
   bedarfFor,
@@ -155,7 +159,7 @@ export default function Projects() {
   /** Which project the detail dialog is showing, if any. */
   const [detailProjectId, setDetailProjectId] = useState<number | null>(null);
 
-  const { data, isLoading, applyEdit, applyReviewEdit } = useProjects({
+  const projectsQuery = useProjects({
     search: search || undefined,
     region: region || undefined,
     projektleiter: projektleiter || undefined,
@@ -164,11 +168,14 @@ export default function Projects() {
     department: department || undefined,
     sortBy,
     sortDir,
-    showAll: true,
   });
+  const { data, isLoading, applyEdit, applyReviewEdit } = projectsQuery;
+  // paging only exists in server mode (cursor pages); the local plane holds everything in memory
+  const pager = projectsQuery as unknown as { hasNextPage?: boolean; isFetchingNextPage?: boolean; fetchNextPage?: () => void };
 
   const { data: filterOptions } = useFilters();
-  const { data: allData } = useAllData();
+  const extras = useProjectsPageExtras(data?.projects ?? [], detailProjectId);
+  const allData = extras.corpus ? { projects: extras.corpus } : undefined;
   /* The wave through the 1.298 rows. Decoration only — every row is in the DOM
      and countable from the first paint; see client/src/lib/motion.ts. */
   const streamRef = useTableStream();
@@ -190,7 +197,7 @@ export default function Projects() {
   // Math.round(total * 0.03); both moved with the row count and with nothing
   // else. shared/project-metrics.ts is the single derivation, so this page and
   // the dashboard cannot show different answers to the same question.
-  const metrics = useMemo(() => deriveProjectMetrics(allData?.projects), [allData?.projects]);
+  const metrics = extras.metrics;
   const totalProjects = metrics.total;
 
   const handleSearch = useCallback(() => {
@@ -420,9 +427,10 @@ export default function Projects() {
   /** The same reconciliation the Handlungsbedarf chip prints, for a slice. */
   const toneSummary = useMemo(() => {
     if (!toneFocus) return null;
+    if (!extras.hasWholeDataset) return null;
     const counted = countTones(allData?.projects ?? [], toneGewerk ?? undefined);
     return counted.find((c) => c.tone === toneFocus) ?? null;
-  }, [toneFocus, toneGewerk, allData]);
+  }, [toneFocus, toneGewerk, allData, extras.hasWholeDataset]);
 
   /**
    * The reconciliation the chip prints.
@@ -434,19 +442,13 @@ export default function Projects() {
    * trusting the screen.
    */
   const bedarfSummary = useMemo(() => {
-    if (!bedarfFocus) return null;
+    if (!bedarfFocus || !extras.hasWholeDataset) return null;
     return (
       countBedarf(allData?.projects ?? [], todayMidnight).find((c) => c.key === bedarfFocus) ?? null
     );
-  }, [bedarfFocus, allData, todayMidnight]);
+  }, [bedarfFocus, allData, todayMidnight, extras.hasWholeDataset]);
 
-  const detailProject = useMemo(
-    () =>
-      detailProjectId == null
-        ? null
-        : ((allData?.projects ?? []).find((p: Project) => p.id === detailProjectId) ?? null),
-    [detailProjectId, allData],
-  );
+  const detailProject = extras.detailProject;
 
   // Scroll the card the map pointed at into view once it has rendered, and
   // leave the ring on it long enough to be seen without it becoming permanent.
@@ -466,6 +468,11 @@ export default function Projects() {
 
   return (
     <div ref={revealRef} className="space-y-8 p-6 bg-background min-h-screen">
+      {SERVER_MODE && (
+        <div className="flex items-center justify-end" data-testid="server-mode-bar">
+          <ConnectionBadge />
+        </div>
+      )}
       {/* KPI cards — every figure derived in shared/project-metrics.ts */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         <Card className="border-l-4 border-l-primary shadow-sm">
@@ -1102,6 +1109,12 @@ export default function Projects() {
                 Height is now viewport-relative: 600 px of fixed map on a
                 667 px-tall phone left no page around it.
               */
+              <>
+              {SERVER_MODE && (
+                <p className="mb-2 text-xs text-muted-foreground" role="note">
+                  Die Karte zeigt die bereits geladenen Projekte ({data?.projects.length ?? 0}). Viewport-Abfragen für den gesamten Bestand sind im Servermodus noch nicht angebunden.
+                </p>
+              )}
               <MapView
                 projects={data?.projects || []}
                 initialCenter={{ lat: 51.1657, lng: 10.4515 }}
@@ -1110,10 +1123,21 @@ export default function Projects() {
                 onProjectSelect={handleMapProjectSelect}
                 onStationSelect={handleStationSelect}
               />
+              </>
             )}
           </>
         )}
       </div>
+
+      {SERVER_MODE && !isLoading && (
+        <ServerPager
+          loaded={data?.projects.length ?? 0}
+          total={data?.total}
+          hasNextPage={!!pager.hasNextPage}
+          isFetching={!!pager.isFetchingNextPage}
+          onLoadMore={() => pager.fetchNextPage?.()}
+        />
+      )}
 
       <ProjectDetailDialog
         project={detailProject}

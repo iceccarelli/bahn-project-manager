@@ -29,6 +29,9 @@ import { RealtimeConnection } from "../../client/src/realtime/connection";
 import type { DomainEvent } from "@shared/domain-events";
 
 const users: Record<string, Principal> = Object.fromEntries([admin, markus, lena, mitteOnly].map(p => [p.id, p]));
+/** Frankfurt-only editor: the recipient in the workspace-move security scenarios */
+const ffmOnly: Principal = { ...mitteOnly, id: "6", name: "Frank" };
+users["6"] = ffmOnly;
 const key = () => `e2e-${randomUUID()}`;
 const until = async (fn: () => boolean, ms = 3000, what = "condition") => {
   const t0 = Date.now();
@@ -77,16 +80,25 @@ describe.skipIf(!hasTestDb)("realtime data plane (real DB, real HTTP/SSE)", () =
   /** a simulated browser: engine + connection, authenticated as `who` */
   function client(who: Principal, scopes: string[], seedIds: number[] = []) {
     const received: DomainEvent[] = [];
-    const engine = new ProjectSyncEngine({ sync: async known => svc.sync(who, known) });
+    const engine = new ProjectSyncEngine({
+      sync: async known => svc.sync(who, known),
+      changes: async input => svc.changes(who, input),
+    });
     const conn = new RealtimeConnection({
       url, heartbeatMs: 200, backoff: { baseMs: 20, maxMs: 100 },
       getHeaders: () => ({ "x-test-user": who.id }),
       onEvent: e => { received.push(e); engine.applyEvent(e); },
-      onReconnect: () => engine.resync(),
+      onSync: ({ headSeq, reconnecting }) => (reconnecting ? engine.resync(headSeq ?? undefined) : engine.catchUp(headSeq ?? undefined)),
     });
     conn.setScopes(scopes);
     cleanup.push(() => conn.stop());
-    return { engine, conn, received, seed: async () => { for (const id of seedIds) engine.seed((await store.detail(id))!); } };
+    return {
+      engine, conn, received,
+      seed: async () => {
+        engine.initCursor(await store.feedHead()); // exactly what a list read does: cursor BEFORE the snapshot
+        for (const id of seedIds) engine.seed((await store.detail(id))!);
+      },
+    };
   }
   const connected = (c: { conn: RealtimeConnection }) => until(() => c.conn.getStatus().state === "connected", 3000, "connected");
 
@@ -158,7 +170,7 @@ describe.skipIf(!hasTestDb)("realtime data plane (real DB, real HTTP/SSE)", () =
     B.conn.start();
     await until(() => B.conn.getStatus().state === "connected" && B.conn.getStatus().lastSyncedChanges !== null, 3000, "resync");
     expect(B.engine.get(p.id)).toMatchObject({ version: 4, kommentar: "three" });
-    expect(B.conn.getStatus().lastSyncedChanges).toBe(1); // "Wiederverbunden · 1 Änderung synchronisiert"
+    expect(B.conn.getStatus().lastSyncedChanges).toBe(3); // "Wiederverbunden · 3 Änderungen synchronisiert"
     expect(states).toContain("resynchronizing");
     // the UI never said "connected" between reconnecting and finishing resync
     const i = states.lastIndexOf("resynchronizing");
@@ -254,6 +266,101 @@ describe.skipIf(!hasTestDb)("realtime data plane (real DB, real HTTP/SSE)", () =
     expect(bad.processedAt).not.toBeNull();
     expect(bad.failureReason).toContain("schemaVersion");
     relay.start();
+  });
+
+  // ---- item 4: workspace transition must not leak new-state to the old workspace ------------------------------
+  it("SECURITY: Frankfurt → Kassel move — a Frankfurt-only subscriber (project AND workspace channel) receives no Kassel state and loses the row", async () => {
+    const p = await mk({ bahnhofsmanagement: "Frankfurt", station: "Geheimbahnhof", kommentar: "vertraulich" });
+    const F = client(ffmOnly, [`project:${p.id}`, "workspace:frankfurt"], [p.id]);
+    await F.seed();
+    F.conn.start(); await connected(F);
+
+    await svc.update(admin, { id: p.id, expectedVersion: 1, changes: { bahnhofsmanagement: "Kassel", projektstand: "FA", kommentar: "nur Kassel" }, idempotencyKey: key() }, ctx());
+    await until(() => F.engine.get(p.id) === undefined, 3000, "row removed for Frankfurt-only user");
+
+    // every frame this user ever received, serialised: nothing from the new state may appear
+    const wire = JSON.stringify(F.received);
+    for (const secret of ["Kassel", "kassel", "nur Kassel", "\"FA\""]) expect(wire).not.toContain(secret);
+    // (the creation event of `p` itself may legitimately arrive first: it happened in Frankfurt)
+    const after = F.received.filter(e => e.aggregateId === String(p.id) && e.eventType !== "project.created");
+    expect(after).toHaveLength(1);
+    expect(after[0]).toMatchObject({ eventType: "project.removed", changes: {}, actorId: "redacted", context: { workspace: null, workspaceBefore: "Frankfurt" } });
+    // …and the authoritative list for that user no longer contains it, nor can they fetch it
+    const list = await store.list({ limit: 100, sort: "id", dir: "asc", expand: [], includeTotal: false }, { workspaces: ["Frankfurt"] });
+    expect(list.items.map(i => i.id)).not.toContain(p.id);
+    await expect(svc.get(ffmOnly, p.id)).rejects.toThrow();
+    // the reconnect feed and the aggregate sync obey the same rule
+    const feed = await svc.changes(ffmOnly, { after: 0 });
+    expect(JSON.stringify(feed.events.filter(e => e.aggregateId === String(p.id)))).not.toContain("Kassel");
+    const sync = await svc.sync(ffmOnly, [{ id: p.id, version: 1 }]);
+    expect(sync.deleted).toEqual([p.id]);
+    expect(JSON.stringify(sync)).not.toContain("Kassel");
+  });
+
+  it("SECURITY: moved IN from a workspace the recipient cannot see — no history (from-values, old workspace) leaks", async () => {
+    const p = await mk({ bahnhofsmanagement: "Kassel", projektstand: "EP" });
+    const F = client(ffmOnly, ["workspace:frankfurt"]);
+    await F.seed();
+    F.conn.start(); await connected(F);
+    await svc.update(admin, { id: p.id, expectedVersion: 1, changes: { bahnhofsmanagement: "Frankfurt", projektstand: "AP" }, idempotencyKey: key() }, ctx());
+    await until(() => F.received.some(e => e.aggregateId === String(p.id)), 3000, "move-in event");
+    const moved = F.received.find(e => e.aggregateId === String(p.id))!;
+    expect(moved.changes).toEqual({ bahnhofsmanagement: { from: null, to: "Frankfurt" }, projektstand: { from: null, to: "AP" } });
+    expect(moved.context?.workspaceBefore).toBe("*");
+    expect(JSON.stringify(F.received)).not.toContain("Kassel");
+  });
+
+  // ---- item 3: collection-level recovery -----------------------------------------------------------------------
+  it("RECOVERY: B (Frankfurt-only) disconnects; A creates, deletes, moves out, moves in, updates; B reconnects and converges to the authoritative visible collection", async () => {
+    const known = await mk({ bahnhofsmanagement: "Frankfurt", station: "Bleibt" });
+    const toDelete = await mk({ bahnhofsmanagement: "Frankfurt", station: "Wird geloescht" });
+    const toMoveOut = await mk({ bahnhofsmanagement: "Frankfurt", station: "Zieht nach Kassel" });
+    const toMoveIn = await mk({ bahnhofsmanagement: "Kassel", station: "Kommt aus Kassel" });
+
+    const B = client(ffmOnly, ["workspace:frankfurt"], [known.id, toDelete.id, toMoveOut.id]);
+    await B.seed();
+    const stale: string[] = [];
+    B.engine.subscribe(c => { if (c.kind === "collection-stale") stale.push(`${c.reason}:${c.id}`); });
+    B.conn.start(); await connected(B);
+    B.conn.stop();                                   // network gone
+
+    // while B is away (A = admin)
+    const created = await mk({ bahnhofsmanagement: "Frankfurt", station: "Ganz neu" });
+    const createdElsewhere = await mk({ bahnhofsmanagement: "Kassel", station: "Unsichtbar neu" });
+    await svc.delete(admin, { id: toDelete.id, expectedVersion: 1, idempotencyKey: key() }, ctx());
+    await svc.update(admin, { id: toMoveOut.id, expectedVersion: 1, changes: { bahnhofsmanagement: "Kassel" }, idempotencyKey: key() }, ctx());
+    await svc.update(admin, { id: toMoveIn.id, expectedVersion: 1, changes: { bahnhofsmanagement: "Frankfurt" }, idempotencyKey: key() }, ctx());
+    await svc.update(admin, { id: known.id, expectedVersion: 1, changes: { projektstand: "FA" }, idempotencyKey: key() }, ctx());
+    // wait for the relay to number and publish everything
+    const last = await (async () => { for (let i = 0; i < 200; i++) { const [[r]] = (await t.pool.query("SELECT COUNT(*) n FROM domain_events WHERE processedAt IS NULL")) as any; if (Number(r.n) === 0) break; await new Promise(x => setTimeout(x, 10)); } return store.feedHead(); })();
+    expect(last).toBeGreaterThan(0);
+
+    B.conn.start();
+    await until(() => B.conn.getStatus().state === "connected" && B.conn.getStatus().lastSyncedChanges !== null, 4000, "resynchronized");
+
+    // B's engine converged on what it holds…
+    expect(B.engine.get(known.id)).toMatchObject({ version: 2, projektstand: "FA" });
+    expect(B.engine.get(toDelete.id)).toBeUndefined();
+    expect(B.engine.get(toMoveOut.id)).toBeUndefined();
+    // …and was told exactly which projects entered the collection (the UI refetches its lists for these)
+    expect(stale.sort()).toEqual([`created:${created.id}`, `moved-in:${toMoveIn.id}`].sort());
+    // the authoritative visible collection B would now refetch:
+    const visible = (await store.list({ limit: 100, sort: "id", dir: "asc", expand: [], includeTotal: false }, { workspaces: ["Frankfurt"] })).items.map(i => i.id);
+    expect(visible).toContain(created.id);
+    expect(visible).toContain(toMoveIn.id);
+    expect(visible).not.toContain(toDelete.id);
+    expect(visible).not.toContain(toMoveOut.id);
+    expect(visible).not.toContain(createdElsewhere.id);
+    // nothing about Kassel-only or moved-out state reached B
+    expect(JSON.stringify(B.received)).not.toContain("Unsichtbar");
+    expect(B.engine.cursorValue).toBeGreaterThanOrEqual(last);
+  });
+
+  it("feedSeq is gapless and in publication order for published events", async () => {
+    const [rows] = (await t.pool.query("SELECT feedSeq FROM domain_events WHERE feedSeq IS NOT NULL ORDER BY feedSeq")) as any;
+    const seqs = (rows as Array<{ feedSeq: number }>).map(r => Number(r.feedSeq));
+    expect(seqs.length).toBeGreaterThan(5);
+    seqs.forEach((v, i) => { if (i) expect(v).toBe(seqs[i - 1]! + 1); });
   });
 
   it("two relays on one outbox never publish the same event twice (cluster-wide lock)", async () => {

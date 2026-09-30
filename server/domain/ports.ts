@@ -4,7 +4,7 @@
  * server/realtime.
  */
 import type { DomainEvent, ScopeKey } from "@shared/domain-events";
-import type { ProjectDetail, ProjectSummary, ListProjectsInput } from "@shared/project-contract";
+import type { ProjectDetail, ProjectListItem, ListProjectsInput } from "@shared/project-contract";
 import type { Project } from "../../drizzle/schema";
 
 // ---- Realtime -------------------------------------------------------------
@@ -72,12 +72,16 @@ export interface ProjectStore {
   detail(id: number): Promise<ProjectDetail | null>;
   list(
     input: ListProjectsInput,
-    visibility: { workspaces: readonly string[] },
+    visibility: { workspaces: readonly string[] | null },
     opts?: { offset?: number; stationPrefix?: string },
-  ): Promise<{ items: ProjectSummary[]; nextCursor: string | null; total?: number }>;
+  ): Promise<{ items: ProjectListItem[]; nextCursor: string | null; total?: number }>;
   versions(ids: number[]): Promise<Map<number, { version: number; bahnhofsmanagement: string | null }>>;
   eventsSince(aggregateId: number, afterVersion: number, limit: number): Promise<DomainEvent[]>;
   shellSummary(): Promise<{ projectCount: number; lastUpdatedAt: string | null }>;
+  /** highest published feedSeq (0 when empty) */
+  feedHead(): Promise<number>;
+  /** published events with feedSeq in (after, upTo], oldest first */
+  changesSince(after: number, limit: number, upTo?: number): Promise<DomainEvent[]>;
 }
 
 /** Called after COMMIT to wake the outbox relay; must never throw into the request. */

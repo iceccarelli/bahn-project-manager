@@ -38,7 +38,12 @@ export function principalFromUser(user: User, extra?: Partial<Pick<Principal, "w
     name: user.name ?? null,
     email: user.email ?? null,
     role: extra?.role ?? roleFromLegacy(user.role),
-    workspaces: extra?.workspaces ?? [],
+    // Default-deny: a user with no explicit workspace grant sees no workspace.
+    // Admins are unrestricted by role. Demo logins (development convenience) and
+    // deployments that explicitly set LEGACY_USER_WORKSPACES=ALL keep the old open behaviour.
+    workspaces:
+      extra?.workspaces ??
+      (user.role === "admin" || user.loginMethod === "demo" || process.env.LEGACY_USER_WORKSPACES === "ALL" ? "ALL" : []),
     departments: extra?.departments ?? [],
   };
 }

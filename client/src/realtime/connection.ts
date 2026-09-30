@@ -23,8 +23,12 @@ export interface ConnectionOptions {
   getHeaders?: () => Record<string, string> | Promise<Record<string, string>>;
   fetchImpl?: typeof fetch;
   onEvent(e: DomainEvent): void;
-  /** recover missed state; returns the number of aggregates that changed */
-  onReconnect?(): Promise<number>;
+  /**
+   * Called on EVERY hello (first connect included) with the server's feed head.
+   * Must bring local state up to that head; returns how many changes it applied.
+   * On a reconnect the status is `resynchronizing` until it settles.
+   */
+  onSync?(hello: { headSeq: number | null; reconnecting: boolean }): Promise<number>;
   heartbeatMs?: number;
   backoff?: { baseMs: number; maxMs: number };
   random?: () => number;
@@ -46,7 +50,7 @@ export class RealtimeConnection {
   constructor(opt: ConnectionOptions) {
     this.o = {
       heartbeatMs: 15_000,
-      backoff: { baseMs: 500, maxMs: 15_000 },
+      backoff: { baseMs: 500, maxMs: 6_000 },
       random: Math.random,
       now: Date.now,
       isOnline: () => (typeof navigator === "undefined" || navigator.onLine !== false),
@@ -84,7 +88,13 @@ export class RealtimeConnection {
   notifyOnline(online: boolean) {
     if (this.stopped) return;
     if (!online) { this.set("offline"); this.abort?.abort(); }
-    else if (this.status.state === "offline") { this.abort?.abort(); this.wake?.(); }
+    else if (this.status.state !== "connected") {
+      // the network is back: do not sit out a backoff timer that was sized for an outage
+      this.set("reconnecting", { attempt: 0 });
+      this.abort?.abort();
+      if (this.retryTimer) clearTimeout(this.retryTimer);
+      this.wake?.();
+    }
   }
   private wake: (() => void) | null = null;
 
@@ -144,17 +154,22 @@ export class RealtimeConnection {
 
   private async handle(f: { event: string; data: string }, reconnecting: boolean) {
     switch (f.event) {
-      case "hello":
+      case "hello": {
         this.hadConnection = true;
-        if (reconnecting && this.o.onReconnect) {
+        let headSeq: number | null = null;
+        try { headSeq = (JSON.parse(f.data) as { headSeq?: number | null }).headSeq ?? null; } catch { /* keep null */ }
+        if (reconnecting && this.o.onSync) {
           this.set("resynchronizing");
           let n = 0;
-          try { n = await this.o.onReconnect(); } catch { /* engine retries on next event/gap */ }
+          try { n = await this.o.onSync({ headSeq, reconnecting: true }); } catch { /* the periodic catch-up retries */ }
           this.set("connected", { attempt: 0, lastSyncedChanges: n });
         } else {
           this.set("connected", { attempt: 0 });
+          // first connect: reconcile silently with the list snapshot's cursor
+          void this.o.onSync?.({ headSeq, reconnecting: false }).catch(() => {});
         }
         break;
+      }
       case "domain": {
         const parsed = DomainEventSchema.safeParse(JSON.parse(f.data));
         if (parsed.success) this.o.onEvent(parsed.data);

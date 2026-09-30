@@ -20,6 +20,16 @@ describe("OIDC bearer verification (Entra-shaped tokens)", () => {
     const id = await verifyBearer(await sign({ tid: "t", oid: "o-1", name: "Markus", preferred_username: "m@bahn.de", roles: ["Editor"], workspaces: ["Frankfurt"], departments: ["ITK"] }), cfg);
     expect(id).toMatchObject({ subject: "t:o-1", name: "Markus", email: "m@bahn.de", role: "editor", workspaces: ["Frankfurt"], departments: ["ITK"] });
   });
+  it("missing roles AND missing workspaces → viewer with no workspace access (never an implicit grant)", async () => {
+    const id = await verifyBearer(await sign({ tid: "t", oid: "o-2", name: "Nobody" }), cfg);
+    expect(id.role).toBe("viewer");
+    expect(id.workspaces).toEqual([]);
+    expect(id.departments).toEqual([]);
+    const junk = await verifyBearer(await sign({ sub: "s", roles: ["superuser", "Owner"], workspaces: "ALL" }), cfg);
+    expect(junk.role).toBe("viewer");
+    expect(junk.workspaces).toEqual([]);
+    expect((await verifyBearer(await sign({ sub: "s", roles: ["editor"], workspaces: ["ALL"] }), cfg)).workspaces).toBe("ALL");
+  });
   it("no roles claim → viewer (least privilege); admin wins over editor", async () => {
     expect((await verifyBearer(await sign({ sub: "s" }), cfg)).role).toBe("viewer");
     expect((await verifyBearer(await sign({ sub: "s", roles: ["editor", "admin"] }), cfg)).role).toBe("admin");

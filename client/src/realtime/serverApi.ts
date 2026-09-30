@@ -10,9 +10,18 @@ import type { ConflictInfo } from "@shared/project-contract";
 
 export const SERVER_MODE = import.meta.env.VITE_SERVER_MODE === "1";
 
-let tokenProvider: (() => Promise<string | null>) | null = null;
+/**
+ * Default token source until MSAL is integrated: a token placed in
+ * sessionStorage (per-tab, cleared on close) by the sign-in flow. Registered
+ * providers (setAccessTokenProvider) take precedence.
+ */
+export const TOKEN_STORAGE_KEY = "bahn.access_token";
+const storageProvider = async (): Promise<string | null> => {
+  try { return sessionStorage.getItem(TOKEN_STORAGE_KEY); } catch { return null; }
+};
+let tokenProvider: (() => Promise<string | null>) | null = storageProvider;
 /** MSAL (or any OIDC library) registers how to obtain the current access token. */
-export const setAccessTokenProvider = (p: (() => Promise<string | null>) | null) => { tokenProvider = p; };
+export const setAccessTokenProvider = (p: (() => Promise<string | null>) | null) => { tokenProvider = p ?? storageProvider; };
 
 export const authHeaders = async (): Promise<Record<string, string>> => {
   const t = await tokenProvider?.();
