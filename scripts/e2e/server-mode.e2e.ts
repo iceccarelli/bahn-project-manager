@@ -16,6 +16,7 @@ import path from "node:path";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { SignJWT, exportJWK, generateKeyPair } from "jose";
 import mysql from "mysql2/promise";
+import * as XLSX from "xlsx";
 
 const DB_BASE = process.env.E2E_DB_BASE ?? "mysql://bahn:bahn@127.0.0.1:3306";
 const DB_NAME = "bahn_e2e";
@@ -586,6 +587,24 @@ async function main() {
     await page.locator('input[role="combobox"]').press("Enter");
     await until(async () => /projekt=\d+/.test(page.url()), 10000, `Enter opened the exact project (url ${page.url()})`);
     await page.close();
+  });
+
+  await step("EXPORT is workspace-scoped; there is no import route; unknown /api paths are 404", async () => {
+    const dbFr = Number((await q("SELECT COUNT(*) n FROM projects WHERE bahnhofsmanagement='Frankfurt'"))[0].n);
+    const dbAll = Number((await q("SELECT COUNT(*) n FROM projects"))[0].n);
+    const exp = async (token: string) => {
+      const r = await fetch(`${URLS[0]}/api/export/excel`, { headers: { authorization: `Bearer ${token}` } });
+      if (r.status !== 200) throw new Error(`export -> ${r.status}`);
+      const wb = XLSX.read(Buffer.from(await r.arrayBuffer()));
+      return XLSX.utils.sheet_to_json<Record<string, string>>(wb.Sheets["Übersicht"]!);
+    };
+    const rb = await exp(tokenB), ra = await exp(tokenA);
+    if (rb.length !== dbFr || rb.some(r => r["Bahnhofsmanagement"] !== "Frankfurt")) throw new Error(`B export leaked: ${rb.length} rows (Frankfurt has ${dbFr})`);
+    if (ra.length !== dbAll) throw new Error(`A export ${ra.length} != ${dbAll}`);
+    const anon = await fetch(`${URLS[0]}/api/export/excel`);
+    if (anon.status !== 401) throw new Error(`anonymous export -> ${anon.status}`);
+    const imp = await fetch(`${URLS[0]}/api/import/excel`, { method: "POST", headers: { authorization: `Bearer ${tokenA}` } });
+    if (imp.status !== 404) throw new Error(`import route exists: ${imp.status}`);
   });
 
   await step("integrity: every committed change has exactly one audit set, one event, one feedSeq; feed is gapless; nothing unpublished/dead", async () => {

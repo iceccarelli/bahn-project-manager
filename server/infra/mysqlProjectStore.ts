@@ -443,10 +443,12 @@ export class MysqlProjectStore implements ProjectStore {
     return rows.map(r => ({ ...parseEnvelope(r.envelope), feedSeq: Number(r.feedSeq) }));
   }
 
-  async shellSummary() {
+  async shellSummary(workspaces: readonly string[] | null) {
+    if (workspaces !== null && workspaces.length === 0) return { projectCount: 0, lastUpdatedAt: null };
     const [row] = await this.db
       .select({ n: sql<number>`COUNT(*)`, last: sql<Date | null>`MAX(${projects.updatedAt})` })
-      .from(projects);
+      .from(projects)
+      .where(workspaces === null ? undefined : inArray(projects.bahnhofsmanagement, [...workspaces]));
     return { projectCount: Number(row?.n ?? 0), lastUpdatedAt: iso(row?.last ? new Date(row.last) : null) };
   }
 

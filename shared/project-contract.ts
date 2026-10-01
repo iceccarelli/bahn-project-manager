@@ -6,7 +6,8 @@
  * valid Projektstand or Projektbeschreibung is.
  */
 import { z } from "zod";
-import { ProjectSchema } from "./validation";
+import { DEPARTMENTS, ProjectSchema } from "./validation";
+import { normalizeReviewStatus } from "./review-status";
 import type { FieldChange } from "./domain-events";
 
 /** The only columns a client may write on a project. Everything else is server-owned. */
@@ -63,6 +64,8 @@ export const UpdateProjectInputSchema = z.object({
 });
 export type UpdateProjectInput = z.infer<typeof UpdateProjectInputSchema>;
 
+/** A review status is null (cleared) or maps onto the canonical vocabulary (annotated variants such as "Niederschrift erstellt (LP05…)" included). */
+const reviewStatus = z.string().max(128).nullable().optional().refine(v => v == null || v.trim() === "" || normalizeReviewStatus(v) !== null, "Unbekannter Prüfstatus");
 export const REVIEW_FIELDS = ["status", "prueferName", "datum"] as const;
 export type ReviewField = (typeof REVIEW_FIELDS)[number];
 /** Change keys for review edits live in the same `changes` map as project fields: review.<Gewerk>.<field>. */
@@ -71,12 +74,12 @@ export const REVIEW_KEY_RE = /^review\.([^.]+)\.(status|prueferName|datum)$/;
 
 export const UpdateReviewInputSchema = z.object({
   projectId: z.number().int().positive(),
-  department: z.string().min(1).max(64),
+  department: z.enum(DEPARTMENTS),
   /** the PROJECT version: a review is part of the Project aggregate */
   expectedVersion: z.number().int().min(1),
   changes: z
     .object({
-      status: z.string().max(128).nullable().optional(),
+      status: reviewStatus,
       prueferName: z.string().max(256).nullable().optional(),
       datum: z.string().max(40).nullable().optional(),
     })
@@ -89,11 +92,11 @@ export type UpdateReviewInput = z.infer<typeof UpdateReviewInputSchema>;
 
 export const CreateReviewInputSchema = z.object({
   projectId: z.number().int().positive(),
-  department: z.string().min(1).max(64),
+  department: z.enum(DEPARTMENTS),
   /** the PROJECT version: a review is part of the Project aggregate */
   expectedVersion: z.number().int().min(1),
   fields: z.object({
-    status: z.string().max(128).nullable().optional(),
+    status: reviewStatus,
     prueferName: z.string().max(256).nullable().optional(),
     datum: z.string().max(40).nullable().optional(),
   }).strict().default({}),

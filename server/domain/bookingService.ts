@@ -63,6 +63,12 @@ export class BookingService {
     const bm = station ? (resolveGeo(station, null)?.bm ?? null) : null;
     if (p.role === "viewer") throw new ForbiddenError("Keine Berechtigung zum Buchen");
     if (!canEditProject(p, { bahnhofsmanagement: bm })) throw new ForbiddenError("Keine Berechtigung für diese Region");
+    // a booking may only be linked to a project the caller is entitled to see (a restricted editor cannot attach slots to,
+    // or learn the existence of, another workspace's project)
+    if (input.projectId != null) {
+      const linked = await tx.detail(input.projectId);
+      if (!linked || !canViewProject(p, linked)) throw new NotFoundError("Projekt");
+    }
     const cur = await tx.lockSlot(input.id);
     if (!cur) throw new NotFoundError("Termin");
     if (cur.syncVersion !== input.expectedVersion || cur.status !== "Frei") {

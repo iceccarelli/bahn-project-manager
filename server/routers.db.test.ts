@@ -97,8 +97,11 @@ describe.skipIf(!hasTestDb)("tRPC projects router (real DB)", () => {
   });
 
   it("audit is restricted to roles that may view it", async () => {
-    await expect(as(viewer).audit.list()).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await expect(as(editor).audit.list()).resolves.toBeInstanceOf(Array);
+    await expect(as(viewer).audit.page()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(as(editor).audit.page()).resolves.toMatchObject({ items: expect.any(Array) });
+    // the unscoped legacy reads no longer exist
+    for (const gone of ["audit.list"]) expect((appRouter as any)._def.procedures[gone]).toBeUndefined();
+    expect((appRouter as any)._def.procedures["projects.searchSuggestions"]).toBeUndefined();
   });
 
   it("shellSummary is a cheap aggregate, not a project list", async () => {

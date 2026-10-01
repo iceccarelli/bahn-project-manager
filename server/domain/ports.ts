@@ -129,7 +129,7 @@ export interface ProjectStore {
   checklistDetail(id: number): Promise<ChecklistDTO | null>;
   versions(ids: number[]): Promise<Map<number, { version: number; bahnhofsmanagement: string | null }>>;
   eventsSince(aggregateId: number, afterVersion: number, limit: number): Promise<DomainEvent[]>;
-  shellSummary(): Promise<{ projectCount: number; lastUpdatedAt: string | null }>;
+  shellSummary(workspaces: readonly string[] | null): Promise<{ projectCount: number; lastUpdatedAt: string | null }>;
   /** highest published feedSeq (0 when empty) */
   feedHead(): Promise<number>;
   /** published events with feedSeq in (after, upTo], oldest first */

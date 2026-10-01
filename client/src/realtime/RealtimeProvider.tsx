@@ -11,6 +11,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { scope as scopeKey, type DomainEvent } from "@shared/domain-events";
+import type { DEPARTMENTS } from "@shared/validation";
+type Department = (typeof DEPARTMENTS)[number];
 import { EDITABLE_PROJECT_FIELDS, reviewChangeKey, type ConflictInfo, type ProjectDetail, type ReviewField, type UpdateProjectInput } from "@shared/project-contract";
 import { ProjectSyncEngine, type ProjectChange } from "./projectSyncEngine";
 import { PresenceClientStore } from "./presence";
@@ -263,7 +265,7 @@ function EditorProvider({ children }: { children: ReactNode }) {
     if (expectedVersion === undefined) { setError("Projekt nicht geladen"); return null; }
     const optimistic = Object.fromEntries(Object.entries(changes).map(([f, v]) => [reviewChangeKey(department, f as ReviewField), v ?? null]));
     return run(projectId, optimistic,
-      ({ mutationId, idempotencyKey }) => serverApi.projects.updateReview.mutate({ projectId, department, expectedVersion, changes, idempotencyKey, mutationId }),
+      ({ mutationId, idempotencyKey }) => serverApi.projects.updateReview.mutate({ projectId, department: department as Department, expectedVersion, changes, idempotencyKey, mutationId }),
       c => setConflict({ projectId, conflict: c, changes: {}, review: { department, changes } }));
   }, [engine, run]);
 
@@ -276,7 +278,7 @@ function EditorProvider({ children }: { children: ReactNode }) {
       setConflict(null);
       // the review path re-sends against the project's current version too
       if (c.review) return run(c.projectId, Object.fromEntries(Object.entries(c.review.changes).map(([f, v]) => [reviewChangeKey(c.review!.department, f as ReviewField), v ?? null])),
-        ({ mutationId, idempotencyKey }) => serverApi.projects.updateReview.mutate({ projectId: c.projectId, department: c.review!.department, expectedVersion: c.conflict.currentVersion, changes: c.review!.changes, idempotencyKey, mutationId }),
+        ({ mutationId, idempotencyKey }) => serverApi.projects.updateReview.mutate({ projectId: c.projectId, department: c.review!.department as Department, expectedVersion: c.conflict.currentVersion, changes: c.review!.changes, idempotencyKey, mutationId }),
         next => setConflict({ ...c, conflict: next }));
       return edit(c.projectId, c.changes, { expectedVersion: c.conflict.currentVersion });
     },

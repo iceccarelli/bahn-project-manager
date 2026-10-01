@@ -26,6 +26,14 @@ import { eq } from "drizzle-orm";
 import { toDate } from "../shared/date";
 import { SYNC_VERSION, DATA_JSON_PATH } from "../shared/const";
 
+// Operator tool that writes outside the domain pipeline (no audit, no events, no versioning, no read models).
+// Never against a production database unless explicitly acknowledged.
+if (process.env.NODE_ENV === "production" && process.env.I_UNDERSTAND_THIS_BYPASSES_THE_DOMAIN_PIPELINE !== "1") {
+  console.error("refusing to run in production: this script bypasses audit/events/versioning (see docs/data-plane.md)");
+  process.exit(2);
+}
+
+
 const DRY_RUN = process.argv.includes("--dry-run");
 const SINGLE_PROJECT = process.argv.find(a => a.startsWith("--project="))?.split("=")[1];
 

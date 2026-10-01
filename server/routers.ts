@@ -6,9 +6,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { sdk } from "./_core/sdk";
 import {
-  getAuditLog,
   getFilterOptions,
-  getSearchSuggestions,
   upsertUser,
 } from "./db";
 import { ODataQuerySchema, parseODataFilter } from "@shared/server/odata";
@@ -40,13 +38,8 @@ import { m } from "./observability/metrics";
 import { ConflictError } from "./domain/errors";
 
 /** 5 s in-process cache: the shell polls this, it must not become a COUNT(*) per tab. */
-let shellCache: { at: number; value: { projectCount: number; lastUpdatedAt: string | null } } | null = null;
-async function shellSummaryCached(load: () => Promise<{ projectCount: number; lastUpdatedAt: string | null }>) {
-  if (shellCache && Date.now() - shellCache.at < 5000) return shellCache.value;
-  const value = await load();
-  shellCache = { at: Date.now(), value };
-  return value;
-}
+const shellScoped = new KeyedCache<{ projectCount: number; lastUpdatedAt: string | null }>("shell", 5_000, 200);
+const shellSummaryCached = (key: string, load: () => Promise<{ projectCount: number; lastUpdatedAt: string | null }>) => shellScoped.get(key, load);
 
 // The read is a few tiny indexed lookups; this short cache only absorbs bursts (one load per scope per 5 s).
 const departmentScoped = new KeyedCache<Awaited<ReturnType<typeof readDepartment>>>("department", 5_000, 500);
@@ -265,16 +258,13 @@ export const appRouter = router({
       }),
 
     /** Global-chrome summary: replaces useAllProjects() in the shell. */
-    shellSummary: protectedProcedure.query(async () => {
+    shellSummary: protectedProcedure.query(async ({ ctx }) => {
       const { store } = await requireServices();
-      return shellSummaryCached(() => store.shellSummary());
+      const restriction = workspaceRestriction(ctx.principal);
+      return shellSummaryCached(scopeKey(restriction), () => store.shellSummary(restriction));
     }),
 
-    searchSuggestions: protectedProcedure
-      .input(z.object({ term: z.string().trim().min(1).max(100) }))
-      .query(async ({ input }) => {
-        return getSearchSuggestions(input.term);
-      }),
+    // `searchSuggestions` is gone: it read every workspace's names. `search.query` is the scoped replacement.
   }),
 
   // ============= NOTIFICATIONS =============
@@ -411,16 +401,7 @@ export const appRouter = router({
         const { pool } = await requireServices();
         return pageAudit(pool, workspaceRestriction(ctx.principal), input);
       }),
-    list: protectedProcedure
-      .input(z.object({
-        entityType: z.string().optional(),
-        entityId: z.number().optional(),
-        limit: z.number().max(500).default(100),
-      }).optional())
-      .query(async ({ input, ctx }) => {
-        if (!canViewAudit(ctx.principal)) throw new TRPCError({ code: "FORBIDDEN" });
-        return getAuditLog(input ?? {});
-      }),
+    // There is no unscoped `audit.list`: `audit.page` is the only audit read (workspace-scoped, keyset-paginated).
   }),
 
   // ============= GLOBAL SEARCH =============

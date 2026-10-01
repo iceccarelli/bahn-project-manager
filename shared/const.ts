@@ -13,7 +13,7 @@ export const SYNC_VERSION = 2;
 /**
  * Repo-relative path to the canonical dataset. It is `client/public/data.json`,
  * not `public/data.json` — the old value made every seed/sync entry point
- * (scripts/seed-perfect.ts, scripts/sync-json-db.ts, server/sync-db.ts,
+ * (scripts/seed-perfect.ts, scripts/sync-json-db.ts,
  * drizzle/seed-from-json.ts) fail with "data.json not found".
  */
 export const DATA_JSON_PATH = "client/public/data.json";

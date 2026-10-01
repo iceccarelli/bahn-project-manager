@@ -159,7 +159,7 @@ else {
       }); else need("realtime: second user receives the update live", "needs SMOKE_TOKEN_RESTRICTED");
 
       await check("audit: every change recorded with actor", async () => {
-        const r = await trpc("audit.list", { entityType: "project", entityId: P.id, limit: 50 });
+        const r0 = await trpc("audit.page", { entityType: "project", entityId: P.id, limit: 50, days: 0 }); const r = { ...r0, data: r0.data?.items };
         if (r.status === 403) throw new Error("SMOKE_TOKEN is not an auditor/admin: cannot read the audit log (use an admin token to prove audit)");
         if (r.status !== 200 || !Array.isArray(r.data)) throw new Error(JSON.stringify(r.error ?? r));
         if (r.data.length < 3 || r.data.some(a => !a.userId && !a.actorId && !a.userName && !a.actor)) throw new Error(`audit rows: ${r.data.length} (need >=3 with an actor)`);
