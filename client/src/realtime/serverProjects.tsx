@@ -17,6 +17,7 @@ import { deriveProjectMetrics, type ProjectMetrics } from "@shared/project-metri
 import type { Filters, Project, Review } from "@/hooks/useDataQuery";
 import { serverApi, useCollectionScopes } from "./serverApi";
 import ConflictDialog from "./ConflictDialog";
+import type { Drill } from "@shared/drilldown";
 import { serverKeys, useOptionalRealtime, useProjectEditor, useRt } from "./RealtimeProvider";
 
 /** server row → the shape the existing Projekte components render */
@@ -45,6 +46,8 @@ export function toLegacyProject(p: ProjectListItem | ProjectDetail): Project & {
 export interface ServerProjectsParams {
   search?: string; region?: string; projektleiter?: string; pruefer?: string; status?: string;
   department?: string; sortBy?: string; sortDir?: "asc" | "desc";
+  /** Dashboard drill-down (bedarf / tone / station ids): the SERVER evaluates it, the page never filters a partial list itself. */
+  drill?: Drill;
 }
 
 const PAGE = 100;
@@ -53,6 +56,7 @@ export function useServerProjects(params: ServerProjectsParams) {
   const { engine, retain } = useRt();
   const editor = useProjectEditor();
   const sort = (PROJECT_SORTS as readonly string[]).includes(params.sortBy ?? "") ? (params.sortBy as (typeof PROJECT_SORTS)[number]) : "id";
+  const drillKey = params.drill && Object.keys(params.drill).length ? JSON.stringify(params.drill) : "";
   const input = useMemo(() => ({
     limit: PAGE,
     sort,
@@ -63,10 +67,11 @@ export function useServerProjects(params: ServerProjectsParams) {
     ...(params.pruefer ? { pruefer: params.pruefer } : {}),
     ...(params.department ? { department: params.department } : {}),
     ...(params.status ? { reviewStatus: params.status } : {}),
+    ...(drillKey ? { drill: params.drill } : {}),
     // Projection: exactly what the table renders. Detail-only fields (eigvEinstufung, createdAt) and review
     // ids/timestamps stay on projects.get. Pages never ask for COUNT(*) — the total is a separate cached query.
     expand: ["table", "reviewSummary"] as ("table" | "reviewSummary")[],
-  }), [sort, params.sortDir, params.search, params.region, params.projektleiter, params.pruefer, params.department, params.status]);
+  }), [sort, params.sortDir, params.search, params.region, params.projektleiter, params.pruefer, params.department, params.status, drillKey]);
 
   // Realtime topology: ONE compact membership channel (create/delete/move) for this view's authorization scope.
   // Field edits arrive on `project:<id>` channels for the rows actually on screen (see useRowScopes) — a global
@@ -102,7 +107,8 @@ export function useServerProjects(params: ServerProjectsParams) {
     ...(params.pruefer ? { pruefer: params.pruefer } : {}),
     ...(params.department ? { department: params.department } : {}),
     ...(params.status ? { reviewStatus: params.status } : {}),
-  }), [params.search, params.region, params.projektleiter, params.pruefer, params.department, params.status]);
+    ...(drillKey ? { drill: params.drill } : {}),
+  }), [params.search, params.region, params.projektleiter, params.pruefer, params.department, params.status, drillKey]);
   const countQ = useQuery({
     queryKey: [...serverKeys.counts(), countInput],
     queryFn: () => serverApi.projects.count.query(countInput),

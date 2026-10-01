@@ -28,6 +28,7 @@ import { loadPortfolioProjects } from "./infra/portfolioModel";
 import { pageAudit } from "./infra/auditQuery";
 import { searchGlobal } from "./infra/searchQuery";
 import { buildPortfolio, buildReelView } from "@shared/portfolio-view";
+import { drillProjectIds, isEmptyDrill, startOfDayUtc, type Drill } from "@shared/drilldown";
 import { AUDIT_DOCUMENT_KINDS } from "@shared/audit-contract";
 import type { PortfolioProject } from "@shared/portfolio-metrics";
 import { MapQuerySchema, MapStationQuerySchema } from "@shared/map-contract";
@@ -51,6 +52,16 @@ const portfolioView = new KeyedCache<ReturnType<typeof buildPortfolio>>("portfol
 // 5 s burst absorber per (scope, user, term): typing the same prefix from many tabs costs one set of queries.
 const auditRecordWindow = new Map<string, { n: number; reset: number }>();
 const searchCache = new KeyedCache<{ q: string; entries: Awaited<ReturnType<typeof searchGlobal>> }>("search", 5_000, 2000);
+/**
+ * A Dashboard drill-down resolved over the caller's authorized rows (the same cached rows and the same pinned day the
+ * Dashboard's own figures use), so a clicked number and the list it opens are one computation. null = no restriction.
+ */
+async function resolveDrill(restriction: readonly string[] | null, drill: Drill | undefined): Promise<Set<number> | null> {
+  if (isEmptyDrill(drill)) return null;
+  const { pool } = await requireServices();
+  const rows = await portfolioRows.get(scopeKey(restriction), () => loadPortfolioProjects(pool, restriction));
+  return drillProjectIds(rows, drill, startOfDayUtc(Date.now()));
+}
 const dashboardScoped = new KeyedCache<Awaited<ReturnType<typeof readDashboard>>>("dashboard", 5_000);
 /** Per-project review statuses → shared/project-metrics.ts. `workspaces` null = all. */
 async function computeMetrics(workspaces: readonly string[] | null) {
@@ -145,7 +156,9 @@ export const appRouter = router({
         // number is delivered live or by projects.changes, so nothing falls
         // between the list snapshot and the subscription.
         const feedHead = await store.feedHead();
-        const page = await store.list(input, { workspaces: workspaceRestriction(ctx.principal) });
+        const restriction = workspaceRestriction(ctx.principal);
+        const ids = await resolveDrill(restriction, input.drill);
+        const page = await store.list(input, { workspaces: restriction }, ids ? { ids } : {});
         return { ...page, feedHead };
       }),
 
@@ -154,12 +167,12 @@ export const appRouter = router({
      * Cached per normalized authorization scope + filters; a stale-by-seconds total is fine for a header count.
      */
     count: protectedProcedure
-      .input(ListProjectsInputSchema.pick({ search: true, bahnhofsmanagement: true, projektstand: true, projektleiter: true, department: true, reviewStatus: true, pruefer: true }))
+      .input(ListProjectsInputSchema.pick({ search: true, bahnhofsmanagement: true, projektstand: true, projektleiter: true, department: true, reviewStatus: true, pruefer: true, drill: true }))
       .query(async ({ input, ctx }) => {
         const { store } = await requireServices();
         const restriction = workspaceRestriction(ctx.principal);
-        const key = `${scopeKey(restriction)}#${JSON.stringify(Object.entries(input).filter(([, v]) => v !== undefined).sort())}`;
-        return { total: await countCache.get(key, () => store.count(input, { workspaces: restriction })), exact: true as const };
+        const key = `${scopeKey(restriction)}#${startOfDayUtc(Date.now())}#${JSON.stringify(Object.entries(input).filter(([, v]) => v !== undefined).sort())}`;
+        return { total: await countCache.get(key, async () => { const ids = await resolveDrill(restriction, input.drill); return store.count(input, { workspaces: restriction }, ids ? { ids } : {}); }), exact: true as const };
       }),
 
     get: protectedProcedure
@@ -371,11 +384,15 @@ export const appRouter = router({
   map: router({
     query: protectedProcedure.input(MapQuerySchema).query(async ({ input, ctx }) => {
       const { store } = await requireServices();
-      return store.mapQuery(input, { workspaces: workspaceRestriction(ctx.principal) });
+      const restriction = workspaceRestriction(ctx.principal);
+      const ids = await resolveDrill(restriction, input.drill);
+      return store.mapQuery(input, { workspaces: restriction }, ids ? { ids } : {});
     }),
     station: protectedProcedure.input(MapStationQuerySchema).query(async ({ input, ctx }) => {
       const { store } = await requireServices();
-      return store.mapStation(input, { workspaces: workspaceRestriction(ctx.principal) });
+      const restriction = workspaceRestriction(ctx.principal);
+      const ids = await resolveDrill(restriction, input.drill);
+      return store.mapStation(input, { workspaces: restriction }, ids ? { ids } : {});
     }),
   }),
 

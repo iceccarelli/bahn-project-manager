@@ -8,6 +8,7 @@
 import { z } from "zod";
 import { DEPARTMENTS, ProjectSchema } from "./validation";
 import { normalizeReviewStatus } from "./review-status";
+import { DrillSchema } from "./drilldown";
 import type { FieldChange } from "./domain-events";
 
 /** The only columns a client may write on a project. Everything else is server-owned. */
@@ -204,6 +205,8 @@ export const ListProjectsInputSchema = z.object({
    */
   expand: z.array(z.enum(["reviews", "details", "table", "reviewSummary"])).max(4).default([]),
   includeTotal: z.boolean().default(false),
+  /** Dashboard drill-down (bedarf / tone / station ids): resolved on the server, see shared/drilldown.ts */
+  drill: DrillSchema.optional(),
 });
 export type ListProjectsInput = z.infer<typeof ListProjectsInputSchema>;
 

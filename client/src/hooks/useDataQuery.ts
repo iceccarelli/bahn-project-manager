@@ -350,6 +350,8 @@ function useLocalProjects(params: {
   sortBy?: string;
   sortDir?: "asc" | "desc";
   showAll?: boolean;
+  /** server build only: Dashboard drill-down, evaluated by the server */
+  drill?: import("@shared/drilldown").Drill;
   /*
    * minLat / maxLat / minLng / maxLng were declared here and never
    * destructured or used in the filter memo below. The Projekte page passed

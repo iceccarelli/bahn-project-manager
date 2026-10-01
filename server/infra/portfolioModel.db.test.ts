@@ -3,6 +3,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { hasTestDb, createTestDatabase } from "../testing/testDb";
 import { loadPortfolioProjects } from "./portfolioModel";
 import { buildPortfolio } from "@shared/portfolio-view";
+import { drillProjectIds, startOfDayUtc } from "@shared/drilldown";
+import { MysqlProjectStore } from "./mysqlProjectStore";
 
 describe.skipIf(!hasTestDb)("portfolio read model (real DB)", () => {
   let t: Awaited<ReturnType<typeof createTestDatabase>>;
@@ -55,5 +57,29 @@ describe.skipIf(!hasTestDb)("portfolio read model (real DB)", () => {
     const v = buildPortfolio(await loadPortfolioProjects(t.pool, []), NOW);
     expect(v.metrics.total).toBe(0);
     expect(v.workload).toEqual([]);
+  });
+
+  it("a drill-down lists EXACTLY the projects its Dashboard number counted (same predicates, same day), scoped", async () => {
+    const rows = await loadPortfolioProjects(t.pool, null);
+    const today = startOfDayUtc(NOW);
+    const view = buildPortfolio(rows, NOW);
+    const store = new MysqlProjectStore(t.db as never);
+    for (const key of ["overdue", "blocked", "nachforderung", "unassigned"] as const) {
+      const ids = drillProjectIds(rows, { bedarf: key }, today)!;
+      expect(ids.size, key).toBe(view.bedarf.find(b => b.key === key)!.projects);
+      const page = await store.list({ limit: 50, sort: "id", dir: "asc", expand: [], includeTotal: true } as never, { workspaces: null }, { ids });
+      expect(new Set(page.items.map((i: any) => i.id)), key).toEqual(ids);
+      expect(page.total).toBe(ids.size);
+    }
+    // a tone slice narrowed to one Gewerk inside the predicate
+    const eea = drillProjectIds(rows, { tone: "pending", department: "EEA" }, today)!;
+    expect(eea.size).toBe(view.gewerke.find(g => g.name === "EEA")!.slices.find(sl => sl.tone === "pending")?.projects ?? 0);
+    // authorization is intersected: a restricted caller cannot reach another workspace's id even by naming it
+    const kasselRows = await loadPortfolioProjects(t.pool, ["Kassel"]);
+    const other = rows.find(r => r.bahnhofsmanagement === "Frankfurt")!.id;
+    const ids = drillProjectIds(kasselRows, { ids: [other] }, today)!;
+    expect(ids.size).toBe(0);
+    const page = await store.list({ limit: 50, sort: "id", dir: "asc", expand: [] } as never, { workspaces: ["Kassel"] }, { ids: new Set([other]) });
+    expect(page.items).toEqual([]);
   });
 });

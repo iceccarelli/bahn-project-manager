@@ -630,6 +630,34 @@ async function main() {
     await until(async () => Number((await q("SELECT COUNT(*) n FROM audit_log WHERE entityType='user' AND field='grant'"))[0].n) >= 2, 8000, "grant audit rows");
   });
 
+  await step("DRILL-DOWN: every Dashboard number lands on EXACTLY the projects it counted (server-evaluated, scoped), in the real UI", async () => {
+    for (const [who, token, base] of [["A", tokenA, URLS[0]!], ["B", tokenB, URLS[1]!]] as const) {
+      const pf = await api(base, token, "dashboard.portfolio", undefined, "GET");
+      for (const b of pf.data.bedarf as Array<{ key: string; projects: number; rows: number }>) {
+        const l = await api(base, token, "projects.list", { limit: 100, expand: [], includeTotal: true, drill: { bedarf: b.key } }, "GET");
+        if (l.status !== 200 || l.data.total !== b.projects) throw new Error(`${who} bedarf ${b.key}: list total ${l.data?.total} != dashboard ${b.projects}`);
+        const c = await api(base, token, "projects.count", { drill: { bedarf: b.key } }, "GET");
+        if (c.data.total !== b.projects) throw new Error(`${who} count(${b.key}) ${c.data.total} != ${b.projects}`);
+      }
+      const slice = (pf.data.tones.slices as Array<{ tone: string; projects: number }>)[0]!;
+      const lt = await api(base, token, "projects.list", { limit: 100, expand: [], includeTotal: true, drill: { tone: slice.tone } }, "GET");
+      if (lt.data.total !== slice.projects) throw new Error(`${who} tone ${slice.tone}: ${lt.data.total} != ${slice.projects}`);
+      const eea = (pf.data.gewerke as Array<{ name: string; slices: Array<{ tone: string; projects: number }> }>).find(g => g.name === "EEA")!.slices[0];
+      if (eea) { const le = await api(base, token, "projects.list", { limit: 100, expand: [], includeTotal: true, drill: { tone: eea.tone, department: "EEA" } }, "GET"); if (le.data.total !== eea.projects) throw new Error(`${who} EEA tone ${eea.tone}: ${le.data.total} != ${eea.projects}`); }
+    }
+    // authorization is intersected: B cannot reach a Kassel project by naming its id in a drill
+    const ka = (await q("SELECT id FROM projects WHERE bahnhofsmanagement='Kassel' LIMIT 1"))[0].id as number;
+    const sneaky = await api(URLS[1]!, tokenB, "projects.list", { limit: 10, expand: [], includeTotal: true, drill: { ids: [ka] } }, "GET");
+    if (sneaky.data.total !== 0 || sneaky.data.items.length) throw new Error("drill ids bypassed workspace authorization");
+    // the real UI: the chip and the list say what the Dashboard said
+    const pfB = await api(URLS[1]!, tokenB, "dashboard.portfolio", undefined, "GET");
+    const od = (pfB.data.bedarf as Array<{ key: string; projects: number; rows: number }>).find(b => b.key === "overdue")!;
+    const page = await B.ctx.newPage();
+    await page.goto(`${URLS[1]}/projects?bedarf=overdue&view=cards`);
+    await until(async () => (await page.getByText(new RegExp(`${od.rows.toLocaleString("de-DE")} Prüfzeilen in ${od.projects.toLocaleString("de-DE")} Projekten`)).count()) > 0, 15000, "drill chip with the dashboard's numbers");
+    await page.close();
+  });
+
   await step("integrity: every committed change has exactly one audit set, one event, one feedSeq; feed is gapless; nothing unpublished/dead", async () => {
     await until(async () => Number((await q("SELECT COUNT(*) n FROM domain_events WHERE processedAt IS NULL"))[0].n) === 0, 5000, "outbox drained");
     const [c] = await q("SELECT COUNT(*) events, SUM(failedAt IS NOT NULL) dead, MIN(feedSeq) lo, MAX(feedSeq) hi, COUNT(feedSeq) seqd FROM domain_events");

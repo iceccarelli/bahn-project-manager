@@ -8,6 +8,8 @@ import {
 } from "@/components/ui/table";
 import { useProjects, useFilters, type Project, type Review } from "@/hooks/useDataQuery";
 import { useProjectsPageExtras } from "@/hooks/useProjectsPage";
+import { useDrillCounts } from "@/hooks/usePortfolio";
+import type { Drill } from "@shared/drilldown";
 import { SERVER_MODE } from "@/realtime/serverApi";
 import { useRowScopes } from "@/realtime/serverProjects";
 import ConnectionBadge from "@/realtime/ConnectionBadge";
@@ -166,7 +168,16 @@ export default function Projects() {
   /** Which project the detail dialog is showing, if any. */
   const [detailProjectId, setDetailProjectId] = useState<number | null>(null);
 
+  // Server build: every focus (Dashboard bedarf / tone slice / map station group / one project) is a DRILL evaluated by the
+  // server over authorized rows, so it is exact across ALL pages — the browser never filters a partially loaded list.
+  const serverDrill = useMemo<Drill | undefined>(() => {
+    if (!SERVER_MODE) return undefined;
+    const ids = stationFocus ? stationFocus.projectIds.slice(0, 500) : projectFocus !== null ? [projectFocus] : undefined;
+    const d: Drill = { ...(bedarfFocus ? { bedarf: bedarfFocus } : {}), ...(toneFocus ? { tone: toneFocus, ...(toneGewerk ? { department: toneGewerk } : {}) } : {}), ...(ids && ids.length ? { ids } : {}) };
+    return Object.keys(d).length ? d : undefined;
+  }, [stationFocus, projectFocus, bedarfFocus, toneFocus, toneGewerk]);
   const projectsQuery = useProjects({
+    drill: serverDrill,
     search: search || undefined,
     region: region || undefined,
     projektleiter: projektleiter || undefined,
@@ -449,6 +460,7 @@ export default function Projects() {
    */
   const visibleProjects = useMemo(() => {
     let list: Project[] = data?.projects ?? [];
+    if (SERVER_MODE) return list; // the server already applied every focus (see serverDrill): exact over all pages
     if (stationFocus) {
       const ids = new Set(stationFocus.projectIds);
       list = list.filter((p) => ids.has(p.id));
@@ -472,12 +484,14 @@ export default function Projects() {
   }, [data, stationFocus, projectFocus, bedarfFocus, toneFocus, toneGewerk, todayMidnight]);
 
   /** The same reconciliation the Handlungsbedarf chip prints, for a slice. */
+  const drillCounts = useDrillCounts(SERVER_MODE && !!(bedarfFocus || toneFocus), bedarfFocus, toneFocus, toneGewerk);
   const toneSummary = useMemo(() => {
     if (!toneFocus) return null;
+    if (SERVER_MODE) return drillCounts.tone;
     if (!extras.hasWholeDataset) return null;
     const counted = countTones(allData?.projects ?? [], toneGewerk ?? undefined);
     return counted.find((c) => c.tone === toneFocus) ?? null;
-  }, [toneFocus, toneGewerk, allData, extras.hasWholeDataset]);
+  }, [toneFocus, toneGewerk, allData, extras.hasWholeDataset, drillCounts.tone]);
 
   /**
    * The reconciliation the chip prints.
@@ -489,11 +503,13 @@ export default function Projects() {
    * trusting the screen.
    */
   const bedarfSummary = useMemo(() => {
-    if (!bedarfFocus || !extras.hasWholeDataset) return null;
+    if (!bedarfFocus) return null;
+    if (SERVER_MODE) return drillCounts.bedarf;
+    if (!extras.hasWholeDataset) return null;
     return (
       countBedarf(allData?.projects ?? [], todayMidnight).find((c) => c.key === bedarfFocus) ?? null
     );
-  }, [bedarfFocus, allData, todayMidnight, extras.hasWholeDataset]);
+  }, [bedarfFocus, allData, todayMidnight, extras.hasWholeDataset, drillCounts.bedarf]);
 
   const detailProject = extras.detailProject;
 
@@ -1166,7 +1182,7 @@ export default function Projects() {
               SERVER_MODE ? (
                 <ServerMap
                   className="relative h-[65vh] min-h-[380px] w-full sm:h-[560px] lg:h-[600px]"
-                  filters={{ search: search || undefined, bahnhofsmanagement: region || undefined, projektleiter: projektleiter || undefined, pruefer: pruefer || undefined, department: department || undefined, reviewStatus: status || undefined }}
+                  filters={{ search: search || undefined, bahnhofsmanagement: region || undefined, projektleiter: projektleiter || undefined, pruefer: pruefer || undefined, department: department || undefined, reviewStatus: status || undefined, drill: serverDrill }}
                   onProjectSelect={(id) => setDetailProjectId(id)}
                 />
               ) : (

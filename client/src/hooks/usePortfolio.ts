@@ -58,3 +58,22 @@ function useNoMapRows(): Project[] { return NONE; }
 function useLocalRows(): Project[] { return useAllProjects().data?.projects ?? NONE; }
 /** Rows for the demo build's client-side map. The server build never loads rows for the map (ServerMap queries bbox/zoom). */
 export const useLocalMapRows: () => Project[] = SERVER_MODE ? useNoMapRows : useLocalRows;
+
+/**
+ * The reconciliation numbers a drill-down chip prints ("N Prüfzeilen in M Projekten"), from the SAME server figures the
+ * Dashboard showed (one cached computation per scope), only fetched while a drill is active. The demo build computes them
+ * from its local rows on the page itself.
+ */
+function useServerDrillCounts(enabled: boolean, bedarf: string | null, tone: string | null, gewerk: string | null) {
+  const q = useQuery({ queryKey: ["server", "portfolio"], queryFn: () => serverApi.dashboard.portfolio.query() as Promise<PortfolioView>, staleTime: 30_000, enabled });
+  const v = q.data;
+  return useMemo(() => {
+    if (!v) return { bedarf: null, tone: null };
+    const b = bedarf ? v.bedarf.find(x => x.key === bedarf) ?? null : null;
+    const slices = gewerk ? v.gewerke.find(g => g.name === gewerk)?.slices : v.tones.slices;
+    const t = tone ? slices?.find(x => x.tone === tone) ?? null : null;
+    return { bedarf: b, tone: t };
+  }, [v, bedarf, tone, gewerk]);
+}
+function useNoDrillCounts(_e: boolean, _b: string | null, _t: string | null, _g: string | null) { return { bedarf: null, tone: null } as { bedarf: import("@shared/handlungsbedarf").BedarfCount | null; tone: import("@shared/handlungsbedarf").ToneCount | null }; }
+export const useDrillCounts: typeof useServerDrillCounts = SERVER_MODE ? useServerDrillCounts : (useNoDrillCounts as unknown as typeof useServerDrillCounts);

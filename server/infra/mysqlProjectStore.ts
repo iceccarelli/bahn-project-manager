@@ -456,12 +456,14 @@ export class MysqlProjectStore implements ProjectStore {
   buildConds(
     input: Pick<ListProjectsInput, "bahnhofsmanagement" | "projektstand" | "projektleiter" | "search" | "department" | "reviewStatus" | "pruefer">,
     visibility: { workspaces: readonly string[] | null },
-    opts: { stationPrefix?: string } = {},
+    opts: { stationPrefix?: string; ids?: ReadonlySet<number> } = {},
   ): SQL[] | null {
     const conds: SQL[] = [];
     // null = unrestricted; [] = no workspace access (must return nothing, never everything)
     if (visibility.workspaces !== null && visibility.workspaces.length === 0) return null;
     if (visibility.workspaces !== null) conds.push(inArray(projects.bahnhofsmanagement, [...visibility.workspaces]));
+    // a drill-down id set (already authorized server-side) narrows further; an empty set matches nothing
+    if (opts.ids) { if (opts.ids.size === 0) return null; conds.push(inArray(projects.id, [...opts.ids])); }
     if (input.bahnhofsmanagement) conds.push(eq(projects.bahnhofsmanagement, input.bahnhofsmanagement));
     if (input.projektstand) conds.push(eq(projects.projektstand, input.projektstand));
     if (input.projektleiter) conds.push(eq(projects.projektleiter, input.projektleiter));
@@ -500,8 +502,8 @@ export class MysqlProjectStore implements ProjectStore {
    * predicates as the list (workspace restriction included), so the map can never show what the table may not.
    * Below MAP_POINT_ZOOM (or when the box holds too many stations) the answer is a grid of clusters.
    */
-  async mapQuery(q: MapQuery, visibility: { workspaces: readonly string[] | null }): Promise<MapResult> {
-    const conds = this.buildConds(q, visibility);
+  async mapQuery(q: MapQuery, visibility: { workspaces: readonly string[] | null }, opts: { ids?: ReadonlySet<number> } = {}): Promise<MapResult> {
+    const conds = this.buildConds(q, visibility, opts);
     if (conds === null) return { mode: "clusters", markers: [], total: 0 };
     const box = sql`g.lat BETWEEN ${q.bbox.minLat} AND ${q.bbox.maxLat} AND g.lng BETWEEN ${q.bbox.minLng} AND ${q.bbox.maxLng}`;
     const where = conds.length ? sql`${and(...conds)} AND ${box}` : box;
@@ -521,8 +523,8 @@ export class MysqlProjectStore implements ProjectStore {
   }
 
   /** The projects at one station marker (popup content), authorized and filtered like the map. */
-  async mapStation(q: MapStationQuery, visibility: { workspaces: readonly string[] | null }): Promise<MapStationProjects> {
-    const conds = this.buildConds(q, visibility);
+  async mapStation(q: MapStationQuery, visibility: { workspaces: readonly string[] | null }, opts: { ids?: ReadonlySet<number> } = {}): Promise<MapStationProjects> {
+    const conds = this.buildConds(q, visibility, opts);
     if (conds === null) return { stationKey: q.stationKey, total: 0, projects: [] };
     const where = conds.length ? sql`${and(...conds)} AND g.stationKey = ${q.stationKey}` : sql`g.stationKey = ${q.stationKey}`;
     const from = sql`FROM project_geo g JOIN projects ON projects.id = g.projectId WHERE ${where}`;
@@ -560,8 +562,9 @@ export class MysqlProjectStore implements ProjectStore {
   async count(
     input: Pick<ListProjectsInput, "bahnhofsmanagement" | "projektstand" | "projektleiter" | "search" | "department" | "reviewStatus" | "pruefer">,
     visibility: { workspaces: readonly string[] | null },
+    opts: { ids?: ReadonlySet<number> } = {},
   ): Promise<number> {
-    const conds = this.buildConds(input, visibility);
+    const conds = this.buildConds(input, visibility, opts);
     if (conds === null) return 0;
     const [r] = await this.db.select({ n: sql<number>`COUNT(*)` }).from(projects).where(conds.length ? and(...conds) : undefined);
     return Number(r?.n ?? 0);
@@ -570,7 +573,7 @@ export class MysqlProjectStore implements ProjectStore {
   async list(
     input: ListProjectsInput,
     visibility: { workspaces: readonly string[] | null },
-    opts: { offset?: number; stationPrefix?: string } = {},
+    opts: { offset?: number; stationPrefix?: string; ids?: ReadonlySet<number> } = {},
   ) {
     const limit = Math.min(input.limit, MAX_PAGE_SIZE);
     const conds = this.buildConds(input, visibility, opts);

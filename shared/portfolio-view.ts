@@ -12,9 +12,9 @@ import { deriveProjectMetrics } from "./project-metrics";
 import { APPROVED_STATUSES, OPEN_STATUSES, normalizeReviewStatus } from "./review-status";
 import { buildReel } from "./gewerk-reel";
 import { toDate } from "./date";
+import { startOfDayUtc } from "./drilldown";
 import { PORTFOLIO_GEWERKE, type PortfolioView, type ReelView, type UpcomingRow, type WorkloadRow } from "./portfolio-contract";
 
-const startOfDayUtc = (ms: number) => Math.floor(ms / 86_400_000) * 86_400_000;
 
 export function buildPortfolio(projects: readonly PortfolioProject[], nowMs: number): PortfolioView {
   const today = startOfDayUtc(nowMs);
@@ -70,13 +70,13 @@ export function buildPortfolio(projects: readonly PortfolioProject[], nowMs: num
     totalReviews,
     regions: [...regions].sort((a, b) => b[1] - a[1]).map(([region, count]) => ({ region, count })),
     withoutRegion,
-    standings: gewerkStandings(projects, PORTFOLIO_GEWERKE, nowMs),
+    standings: gewerkStandings(projects, PORTFOLIO_GEWERKE, today),
     tones: { ...all, unmappedStatusRows },
     gewerke: PORTFOLIO_GEWERKE.map(name => ({ name, ...requiredTones(projects, name) })),
-    aging: agingOfOpenReviews(projects, nowMs),
+    aging: agingOfOpenReviews(projects, today),
     concentration: reviewerConcentration(projects),
     quality: dataQuality(projects),
-    bedarf: countBedarf(projects, nowMs),
+    bedarf: countBedarf(projects, today),
     workload,
     upcoming: upcoming.sort((a, b) => a.t - b.t).slice(0, 12).map(({ t: _t, ...u }) => u),
   };

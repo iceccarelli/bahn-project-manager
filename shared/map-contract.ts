@@ -1,5 +1,6 @@
 /** Map query contract: bounding box + zoom (+ the same filters as the list) in, lightweight markers out. */
 import { z } from "zod";
+import { DrillSchema } from "./drilldown";
 
 export const MapQuerySchema = z.object({
   bbox: z.object({
@@ -14,6 +15,8 @@ export const MapQuerySchema = z.object({
   department: z.string().max(64).optional(),
   reviewStatus: z.string().max(128).optional(),
   pruefer: z.string().max(256).optional(),
+  /** the same Dashboard drill-down the list honours (evaluated by the server) */
+  drill: DrillSchema.optional(),
 });
 export type MapQuery = z.infer<typeof MapQuerySchema>;
 

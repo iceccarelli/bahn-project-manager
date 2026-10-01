@@ -156,3 +156,33 @@ unscoped read helpers in `server/db.ts`.
 
 Known, documented referential gap: deleting a project does not unlink `schedule_slots.projectId` /
 `project_checklists.projectId` (the link then resolves to NotFound; it is read-safe, not a write bypass).
+
+## Dashboard: where every figure comes from
+
+All figures are computed by the server for the caller's **authorized workspaces only** (`workspaceRestriction`; a restricted
+principal's cache key is its normalized workspace set, never shared with another scope). Two classes:
+
+* **Incremental** — counters maintained inside the write transaction (`rm_project_stats`, `rm_review_stats`, `rm_pruefer_load`):
+  exact at commit, read as tiny indexed lookups (`dashboard.stats`, `dashboard.department`; 5 s burst cache per scope).
+* **Date-dependent** — cannot be a stored counter because "today" moves (overdue, aging, upcoming, delayed projects) or
+  needs per-project distinct counts: derived by `shared/portfolio-view.ts` from ONE lean authorized row scan, cached per scope
+  with single flight (30 s TTL; `dashboard.portfolio`, `dashboard.reel`, and every drill-down share that cache). Not a scan per
+  request. Update latency ≤ 30 s plus the client's 60 s refetch; on the instance that handled a write nothing is invalidated
+  early (documented trade-off).
+
+| Figure | Source | Scope | Cache | Click-through (server-evaluated `drill`) |
+|---|---|---|---|---|
+| Gesamtprojekte / Fachprüfungen | portfolio (`metrics`, `totalReviews`) | workspaces | 30 s | `/projects` |
+| Offene Prüfungen, Abgeschlossen, Kritisch | portfolio `metrics` (`shared/project-metrics`) | workspaces | 30 s | `/projects` |
+| Handlungsbedarf (overdue / blocked / Nachforderung / unassigned) | portfolio `bedarf` (rows + distinct projects) | workspaces | 30 s | `?bedarf=<key>` → `drill.bedarf`, same predicate + same pinned day |
+| Status-Verteilung and per-Gewerk donuts | portfolio `tones` / `gewerke` | workspaces | 30 s | `?tone=<band>[&gewerk=<G>]` → `drill.{tone,department}` (department inside the predicate); EEA/ITK donuts open `/bvb-eea` / `/psv-itk` with the same drill |
+| Gewerk standings / risk, aging, concentration, data quality | portfolio | workspaces | 30 s | Gewerk → its page; reviewer → search |
+| Anstehende Prüftermine | portfolio `upcoming` (12 nearest open dated rows) | workspaces | 30 s | project dialog (live detail) |
+| Regionale Verteilung | portfolio `regions` | workspaces | 30 s | `/projects?region=…` |
+| Fachspezialisten workload | portfolio `workload` (timeline capped to 8) | workspaces | 30 s | project |
+| Team-Aktivität | `audit.page` (8 newest, 7 days; auditors only) | workspaces | 15 s / 60 s refetch | `/audit` |
+| Map | `map.query` (bbox/zoom, honours the drill) | workspaces | 30 s | station → `drill.ids` |
+
+A drill is resolved server-side to an id set over the caller's authorized rows and intersected with the list's own workspace
+condition; a client-supplied id outside the caller's scope matches nothing (`DRILL-DOWN` e2e step). Counts and lists are the
+same computation, so a badge and the list it opens cannot disagree (`portfolioModel.db.test.ts`).

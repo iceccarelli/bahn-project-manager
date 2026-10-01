@@ -10,6 +10,9 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useLocation, useSearch as useRouteSearch } from "wouter";
+import { toneFor } from "@shared/handlungsbedarf";
+import { TONE_APPEARANCE } from "@shared/status-appearance";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -49,7 +52,10 @@ export function ServerDepartmentView({ department, title, subtitle, prueferLabel
   const [detailId, setDetailId] = useState<number | null>(null);
   useEffect(() => { const t = setTimeout(() => setSearch(searchInput.trim()), 250); return () => clearTimeout(t); }, [searchInput]);
 
-  const list = useServerProjects({ department, search: search || undefined, region: region || undefined, status: status || undefined, pruefer: pruefer || undefined, sortBy: "projektnummer", sortDir: "asc" });
+  // ?tone=<band> (a slice of this Gewerk's donut on the Dashboard): evaluated by the server, narrowed to THIS department inside the predicate
+  const [, navigate] = useLocation();
+  const tone = toneFor(new URLSearchParams(useRouteSearch()).get("tone"));
+  const list = useServerProjects({ drill: tone ? { tone, department } : undefined, department, search: search || undefined, region: region || undefined, status: status || undefined, pruefer: pruefer || undefined, sortBy: "projektnummer", sortDir: "asc" });
   const { data: filterOptions } = useServerFilters();
   const kpi = useQuery({ queryKey: ["server", "dashboard", "department", department], queryFn: () => serverApi.dashboard.department.query({ department }), staleTime: 15_000, refetchInterval: 30_000 });
   const detail = useServerProjectDetail(detailId);
@@ -87,6 +93,12 @@ export function ServerDepartmentView({ department, title, subtitle, prueferLabel
         <Kpi label="Blockiert" value={kpi.data ? counts.blocked : null} caption="abgelehnt oder gestoppt" tone="text-red-700" />
       </div>
 
+      {tone && (
+        <div role="status" className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm" data-testid="drill-chip">
+          <span>Filter: {department} · {TONE_APPEARANCE[tone].label}{list.data.totalExact ? ` — ${list.data.total.toLocaleString("de-DE")} Projekte` : ""}</span>
+          <button type="button" className="ml-auto rounded px-2 py-0.5 text-xs underline" onClick={() => navigate(department === "EEA" ? "/bvb-eea" : "/psv-itk")}>Filter entfernen</button>
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-3">
         <Input id="dept-search" aria-label={`${department}-Prüfungen durchsuchen`} placeholder="Station, Projektnummer, Projektleitung …" className="w-72" value={searchInput} onChange={e => setSearchInput(e.target.value)} />
         <Select value={region || ALL} onValueChange={x => setRegion(x === ALL ? "" : x)}>
