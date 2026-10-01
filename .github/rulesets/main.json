@@ -55,6 +55,9 @@
           },
           {
             "context": "image"
+          },
+          {
+            "context": "ui-perf"
           }
         ]
       }

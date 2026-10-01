@@ -8,11 +8,11 @@ DATABASE_URL=mysql://… JWT_SECRET=<≥32 random chars> \
 OIDC_ISSUER=https://login.microsoftonline.com/<tenant>/v2.0 OIDC_AUDIENCE=<api client id> \
 REDIS_URL=redis://… METRICS_TOKEN=<token> node dist/index.js
 ```
-`GET /api/health` liveness · `GET /api/ready` readiness (`SELECT 1`) · `GET /api/metrics` (token).
-Migrations: `pnpm db:push` (`drizzle/0004_event_pipeline.sql` adds `domain_events`, `idempotency_keys`, audit columns,
+`GET /api/health` liveness · `GET /api/ready` readiness (`SELECT 1` + Redis `PING`) · `GET /api/metrics` (token).
+Migrations: `node dist/migrate.js` (the image has no drizzle-kit; `pnpm db:push` is the dev-time generator) (`drizzle/0004_event_pipeline.sql` adds `domain_events`, `idempotency_keys`, audit columns,
 `projects_updatedAt_id_idx`, FULLTEXT index, append-only audit triggers). The FULLTEXT build and index creation lock/scan
 a large table — run off-peak.
-Client: build with `VITE_SERVER_MODE=1` to enable server mode (default off = static local mode).
+Client: `pnpm build:production` (the Dockerfile does this) is the server artifact; `pnpm build:demo` is the browser-local demo. There is no other build.
 
 ## Failure modes
 
@@ -65,17 +65,11 @@ node scripts/load/unique-users.mjs --users 10000 --burst-seconds 60 --spawn     
 scripts/gate/container-sim.sh dist-e2e   |   pnpm exec tsx scripts/gate/local-smoke.ts                # artifact / smoke script self-checks
 pnpm gate                                                                                             # the whole gate
 ```
-DB-backed suites **skip** (visibly) without `TEST_DATABASE_URL`. **CI note:** `.github/workflows/ci.yml` provides MySQL 8.4 +
-Redis to the unit job, but the new suites have only been run against MariaDB 10.11 locally; CI has not yet executed
-them, and the browser/chaos/gate suites are not in CI.
+DB-backed suites **skip** (visibly) without `TEST_DATABASE_URL`; CI runs them against MySQL 8.4 + Redis 7, together with the
+server-mode browser suite, the container gate and the UI performance gate (`.github/workflows/ci.yml`).
 
 ## Known gaps
 
-Not on the event pipeline: `reviews.create`, checklists, bookings, BVB-EEA, PSV-ITK, Excel import. The Dashboard,
-BVB-EEA, PSV-ITK, Projektanmeldung, Audit and the Gewerk workspaces still read the static snapshot in server mode (they are
-labelled "lokaler Datenbestand, nicht live" and their writes are disabled). Header search / Ask Bahn have no server
-search yet in server mode. The map shows the loaded rows only (no viewport/cluster queries). Handlungsbedarf/tone chips
-need the whole dataset and are not offered in server mode. Not built: read-model tables for dashboard aggregates,
-`@tanstack/react-virtual` tables, offline queue/IndexedDB, web-vitals/Sentry wiring,
-notification email/push, mention/system/deadline-reminder producers, presence rate limiting, a Postgres migration (no
-evidence it is needed). Staging and load certification: see docs/staging.md and docs/load-testing.md.
+The authoritative list lives in [production-readiness.md](production-readiness.md) (phase ledger with evidence). Not built and
+not claimed: Entra-tenant verification, public staging, separate-host load certification, offline queue/IndexedDB, field
+web-vitals collection, notification email/push, a Postgres migration (no evidence it is needed).

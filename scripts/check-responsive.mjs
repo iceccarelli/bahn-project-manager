@@ -9,7 +9,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST = path.resolve(__dirname, "..", "dist", "public");
 const PORT = 4173;
 if (!fs.existsSync(path.join(DIST, "index.html"))) {
-  console.error(`\n❌ ${DIST}/index.html not found. Run "NODE_ENV=production pnpm build:client" first.\n`);
+  console.error(`\n❌ ${DIST}/index.html not found. Run "pnpm build:demo" first.\n`);
   process.exit(2);
 }
 const MIME = { ".html":"text/html",".js":"text/javascript",".css":"text/css",".json":"application/json",

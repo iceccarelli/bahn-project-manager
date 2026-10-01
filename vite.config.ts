@@ -101,11 +101,13 @@ function vitePluginBuildTarget(): Plugin {
     name: "build-target",
     apply: "build",
     buildStart() {
+      // There is no generic "vite build": an artifact must say what it is, so the demo can never be produced by accident.
+      if (target !== "production" && target !== "demo") this.error("BUILD_TARGET must be 'production' or 'demo' — use `pnpm build:production` or `pnpm build:demo` (a bare `vite build` is refused)");
       if (target === "production" && !serverMode) this.error("BUILD_TARGET=production requires VITE_SERVER_MODE=1 (refusing to build the browser-local demo as a production artifact)");
       if (target === "demo" && serverMode) this.error("BUILD_TARGET=demo requires VITE_SERVER_MODE=0");
     },
     generateBundle() {
-      this.emitFile({ type: "asset", fileName: "build-info.json", source: JSON.stringify({ target: target ?? "unspecified", serverMode, version: pkg.version }) });
+      this.emitFile({ type: "asset", fileName: "build-info.json", source: JSON.stringify({ target, serverMode, version: pkg.version }) });
     },
   };
 }

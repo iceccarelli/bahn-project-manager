@@ -46,7 +46,7 @@ add("security", "authorization, recipient-safe events, OIDC validation, CSRF, pr
   const r = sh('pnpm vitest run server/domain/permissions.test.ts server/_core server/domain/notificationPolicy.test.ts server/realtime/presence.test.ts server/realtime/e2e.db.test.ts server/realtime/gateway.test.ts server/routers.db.test.ts'); const m = tests(r.out);
   return { ok: r.code === 0 && !!m && Number(m[3] ?? 0) === 0, evidence: m ? `${m[2]} passed` : r.out.slice(-300), ms: r.ms };
 });
-add("build-client", "vite build (static SPA)", async () => { const r = sh("pnpm build:client"); return { ok: r.code === 0 && existsSync("dist/public/index.html"), evidence: r.code === 0 ? "dist/public built" : r.out.slice(-400), ms: r.ms }; });
+add("build-demo", "demo artifact (browser-local, explicit target)", async () => { const r = sh("pnpm build:demo"); return { ok: r.code === 0 && existsSync("dist/public/index.html"), evidence: r.code === 0 ? "dist/public built" : r.out.slice(-400), ms: r.ms }; });
 add("build-server-mode", "server bundle + SPA built with VITE_SERVER_MODE=1", async () => { const r = sh("scripts/e2e/build-server-mode.sh"); return { ok: r.code === 0 && existsSync("dist-e2e/index.js") && existsSync("dist-e2e/public/index.html"), evidence: r.code === 0 ? "dist-e2e built" : r.out.slice(-400), ms: r.ms }; });
 add("bundle-inspection", "server entry chunk: no demo credentials, no devDependency imports, migrations present", async () => {
   if (!existsSync("dist-e2e/index.js")) return { ok: null, evidence: "no bundle (build-server-mode skipped or failed)" };
@@ -66,7 +66,7 @@ add("container-sim", "production-only dependency install boots the artifact (sta
 });
 add("e2e-local", "existing Playwright suite (static/local mode) — the product still works", async () => {
   if (skip.has("e2e-local")) return { ok: null, evidence: "skipped by flag" };
-  const r = sh("pnpm build:client && pnpm e2e", {}, 3_000_000); const m = /(\d+) passed, (\d+) failed/.exec(r.out);
+  const r = sh("pnpm build:demo && pnpm e2e", {}, 3_000_000); const m = /(\d+) passed, (\d+) failed/.exec(r.out);
   return { ok: r.code === 0 && !!m && m[2] === "0", evidence: m ? `${m[1]} passed, ${m[2]} failed` : r.out.slice(-300), ms: r.ms };
 });
 add("server-mode-browser", "two-browser proof against two instances + Redis + real DB (realtime, conflict, move, recovery, presence, notifications)", async () => {

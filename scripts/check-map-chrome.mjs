@@ -21,7 +21,7 @@
  * the network into one blob. Leaflet's attribution links are excluded too —
  * that is a legal credit line, not a control.
  *
- *   pnpm build:client && pnpm check:map
+ *   pnpm build:demo && pnpm check:map
  */
 import { chromium } from "playwright";
 import http from "node:http";
@@ -37,7 +37,7 @@ const MIME = { ".html":"text/html", ".js":"text/javascript", ".css":"text/css",
   ".svg":"image/svg+xml", ".ttf":"font/ttf" };
 
 if (!fs.existsSync(path.join(ROOT, "index.html"))) {
-  console.error("!! dist/public/index.html missing — run `pnpm build:client` first");
+  console.error("!! dist/public/index.html missing — run `pnpm build:demo` first");
   process.exit(2);
 }
 
