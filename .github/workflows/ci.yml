@@ -78,7 +78,16 @@ jobs:
           node-version: 22
           cache: 'pnpm'
       - run: pnpm install --frozen-lockfile
-      - run: pnpm build:parallel
+      # PRODUCTION artifact: VITE_SERVER_MODE=1 is pinned by the script, the build refuses anything else, and the
+      # emitted build-info.json is asserted (a production build containing SERVER_MODE=false fails here).
+      - run: pnpm build:production
+      - run: node scripts/assert-build-target.mjs dist/public production
+      # The guard itself must fail when it should: a demo build is NOT a production artifact...
+      - name: Guard rejects a demo build as production
+        run: |
+          ! BUILD_TARGET=production VITE_SERVER_MODE=0 pnpm exec vite build --outDir "$RUNNER_TEMP/wrong" 2>&1
+          pnpm build:demo
+          ! node scripts/assert-build-target.mjs dist/public production
       # The bundle is the artefact the container runs, so the checks that are
       # about the bundle belong here: no devDependency may appear in the server
       # entry. That import is what killed the container on its first line.
@@ -155,7 +164,8 @@ jobs:
       # Only Chromium, and only its own deps — the full `playwright install`
       # pulls three browsers this suite never opens.
       - run: pnpm exec playwright install --with-deps chromium
-      - run: NODE_ENV=production pnpm build:client
+      # The browser-local DEMO artifact — deliberately not the production build.
+      - run: pnpm build:demo
       - run: pnpm e2e
       # Layout gates run on the same build and the same browser install.
       # check:responsive asserts no route overflows its viewport at seven
@@ -173,15 +183,27 @@ jobs:
       - run: pnpm check:ui
 
   # ---------------------------------------------------------------------------
-  # Containerisation gate. Builds the production image and proves the container
-  # actually comes up and answers its own health route — a Dockerfile that
-  # builds but produces a container that never becomes healthy is a deploy
-  # outage, not a build success.
+  # Container gate. Builds the PRODUCTION image and runs it against real MySQL 8.4 + Redis 7 with the
+  # configuration production requires (CI-only values; the image's own validation is NOT weakened — the script
+  # first asserts the image still refuses to boot without it). Proves: boot, /api/health, /api/ready (DB + Redis),
+  # migrations (twice), that the image ships the production server-mode client, and graceful SIGTERM shutdown.
   # ---------------------------------------------------------------------------
-  docker:
+  container:
     runs-on: ubuntu-latest
     needs: [lint-typecheck, test]
-    timeout-minutes: 20
+    timeout-minutes: 25
+    services:
+      mysql:
+        image: mysql:8.4
+        env: { MYSQL_ROOT_PASSWORD: root, MYSQL_DATABASE: bahn_ci }
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot" --health-interval=5s --health-timeout=5s --health-retries=20
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd="redis-cli ping" --health-interval=5s --health-timeout=3s --health-retries=20
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -195,16 +217,12 @@ jobs:
           tags: bahn-project-manager:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - name: Container starts and reports healthy
-        run: |
-          docker run -d --name bpm -p 3000:3000 bahn-project-manager:ci
-          for _ in $(seq 1 30); do
-            if curl -fsS http://localhost:3000/api/health; then
-              echo; echo "container healthy"; docker rm -f bpm; exit 0
-            fi
-            sleep 2
-          done
-          echo "health check never passed"; docker logs bpm; exit 1
+      - name: Container gate (boot, health, ready, migrations, DB, Redis, shutdown)
+        run: scripts/gate/container-ci.sh
+        env:
+          IMAGE: bahn-project-manager:ci
+          CI_DATABASE_URL: mysql://root:root@127.0.0.1:3306/bahn_ci
+          CI_REDIS_URL: redis://127.0.0.1:6379
 
   # ---------------------------------------------------------------------------
   # Server-mode browser proofs against REAL MySQL 8.4 + Redis 7: two browsers, two server instances (realtime,
@@ -272,7 +290,7 @@ jobs:
   # image — not Vercel — is the unit that is deployed (deploy/staging/docker-compose.yml → docs/topology.md).
   image:
     runs-on: ubuntu-latest
-    needs: [lint-typecheck, test, e2e-server, migrations-mysql84]
+    needs: [lint-typecheck, test, e2e-server, migrations-mysql84, container]
     permissions: { contents: read, packages: write }
     timeout-minutes: 30
     steps:
@@ -289,7 +307,6 @@ jobs:
           load: ${{ github.ref != 'refs/heads/main' }}
           tags: ghcr.io/${{ github.repository }}:${{ github.sha }}
           build-args: |
-            VITE_SERVER_MODE=1
             VITE_OIDC_AUTHORITY=${{ vars.VITE_OIDC_AUTHORITY }}
             VITE_OIDC_CLIENT_ID=${{ vars.VITE_OIDC_CLIENT_ID }}
             VITE_OIDC_SCOPE=${{ vars.VITE_OIDC_SCOPE }}

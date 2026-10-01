@@ -47,21 +47,17 @@ COPY . .
 # Type-check before bundling. A container that builds but does not compile is
 # worse than a build failure, because it fails in production instead of in CI.
 RUN pnpm run check
-# Server-authoritative data plane in the SPA: build with `--build-arg VITE_SERVER_MODE=1`.
-# Default 0 = the static, browser-local app (what the current Vercel deployment serves).
-ARG VITE_SERVER_MODE=0
-ENV VITE_SERVER_MODE=$VITE_SERVER_MODE
 # Browser sign-in (OIDC code + PKCE; Entra v2.0 compatible). Public values, baked into the SPA at build time.
 # Both empty = no SSO button (the server still validates bearer tokens).
 ARG VITE_OIDC_AUTHORITY=
 ARG VITE_OIDC_CLIENT_ID=
 ARG VITE_OIDC_SCOPE="openid profile"
 ENV VITE_OIDC_AUTHORITY=$VITE_OIDC_AUTHORITY VITE_OIDC_CLIENT_ID=$VITE_OIDC_CLIENT_ID VITE_OIDC_SCOPE=$VITE_OIDC_SCOPE
-# The legacy snapshot is staged here: synthetic by default. A real export is supplied ONLY as a BuildKit secret
-# (docker build --secret id=private_data,src=<dir>) and never reaches a layer of the final image's public files.
-RUN node scripts/data/stage-public-data.mjs
-RUN NODE_ENV=production pnpm run build:client
-RUN NODE_ENV=production pnpm run build:server
+# This image IS the production artifact: server-authoritative data plane, always. There is deliberately
+# no VITE_SERVER_MODE build-arg — `build:production` pins it to 1, refuses to build otherwise, and
+# asserts the emitted build-info.json (see scripts/assert-build-target.mjs). The browser-local demo is
+# a separate artifact (`pnpm build:demo`, Vercel) and cannot be produced by this Dockerfile.
+RUN pnpm run build:production
 
 # --------------------------------------------------------- prod-deps --------
 FROM deps AS prod-deps

@@ -94,6 +94,29 @@ function vitePluginLegacySnapshotOffPublic(): Plugin {
   };
 }
 
+
+/**
+ * Production / demo separation. `BUILD_TARGET` is set only by `build:production` and `build:demo`.
+ * A production artifact built without the server data plane (or a demo built with it) is refused
+ * here, at build time, and the result is stamped into `build-info.json` so CI and the container
+ * gate can verify the artifact that is actually shipped (scripts/assert-build-target.mjs).
+ */
+function vitePluginBuildTarget(): Plugin {
+  const target = process.env.BUILD_TARGET;
+  const serverMode = process.env.VITE_SERVER_MODE === "1";
+  return {
+    name: "build-target",
+    apply: "build",
+    buildStart() {
+      if (target === "production" && !serverMode) this.error("BUILD_TARGET=production requires VITE_SERVER_MODE=1 (refusing to build the browser-local demo as a production artifact)");
+      if (target === "demo" && serverMode) this.error("BUILD_TARGET=demo requires VITE_SERVER_MODE=0");
+    },
+    generateBundle() {
+      this.emitFile({ type: "asset", fileName: "build-info.json", source: JSON.stringify({ target: target ?? "unspecified", serverMode, version: pkg.version }) });
+    },
+  };
+}
+
 const isProduction = process.env.NODE_ENV === "production";
 
 const plugins = [
@@ -107,6 +130,7 @@ const plugins = [
     : []),
   vitePluginDataValidationAndCache(),
   vitePluginLegacySnapshotOffPublic(),
+  vitePluginBuildTarget(),
 ];
 
 export default defineConfig({

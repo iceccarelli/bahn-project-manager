@@ -3,7 +3,7 @@
   "version": 2,
   "framework": null,
   "installCommand": "pnpm install --frozen-lockfile",
-  "buildCommand": "pnpm build:client",
+  "buildCommand": "pnpm build:demo",
   "outputDirectory": "dist/public",
   "regions": ["iad1"],
   "rewrites": [

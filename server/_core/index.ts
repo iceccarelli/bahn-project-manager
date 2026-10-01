@@ -75,7 +75,8 @@ async function startServer() {
     try {
       if (!services) throw new Error("no database configured");
       await services.pool.query("SELECT 1");
-      res.status(200).json({ status: "ready" });
+      await services.pingShared();
+      res.status(200).json({ status: "ready", db: "ok", redis: process.env.REDIS_URL ? "ok" : "not-configured" });
     } catch {
       res.status(503).json({ status: "unavailable" });
     }

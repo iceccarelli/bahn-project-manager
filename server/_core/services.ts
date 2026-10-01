@@ -29,6 +29,8 @@ export interface Services {
   relay: OutboxRelay;
   presence: PresenceService;
   pool: Pool;
+  /** Rejects when a shared dependency (Redis) is unreachable; resolves immediately when none is configured. */
+  pingShared(): Promise<void>;
   shutdown(): Promise<void>;
 }
 
@@ -45,6 +47,7 @@ export async function getServices(log: (msg: string, e?: unknown) => void = cons
   let presenceStore: PresenceStore = new MemoryPresenceStore();
   let sweepLock: (() => Promise<boolean>) | null = null;
   let purgeLock: (() => Promise<boolean>) | null = null;
+  let pingShared: () => Promise<void> = async () => {};
   const closers: Array<() => Promise<unknown>> = [];
   if (process.env.REDIS_URL) {
     const { default: IORedis } = await import("ioredis");
@@ -57,6 +60,7 @@ export async function getServices(log: (msg: string, e?: unknown) => void = cons
     // one sweeper cluster-wide: SET NX PX
     sweepLock = async () => (await pub.set("bahn:pres:sweeper", "1", "PX", 9000, "NX")) === "OK";
     purgeLock = async () => (await pub.set("bahn:notif:retention", "1", "PX", 55 * 60_000, "NX")) === "OK";
+    pingShared = async () => { if ((await pub.ping()) !== "PONG") throw new Error("redis ping failed"); };
     closers.push(() => pub.quit(), () => sub.quit());
   } else {
     bus = new InProcessBus();
@@ -99,7 +103,7 @@ export async function getServices(log: (msg: string, e?: unknown) => void = cons
 
   relay.start();
   services = {
-    store, projects: svc, bookings, checklists, publisher: bus, subscriber: bus, relay, presence, pool,
+    store, projects: svc, bookings, checklists, publisher: bus, subscriber: bus, relay, presence, pool, pingShared,
     async shutdown() {
       clearInterval(sampler);
       clearInterval(sweeper);
