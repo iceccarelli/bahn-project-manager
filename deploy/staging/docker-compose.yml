@@ -24,14 +24,14 @@ services:
     healthcheck: { test: ["CMD", "redis-cli", "ping"], interval: 5s, timeout: 3s, retries: 10 }
 
   migrate:
-    build: { context: ../.., target: runtime, args: { VITE_SERVER_MODE: "1", VITE_OIDC_AUTHORITY: "${VITE_OIDC_AUTHORITY:?}", VITE_OIDC_CLIENT_ID: "${VITE_OIDC_CLIENT_ID:?}", VITE_OIDC_SCOPE: "${VITE_OIDC_SCOPE:?}" } }
+    build: { context: ../.., target: runtime, args: { VITE_OIDC_AUTHORITY: "${VITE_OIDC_AUTHORITY:?}", VITE_OIDC_CLIENT_ID: "${VITE_OIDC_CLIENT_ID:?}", VITE_OIDC_SCOPE: "${VITE_OIDC_SCOPE:?}" } }
     depends_on: { db: { condition: service_healthy } }
     environment: { NODE_ENV: production, DATABASE_URL: "mysql://bahn:${MYSQL_PASSWORD}@db:3306/bahn" }
     command: ["node", "dist/migrate.js"]
     restart: "no"
 
   app1: &app
-    build: { context: ../.., target: runtime, args: { VITE_SERVER_MODE: "1", VITE_OIDC_AUTHORITY: "${VITE_OIDC_AUTHORITY:?}", VITE_OIDC_CLIENT_ID: "${VITE_OIDC_CLIENT_ID:?}", VITE_OIDC_SCOPE: "${VITE_OIDC_SCOPE:?}" } }
+    build: { context: ../.., target: runtime, args: { VITE_OIDC_AUTHORITY: "${VITE_OIDC_AUTHORITY:?}", VITE_OIDC_CLIENT_ID: "${VITE_OIDC_CLIENT_ID:?}", VITE_OIDC_SCOPE: "${VITE_OIDC_SCOPE:?}" } }
     restart: unless-stopped
     depends_on: { migrate: { condition: service_completed_successfully }, redis: { condition: service_healthy } }
     environment: &appenv

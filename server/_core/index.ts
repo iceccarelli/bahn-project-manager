@@ -4,7 +4,6 @@ import { createServer } from "node:http";
 import net from "node:net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
-import { registerStorageProxy } from "./storageProxy";
 import { registerExcelRoutes } from "../excel";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
@@ -71,12 +70,18 @@ async function startServer() {
   // is unset — the static SPA deployment — in which case /api/trpc data routes
   // answer with an error rather than pretending.
   const services = await getServices();
+  let gateway: ReturnType<typeof registerRealtimeGateway> | null = null;
+  let draining = false;
   app.get("/api/ready", async (_req, res) => {
     try {
       if (!services) throw new Error("no database configured");
+      if (draining) { res.status(503).json({ status: "draining" }); return; } // leave the load balancer before the process exits
       await services.pool.query("SELECT 1");
-      await services.pingShared();
-      res.status(200).json({ status: "ready", db: "ok", redis: process.env.REDIS_URL ? "ok" : "not-configured" });
+      // MySQL is the truth: without it this instance cannot serve (503). Redis is transport/cache: when it is down the API
+      // keeps working (writes commit, the outbox backlog waits, clients recover), so the instance stays IN rotation and
+      // reports `degraded` — otherwise one Redis restart would take every instance, and the whole site, out of the load balancer.
+      const redis = await services.redisStatus();
+      res.status(200).json({ status: redis === false ? "degraded" : "ready", db: "ok", redis: redis === null ? "not-configured" : redis ? "ok" : "down" });
     } catch {
       res.status(503).json({ status: "unavailable" });
     }
@@ -88,7 +93,7 @@ async function startServer() {
     res.type("text/plain; version=0.0.4").send(renderMetrics());
   });
   if (services) {
-    registerRealtimeGateway(app, { subscriber: services.subscriber, store: services.store });
+    gateway = registerRealtimeGateway(app, { subscriber: services.subscriber, store: services.store });
     registerPresenceRoutes(app, { presence: services.presence, store: services.store, onError: e => console.error("[presence]", e) });
   }
 
@@ -103,8 +108,7 @@ async function startServer() {
     };
   app.use("/api/export", requirePrincipal(canExport));
 
-  registerStorageProxy(app);
-  registerOAuthRoutes(app);
+  if (process.env.NODE_ENV !== "production") registerOAuthRoutes(app); // legacy OAuth/cookie login: development only
   registerExcelRoutes(app);
   // tRPC API
   app.use(
@@ -158,15 +162,23 @@ async function startServer() {
   let shuttingDown = false;
   const shutdown = (signal: NodeJS.Signals) => {
     if (shuttingDown) return;
-    shuttingDown = true;
+    shuttingDown = true; draining = true;
+    gateway?.drain(); // SSE streams never end on their own: tell clients to reconnect elsewhere right now
     console.log(`${signal} received — draining connections`);
     // SSE streams never end on their own; ending them lets clients reconnect
     // to a healthy instance instead of holding the drain open.
     server.closeIdleConnections?.();
-    setTimeout(() => server.closeAllConnections?.(), 5_000).unref();
+    // ended SSE responses become idle a moment later: keep sweeping so the drain is not held open by keep-alive timeouts
+    setInterval(() => server.closeIdleConnections?.(), 100).unref?.();
+    // SSE streams are already ended (above); anything still open after the grace is a pre-opened/idle socket or a straggler
+    setTimeout(() => server.closeAllConnections?.(), Number(process.env.SHUTDOWN_GRACE_MS ?? 2_000)).unref();
+    const t0 = Date.now();
     server.close(async (err) => {
+      console.log(`[shutdown] http connections drained after ${Date.now() - t0} ms`);
       await services?.shutdown().catch(() => {});
+      console.log(`[shutdown] relay/redis stopped after ${Date.now() - t0} ms`);
       await closeDb().catch(() => {});
+      console.log(`[shutdown] db closed after ${Date.now() - t0} ms`);
       if (err) {
         console.error("Error during shutdown:", err);
         process.exit(1);

@@ -1,3 +1,4 @@
+import type { AuditAction, AuditEntityType } from "@shared/audit-contract";
 /**
  * Ports. The domain layer depends on these interfaces only — never on MySQL,
  * Redis, HTTP or a realtime vendor. Concrete adapters live in server/infra and
@@ -53,6 +54,12 @@ export interface ControlChannel {
 
 export interface RealtimeSubscriber {
   subscribe(scope: SubscriptionScope): Subscription;
+  /**
+   * Called when the shared transport (Redis) came back after an outage. Pub/sub is fire-and-forget, so anything published
+   * while this process's subscriber was down is gone: the gateway tells every open stream to catch up from the durable
+   * feed immediately instead of waiting for the next event or the periodic poll.
+   */
+  onTransportRecovered?(cb: () => void): () => void;
   readonly control?: ControlChannel;
 }
 
@@ -66,14 +73,15 @@ export type IdempotencyClaim =
 export interface AuditRow {
   userId: number | null;
   userName: string;
-  entityType: "project" | "checklist" | "booking";
+  entityType: AuditEntityType;
   entityId: number;
-  action: "create" | "update" | "delete";
+  action: AuditAction;
   field: string | null;
   oldValue: string | null;
   newValue: string | null;
-  eventId: string;
-  aggregateVersion: number;
+  /** null for rows that are not an aggregate transition (document actions, authorization grants). */
+  eventId: string | null;
+  aggregateVersion: number | null;
   traceId: string;
   /** Authorization scope stamped in the writing transaction; null = unrestricted principals only. */
   workspace?: string | null;

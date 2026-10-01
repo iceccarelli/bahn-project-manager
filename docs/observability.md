@@ -25,9 +25,16 @@
 | `bahn_auth_verify_ms`, `bahn_identity_resolve_ms` | token verification / identity resolution latency (cache hits included) |
 | `bahn_user_provision_written_total`, `_failures_total` | write-behind user provisioning |
 | `bahn_outbox_dead_letters_total` | unpublishable rows quarantined (alert on > 0) |
+| `bahn_redis_up` | 1/0: shared Redis reachable (readiness reports `degraded`, instance stays in rotation) |
 
-**Suggested alerts** (not configured — no monitoring stack here): `outbox_backlog > 100 for 1m`; `dead_letters > 0`;
-`unhandled_rejections > 0`; `shed_total` rate > 0 for 2m; `event_age_ms p95 > 500`; `dropped_total` rate > 0.
+**Alert rules**: `deploy/observability/alerts.yml` (Prometheus format; 12 rules covering instance liveness, Redis, outbox
+backlog / dead letters, realtime latency and drops, load shedding, pool saturation, API latency, conflict rate, unhandled
+rejections, OIDC latency). `pnpm check:consistency` fails if a rule names a metric the server does not export. The
+thresholds are starting points to tune from the staging load run; no monitoring stack runs in this repository, so they
+have **not** been exercised against a live Prometheus.
+
+**Probes**: `/api/health` (liveness), `/api/ready` — 503 when MySQL is unreachable or the instance is draining; 200 with
+`status: degraded, redis: down` when only Redis is lost.
 
 ## Not done
 

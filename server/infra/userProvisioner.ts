@@ -11,7 +11,8 @@
  */
 import { counter } from "../observability/metrics";
 
-export interface ProvisionedUser { openId: string; name: string | null; email: string | null; role: "admin" | "user" }
+/** `grant`: canonical JSON of the verified authorization grant {role, workspaces, departments}; a change is audited. */
+export interface ProvisionedUser { openId: string; name: string | null; email: string | null; role: "admin" | "user"; grant: string }
 export type BatchWriter = (users: ProvisionedUser[]) => Promise<void>;
 
 const written = counter("bahn_user_provision_written_total", "OIDC users written by the provisioner");
@@ -20,6 +21,7 @@ const failed = counter("bahn_user_provision_failures_total", "Provisioner batch 
 export class UserProvisioner {
   private pending = new Map<string, ProvisionedUser>();
   private seen = new Map<string, number>();
+  private grants = new Map<string, string>();
   private timer: NodeJS.Timeout | null = null;
   constructor(
     private readonly write: BatchWriter,
@@ -30,9 +32,11 @@ export class UserProvisioner {
   enqueue(u: ProvisionedUser): void {
     const now = (this.opt.now ?? Date.now)();
     const last = this.seen.get(u.openId);
-    if (last !== undefined && now - last < (this.opt.ttlMs ?? 10 * 60_000)) return;
-    if (this.seen.size >= (this.opt.maxSeen ?? 100_000)) this.seen.delete(this.seen.keys().next().value!);
+    if (this.seen.size >= (this.opt.maxSeen ?? 100_000)) { const old = this.seen.keys().next().value!; this.seen.delete(old); this.grants.delete(old); }
+    // a changed grant is never swallowed by the sighting TTL: authorization changes must reach the audit trail promptly
+    if (last !== undefined && this.grants.get(u.openId) === u.grant && now - last < (this.opt.ttlMs ?? 10 * 60_000)) return;
     this.seen.set(u.openId, now);
+    this.grants.set(u.openId, u.grant);
     this.pending.set(u.openId, u);
     if (!this.timer) {
       this.timer = setTimeout(() => { this.timer = null; void this.flush(); }, this.opt.flushMs ?? 1000);
@@ -48,7 +52,7 @@ export class UserProvisioner {
       const batch = [...this.pending.values()].slice(0, batchSize);
       for (const u of batch) this.pending.delete(u.openId);
       try { await this.write(batch); written.inc(undefined, batch.length); }
-      catch { failed.inc(); for (const u of batch) this.seen.delete(u.openId); /* retried on next sighting */ }
+      catch { failed.inc(); for (const u of batch) { this.seen.delete(u.openId); this.grants.delete(u.openId); } /* retried on next sighting */ }
     }
   }
 }

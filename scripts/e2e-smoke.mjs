@@ -7,7 +7,7 @@
  * filters actually filter, and that the Projektanmeldung wizard creates a
  * project with exactly the reviews the checklist implies.
  *
- *   pnpm build:client && pnpm e2e
+ *   pnpm build:demo && pnpm e2e
  *
  * Exits non-zero on the first failed assertion, so CI can gate on it.
  */
@@ -22,7 +22,7 @@ const MIME = { ".html":"text/html", ".js":"text/javascript", ".css":"text/css",
   ".json":"application/json", ".woff2":"font/woff2", ".png":"image/png", ".svg":"image/svg+xml" };
 
 if (!fs.existsSync(path.join(ROOT, "index.html"))) {
-  console.error("!! dist/public/index.html missing — run `pnpm build:client` first");
+  console.error("!! dist/public/index.html missing — run `pnpm build:demo` first");
   process.exit(1);
 }
 

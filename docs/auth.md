@@ -40,14 +40,26 @@ with Entra-shaped tokens and in the two-browser proof (a local test IdP + JWKS).
   access; only the literal `["ALL"]` grants all workspaces to a non-admin; unknown roles = viewer. Proven end to end in
   `scripts/e2e/oidc-browser.e2e.ts` (mock authority, real browser, real server bundle). **Not proven against Entra.**
 
-## Demo credentials
+## One production auth model: OIDC bearer tokens
 
-`auth.demoLogin` returns `NOT_FOUND` in production unless `ALLOW_DEMO_LOGIN=1`. The server refuses to boot in
-production with the default JWT secret, a secret < 32 chars, no `DATABASE_URL`, or no IdP configured
-(`assertProductionConfig`, tested). In server mode (`VITE_SERVER_MODE=1`) the SPA takes its identity from the SERVER
-(`auth.session`, resolved from the bearer token in `sessionStorage['bahn.access_token']` or the session cookie), never from
-localStorage; the login screen calls `auth.demoLogin` (only answers when explicitly enabled). The static local-mode login
-still exists for the unchanged Vercel app and protects nothing.
+Production authenticates **bearer access tokens only**, verified by the server on every request (signature, issuer,
+audience, expiry, claims). There is no demo login, no cookie session and no legacy OAuth route in production:
+
+* `assertProductionConfig` refuses to boot with `ALLOW_DEMO_LOGIN` set (any truthy value), `LEGACY_USER_WORKSPACES`,
+  `OAUTH_SERVER_URL`, a missing `OIDC_ISSUER`/`OIDC_AUDIENCE`, a weak/default `JWT_SECRET`, no `DATABASE_URL` or no `REDIS_URL`.
+* `auth.demoLogin` answers `NOT_FOUND` in production, signed legacy session cookies are ignored (401), and the legacy OAuth
+  callback is not mounted. The production SPA has no credential form: if the IdP was not configured at build time the login
+  page says so. (Covered by `oidc.test.ts` and the `AUTH (production)` step of the server-mode e2e.)
+* In the SPA the identity comes from the SERVER (`auth.session`, resolved from the bearer token held in `sessionStorage`).
+* The static demo artifact (`pnpm build:demo`) keeps its browser-local demo login; it protects nothing and says so.
+
+### Authorization changes are audited
+
+Role, workspaces and departments come from the verified token on every request. The server mirrors each verified principal
+into `users` and, in the same transaction, appends an `audit_log` row (`entityType='user'`, `field='grant'`, old/new canonical
+grant JSON) whenever a grant is new or changed. A changed grant bypasses the provisioner's sighting TTL, so it is recorded on
+the next request that carries the new token; access itself changes as soon as the IdP issues a token with new claims
+(the identity cache holds a verified token for at most 30 s). These rows are unscoped (visible to unrestricted auditors only).
 
 ## Permission functions (`server/domain/permissions.ts`, pure, unit-tested)
 

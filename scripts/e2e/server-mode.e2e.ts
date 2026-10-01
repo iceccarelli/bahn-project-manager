@@ -9,7 +9,7 @@
  * (a window marker set before the change must still exist after it).
  * Writes artifacts/e2e-server-mode.json (machine-readable, used by the deployment gate).
  */
-import { spawn, type ChildProcess } from "node:child_process";
+import { execSync, spawn, type ChildProcess } from "node:child_process";
 import { createServer } from "node:http";
 import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
@@ -77,15 +77,19 @@ async function main() {
   const tokenNoClaims = await mint("nobody", "Nobody", []);
 
   // ---- two server instances sharing DB + Redis -------------------------------------------
-  for (const port of PORTS) {
+  const instances = new Map<number, ChildProcess>();
+  const spawnInstance = (port: number) => {
     const p = spawn("node", ["dist-e2e/index.js"], {
       env: { ...process.env, NODE_ENV: "production", PORT: String(port), DATABASE_URL: `${DB_BASE}/${DB_NAME}`, JWT_SECRET: "e2e-".padEnd(48, "x"),
         OIDC_ISSUER: ISS, OIDC_AUDIENCE: AUD, OIDC_JWKS_URI: `${ISS}jwks`, REDIS_URL: REDIS, METRICS_TOKEN: "e2e", DB_POOL_SIZE: "10" },
       stdio: ["ignore", "pipe", "pipe"],
     });
     p.stderr!.on("data", d => process.env.E2E_VERBOSE && process.stderr.write(`[srv${port}] ${d}`));
-    children.push(p);
-  }
+    p.stdout!.on("data", d => process.env.E2E_VERBOSE && process.stderr.write(`[srv${port}] ${d}`));
+    children.push(p); instances.set(port, p);
+    return p;
+  };
+  for (const port of PORTS) spawnInstance(port);
   for (const port of PORTS) await until(async () => (await fetch(`http://127.0.0.1:${port}/api/ready`).catch(() => null))?.ok, 20000, `server ${port} ready`);
   const URLS = PORTS.map(p => `http://127.0.0.1:${p}`);
 
@@ -273,6 +277,42 @@ async function main() {
   });
 
   // ---------------- DOMAIN UNIFICATION: PSV-ITK is a Gewerk view over the same aggregate ------------------------
+  await step("DRAWER: details open as a persistent non-modal drawer — list stays scrollable, remote edits show live, edit inside is versioned, close returns to the same list position", async () => {
+    const P = await A.ctx.newPage();
+    try {
+      await P.goto(`${URLS[0]}/projects`);
+      await search(P, "Kaisertreppe");
+      await until(async () => (await row(P).count()) > 0, 15000, "row visible in drawer page");
+      await row(P).locator('button[aria-label*="Details zu Projekt"]').first().click();
+      const drawer = P.locator('[data-testid="project-drawer"]');
+      await drawer.waitFor({ state: "visible", timeout: 8000 });
+      if (!/detail=\d+/.test(P.url())) throw new Error(`drawer is not URL state: ${P.url()}`);
+      // non-modal: the list behind it still receives scrolling and stays rendered
+      const sc = P.locator('[data-testid="projects-scroll"]');
+      const before = await sc.evaluate(c => { c.scrollTop = 40; return c.scrollTop; });
+      if ((await row(P).count()) === 0) throw new Error("list vanished behind the drawer");
+      if (await P.locator('[data-radix-dialog-overlay], [data-state="open"][aria-hidden="true"].fixed.inset-0').count()) throw new Error("a modal overlay is present");
+      // a remote edit (B) appears in the drawer's live activity, no reload
+      const cur = (await q("SELECT projektstand s FROM projects WHERE id=?", [PID]))[0]?.s;
+      const rem = await apiUpdate(tokenB, PID, { projektstand: cur === "EP" ? "FA" : "EP" });
+      if (rem.status !== 200) throw new Error(`remote edit: ${JSON.stringify(rem.error)}`);
+      await until(async () => /Zuletzt geändert/.test((await P.locator('[data-testid="remote-activity"]').textContent().catch(() => "")) ?? ""), 8000, "remote activity in drawer");
+      // an edit inside the drawer is a versioned server mutation
+      const v0 = await ver(PID);
+      await drawer.locator('button[aria-label^="Projektleiter bearbeiten"]').click();
+      const input = drawer.getByLabel("Projektleiter bearbeiten");
+      await input.fill(`Drawer-E2E-${Date.now() % 1000}`); await input.press("Enter");
+      await until(async () => (await ver(PID)) > v0, 8000, "drawer edit committed");
+      // close: URL cleaned, list position unchanged
+      await P.keyboard.press("Escape");
+      await drawer.waitFor({ state: "detached", timeout: 5000 });
+      if (/detail=/.test(P.url())) throw new Error("?detail stayed after close");
+      const after = await sc.evaluate(c => c.scrollTop);
+      if (Math.abs(after - before) > 2) throw new Error(`list position moved ${before} → ${after}`);
+    } finally { await P.close().catch(() => {}); }
+    vN = await ver(PID);
+  });
+
   await step("PSV-ITK (server): the Gewerk page is the Project aggregate filtered to ITK — virtualized, read-model KPIs, and A's review edit reaches B live", async () => {
     const { page } = B;
     await page.goto(`${URLS[1]}/psv-itk`);
@@ -339,7 +379,7 @@ async function main() {
     if ((await cellText(B.page, "Projektleitung")) === "E2E Leiter Drei") throw new Error("B changed while offline?!");
     await B.ctx.setOffline(false);
     if (process.env.E2E_NET) for (let i = 0; i < 6; i++) { console.log(`   [B diag] onLine=${await B.page.evaluate(() => navigator.onLine)} badge=${await badge(B.page)}`); await sleep(1000); }
-    await until(async () => /Wiederverbunden · 3 Änderungen synchronisiert/.test(await badge(B.page)), 15000, `B badge (was: ${await badge(B.page)})`);
+    await until(async () => /Wiederverbunden · 1 Projekt aktualisiert/.test(await badge(B.page)), 15000, `B badge (was: ${await badge(B.page)})`);
     const [srv] = await q("SELECT station, projektleiter, projektstand FROM projects WHERE id=?", [PID]);
     await until(async () => (await cellText(B.page, "Projektleitung")) === srv.projektleiter && (await cellText(B.page, "Station")) === srv.station, 5000, "B converged");
     if (!(await noReload(B.page))) throw new Error("reloaded");
@@ -364,6 +404,9 @@ async function main() {
     await until(async () => await dialog.isVisible(), 8000, "structured conflict dialog on B");
     const text = await dialog.innerText();
     if (!text.includes(`A-Wert-${choose}`) || !text.includes(`B-Wert-${choose}`) || !/Konflikt/.test(text)) throw new Error(`dialog: ${text}`);
+    // the diff names the clash: the conflicting field is marked, with base / current / attempted values side by side
+    const clash = dialog.locator('[data-testid="conflict-diff"] tr[data-conflict="true"]');
+    if ((await clash.count()) !== 1 || !/Konflikt/.test(await clash.innerText())) throw new Error("conflict diff does not mark the clashing field");
     if ((await q("SELECT projektleiter p FROM projects WHERE id=?", [PID]))[0].p !== `A-Wert-${choose}`) throw new Error("B silently overwrote A");
     if ((await ver(PID)) !== v0 + 1) throw new Error("version moved although B was rejected");
     if (choose === "server") {
@@ -480,7 +523,7 @@ async function main() {
     const inn = await apiUpdate(tokenA, comingIn, { bahnhofsmanagement: "Frankfurt" });
     if ([cr, del, out, inn].some(x => x.status !== 200)) throw new Error(JSON.stringify([cr.error, del.error, out.error, inn.error]));
     await B.ctx.setOffline(false);
-    await until(async () => /Wiederverbunden · \d+ Änderungen? synchronisiert/.test(await badge(B.page)), 15000, `resync badge (was: ${await badge(B.page)})`);
+    await until(async () => /Wiederverbunden · \d+ Projekte? aktualisiert/.test(await badge(B.page)), 15000, `resync badge (was: ${await badge(B.page)})`);
     const auth = await api(URLS[1]!, tokenB, "projects.list", { limit: 100, sort: "id", dir: "desc", expand: [] }, "GET");
     const authoritative: number[] = auth.data.items.map((p: any) => p.id);
     // The DOM holds only the rows around the viewport, so the comparison is window by window against the authoritative order.
@@ -606,6 +649,141 @@ async function main() {
     if (anon.status !== 401) throw new Error(`anonymous export -> ${anon.status}`);
     const imp = await fetch(`${URLS[0]}/api/import/excel`, { method: "POST", headers: { authorization: `Bearer ${tokenA}` } });
     if (imp.status !== 404) throw new Error(`import route exists: ${imp.status}`);
+  });
+
+  await step("AUTH (production): no demo login, no cookie sessions; document actions are server-recorded, authorized and scoped", async () => {
+    const demo = await api(URLS[0]!, "", "auth.demoLogin", { email: "admin@bahn.de", password: "admin" });
+    if (demo.status !== 404) throw new Error(`demoLogin must not exist in production: ${demo.status}`);
+    // a perfectly signed legacy session cookie (same JWT_SECRET) is worth nothing: production authenticates bearer tokens only
+    const cookie = await new SignJWT({ openId: "demo-admin", appId: "bahn-project-manager", name: "Demo" }).setProtectedHeader({ alg: "HS256", typ: "JWT" }).setExpirationTime("1h").sign(new TextEncoder().encode("e2e-".padEnd(48, "x")));
+    const viaCookie = await fetch(`${URLS[0]}/api/trpc/projects.list?input=${encodeURIComponent(JSON.stringify({ json: { limit: 5, expand: [] } }))}`, { headers: { cookie: `app_session_id=${cookie}` } });
+    if (viaCookie.status !== 401) throw new Error(`cookie session accepted in production: ${viaCookie.status}`);
+    // document actions: B (Frankfurt) records a PDF for a Frankfurt project; for a Kassel project it is NotFound
+    const fr = (await q("SELECT id FROM projects WHERE bahnhofsmanagement='Frankfurt' LIMIT 1"))[0].id as number;
+    const ka = (await q("SELECT id FROM projects WHERE bahnhofsmanagement='Kassel' LIMIT 1"))[0].id as number;
+    const ok = await api(URLS[1]!, tokenB, "audit.record", { kind: "pdf", details: "Projektblatt e2e.pdf", projectId: fr });
+    if (ok.status !== 200) throw new Error(`audit.record -> ${ok.status} ${JSON.stringify(ok.error)}`);
+    const denied = await api(URLS[1]!, tokenB, "audit.record", { kind: "pdf", details: "x.pdf", projectId: ka });
+    if (denied.status !== 404) throw new Error(`cross-workspace audit.record -> ${denied.status}`);
+    const bad = await api(URLS[1]!, tokenB, "audit.record", { kind: "format-c", details: "x" });
+    if (bad.status === 200) throw new Error("closed vocabulary not enforced");
+    const [row] = await q("SELECT workspace, entityType, action, field, eventId FROM audit_log WHERE action='document' AND entityId=? ORDER BY id DESC LIMIT 1", [fr]);
+    if (!row || row.workspace !== "Frankfurt" || row.field !== "pdf" || row.eventId !== null) throw new Error(`document audit row: ${JSON.stringify(row)}`);
+    // the grant of every verified principal was mirrored and audited (role/workspaces/departments)
+    await until(async () => Number((await q("SELECT COUNT(*) n FROM audit_log WHERE entityType='user' AND field='grant'"))[0].n) >= 2, 8000, "grant audit rows");
+  });
+
+  await step("DRILL-DOWN: every Dashboard number lands on EXACTLY the projects it counted (server-evaluated, scoped), in the real UI", async () => {
+    for (const [who, token, base] of [["A", tokenA, URLS[0]!], ["B", tokenB, URLS[1]!]] as const) {
+      const pf = await api(base, token, "dashboard.portfolio", undefined, "GET");
+      for (const b of pf.data.bedarf as Array<{ key: string; projects: number; rows: number }>) {
+        const l = await api(base, token, "projects.list", { limit: 100, expand: [], includeTotal: true, drill: { bedarf: b.key } }, "GET");
+        if (l.status !== 200 || l.data.total !== b.projects) throw new Error(`${who} bedarf ${b.key}: list total ${l.data?.total} != dashboard ${b.projects}`);
+        const c = await api(base, token, "projects.count", { drill: { bedarf: b.key } }, "GET");
+        if (c.data.total !== b.projects) throw new Error(`${who} count(${b.key}) ${c.data.total} != ${b.projects}`);
+      }
+      const slice = (pf.data.tones.slices as Array<{ tone: string; projects: number }>)[0]!;
+      const lt = await api(base, token, "projects.list", { limit: 100, expand: [], includeTotal: true, drill: { tone: slice.tone } }, "GET");
+      if (lt.data.total !== slice.projects) throw new Error(`${who} tone ${slice.tone}: ${lt.data.total} != ${slice.projects}`);
+      const eea = (pf.data.gewerke as Array<{ name: string; slices: Array<{ tone: string; projects: number }> }>).find(g => g.name === "EEA")!.slices[0];
+      if (eea) { const le = await api(base, token, "projects.list", { limit: 100, expand: [], includeTotal: true, drill: { tone: eea.tone, department: "EEA" } }, "GET"); if (le.data.total !== eea.projects) throw new Error(`${who} EEA tone ${eea.tone}: ${le.data.total} != ${eea.projects}`); }
+    }
+    // authorization is intersected: B cannot reach a Kassel project by naming its id in a drill
+    const ka = (await q("SELECT id FROM projects WHERE bahnhofsmanagement='Kassel' LIMIT 1"))[0].id as number;
+    const sneaky = await api(URLS[1]!, tokenB, "projects.list", { limit: 10, expand: [], includeTotal: true, drill: { ids: [ka] } }, "GET");
+    if (sneaky.data.total !== 0 || sneaky.data.items.length) throw new Error("drill ids bypassed workspace authorization");
+    // the real UI: the chip and the list say what the Dashboard said
+    const pfB = await api(URLS[1]!, tokenB, "dashboard.portfolio", undefined, "GET");
+    const od = (pfB.data.bedarf as Array<{ key: string; projects: number; rows: number }>).find(b => b.key === "overdue")!;
+    const page = await B.ctx.newPage();
+    await page.goto(`${URLS[1]}/projects?bedarf=overdue&view=cards`);
+    await until(async () => (await page.getByText(new RegExp(`${od.rows.toLocaleString("de-DE")} Prüfzeilen in ${od.projects.toLocaleString("de-DE")} Projekten`)).count()) > 0, 15000, "drill chip with the dashboard's numbers");
+    await page.close();
+  });
+
+  // ---------------- CHAOS: Redis outage, app restart --------------------------------------------------------------
+  const sh = (cmd: string) => execSync(cmd, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+  const redisContainer = process.env.E2E_REDIS_CONTAINER ?? (() => { try { return sh("docker ps -q --filter ancestor=redis:7 | head -1"); } catch { return ""; } })();
+  /** Minimal SSE client (a "browser tab"): collects `domain` events for the given scopes. */
+  const openStream = async (base: string, token: string, scopes: string[]) => {
+    const ac = new AbortController(); const events: any[] = []; const hints: string[] = []; const frames: string[] = []; let hello: any = null; let ended = false;
+    const res = await fetch(`${base}/api/realtime/stream?scopes=${encodeURIComponent(scopes.join(","))}`, { headers: { authorization: `Bearer ${token}`, accept: "text/event-stream" }, signal: ac.signal });
+    if (res.status !== 200) throw new Error(`stream -> ${res.status}`);
+    (async () => {
+      const rd = res.body!.pipeThrough(new TextDecoderStream()).getReader(); let buf = "";
+      try { for (;;) { const { value, done } = await rd.read(); if (done) break; buf += value; let i; while ((i = buf.indexOf("\n\n")) >= 0) { const f = buf.slice(0, i); buf = buf.slice(i + 2); const ev = /event: (.+)/.exec(f)?.[1]; const data = /data: (.+)/.exec(f)?.[1]; if (ev) frames.push(ev); if (ev === "hello" && data) hello = JSON.parse(data); if (ev === "domain" && data) events.push(JSON.parse(data)); if (ev === "hint" && data) hints.push(JSON.parse(data).kind); } } } catch { /* aborted */ }
+      ended = true;
+    })();
+    await until(() => hello, 5000, "stream hello");
+    return { events, hints, frames, hello: () => hello, ended: () => ended, close: () => ac.abort() };
+  };
+  const readyBody = async (base: string) => { const r = await fetch(`${base}/api/ready`).catch(() => null); return r ? { status: r.status, body: await r.json().catch(() => ({})) } : null; };
+
+  await step("CHAOS: Redis outage — writes commit, instances stay in rotation (degraded), the outbox waits, delivery resumes by itself after Redis returns", async () => {
+    if (!redisContainer) throw new Error("no redis container found (set E2E_REDIS_CONTAINER)");
+    const fr = (await q("SELECT id FROM projects WHERE bahnhofsmanagement='Frankfurt' ORDER BY id LIMIT 1"))[0].id as number;
+    const sse = await openStream(URLS[1]!, tokenB, [`project:${fr}`]);          // a tab on instance 2
+    const write = (v: string) => apiUpdate(tokenA, fr, { kommentar: v });        // a writer on instance 1 (cross-instance = through Redis)
+    const w0 = await write("chaos-0"); if (w0.status !== 200) throw new Error(`baseline write ${w0.status}`);
+    await until(() => sse.events.some(e => e.aggregateId == fr && e.changes?.kommentar?.to === "chaos-0"), 6000, "baseline cross-instance delivery");
+    sh(`docker stop ${redisContainer}`); const tStop = new Date().toISOString(); measurements.chaos_tStop = tStop;
+    try {
+      await until(async () => { const r = await readyBody(URLS[0]!); return r?.status === 200 && r.body.redis === "down" && r.body.status === "degraded"; }, 10000, "instance 1 ready=degraded (200) while Redis is down");
+      const r2 = await readyBody(URLS[1]!); if (r2?.status !== 200) throw new Error(`instance 2 left rotation: ${r2?.status}`);
+      const w1 = await write("chaos-1"); if (w1.status !== 200) throw new Error(`write during Redis outage -> ${w1.status} ${JSON.stringify(w1.error)}`);
+      const [ev] = await q("SELECT processedAt FROM domain_events WHERE aggregateType='project' AND aggregateId=? ORDER BY id DESC LIMIT 1", [fr]);
+      await sleep(1500);
+      if (sse.events.some(e => e.changes?.kommentar?.to === "chaos-1")) throw new Error("event crossed instances without Redis?");
+      const backlog = Number((await q("SELECT COUNT(*) n FROM domain_events WHERE processedAt IS NULL"))[0].n);
+      if (backlog < 1 && ev.processedAt) throw new Error("outbox did not hold the undelivered event (published without a transport?)");
+      measurements.chaos_redis_backlog_during_outage = backlog;
+      const m = await (await fetch(`${URLS[0]}/api/metrics`, { headers: { authorization: "Bearer e2e" } })).text();
+      if (!/^bahn_redis_up 0$/m.test(m)) throw new Error("bahn_redis_up did not report 0");
+    } finally { sh(`docker start ${redisContainer}`); }
+    const t0 = Date.now();
+    await until(async () => (await readyBody(URLS[0]!))?.body.redis === "ok", 20000, "Redis back");
+    // Pub/sub is fire-and-forget, so the event published during the gap may or may not have crossed instances. What is GUARANTEED:
+    // the instance tells its open streams to catch up the moment its subscriber is back, and the durable feed holds the event.
+    const cursor0 = (await api(URLS[1]!, tokenB, "projects.changes", { after: 0, limit: 1 }, "GET")).data;
+    await until(() => sse.hints.includes("catchup"), 15000, "catch-up hint after the transport recovered");
+    const feed = await api(URLS[1]!, tokenB, "projects.changes", { after: Math.max(0, (sse.hello().headSeq ?? 0) - 1), limit: 500 }, "GET");
+    const held = (feed.data?.events ?? []).filter((e: any) => e.aggregateId == fr && e.changes?.kommentar?.to === "chaos-1");
+    if (held.length !== 1) throw new Error(`the durable feed must hold the event published during the outage exactly once (found ${held.length}; cursor ${JSON.stringify(cursor0?.cursor)})`);
+    measurements.chaos_redis_recovery_ms = Date.now() - t0;
+    await until(async () => Number((await q("SELECT COUNT(*) n FROM domain_events WHERE processedAt IS NULL"))[0].n) === 0, 15000, "outbox drained");
+    const w2 = await write("chaos-2"); if (w2.status !== 200) throw new Error("write after recovery");
+    await until(() => sse.events.some(e => e.changes?.kommentar?.to === "chaos-2"), 8000, "live delivery after recovery");
+    sse.close();
+  });
+
+  await step("CHAOS: app restart — graceful drain, the durable feed holds what was missed, a reconnecting client recovers it, the instance rejoins", async () => {
+    const fr = (await q("SELECT id FROM projects WHERE bahnhofsmanagement='Frankfurt' ORDER BY id LIMIT 1"))[0].id as number;
+    const sse = await openStream(URLS[1]!, tokenB, [`project:${fr}`]);
+    const headBefore = (await api(URLS[0]!, tokenA, "projects.changes", { after: 0, limit: 1 }, "GET")).data;
+    const cursor = sse.hello().headSeq ?? headBefore?.cursor ?? 0;
+    const child = instances.get(PORTS[1]!)!;
+    const exited = new Promise<number | null>(r => child.once("exit", c => r(c)));
+    const t0 = Date.now(); child.kill("SIGTERM");
+    const code = await Promise.race([exited, sleep(12000).then(() => "timeout" as const)]);
+    if (code !== 0) throw new Error(`instance 2 did not drain and exit 0: ${code}`);
+    measurements.chaos_restart_drain_ms = Date.now() - t0;
+    if (Date.now() - t0 > 3500) throw new Error(`drain took ${Date.now() - t0} ms: open SSE streams must be ended at SIGTERM, not at the forced-close timeout`);
+    if (!sse.frames.includes("reconnect")) throw new Error("the open stream was not told to reconnect elsewhere");
+    await until(() => sse.ended(), 3000, "the open stream was ended by the drain (clients reconnect)");
+    // while it is down: the other instance keeps serving and committing
+    const w = await apiUpdate(tokenA, fr, { kommentar: "while-instance-2-down" }); if (w.status !== 200) throw new Error(`write while peer down -> ${w.status}`);
+    if ((await fetch(`${URLS[0]}/api/ready`)).status !== 200) throw new Error("instance 1 not ready while its peer is down");
+    // restart on the same port
+    spawnInstance(PORTS[1]!);
+    await until(async () => (await readyBody(URLS[1]!))?.status === 200, 20000, "instance 2 ready again");
+    // the reconnecting client's recovery contract: hello carries the feed head; projects.changes returns everything after its cursor
+    const again = await openStream(URLS[1]!, tokenB, [`project:${fr}`]);
+    const feed = await api(URLS[1]!, tokenB, "projects.changes", { after: cursor, limit: 200 }, "GET");
+    const missed = (feed.data?.events ?? []).filter((e: any) => e.aggregateId == fr && e.changes?.kommentar?.to === "while-instance-2-down");
+    if (missed.length !== 1) throw new Error(`feed did not return the missed event exactly once: ${JSON.stringify(feed.data?.events?.length)}`);
+    const w2 = await apiUpdate(tokenA, fr, { kommentar: "after-restart" }); if (w2.status !== 200) throw new Error("write after restart");
+    await until(() => again.events.some(e => e.changes?.kommentar?.to === "after-restart"), 8000, "live delivery through the restarted instance");
+    again.close();
   });
 
   await step("integrity: every committed change has exactly one audit set, one event, one feedSeq; feed is gapless; nothing unpublished/dead", async () => {

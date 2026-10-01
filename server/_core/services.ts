@@ -29,8 +29,8 @@ export interface Services {
   relay: OutboxRelay;
   presence: PresenceService;
   pool: Pool;
-  /** Rejects when a shared dependency (Redis) is unreachable; resolves immediately when none is configured. */
-  pingShared(): Promise<void>;
+  /** Redis health (the shared transport): true/false, or null when none is configured. Never throws; sampled into `bahn_redis_up`. */
+  redisStatus(): Promise<boolean | null>;
   shutdown(): Promise<void>;
 }
 
@@ -47,7 +47,7 @@ export async function getServices(log: (msg: string, e?: unknown) => void = cons
   let presenceStore: PresenceStore = new MemoryPresenceStore();
   let sweepLock: (() => Promise<boolean>) | null = null;
   let purgeLock: (() => Promise<boolean>) | null = null;
-  let pingShared: () => Promise<void> = async () => {};
+  let redisStatus: () => Promise<boolean | null> = async () => null;
   const closers: Array<() => Promise<unknown>> = [];
   if (process.env.REDIS_URL) {
     const { default: IORedis } = await import("ioredis");
@@ -60,7 +60,10 @@ export async function getServices(log: (msg: string, e?: unknown) => void = cons
     // one sweeper cluster-wide: SET NX PX
     sweepLock = async () => (await pub.set("bahn:pres:sweeper", "1", "PX", 9000, "NX")) === "OK";
     purgeLock = async () => (await pub.set("bahn:notif:retention", "1", "PX", 55 * 60_000, "NX")) === "OK";
-    pingShared = async () => { if ((await pub.ping()) !== "PONG") throw new Error("redis ping failed"); };
+    redisStatus = async () => {
+      try { const ok = (await Promise.race([pub.ping(), new Promise<never>((_, rej) => setTimeout(() => rej(new Error("redis ping timeout")), 1500))])) === "PONG"; m.redisUp.set(ok ? 1 : 0); return ok; }
+      catch { m.redisUp.set(0); return false; }
+    };
     closers.push(() => pub.quit(), () => sub.quit());
   } else {
     bus = new InProcessBus();
@@ -77,6 +80,7 @@ export async function getServices(log: (msg: string, e?: unknown) => void = cons
   const sampler = setInterval(async () => {
     try {
       m.outboxBacklog.set(await outbox.backlog());
+      await redisStatus(); // keeps bahn_redis_up current between readiness probes
       const p = (pool as any).pool;
       if (p) {
         m.poolInUse.set((p._allConnections?.length ?? 0) - (p._freeConnections?.length ?? 0));
@@ -103,7 +107,7 @@ export async function getServices(log: (msg: string, e?: unknown) => void = cons
 
   relay.start();
   services = {
-    store, projects: svc, bookings, checklists, publisher: bus, subscriber: bus, relay, presence, pool, pingShared,
+    store, projects: svc, bookings, checklists, publisher: bus, subscriber: bus, relay, presence, pool, redisStatus,
     async shutdown() {
       clearInterval(sampler);
       clearInterval(sweeper);

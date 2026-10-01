@@ -52,7 +52,7 @@ A slow consumer never blocks the publisher: on queue overflow it gets a `resync`
   field never clobbers a pending local one; own-event echo (before or after the HTTP response) is a no-op.
 * `RealtimeConnection`: `connecting → connected ⇄ degraded`, `reconnecting → resynchronizing → connected`, `offline`.
   Heartbeat watchdog (2.5× interval → degraded), full-jitter exponential backoff, the UI never shows "Live" until
-  resync finished ("Wiederverbunden · 3 Änderungen synchronisiert"). `fetch` streaming (not `EventSource`) so a bearer
+  resync finished ("Wiederverbunden · 1 Projekt aktualisiert"). `fetch` streaming (not `EventSource`) so a bearer
   token can be sent.
 * Bridge to React Query: engine changes `setQueryData` the project and patch it into every cached list page.
   No collection refetch per change.
@@ -127,3 +127,17 @@ below the client's recovery cursor. Tested with a Redis whose SUBSCRIBE ack is d
   leading + one trailing snapshot per scope per 500 ms. Never SQL.
 * Notifications: ≤ 5 live frames per stream per 10 s, then one `hint` that tells the client to re-read the durable inbox;
   unread counters are a read model (`notification_unread`); retention job (read > 30 d, any > 180 d).
+
+
+## Recovery semantics (verified by the server-mode e2e `CHAOS` steps)
+
+* **Redis outage.** MySQL commits are unaffected; the outbox holds the events (`bahn_outbox_backlog` rises, `bahn_redis_up` = 0,
+  `/api/ready` = 200 `degraded`). When the subscriber is back, every open stream receives `hint: catchup` (+ `notifications`) and the
+  client re-reads the durable feed at once (measured recovery ≈ 0.7 s); pub/sub messages published in the gap are never assumed
+  delivered. The periodic 30 s client catch-up remains the backstop.
+* **App restart.** SIGTERM flips readiness to 503, ends every SSE stream with a `reconnect` frame, sweeps idle sockets and forces
+  stragglers after `SHUTDOWN_GRACE_MS` (default 2 s). Measured drain ≈ 2.0 s; the process exits 0. A reconnecting client's hello carries
+  the feed head and `projects.changes` returns everything after its cursor exactly once.
+* **`lastSyncedChanges`** (badge "Wiederverbunden · N Projekte aktualisiert") = the number of distinct projects whose state differs
+  from what the client held when recovery started (updated, created/moved in, deleted/moved out) — one unit however recovery was split
+  between feed events and snapshots. Three edits of one project are one changed project.

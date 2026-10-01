@@ -71,6 +71,13 @@
       "when": 1790826188164,
       "tag": "0009_audit_scope",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1790852346463,
+      "tag": "0010_user_grant_audit",
+      "breakpoints": true
     }
   ]
 }

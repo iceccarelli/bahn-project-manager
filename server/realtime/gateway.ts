@@ -62,8 +62,11 @@ export function registerRealtimeGateway(app: Express, opt: GatewayOptions) {
   const nodeId = opt.nodeId ?? randomUUID().slice(0, 8);
 
   // ---- live streams of THIS process, addressable by id so their scopes can change without reconnecting ----
-  interface Stream { principal: Principal; it: SubscriptionIterator; push(event: string, data: unknown): void; lastUpdate: number; recentUpdates: number }
+  interface Stream { principal: Principal; it: SubscriptionIterator; push(event: string, data: unknown): void; end(): void; lastUpdate: number; recentUpdates: number }
   const streams = new Map<string, Stream>();
+  // Redis came back: whatever was published during the gap never reached us. Every open stream re-reads the durable feed
+  // (and its notification inbox) now — recovery is prompt and does not depend on the next event or the 30 s client poll.
+  opt.subscriber.onTransportRecovered?.(() => { for (const st of streams.values()) { st.push("hint", { kind: "catchup" }); st.push("hint", { kind: "notifications" }); } });
 
   /** Authorize + apply a scope change on a stream owned by this process. Answers on the stream itself. */
   async function applyScopes(streamId: string, principalId: string, requestId: string, add: string[], remove: string[]) {
@@ -200,7 +203,7 @@ export function registerRealtimeGateway(app: Express, opt: GatewayOptions) {
     const streamId = `${nodeId}.${randomUUID().replace(/-/g, "").slice(0, 16)}`;
     total++; m.rtConnections.add(1); m.rtReconnects.inc();
     open.set(principal.id, (open.get(principal.id) ?? 0) + 1);
-    streams.set(streamId, { principal, it: iterator, push: frame, lastUpdate: 0, recentUpdates: 0 });
+    streams.set(streamId, { principal, it: iterator, push: frame, end: () => finish(), lastUpdate: 0, recentUpdates: 0 });
     let finished = false;
     const finish = () => {
       if (finished) return;
@@ -261,6 +264,11 @@ export function registerRealtimeGateway(app: Express, opt: GatewayOptions) {
       finish();
     }
   }
+
+  return {
+    /** Graceful shutdown: tell every open stream to reconnect elsewhere and end it now (do not hold the drain open for minutes). */
+    drain() { for (const st of [...streams.values()]) { try { st.push("reconnect", { reason: "shutdown" }); } catch { /* socket already gone */ } st.end(); } },
+  };
 }
 
 

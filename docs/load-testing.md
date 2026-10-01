@@ -11,18 +11,18 @@ single-box measurements that found and fixed real defects.
 | `setup-db.mjs` | migrations + N synthetic projects (200k), reviews for 20k, load users | yes |
 | `explain.mjs` | plan + median/p95 for the list/search/outbox queries, with/without each index | yes |
 | `run-server.sh` | starts the **built** bundle `dist/index.js` (`REDIS_URL`, ports, pools via env) | yes |
-| `mint-session.mjs` | signed session cookie for the seeded users | yes |
+| `mock-idp.mjs` | local OIDC IdP (JWKS + `/token`) for LOCAL runs; staging/production runs use real tokens | yes |
 | `api-bench.mjs` | closed-loop HTTP/tRPC driver: `read`, `mixed`, `write-distinct`, `write-same` (hot project) + consistency check. `--ids MIN:MAX` (default **1:1298**, the real dataset, so no artificial 404s; use `--ids 1:200000` for the synthetic DB) and `--think-ms N` (per-VU think time) | yes (≤100 VUs; 50-VU run on the real 1,298-row dataset on MySQL 8.4: 0 % errors, hot-project run 0 lost/duplicated writes) |
 | `realtime-fanout.mjs` | N SSE connections, one mutation, per-connection propagation latency; multi-instance via comma list | yes (≤10,000 conn) |
 | `k6-api.js` | ramping 100→10,000 VU suite with think time and SLO thresholds | **no — k6 not installable here** |
 
 Reproduce: `node scripts/load/setup-db.mjs mysql://u:p@127.0.0.1:3306 bahn_load 200000 && pnpm build:server &&
 JWT_SECRET=… scripts/load/run-server.sh && node scripts/load/realtime-fanout.mjs --base http://127.0.0.1:3100
---cookie "$(JWT_SECRET=… node scripts/load/mint-session.mjs)" --connections 10000 --project 5`.
+--token "$(curl -s "http://127.0.0.1:3290/token?role=admin&workspaces=ALL")" --connections 10000 --project 5`.
 
 ## `certify.mjs` stages (external host only)
 
-`BASE=https://… COOKIE|TOKEN=… METRICS_TOKEN=… node scripts/load/certify.mjs --ids 1:1298 [--think-ms 1000] [--stages-api 100,500,1000,2500,5000,10000]`
+`BASE=https://… TOKEN=… METRICS_TOKEN=… node scripts/load/certify.mjs --ids 1:1298 [--think-ms 1000] [--stages-api 100,500,1000,2500,5000,10000]`
 
 mixed read/write API stages (each samples the server's outbox backlog, dead letters, pool in-use/queued, shed and unhandled
 counters before/after, and `/api/ready` afterwards) → `concurrent-writes` (200 VUs, distinct + shared projects) → `hot-project`

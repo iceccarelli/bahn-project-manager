@@ -91,7 +91,12 @@ export function assertProductionConfig(env: NodeJS.ProcessEnv = process.env) {
   const problems: string[] = [];
   if (!env.JWT_SECRET || env.JWT_SECRET.length < 32 || /demo|change/i.test(env.JWT_SECRET)) problems.push("JWT_SECRET must be set to a random value of at least 32 characters");
   if (!env.DATABASE_URL) problems.push("DATABASE_URL is required");
-  if (!env.OIDC_ISSUER && env.ALLOW_DEMO_LOGIN !== "1" && !env.OAUTH_SERVER_URL) problems.push("configure OIDC_ISSUER/OIDC_AUDIENCE (or explicitly ALLOW_DEMO_LOGIN=1 for a demo deployment)");
+  // Production identity is OIDC bearer tokens verified by the server — nothing else. Demo/legacy authentication is refused
+  // outright (not "off unless enabled"): a mis-set flag must stop the boot, not silently open a side door.
+  if (!env.OIDC_ISSUER) problems.push("OIDC_ISSUER (+ OIDC_AUDIENCE) is required: production authentication is OIDC only");
+  if (env.ALLOW_DEMO_LOGIN && env.ALLOW_DEMO_LOGIN !== "0" && env.ALLOW_DEMO_LOGIN.toLowerCase() !== "false") problems.push("ALLOW_DEMO_LOGIN is not permitted in production (demo authentication cannot be enabled)");
+  if (env.LEGACY_USER_WORKSPACES) problems.push("LEGACY_USER_WORKSPACES is not permitted in production (workspace access comes from the verified token only)");
+  if (env.OAUTH_SERVER_URL) problems.push("OAUTH_SERVER_URL (legacy OAuth/cookie sessions) is not permitted in production");
   // Redis is the shared transport of the topology (realtime fan-out, presence, subscription barrier). Without it
   // two instances silently stop seeing each other's events, so it is not optional unless a single node is declared.
   if (!env.REDIS_URL && env.ALLOW_SINGLE_INSTANCE !== "1") problems.push("REDIS_URL is required (multi-instance realtime transport); set ALLOW_SINGLE_INSTANCE=1 only for a deliberate single-node deployment");

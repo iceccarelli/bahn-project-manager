@@ -15,7 +15,8 @@ import { generatedLabel } from "@shared/generated-stamp";
  * All four write through the same query cache the Änderungshistorie page and
  * the header bell read, so an entry appears in both the moment it is made.
  */
-export function useAuditTrail() {
+/** `projectId`: the project the actions concern (server build: scopes the audit row to that project's workspace). */
+export function useAuditTrail(projectId?: number) {
   const record = useRecordAudit();
 
   /** A generated document. `what` names it, `filename` proves which file. */
@@ -30,9 +31,10 @@ export function useAuditTrail() {
         details: [what, subjectLine, filename, `Stand ${generatedLabel()}`]
           .filter(Boolean)
           .join(" · "),
+        ...(projectId ? { meta: { projectId } } : {}),
       });
     },
-    [record],
+    [record, projectId],
   );
 
   /**
@@ -47,9 +49,10 @@ export function useAuditTrail() {
         action:
           channel === "mail" ? AUDIT_ACTIONS.mailGeoeffnet : AUDIT_ACTIONS.teamsGeoeffnet,
         details: [subjectLine, `an ${recipient}`].filter(Boolean).join(" · "),
+        ...(projectId ? { meta: { projectId } } : {}),
       });
     },
-    [record],
+    [record, projectId],
   );
 
   /**

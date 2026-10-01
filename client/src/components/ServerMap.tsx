@@ -16,6 +16,7 @@ import { serverApi } from "@/realtime/serverApi";
 export interface ServerMapFilters {
   search?: string; bahnhofsmanagement?: string; projektstand?: string; projektleiter?: string;
   department?: string; reviewStatus?: string; pruefer?: string;
+  drill?: import("@shared/drilldown").Drill;
 }
 type Bounds = MapQuery["bbox"];
 

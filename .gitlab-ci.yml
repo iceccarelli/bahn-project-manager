@@ -79,8 +79,7 @@ build:
   stage: build
   needs: [typen-und-lint, unit]
   script:
-    - NODE_ENV=production pnpm build:client
-    - NODE_ENV=production pnpm build:server
+    - pnpm build:production   # server-authoritative artifact; refuses to build as demo, asserts build-info
     # Auf dem Artefakt, nicht auf der Quelle: der Server-Entry darf keine
     # Entwicklungsabhaengigkeit importieren, sonst stirbt der Container in
     # seiner ersten Zeile.
@@ -104,6 +103,7 @@ abnahme:
   timeout: 40m
   script:
     - pnpm exec playwright install --with-deps chromium
+    - pnpm build:demo   # the browser-local demo is what these UI gates exercise (dist/public is replaced)
     - node scripts/e2e-smoke.mjs
     - pnpm check:responsive
     - pnpm check:map

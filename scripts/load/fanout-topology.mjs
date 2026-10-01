@@ -6,7 +6,7 @@
  *   before   every client subscribes to all nine workspace channels (every edit of every project reaches everyone)
  *   after    every client subscribes to `collection:all` (membership feed) + `project:<id>` for the rows on its screen
  *
- *   node scripts/load/fanout-topology.mjs --base http://127.0.0.1:3100 --cookie <session> \
+ *   node scripts/load/fanout-topology.mjs --base http://127.0.0.1:3100 --token <oidc access token> \
  *        [--clients 1000] [--events 200] [--visible 40] [--topology before|after|both] [--ids 1:1298]
  *
  * Reports deliveries (frames received across all clients), bytes, deliveries per event, and the ideal
@@ -16,13 +16,13 @@
 import http from "node:http";
 
 const arg = (k, d) => { const i = process.argv.indexOf(`--${k}`); return i > -1 ? process.argv[i + 1] : d; };
-const BASE = new URL(arg("base", "http://127.0.0.1:3100")), COOKIE = arg("cookie", process.env.COOKIE);
+const BASE = new URL(arg("base", "http://127.0.0.1:3100")), TOKEN = arg("token", process.env.TOKEN);
 const CLIENTS = Number(arg("clients", 1000)), EVENTS = Number(arg("events", 200)), VISIBLE = Number(arg("visible", 40));
 const TOPOLOGY = arg("topology", "both"), [ID_MIN, ID_MAX] = arg("ids", "1:1298").split(":").map(Number);
-if (!COOKIE) { console.error("--cookie required"); process.exit(2); }
+if (!TOKEN) { console.error("--token (OIDC bearer access token) required"); process.exit(2); }
 const WORKSPACES = ["darmstadt", "frankfurt", "giessen", "kaiserslautern", "kassel", "koblenz", "mainz", "saarbrucken", "ubergreifend"]; // slug form (shared/bahnhofsmanagement.ts) // slug form
 const rnd = n => Math.floor(Math.random() * n);
-const H = { cookie: `app_session_id=${COOKIE}`, "content-type": "application/json" };
+const H = { authorization: `Bearer ${TOKEN}`, "content-type": "application/json" };
 const agent = new http.Agent({ keepAlive: true, maxSockets: Infinity });
 
 async function trpc(proc, input, method = "GET") {
@@ -41,7 +41,7 @@ async function run(topology) {
     const rows = new Set(); while (rows.size < VISIBLE) rows.add(ID_MIN + rnd(ID_MAX - ID_MIN + 1));
     held[i] = rows;
     const scopes = topology === "before" ? WORKSPACES.map(w => `workspace:${w}`) : ["collection:all", ...[...rows].map(id => `project:${id}`)];
-    const req = http.request({ host: BASE.hostname, port: BASE.port, path: `/api/realtime/stream?scopes=${encodeURIComponent(scopes.join(","))}`, agent, headers: { cookie: `app_session_id=${COOKIE}`, accept: "text/event-stream" } }, res => {
+    const req = http.request({ host: BASE.hostname, port: BASE.port, path: `/api/realtime/stream?scopes=${encodeURIComponent(scopes.join(","))}`, agent, headers: { authorization: `Bearer ${TOKEN}`, accept: "text/event-stream" } }, res => {
       if (res.statusCode !== 200) { stats.failed++; res.resume(); return resolve(false); }
       res.setEncoding("utf8"); let ready = false;
       res.on("data", chunk => {

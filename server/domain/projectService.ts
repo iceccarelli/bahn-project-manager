@@ -42,6 +42,7 @@ import {
 } from "./permissions";
 import { eventForPrincipal } from "./eventVisibility";
 import { planNotification } from "./notificationPolicy";
+import type { AuditDocumentKind, AuditEntityType } from "@shared/audit-contract";
 import type { AfterCommit, AuditRow, ProjectStore, ProjectTx } from "./ports";
 
 export interface RequestContext {
@@ -117,6 +118,16 @@ function diffOf(
     if (from !== to) changes[field] = { from, to };
   }
   return changes;
+}
+
+/** The removed record as JSON for the delete audit row (strings capped; the audit text column is 64 KB). */
+function snapshotJson(d: ProjectDetail | null): string | null {
+  if (!d) return null;
+  const cap = (v: unknown) => (typeof v === "string" && v.length > 2000 ? `${v.slice(0, 2000)}…` : v);
+  const { reviews, ...fields } = d as unknown as Record<string, unknown> & { reviews?: Array<Record<string, unknown>> };
+  const out = { ...Object.fromEntries(Object.entries(fields).map(([k, v]) => [k, cap(v)])), reviews: (reviews ?? []).map(r => ({ department: r.department, status: r.status, prueferName: r.prueferName, datum: r.datum })) };
+  const j = JSON.stringify(out);
+  return j.length <= 60_000 ? j : JSON.stringify({ truncated: true, id: d.id, projektnummer: d.projektnummer, station: d.station, bahnhofsmanagement: d.bahnhofsmanagement, version: d.version });
 }
 
 const labelOf = (station: string | null | undefined, nummer: string | null | undefined): string | null => (station?.trim() || nummer?.trim() || null)?.slice(0, 255) ?? null;
@@ -336,11 +347,22 @@ export class ProjectService {
    * aggregates that create a project as part of their own transition (checklist submission), so both write the
    * same audit rows and the same event as a direct create.
    */
-  async createWithin(tx: ProjectTx, principal: Principal, ctx: RequestContext, norm: Partial<Record<EditableProjectField, string | null>>) {
+  async createWithin(
+    tx: ProjectTx, principal: Principal, ctx: RequestContext, norm: Partial<Record<EditableProjectField, string | null>>,
+    reviews: ReadonlyArray<{ department: string; status: string | null; prueferName: string | null; datum: Date | null }> = [],
+  ) {
     if (!canCreateProject(principal, { bahnhofsmanagement: norm.bahnhofsmanagement ?? null })) throw new ForbiddenError();
     const id = await tx.insertProject(toColumnValues(norm));
     const changes: Record<string, FieldChange> = {};
     for (const [k, to] of Object.entries(norm)) if (to !== null && to !== undefined) changes[k] = { from: null, to };
+    // the initial reviews are part of the Project aggregate's creation: inserted in this transaction and recorded in the
+    // SAME audit rows and event (review.<Gewerk>.<field>), never written behind the aggregate's back
+    for (const r of reviews) {
+      await tx.insertReview(id, { department: r.department, status: r.status, prueferName: r.prueferName, datum: r.datum });
+      if (r.status !== null) changes[reviewChangeKey(r.department, "status")] = { from: null, to: r.status };
+      if (r.prueferName !== null) changes[reviewChangeKey(r.department, "prueferName")] = { from: null, to: r.prueferName };
+      if (r.datum !== null) changes[reviewChangeKey(r.department, "datum")] = { from: null, to: dateToWire(r.datum) };
+    }
     const event = this.buildEvent("project.created", principal, ctx, id, 1, changes, { workspace: norm.bahnhofsmanagement ?? null });
     await tx.appendAudit(this.auditRows(principal, event, "create", changes, labelOf(norm.station, norm.projektnummer)));
     await tx.appendEvent(event);
@@ -366,10 +388,12 @@ export class ProjectService {
       const event = this.buildEvent("project.deleted", principal, ctx, input.id, version, {}, {
         workspace: current.bahnhofsmanagement,
       });
+      // forensic snapshot of what is about to disappear (project fields + every review), captured BEFORE the delete
+      const snapshot = snapshotJson(await tx.detail(input.id));
       // notify BEFORE the project (and its watcher rows) are removed
       await this.notifyWatchers(tx, principal, event, { id: input.id, projektnummer: current.projektnummer, station: current.station });
       await tx.deleteProject(input.id);
-      await tx.appendAudit(this.auditRows(principal, event, "delete", {}, labelOf(current.station, current.projektnummer)));
+      await tx.appendAudit(this.auditRows(principal, event, "delete", {}, labelOf(current.station, current.projektnummer), snapshot));
       await tx.appendEvent(event);
       const res = { eventId: event.eventId, replayed: false };
       await tx.completeIdempotency(principal.id, input.idempotencyKey, res);
@@ -377,6 +401,30 @@ export class ProjectService {
     });
     if (!result.replayed) this.notifyAfterCommit();
     return result;
+  }
+
+  /**
+   * A durable document/message action (PDF produced, export downloaded, mail/Teams message prepared).
+   * Not an aggregate transition: no version, no domain event, no realtime — exactly one audit row, written in its own
+   * transaction, authorized like a read: a project must be visible to the caller; without a project the row is scoped to
+   * the caller's single workspace (or left unscoped = visible to unrestricted principals only).
+   */
+  async recordDocumentAction(principal: Principal, input: { kind: AuditDocumentKind; details: string; projectId?: number }, ctx: RequestContext): Promise<void> {
+    let workspace: string | null = null, label: string | null = null, entityType: AuditEntityType = "document", entityId = 0;
+    if (input.projectId !== undefined) {
+      const d = await this.get(principal, input.projectId); // NotFound if not visible: no oracle, no cross-workspace row
+      workspace = d.bahnhofsmanagement; label = labelOf(d.station, d.projektnummer); entityType = "project"; entityId = d.id;
+    } else {
+      workspace = Array.isArray(principal.workspaces) && principal.workspaces.length === 1 ? principal.workspaces[0]! : null;
+      label = input.details.slice(0, 255);
+    }
+    await this.store.transaction(async tx => {
+      await tx.appendAudit([{
+        userId: actorNumericId(principal), userName: principal.name || principal.email || principal.id, entityType, entityId,
+        action: "document", field: input.kind, oldValue: null, newValue: input.details.slice(0, 500),
+        eventId: null, aggregateVersion: null, traceId: ctx.traceId, workspace, entityLabel: label,
+      }]);
+    });
   }
 
   // ---- internals ----------------------------------------------------------
@@ -480,6 +528,7 @@ export class ProjectService {
     action: AuditRow["action"],
     changes: Record<string, FieldChange>,
     label: string | null = null,
+    snapshot: string | null = null,
   ): AuditRow[] {
     const base = {
       workspace: e.context?.workspace ?? null,
@@ -494,7 +543,7 @@ export class ProjectService {
       traceId: e.traceId,
     };
     const fields = Object.entries(changes);
-    if (fields.length === 0) return [{ ...base, field: null, oldValue: null, newValue: null }];
+    if (fields.length === 0) return [{ ...base, field: null, oldValue: snapshot, newValue: null }];
     return fields.map(([field, c]) => ({ ...base, field, oldValue: c.from, newValue: c.to }));
   }
 

@@ -1,6 +1,6 @@
 # Production readiness — status by phase (honest ledger)
 
-Branch `claude/amazing-carson-q1ae16`, continued from `736c1de`. "Done" means implemented **and** verified with the evidence
+Convergence branch `claude/amazing-carson-q1ae16`, based on `main` `6c14bd9`. "Done" means implemented **and** verified with the evidence
 named; anything that needs infrastructure, credentials or an owner decision this environment does not have is listed as a gap,
 not as a pass.
 
@@ -15,30 +15,30 @@ not as a pass.
 if a production artifact says `serverMode:false`, ships the demo notice, or contains `data.json`/`schedule.json`. The container
 gate re-checks the *image* (`/build-info.json`, `/data.json` → 404).
 
-## Phase ledger
+## Convergence ledger
 
-| # | Phase | State | Evidence / what is missing |
-|---|---|---|---|
-| 1 | Remove demo/production split | **Done** | build separation + guards above; CI `build` job proves a demo build is rejected as production |
-| 2 | CI container gate | **Done** (CI-proven) | `container` job: real image, MySQL 8.4 + Redis 7 services, CI-only config; asserts the image still refuses to boot without it, migrations ×2, `/api/health`, `/api/ready` (DB + Redis), production client in image, SIGTERM → exit 0. Production config now *requires* `REDIS_URL` and `OIDC_AUDIENCE`. |
-| 3 | Mainline convergence | **In progress** | PR #2; required checks listed in `.github/rulesets/main.json` (`container` added). **Branch protection is not applied** — the ruleset file must be imported by a repo admin (no API access here). |
-| 4 | Authoritative data plane | **Done in code**, browser-proven | Dashboard (`dashboard.portfolio`/`reel`), Audit (`audit.page`, keyset, workspace-scoped, new `audit_log.workspace`), Search (`search.query`) are server-backed; legacy snapshot removed from the server artifact. Server-mode e2e covers scope per identity, paging, direct links. **Gaps:** Dashboard figures are a per-scope TTL-cached scan (30 s), not incrementally maintained counters (date-dependent figures cannot be); Ask Bahn is not offered in the server build; audit undo is not available in the server build; Projects page does not yet apply `bedarf`/`tone` chips server-side (Dashboard click-throughs for those land on an unfiltered list). |
-| 5 | Domain unification audit | **Audited, partly fixed** | Fixed: direct-write Excel import removed; export workspace-scoped; unscoped `audit.list`, `searchSuggestions` removed, `shellSummary` scoped; booking→project link authorized; review department/status validated; operator seed scripts refuse production; unknown `/api/*` → 404. **Open (documented, not fixed):** server-side recording of client-side document actions (PDF/CSV/mail) in `audit_log` (still local only); delete audit rows carry no field snapshot; checklist-submit reviews are not individually audited/evented; users-table role sync is not audited; `ALLOW_DEMO_LOGIN` still accepted in production config. |
-| 6 | Realtime topology | **Preserved, tested** | collection/row fan-out untouched. Browser e2e: create, delete, move-in/out, off-screen edit, scroll-into-view subscription, reconnect/recovery (PROOFS 1–5, TOPOLOGY); unit/DB: Redis bus (multi-instance), subscribe barrier race, feed recovery. |
-| 7 | Projects UI performance | **Gated** | `scripts/perf/thresholds.json` + `ui-perf` CI job. Latest local run: DOM 1409, rows in DOM 20, heap 9.9 MB, scroll p95 66.6 ms, INP 96 ms (loaded dev box), first marker 512 ms. The job is **not yet in the required-checks list** until it has been seen green on CI. |
-| 8 | Persistent detail drawer | **Not done** | |
-| 9 | Global command search | **Partly done** | server-side typed search (projects, numbers, stations, leaders, reviewers, regions, audit, bookings, own notifications), Enter opens the exact project; `/` and Ctrl-K palette exist. Not done: dedicated reviewer/department filters in the palette, keyboard-first polish. |
-| 10 | Map data plane | **Unchanged (already server-backed)** | `map.query` by bbox/zoom/authorization; Dashboard now uses `ServerMap` in the server build. |
-| 11 | Presence + notifications | **Unchanged (already implemented)** | Redis presence, durable SQL notifications; covered by e2e (PRESENCE, NOTIFICATIONS). |
-| 12 | Real Entra OIDC | **Not done — needs a tenant** | Server and browser sign-in are proven against a *mock* IdP (`oidc-browser.e2e.ts`: valid/forged/tampered/wrong-audience/expired tokens, no claim, restricted, logout). No Microsoft Entra evidence exists. |
-| 13 | Production topology | **Specified** | `docs/topology.md`, `deploy/staging/`; stateless app verified by the two-instance e2e. |
-| 14 | Public data governance | **Prepared, not executed** | exact paths/commits in `docs/data-governance.md`; `scripts/data/verify-history-clean.sh`. History rewrite needs the owner. |
-| 15 | Staging | **Not done — needs hosts/DNS/Entra** | `deploy/staging` + `scripts/gate/staging-smoke.mjs` (27 checks) exist and have not been run against a public HTTPS environment. |
-| 16 | External load certification | **Not done — needs a separate host** | Nothing here may be quoted as 10k certification. |
-| 17 | UX polish | **Not done** | |
-| 18 | Observability | **Partly** | metrics endpoint (latency, pool, outbox backlog, unhandled), UI budgets in CI. Not done: LCP/INP/CLS field collection, dead-letter and reconnect dashboards. |
+One command runs every layer that can be proven on one machine: `pnpm gate:convergence` (build, data, auth+mutations,
+realtime+UI browser e2e, performance thresholds, deployment gate). It prints PASS / FAIL / SKIPPED per layer and never
+reports a layer it could not run as passed. CI runs the same layers as separate required jobs.
 
-## Known intermittent
-`server/realtime/e2e.db.test.ts` "B disconnects, A changes 3×, B reconnects" failed once in four full local runs
-(`lastSyncedChanges` was 2 instead of 3: the "N Änderungen synchronisiert" badge mixes feed events and changed aggregates).
-Convergence assertions passed; the count is cosmetic. Not yet root-caused.
+| Area | State | Evidence |
+|---|---|---|
+| Build artifacts | **Verified** | `pnpm check:consistency` (scripts, Dockerfile, vercel, compose, ruleset ↔ ci.yml, alerts ↔ metrics, runbook anchors); `build:production` asserts its own target; bare `vite build` refused; CI `build` + `container` jobs. |
+| Production security gaps | **Verified** | `ALLOW_DEMO_LOGIN`, legacy workspaces and legacy OAuth refused at boot; document actions recorded server-side (`audit.record`); delete rows carry a snapshot; checklist submissions audited/evented; role/grant changes audited (`users.grantSnapshot`). `securityAudit.db.test.ts`, `oidc.test.ts`, server-mode step "AUTH (production)". |
+| One mutation plane | **Verified** | `server/mutationPlane.test.ts` fails if any module outside the domain services writes project tables. |
+| Dashboard / Audit / Search | **Verified (local)** | server read models, per-scope 30 s cache, keyset audit, typed search; every Dashboard number lands on the exact projects it counted (`drill`, server-evaluated). Browser steps DASHBOARD+AUDIT, COMMAND SEARCH, DRILL-DOWN. Date-dependent figures are a TTL-cached scan, not incremental counters. |
+| Operations UX | **Verified (local browser)** | persistent non-modal detail drawer (`?detail=<id>`, list position kept, live remote activity, versioned inline edit; step DRAWER); conflict diff with base / current / attempted values and the clashing field marked (PROOF 3a/3b); `/` and Ctrl-K command search, `?projekt=` opens the drawer; phone-width default card view. Demo-build layout gates (`check:responsive`, `check:ui`) run in CI job `e2e`. |
+| Realtime convergence | **Verified (local)** | create/delete/move-in/move-out/off-screen/scroll-into-view/reconnect (PROOFS 1–5, TOPOLOGY), Redis outage and app restart chaos steps, two instances, presence (now also leaves on `pagehide`), notifications. The "N Projekte aktualisiert" badge counts distinct changed projects (`projectSyncEngine.test.ts`); the former "known intermittent" is closed. |
+| Observability | **Partly** | metrics + `deploy/observability/alerts.yml` (12 rules, checked against exported metrics) + runbook playbooks. **Not exercised against a live Prometheus.** No field web-vitals collection exists (no collection path), so none is claimed. |
+| Mainline protection | **NOT APPLIED** | ruleset is code (`.github/rulesets/main.json`); an admin must import it — `docs/mainline-protection.md`. |
+| Data governance | **Prepared, not executed** | `docs/data-governance.md`, `scripts/data/verify-history-clean.sh`; the history rewrite needs the data owner and is not part of an application PR. |
+
+## Infrastructure-dependent — no evidence exists yet
+
+| Item | What is missing |
+|---|---|
+| Real Microsoft Entra sign-in | a tenant; proven only against the mock IdP (`oidc-browser.e2e.ts`) |
+| Public HTTPS staging, 2 instances | hosts, DNS, TLS, Entra; `deploy/staging` + `scripts/gate/staging-smoke.mjs` exist, never run publicly |
+| Separate-host load certification 100…10,000 | a load host separate from the system under test; `docs/load-testing.md` |
+| History rewrite | owner decision and a coordinated force-push |
+| Ruleset import | repository admin |

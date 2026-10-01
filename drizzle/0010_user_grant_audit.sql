@@ -1,0 +1,1 @@
+ALTER TABLE `users` ADD `grantSnapshot` varchar(1024);

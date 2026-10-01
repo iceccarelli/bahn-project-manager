@@ -145,6 +145,15 @@ export function CommandSearch({ id = "app-search" }: { id?: string }) {
         inputRef.current?.focus();
         inputRef.current?.select();
         setOpen(true);
+        return;
+      }
+      // "/" — the keyboard-first entry used by every ops tool; never while typing in a field
+      const t = e.target as HTMLElement | null;
+      const typing = !!t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+      if (e.key === "/" && !e.metaKey && !e.ctrlKey && !e.altKey && !typing) {
+        e.preventDefault();
+        inputRef.current?.focus();
+        setOpen(true);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -250,7 +259,7 @@ export function CommandSearch({ id = "app-search" }: { id?: string }) {
           // all — which is how the old list became unusable without a mouse.
           onBlur={() => window.setTimeout(() => setOpen(false), 160)}
           onKeyDown={onKeyDown}
-          placeholder="Suchen … (Strg + K)"
+          placeholder="Suchen … (/ oder Strg + K)"
           className="h-9 w-full rounded-lg border border-border bg-muted/50 pl-11 pr-9 text-sm transition-all focus:border-primary focus:bg-background focus:outline-none"
         />
         {query && (

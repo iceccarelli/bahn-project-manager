@@ -4,7 +4,8 @@ import { useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { apiClient } from "@/_core/api/client";
 import { BAHNHOFSMANAGEMENT } from "@shared/bahnhofsmanagement";
-import { SERVER_MODE } from "@/realtime/serverApi";
+import { SERVER_MODE, serverApi } from "@/realtime/serverApi";
+import { AUDIT_ACTIONS } from "@shared/audit-actions";
 import { useServerFilters, useServerProjects } from "@/realtime/serverProjects";
 import type {
   ProjectUpdateInput,
@@ -139,6 +140,21 @@ export function useAuditLog() {
   });
 }
 
+/**
+ * Server build: durable document/message actions are recorded by the server (authorized, workspace-stamped, in
+ * `audit_log`). Everything else the page used to log locally (field edits, creations, bookings) is audited by the domain
+ * services inside their own transactions, so it is deliberately NOT sent from the browser.
+ */
+const DOCUMENT_KIND: Record<string, "pdf" | "export" | "mail" | "teams"> = {
+  [AUDIT_ACTIONS.pdfErzeugt]: "pdf", [AUDIT_ACTIONS.exportErzeugt]: "export",
+  [AUDIT_ACTIONS.mailGeoeffnet]: "mail", [AUDIT_ACTIONS.teamsGeoeffnet]: "teams",
+};
+async function recordOnServer(action: string, details: string, meta?: AuditMeta): Promise<void> {
+  const kind = DOCUMENT_KIND[action];
+  if (!kind) return;
+  await serverApi.audit.record.mutate({ kind, details: details.slice(0, 500) || action, ...(meta?.projectId ? { projectId: meta.projectId } : {}) });
+}
+
 export function useRecordAudit() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -147,9 +163,10 @@ export function useRecordAudit() {
       details,
       meta,
     }: { action: string; details: string; meta?: AuditMeta }) =>
-      apiClient.audit.record(action, details, meta),
+      SERVER_MODE ? recordOnServer(action, details, meta) : apiClient.audit.record(action, details, meta).then(() => undefined),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.audit.all });
+      if (SERVER_MODE) queryClient.invalidateQueries({ queryKey: ["server", "audit"] });
     },
   });
 }
@@ -333,6 +350,8 @@ function useLocalProjects(params: {
   sortBy?: string;
   sortDir?: "asc" | "desc";
   showAll?: boolean;
+  /** server build only: Dashboard drill-down, evaluated by the server */
+  drill?: import("@shared/drilldown").Drill;
   /*
    * minLat / maxLat / minLng / maxLng were declared here and never
    * destructured or used in the filter memo below. The Projekte page passed

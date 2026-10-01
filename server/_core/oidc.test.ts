@@ -60,6 +60,18 @@ describe("production guards", () => {
     expect(() => assertProductionConfig({ NODE_ENV: "production", DATABASE_URL: "mysql://x", JWT_SECRET: "x".repeat(40), OIDC_ISSUER: ISS, REDIS_URL: "redis://r" } as never)).toThrow(/OIDC_AUDIENCE/);
     expect(() => assertProductionConfig({ NODE_ENV: "development" } as never)).not.toThrow();
   });
+  it("production refuses demo/legacy authentication outright (a mis-set flag stops the boot)", () => {
+    const base = { NODE_ENV: "production", DATABASE_URL: "mysql://x", JWT_SECRET: "x".repeat(40), OIDC_ISSUER: ISS, OIDC_AUDIENCE: AUD, REDIS_URL: "redis://r" };
+    expect(() => assertProductionConfig({ ...base } as never)).not.toThrow();
+    expect(() => assertProductionConfig({ ...base, ALLOW_DEMO_LOGIN: "1" } as never)).toThrow(/ALLOW_DEMO_LOGIN/);
+    expect(() => assertProductionConfig({ ...base, ALLOW_DEMO_LOGIN: "true" } as never)).toThrow(/ALLOW_DEMO_LOGIN/);
+    expect(() => assertProductionConfig({ ...base, ALLOW_DEMO_LOGIN: "0" } as never)).not.toThrow();
+    expect(() => assertProductionConfig({ ...base, LEGACY_USER_WORKSPACES: "ALL" } as never)).toThrow(/LEGACY_USER_WORKSPACES/);
+    expect(() => assertProductionConfig({ ...base, OAUTH_SERVER_URL: "https://oauth.example" } as never)).toThrow(/OAUTH_SERVER_URL/);
+    // OIDC is the only way in: a demo flag cannot substitute for it
+    const { OIDC_ISSUER: _drop, ...noIdp } = base;
+    expect(() => assertProductionConfig({ ...noIdp, ALLOW_DEMO_LOGIN: "1" } as never)).toThrow(/OIDC_ISSUER/);
+  });
   it("CSRF: cross-origin cookie-authenticated POST is rejected; same-origin, bearer and non-browser pass", () => {
     const run = (headers: Record<string, string>, method = "POST") => {
       let status = 0; let nexted = false;

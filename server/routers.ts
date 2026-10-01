@@ -28,6 +28,8 @@ import { loadPortfolioProjects } from "./infra/portfolioModel";
 import { pageAudit } from "./infra/auditQuery";
 import { searchGlobal } from "./infra/searchQuery";
 import { buildPortfolio, buildReelView } from "@shared/portfolio-view";
+import { drillProjectIds, isEmptyDrill, startOfDayUtc, type Drill } from "@shared/drilldown";
+import { AUDIT_DOCUMENT_KINDS } from "@shared/audit-contract";
 import type { PortfolioProject } from "@shared/portfolio-metrics";
 import { MapQuerySchema, MapStationQuerySchema } from "@shared/map-contract";
 import { BookSlotInputSchema, ListSlotsInputSchema, ReleaseSlotInputSchema } from "@shared/booking-contract";
@@ -48,7 +50,18 @@ const departmentScoped = new KeyedCache<Awaited<ReturnType<typeof readDepartment
 const portfolioRows = new KeyedCache<PortfolioProject[]>("portfolio-rows", 30_000, 100);
 const portfolioView = new KeyedCache<ReturnType<typeof buildPortfolio>>("portfolio", 30_000, 100);
 // 5 s burst absorber per (scope, user, term): typing the same prefix from many tabs costs one set of queries.
+const auditRecordWindow = new Map<string, { n: number; reset: number }>();
 const searchCache = new KeyedCache<{ q: string; entries: Awaited<ReturnType<typeof searchGlobal>> }>("search", 5_000, 2000);
+/**
+ * A Dashboard drill-down resolved over the caller's authorized rows (the same cached rows and the same pinned day the
+ * Dashboard's own figures use), so a clicked number and the list it opens are one computation. null = no restriction.
+ */
+async function resolveDrill(restriction: readonly string[] | null, drill: Drill | undefined): Promise<Set<number> | null> {
+  if (isEmptyDrill(drill)) return null;
+  const { pool } = await requireServices();
+  const rows = await portfolioRows.get(scopeKey(restriction), () => loadPortfolioProjects(pool, restriction));
+  return drillProjectIds(rows, drill, startOfDayUtc(Date.now()));
+}
 const dashboardScoped = new KeyedCache<Awaited<ReturnType<typeof readDashboard>>>("dashboard", 5_000);
 /** Per-project review statuses → shared/project-metrics.ts. `workspaces` null = all. */
 async function computeMetrics(workspaces: readonly string[] | null) {
@@ -97,9 +110,9 @@ export const appRouter = router({
         password: z.string(),
       }))
       .mutation(async ({ input, ctx }) => {
-        // Demo credentials are a development convenience. In production they are
-        // off unless explicitly enabled — production identity is OIDC (docs/auth.md).
-        if (process.env.NODE_ENV === "production" && process.env.ALLOW_DEMO_LOGIN !== "1") {
+        // Demo credentials are a development convenience and DO NOT EXIST in production (the boot also refuses
+        // ALLOW_DEMO_LOGIN there) — production identity is OIDC bearer tokens only (docs/auth.md).
+        if (process.env.NODE_ENV === "production") {
           throw new TRPCError({ code: "NOT_FOUND", message: "Not found" });
         }
         const { DEMO_USERS } = await import("./_core/demoUsers");
@@ -143,7 +156,9 @@ export const appRouter = router({
         // number is delivered live or by projects.changes, so nothing falls
         // between the list snapshot and the subscription.
         const feedHead = await store.feedHead();
-        const page = await store.list(input, { workspaces: workspaceRestriction(ctx.principal) });
+        const restriction = workspaceRestriction(ctx.principal);
+        const ids = await resolveDrill(restriction, input.drill);
+        const page = await store.list(input, { workspaces: restriction }, ids ? { ids } : {});
         return { ...page, feedHead };
       }),
 
@@ -152,12 +167,12 @@ export const appRouter = router({
      * Cached per normalized authorization scope + filters; a stale-by-seconds total is fine for a header count.
      */
     count: protectedProcedure
-      .input(ListProjectsInputSchema.pick({ search: true, bahnhofsmanagement: true, projektstand: true, projektleiter: true, department: true, reviewStatus: true, pruefer: true }))
+      .input(ListProjectsInputSchema.pick({ search: true, bahnhofsmanagement: true, projektstand: true, projektleiter: true, department: true, reviewStatus: true, pruefer: true, drill: true }))
       .query(async ({ input, ctx }) => {
         const { store } = await requireServices();
         const restriction = workspaceRestriction(ctx.principal);
-        const key = `${scopeKey(restriction)}#${JSON.stringify(Object.entries(input).filter(([, v]) => v !== undefined).sort())}`;
-        return { total: await countCache.get(key, () => store.count(input, { workspaces: restriction })), exact: true as const };
+        const key = `${scopeKey(restriction)}#${startOfDayUtc(Date.now())}#${JSON.stringify(Object.entries(input).filter(([, v]) => v !== undefined).sort())}`;
+        return { total: await countCache.get(key, async () => { const ids = await resolveDrill(restriction, input.drill); return store.count(input, { workspaces: restriction }, ids ? { ids } : {}); }), exact: true as const };
       }),
 
     get: protectedProcedure
@@ -369,11 +384,15 @@ export const appRouter = router({
   map: router({
     query: protectedProcedure.input(MapQuerySchema).query(async ({ input, ctx }) => {
       const { store } = await requireServices();
-      return store.mapQuery(input, { workspaces: workspaceRestriction(ctx.principal) });
+      const restriction = workspaceRestriction(ctx.principal);
+      const ids = await resolveDrill(restriction, input.drill);
+      return store.mapQuery(input, { workspaces: restriction }, ids ? { ids } : {});
     }),
     station: protectedProcedure.input(MapStationQuerySchema).query(async ({ input, ctx }) => {
       const { store } = await requireServices();
-      return store.mapStation(input, { workspaces: workspaceRestriction(ctx.principal) });
+      const restriction = workspaceRestriction(ctx.principal);
+      const ids = await resolveDrill(restriction, input.drill);
+      return store.mapStation(input, { workspaces: restriction }, ids ? { ids } : {});
     }),
   }),
 
@@ -387,9 +406,9 @@ export const appRouter = router({
       .input(z.object({
         cursor: z.number().int().positive().optional(),
         limit: z.number().int().min(1).max(100).default(50),
-        entityType: z.enum(["project", "checklist", "booking"]).optional(),
+        entityType: z.enum(["project", "checklist", "booking", "user", "document"]).optional(),
         entityId: z.number().int().positive().optional(),
-        action: z.enum(["create", "update", "delete"]).optional(),
+        action: z.enum(["create", "update", "delete", "document"]).optional(),
         user: z.string().trim().min(1).max(100).optional(),
         label: z.string().trim().min(1).max(100).optional(),
         q: z.string().trim().min(1).max(100).optional(),
@@ -400,6 +419,21 @@ export const appRouter = router({
         if (!canViewAudit(ctx.principal)) throw new TRPCError({ code: "FORBIDDEN" });
         const { pool } = await requireServices();
         return pageAudit(pool, workspaceRestriction(ctx.principal), input);
+      }),
+    /**
+     * Durable document actions (PDF, export, mail, Teams). Authorized like a read of the project (or scoped to the caller's
+     * workspace), closed vocabulary, rate-limited per principal. Aggregate changes never come through here: those are audited
+     * inside their own transaction by the domain services.
+     */
+    record: protectedProcedure
+      .input(z.object({ kind: z.enum(AUDIT_DOCUMENT_KINDS), details: z.string().trim().min(1).max(500), projectId: z.number().int().positive().optional() }))
+      .mutation(async ({ input, ctx }) => {
+        const k = ctx.principal.id; const now = Date.now(); const w = auditRecordWindow.get(k);
+        if (w && now < w.reset) { if (++w.n > 120) throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "zu viele Protokolleinträge" }); } else auditRecordWindow.set(k, { n: 1, reset: now + 60_000 });
+        if (auditRecordWindow.size > 5000) auditRecordWindow.clear();
+        const { projects } = await requireServices();
+        await projects.recordDocumentAction(ctx.principal, input, { traceId: ctx.traceId, requestId: ctx.requestId });
+        return { ok: true as const };
       }),
     // There is no unscoped `audit.list`: `audit.page` is the only audit read (workspace-scoped, keyset-paginated).
   }),
@@ -471,7 +505,3 @@ export const appRouter = router({
 });
 
 export type AppRouter = typeof appRouter;
-
-// Note: The full Express OData router (odataRouter) is exported from ./odata/router
-// and should be mounted in server/_core/index.ts like:
-// app.use("/odata", expressODataRouter);

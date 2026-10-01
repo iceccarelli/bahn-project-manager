@@ -3,7 +3,7 @@
  * HTTP/tRPC load driver (closed-loop, C concurrent virtual users, keep-alive).
  * Protocol-level only: it measures the API + database, not the browser.
  *
- *   node scripts/load/api-bench.mjs --base http://127.0.0.1:3100 --cookie <session> \
+ *   node scripts/load/api-bench.mjs --base http://127.0.0.1:3100 --token <oidc access token> \
  *        --scenario read|mixed|write-distinct|write-same --vus 500 --seconds 30
  *
  * Reports per-endpoint p50/p95/p99, error rate, and — for the write scenarios —
@@ -12,7 +12,7 @@
  */
 
 const arg = (k, d) => { const i = process.argv.indexOf(`--${k}`); return i > -1 ? process.argv[i + 1] : d; };
-const BASE = arg("base", "http://127.0.0.1:3000"), COOKIE = arg("cookie", process.env.COOKIE);
+const BASE = arg("base", "http://127.0.0.1:3000"), TOKEN = arg("token", process.env.TOKEN);
 const SCENARIO = arg("scenario", "mixed"), VUS = Number(arg("vus", 100)), SECONDS = Number(arg("seconds", 20));
 // Project-id space the target actually contains. Defaults to the real dataset (1,298 rows, ids 1..1298);
 // pass --ids 1:200000 for the synthetic load database. Detail reads and write targets are drawn from it,
@@ -21,9 +21,9 @@ const [ID_MIN, ID_MAX] = arg("ids", "1:1298").split(":").map(Number);
 const ID_SPAN = ID_MAX - ID_MIN + 1;
 const THINK_MS = Number(arg("think-ms", 0)); // per-VU pause between requests; 0 = closed loop with no think time
 const think = () => THINK_MS ? new Promise(r => setTimeout(r, THINK_MS * (0.5 + Math.random()))) : null;
-if (!COOKIE) { console.error("--cookie required"); process.exit(2); }
+if (!TOKEN) { console.error("--token (OIDC bearer access token) required"); process.exit(2); }
 
-const H = { cookie: `app_session_id=${COOKIE}`, "content-type": "application/json" };
+const H = { authorization: `Bearer ${TOKEN}`, "content-type": "application/json" };
 const enc = v => encodeURIComponent(JSON.stringify({ json: v }));
 const rnd = n => Math.floor(Math.random() * n);
 // Realistic search terms: a station name word (selective) or a project-number prefix.

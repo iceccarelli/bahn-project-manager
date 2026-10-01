@@ -108,7 +108,11 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         // creations/deletions/moves change the shell count; plain updates do not
         if (e.eventType !== "project.updated") void qc.invalidateQueries({ queryKey: serverKeys.shell() });
       },
-      onHint: kind => { if (kind === "notifications") void qc.invalidateQueries({ queryKey: ["server", "notifications"] }); },
+      onHint: kind => {
+        if (kind === "notifications") void qc.invalidateQueries({ queryKey: ["server", "notifications"] });
+        // the server's transport recovered from an outage: re-read the durable feed now (idempotent, shares one run)
+        if (kind === "catchup") void engine.catchUp().catch(() => {});
+      },
       // every (re)connect re-reads the durable inbox + unread counter: nothing missed while offline stays hidden
       onSync: ({ headSeq, reconnecting }) => {
         void qc.invalidateQueries({ queryKey: ["server", "notifications"] });
@@ -314,4 +318,20 @@ export function useShellSummary() {
     refetchInterval: 60_000,
   });
   return { projectCount: q.data?.projectCount ?? null, lastUpdatedAt: q.data?.lastUpdatedAt ?? null, isError: q.isError, isLoading: q.isLoading };
+}
+
+
+/**
+ * Remote changes of one project (who changed what, when), live from the sync engine. Empty without a provider (demo build) or
+ * without an id. Re-renders only when THIS project changes.
+ */
+export function useRecentChangesFor(id: number | null): import("./projectSyncEngine").RecentChange[] {
+  const rt = useOptionalRealtime();
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (!rt || id === null) return undefined;
+    const off = rt.engine.subscribe(c => { if ("id" in c && c.id === id) tick(n => n + 1); });
+    return () => { off(); };
+  }, [rt, id]);
+  return rt && id !== null ? rt.engine.recentChanges(id) : [];
 }

@@ -79,6 +79,7 @@ export const m = {
   identityMs: histogram("bahn_identity_resolve_ms", "Total identity resolution per request in ms (cache hits included)"),
   shed: counter("bahn_requests_shed_total", "Requests rejected with 429 because the DB pool queue was full"),
   outboxDeadLetters: counter("bahn_outbox_dead_letters_total", "Outbox rows quarantined because they can never be published (alert on > 0)"),
+  redisUp: gauge("bahn_redis_up", "1 when the shared Redis answered the last readiness/sampler ping, 0 when it did not (alert on 0)"),
   outboxBacklog: gauge("bahn_outbox_backlog", "Unpublished outbox events (sampled)"),
   poolInUse: gauge("bahn_db_pool_connections_in_use", "DB pool connections in use (sampled)"),
   poolQueued: gauge("bahn_db_pool_queued_requests", "DB pool waiters (sampled)"),

@@ -8,6 +8,8 @@ import {
 } from "@/components/ui/table";
 import { useProjects, useFilters, type Project, type Review } from "@/hooks/useDataQuery";
 import { useProjectsPageExtras } from "@/hooks/useProjectsPage";
+import { useDrillCounts } from "@/hooks/usePortfolio";
+import type { Drill } from "@shared/drilldown";
 import { SERVER_MODE } from "@/realtime/serverApi";
 import { useRowScopes } from "@/realtime/serverProjects";
 import ConnectionBadge from "@/realtime/ConnectionBadge";
@@ -158,15 +160,38 @@ export default function Projects() {
   const [, setLocation] = useLocation();
   const routeSearch = useRouteSearch();
   const { recordDocument } = useAuditTrail();
-  const [viewMode, setViewMode] = useState<"table" | "cards" | "map">("table");
+  // Phone-width screens default to the card view (a 14-column table is not an operations surface at 390 px); same
+  // domain operations and authorization either way — only the presentation differs. Not persisted: it is a width default.
+  const [viewMode, setViewMode] = useState<"table" | "cards" | "map">(() =>
+    typeof window !== "undefined" && window.matchMedia?.("(max-width: 639px)").matches ? "cards" : "table");
   /** Set by the map; narrows the card view to one station's exact project ids. */
   const [stationFocus, setStationFocus] = useState<StationSelection | null>(null);
   /** The card to scroll to and ring after arriving from the map. */
   const [focusProjectId, setFocusProjectId] = useState<number | null>(null);
   /** Which project the detail dialog is showing, if any. */
-  const [detailProjectId, setDetailProjectId] = useState<number | null>(null);
+  // The open project is URL state (?detail=<id>): a shareable, reload-safe link to "this list with this project open".
+  const [detailProjectId, setDetailProjectId] = useState<number | null>(() => {
+    const n = Number(typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("detail"));
+    return Number.isInteger(n) && n > 0 ? n : null;
+  });
+  useEffect(() => {
+    try {
+      const u = new URL(window.location.href);
+      if (detailProjectId === null) u.searchParams.delete("detail"); else u.searchParams.set("detail", String(detailProjectId));
+      if (u.href !== window.location.href) window.history.replaceState(window.history.state, "", u);
+    } catch { /* non-browser */ }
+  }, [detailProjectId]);
 
+  // Server build: every focus (Dashboard bedarf / tone slice / map station group / one project) is a DRILL evaluated by the
+  // server over authorized rows, so it is exact across ALL pages — the browser never filters a partially loaded list.
+  const serverDrill = useMemo<Drill | undefined>(() => {
+    if (!SERVER_MODE) return undefined;
+    const ids = stationFocus ? stationFocus.projectIds.slice(0, 500) : projectFocus !== null ? [projectFocus] : undefined;
+    const d: Drill = { ...(bedarfFocus ? { bedarf: bedarfFocus } : {}), ...(toneFocus ? { tone: toneFocus, ...(toneGewerk ? { department: toneGewerk } : {}) } : {}), ...(ids && ids.length ? { ids } : {}) };
+    return Object.keys(d).length ? d : undefined;
+  }, [stationFocus, projectFocus, bedarfFocus, toneFocus, toneGewerk]);
   const projectsQuery = useProjects({
+    drill: serverDrill,
     search: search || undefined,
     region: region || undefined,
     projektleiter: projektleiter || undefined,
@@ -305,6 +330,8 @@ export default function Projects() {
     const projektRaw = params.get("projekt");
     const projekt = projektRaw === null ? Number.NaN : Number(projektRaw);
     setProjectFocus(Number.isInteger(projekt) && projekt > 0 ? projekt : null);
+    // a link to one project (command search, notification) lands on that row AND shows it in the drawer
+    if (Number.isInteger(projekt) && projekt > 0) setDetailProjectId(projekt);
 
     // Arriving with either focus clears the leftover text search: the reader
     // asked for a set, not for that set intersected with whatever was typed
@@ -449,6 +476,7 @@ export default function Projects() {
    */
   const visibleProjects = useMemo(() => {
     let list: Project[] = data?.projects ?? [];
+    if (SERVER_MODE) return list; // the server already applied every focus (see serverDrill): exact over all pages
     if (stationFocus) {
       const ids = new Set(stationFocus.projectIds);
       list = list.filter((p) => ids.has(p.id));
@@ -472,12 +500,14 @@ export default function Projects() {
   }, [data, stationFocus, projectFocus, bedarfFocus, toneFocus, toneGewerk, todayMidnight]);
 
   /** The same reconciliation the Handlungsbedarf chip prints, for a slice. */
+  const drillCounts = useDrillCounts(SERVER_MODE && !!(bedarfFocus || toneFocus), bedarfFocus, toneFocus, toneGewerk);
   const toneSummary = useMemo(() => {
     if (!toneFocus) return null;
+    if (SERVER_MODE) return drillCounts.tone;
     if (!extras.hasWholeDataset) return null;
     const counted = countTones(allData?.projects ?? [], toneGewerk ?? undefined);
     return counted.find((c) => c.tone === toneFocus) ?? null;
-  }, [toneFocus, toneGewerk, allData, extras.hasWholeDataset]);
+  }, [toneFocus, toneGewerk, allData, extras.hasWholeDataset, drillCounts.tone]);
 
   /**
    * The reconciliation the chip prints.
@@ -489,11 +519,13 @@ export default function Projects() {
    * trusting the screen.
    */
   const bedarfSummary = useMemo(() => {
-    if (!bedarfFocus || !extras.hasWholeDataset) return null;
+    if (!bedarfFocus) return null;
+    if (SERVER_MODE) return drillCounts.bedarf;
+    if (!extras.hasWholeDataset) return null;
     return (
       countBedarf(allData?.projects ?? [], todayMidnight).find((c) => c.key === bedarfFocus) ?? null
     );
-  }, [bedarfFocus, allData, todayMidnight, extras.hasWholeDataset]);
+  }, [bedarfFocus, allData, todayMidnight, extras.hasWholeDataset, drillCounts.bedarf]);
 
   const detailProject = extras.detailProject;
 
@@ -514,7 +546,7 @@ export default function Projects() {
   }, [focusProjectId, viewMode, visibleProjects]);
 
   return (
-    <div ref={revealRef} className="space-y-8 p-6 bg-background min-h-screen">
+    <div ref={revealRef} className={`space-y-8 p-6 bg-background min-h-screen transition-[padding] duration-200 ${detailProjectId !== null ? "lg:pr-[560px]" : ""}`}>
       {SERVER_MODE && (
         <div className="flex items-center justify-end gap-4" data-testid="server-mode-bar">
           <WorkspacePresence workspace={region || homeWorkspace} />
@@ -906,7 +938,7 @@ export default function Projects() {
                       if (!project) return null;
                       const reviews = project.reviews || [];
                       return (
-                        <tr key={project.id} {...vrows.rowProps(vi.index)} className="border-b hover:bg-muted/30 transition-colors group">
+                        <tr key={project.id} {...vrows.rowProps(vi.index)} aria-selected={detailProjectId === project.id} className={`border-b hover:bg-muted/30 transition-colors group ${detailProjectId === project.id ? "bg-primary/5 ring-1 ring-inset ring-primary/30" : ""}`}>
                           <td className="sticky left-0 z-10 w-[52px] min-w-[52px] bg-white px-3 py-3 font-mono font-medium text-muted-foreground dark:bg-zinc-950">
                             {project.id}
                           </td>
@@ -1166,7 +1198,7 @@ export default function Projects() {
               SERVER_MODE ? (
                 <ServerMap
                   className="relative h-[65vh] min-h-[380px] w-full sm:h-[560px] lg:h-[600px]"
-                  filters={{ search: search || undefined, bahnhofsmanagement: region || undefined, projektleiter: projektleiter || undefined, pruefer: pruefer || undefined, department: department || undefined, reviewStatus: status || undefined }}
+                  filters={{ search: search || undefined, bahnhofsmanagement: region || undefined, projektleiter: projektleiter || undefined, pruefer: pruefer || undefined, department: department || undefined, reviewStatus: status || undefined, drill: serverDrill }}
                   onProjectSelect={(id) => setDetailProjectId(id)}
                 />
               ) : (
@@ -1197,6 +1229,9 @@ export default function Projects() {
       )}
 
       <ProjectDetailDialog
+        variant="drawer"
+        onEdit={(id, field, value) => applyEdit(id, field as never, value)}
+        onReviewEdit={(id, dept, field, value) => applyReviewEdit(id, dept, field as never, value)}
         project={detailProject}
         open={detailProjectId !== null}
         onOpenChange={(o) => {

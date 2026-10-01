@@ -20,11 +20,22 @@ const CTL = "bahn:ctl:";
 export class RedisBus implements RealtimePublisher, RealtimeSubscriber {
   readonly hub: LocalHub;
   private readonly ctlHandlers = new Map<string, (m: unknown) => void>();
+  private readonly recovered = new Set<() => void>();
+  private wasDown = false;
   constructor(private readonly pub: Redis, private readonly sub: Redis, private readonly onError: (e: unknown) => void = () => {}) {
     this.hub = new LocalHub({
       // The returned promise settles when Redis has ACKNOWLEDGED the SUBSCRIBE: that is what `ready` means.
       onChannelOpen: c => this.sub.subscribe(PREFIX + c).then(() => undefined, e => { this.onError(e); throw e; }),
       onChannelClose: c => { this.sub.unsubscribe(PREFIX + c).catch(this.onError); },
+    });
+    // transport health: a (re)connection after an outage re-subscribes automatically (ioredis), but anything published in the
+    // gap is lost to this process — tell the gateway so open streams catch up from the durable feed right away
+    this.sub.on("close", () => { this.wasDown = true; });
+    this.sub.on("ready", () => {
+      if (!this.wasDown) return;
+      this.wasDown = false;
+      // after the automatic re-subscribe has been acknowledged (second hint covers a slow resubscribe)
+      for (const delay of [300, 3000]) setTimeout(() => { for (const cb of this.recovered) { try { cb(); } catch (e) { this.onError(e); } } }, delay).unref?.();
     });
     this.sub.on("message", (channel: string, payload: string) => {
       try {
@@ -34,6 +45,8 @@ export class RedisBus implements RealtimePublisher, RealtimeSubscriber {
       } catch (e) { this.onError(e); }
     });
   }
+
+  onTransportRecovered(cb: () => void): () => void { this.recovered.add(cb); return () => { this.recovered.delete(cb); }; }
 
   readonly control: ControlChannel = {
     sendControl: async (node, message) => (await this.pub.publish(CTL + node, JSON.stringify(message))) > 0,

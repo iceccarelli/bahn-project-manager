@@ -19,7 +19,7 @@
  * Run with `--inventory` to print 4 in full; by default it reports only the
  * sizes that fall outside the type scale.
  *
- *   pnpm build:client && pnpm check:ui
+ *   pnpm build:demo && pnpm check:ui
  */
 import { chromium } from "playwright";
 import http from "node:http";
@@ -35,7 +35,7 @@ const MIME = { ".html":"text/html", ".js":"text/javascript", ".css":"text/css",
   ".svg":"image/svg+xml", ".ttf":"font/ttf" };
 
 if (!fs.existsSync(path.join(ROOT, "index.html"))) {
-  console.error("!! dist/public/index.html missing — run `pnpm build:client` first");
+  console.error("!! dist/public/index.html missing — run `pnpm build:demo` first");
   process.exit(2);
 }
 

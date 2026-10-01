@@ -20,6 +20,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
       - run: pnpm lint
+      # the repository must not contradict itself (build entry points, Dockerfile/compose/docs, ruleset vs CI jobs)
+      - run: pnpm check:consistency
       # Data integrity: canonical Bahnhofsmanagement, station master invariants,
       # derived blocks in sync, and no regression in map coverage.
       - run: pnpm verify:data

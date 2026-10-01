@@ -6,7 +6,7 @@ export function describeConnection(s: Pick<ConnectionStatus, "state" | "lastSync
   switch (s.state) {
     case "connected":
       return s.lastSyncedChanges
-        ? { dot: "bg-emerald-500", text: `Wiederverbunden · ${s.lastSyncedChanges} ${s.lastSyncedChanges === 1 ? "Änderung" : "Änderungen"} synchronisiert` }
+        ? { dot: "bg-emerald-500", text: `Wiederverbunden · ${s.lastSyncedChanges} ${s.lastSyncedChanges === 1 ? "Projekt" : "Projekte"} aktualisiert` }
         : { dot: "bg-emerald-500", text: "Live" };
     case "connecting": return { dot: "bg-amber-400", text: "Verbinde …" };
     case "degraded": return { dot: "bg-amber-500", text: "Verbindung instabil" };

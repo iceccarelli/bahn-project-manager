@@ -13,16 +13,17 @@ Why Vercel cannot be the backend for this architecture (not an opinion about Ver
 | Connection-pool sizing (`DB_POOL_SIZE`) | Per-instance pool arithmetic breaks when instance count is elastic and short-lived. |
 
 Nothing in this repository proves the backend running on Vercel, so nothing claims it. `vercel.json` stays what it is: a
-**static SPA build** (`pnpm build:client`, rewrites to `index.html`, no functions). That deployment is the browser-local
+**static demo build** (`pnpm build:demo`, rewrites to `index.html`, no functions). That deployment is the browser-local
 demo: its data lives in the visitor's browser, its login is the demo login, it has no server and no multi-user
-synchronisation. It now says so on every page (`preview-mode-notice`). It must not be the URL anyone treats as "the system".
+synchronisation. The demo artifact says so on every page; the production artifact cannot contain that notice or the dataset
+(`scripts/assert-build-target.mjs`). It must not be the URL anyone treats as "the system".
 
 ## What "production" means here
 
 | Layer | Component | Evidence required before it may be called deployed |
 |---|---|---|
 | Edge | Caddy, automatic TLS, `flush_interval -1` for SSE | public HTTPS URL answering `staging-smoke.mjs` |
-| App | ≥ 2 containers from one image (`Dockerfile`, `--build-arg VITE_SERVER_MODE=1` + `VITE_OIDC_*`) | smoke check "at least two app instances serve this URL" |
+| App | ≥ 2 containers from one image (`Dockerfile` = `pnpm build:production`; the only build-args are the public `VITE_OIDC_*` values) | smoke check "at least two app instances serve this URL" |
 | DB | MySQL **8.4** (not MariaDB) | gate check `mysql-version`; the full suite green on that server |
 | Cache/bus | Redis 7, `noeviction` | realtime across both instances (smoke: second user receives the update live) |
 | Identity | OIDC IdP (Microsoft Entra ID), bearer access tokens | smoke tokens issued by the real IdP |
