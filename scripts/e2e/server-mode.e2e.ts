@@ -608,6 +608,28 @@ async function main() {
     if (imp.status !== 404) throw new Error(`import route exists: ${imp.status}`);
   });
 
+  await step("AUTH (production): no demo login, no cookie sessions; document actions are server-recorded, authorized and scoped", async () => {
+    const demo = await api(URLS[0]!, "", "auth.demoLogin", { email: "admin@bahn.de", password: "admin" });
+    if (demo.status !== 404) throw new Error(`demoLogin must not exist in production: ${demo.status}`);
+    // a perfectly signed legacy session cookie (same JWT_SECRET) is worth nothing: production authenticates bearer tokens only
+    const cookie = await new SignJWT({ openId: "demo-admin", appId: "bahn-project-manager", name: "Demo" }).setProtectedHeader({ alg: "HS256", typ: "JWT" }).setExpirationTime("1h").sign(new TextEncoder().encode("e2e-".padEnd(48, "x")));
+    const viaCookie = await fetch(`${URLS[0]}/api/trpc/projects.list?input=${encodeURIComponent(JSON.stringify({ json: { limit: 5, expand: [] } }))}`, { headers: { cookie: `app_session_id=${cookie}` } });
+    if (viaCookie.status !== 401) throw new Error(`cookie session accepted in production: ${viaCookie.status}`);
+    // document actions: B (Frankfurt) records a PDF for a Frankfurt project; for a Kassel project it is NotFound
+    const fr = (await q("SELECT id FROM projects WHERE bahnhofsmanagement='Frankfurt' LIMIT 1"))[0].id as number;
+    const ka = (await q("SELECT id FROM projects WHERE bahnhofsmanagement='Kassel' LIMIT 1"))[0].id as number;
+    const ok = await api(URLS[1]!, tokenB, "audit.record", { kind: "pdf", details: "Projektblatt e2e.pdf", projectId: fr });
+    if (ok.status !== 200) throw new Error(`audit.record -> ${ok.status} ${JSON.stringify(ok.error)}`);
+    const denied = await api(URLS[1]!, tokenB, "audit.record", { kind: "pdf", details: "x.pdf", projectId: ka });
+    if (denied.status !== 404) throw new Error(`cross-workspace audit.record -> ${denied.status}`);
+    const bad = await api(URLS[1]!, tokenB, "audit.record", { kind: "format-c", details: "x" });
+    if (bad.status === 200) throw new Error("closed vocabulary not enforced");
+    const [row] = await q("SELECT workspace, entityType, action, field, eventId FROM audit_log WHERE action='document' AND entityId=? ORDER BY id DESC LIMIT 1", [fr]);
+    if (!row || row.workspace !== "Frankfurt" || row.field !== "pdf" || row.eventId !== null) throw new Error(`document audit row: ${JSON.stringify(row)}`);
+    // the grant of every verified principal was mirrored and audited (role/workspaces/departments)
+    await until(async () => Number((await q("SELECT COUNT(*) n FROM audit_log WHERE entityType='user' AND field='grant'"))[0].n) >= 2, 8000, "grant audit rows");
+  });
+
   await step("integrity: every committed change has exactly one audit set, one event, one feedSeq; feed is gapless; nothing unpublished/dead", async () => {
     await until(async () => Number((await q("SELECT COUNT(*) n FROM domain_events WHERE processedAt IS NULL"))[0].n) === 0, 5000, "outbox drained");
     const [c] = await q("SELECT COUNT(*) events, SUM(failedAt IS NOT NULL) dead, MIN(feedSeq) lo, MAX(feedSeq) hi, COUNT(feedSeq) seqd FROM domain_events");

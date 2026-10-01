@@ -115,9 +115,10 @@ export class ChecklistService {
       } as const;
       const norm = Object.fromEntries(Object.entries(projectFields).map(([k, v]) => [k, cleanStr(v)]));
       // the project is created through the Project aggregate's own creation step (same authorization, audit rows and event)
-      const created = await this.projects.createWithin(tx, p, ctx, norm as never);
+      // ... including its 14 initial reviews: they are recorded in the project's own creation audit rows and event
       const answers: ChecklistAnswers = Object.fromEntries(Object.entries(detail.answers).map(([k, a]) => [k, { answer: a.answer, secondary: (a.secondary as "Ja" | "Nein" | null) ?? null, comment: a.comment }]));
-      for (const r of buildDepartmentReviews(answers)) await tx.insertReview(created.id, { department: r.department, status: r.status, prueferName: null, datum: null });
+      const reviews = buildDepartmentReviews(answers).map(r => ({ department: r.department, status: r.status, prueferName: null, datum: null }));
+      const created = await this.projects.createWithin(tx, p, ctx, norm as never, reviews);
 
       // optional slot booking, same transaction: if the slot is gone the project, reviews and checklist roll back with it
       if (input.slot) {

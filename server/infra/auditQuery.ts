@@ -7,9 +7,9 @@
  *  - the look-back window bounds the scan of contains-style filters.
  */
 import type { Pool } from "mysql2/promise";
-import { splitAuditField, type AuditFilter, type AuditItem, type AuditPage } from "@shared/audit-contract";
+import { splitAuditField, type AuditAction, type AuditEntityType, type AuditFilter, type AuditItem, type AuditPage } from "@shared/audit-contract";
 
-interface Row { id: number; createdAt: Date; userName: string | null; entityType: AuditItem["entityType"]; entityId: number; entityLabel: string | null; action: AuditItem["action"]; field: string | null; oldValue: string | null; newValue: string | null; aggregateVersion: number | null; workspace: string | null; eventId: string | null }
+interface Row { id: number; createdAt: Date; userName: string | null; entityType: AuditEntityType; entityId: number; entityLabel: string | null; action: AuditAction; field: string | null; oldValue: string | null; newValue: string | null; aggregateVersion: number | null; workspace: string | null; eventId: string | null }
 
 const esc = (s: string) => s.replace(/[\\%_]/g, m => `\\${m}`);
 export const MAX_AUDIT_PAGE = 100;
@@ -38,9 +38,12 @@ export async function pageAudit(pool: Pool, workspaces: readonly string[] | null
   const more = rows.length > limit;
   const items: AuditItem[] = rows.slice(0, limit).map(r => {
     const s = splitAuditField(r.field);
+    // a delete carries the removed record as a JSON snapshot in oldValue (see ProjectService.delete)
+    let snapshot: Record<string, unknown> | null = null;
+    if (r.action === "delete" && r.oldValue) { try { const j = JSON.parse(r.oldValue); if (j && typeof j === "object") snapshot = j as Record<string, unknown>; } catch { /* legacy delete rows have no snapshot */ } }
     return {
       id: r.id, at: r.createdAt.toISOString(), user: r.userName ?? "—", entityType: r.entityType, entityId: r.entityId, label: r.entityLabel,
-      action: r.action, field: s.field, department: s.department, from: r.oldValue, to: r.newValue, version: r.aggregateVersion, workspace: r.workspace, eventId: r.eventId,
+      action: r.action, field: s.field, department: s.department, from: snapshot ? null : r.oldValue, to: r.newValue, snapshot, version: r.aggregateVersion, workspace: r.workspace, eventId: r.eventId,
     };
   });
   return { items, nextCursor: more ? items[items.length - 1]!.id : null };

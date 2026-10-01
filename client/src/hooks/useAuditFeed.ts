@@ -16,7 +16,15 @@ export interface AuditFeedParams { days: number | null; q: string; statusOnly: b
 export interface AuditFeed { entries: AuditLogEntry[]; isLoading: boolean; isError: boolean; hasMore: boolean; loadMore: () => void; loadingMore: boolean }
 
 /** Server row → the entry shape the page renders (severity/correction logic keep working on it). */
+const DOCUMENT_ACTION: Record<string, string> = { pdf: AUDIT_ACTIONS.pdfErzeugt, export: AUDIT_ACTIONS.exportErzeugt, mail: AUDIT_ACTIONS.mailGeoeffnet, teams: AUDIT_ACTIONS.teamsGeoeffnet };
+
 export function toAuditEntry(i: AuditItem): AuditLogEntry {
+  if (i.action === "document") {
+    return { id: String(i.id), timestamp: i.at, user: i.user, action: DOCUMENT_ACTION[i.field ?? ""] ?? AUDIT_ACTIONS.exportErzeugt, details: [i.label, i.to].filter(Boolean).join(" · "), meta: { ...(i.entityType === "project" ? { projectId: i.entityId } : {}), station: i.label } } as AuditLogEntry;
+  }
+  if (i.entityType === "user") {
+    return { id: String(i.id), timestamp: i.at, user: i.user, action: AUDIT_ACTIONS.berechtigungGeaendert, details: [i.label, i.to].filter(Boolean).join(" · "), meta: { field: "Berechtigung", from: i.from, to: i.to } } as AuditLogEntry;
+  }
   const action =
     i.entityType === "booking" ? AUDIT_ACTIONS.terminGebucht
     : i.entityType === "checklist" ? AUDIT_ACTIONS.anmeldungEingereicht
@@ -29,7 +37,7 @@ export function toAuditEntry(i: AuditItem): AuditLogEntry {
     timestamp: i.at,
     user: i.user,
     action,
-    details: i.label ?? "",
+    details: i.snapshot ? `${i.label ?? ""} · Snapshot: ${[i.snapshot.projektnummer, i.snapshot.station, i.snapshot.bahnhofsmanagement, `${Array.isArray(i.snapshot.reviews) ? i.snapshot.reviews.length : 0} Prüfungen`].filter(Boolean).join(", ")}` : (i.label ?? ""),
     meta: {
       ...(i.entityType === "project" ? { projectId: i.entityId } : {}),
       station: i.label,

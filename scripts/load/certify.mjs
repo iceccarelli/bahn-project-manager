@@ -6,7 +6,7 @@
  * It REFUSES to run when the generator and the server are the same host (loopback numbers are not
  * certification): the server advertises an opaque per-host id in the `X-Instance` header.
  *
- *   BASE=https://staging.example TOKEN=<oidc token> COOKIE=<or session cookie> node scripts/load/certify.mjs \
+ *   BASE=https://staging.example TOKEN=<oidc access token> node scripts/load/certify.mjs \
  *       [--stages-api 100,500,1000,2500,5000,10000] [--stages-rt 1000,2500,5000,10000] [--seconds 60]
  *
  * API stages use api-bench.mjs (zero think time — a harsher profile than users; the k6 suite adds think
@@ -20,7 +20,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 
 const arg = (k, d) => { const i = process.argv.indexOf(`--${k}`); return i > -1 ? process.argv[i + 1] : d; };
-const BASE = (process.env.BASE ?? arg("base", "")).replace(/\/$/, ""), TOKEN = process.env.TOKEN, COOKIE = process.env.COOKIE;
+const BASE = (process.env.BASE ?? arg("base", "")).replace(/\/$/, ""), TOKEN = process.env.TOKEN;
 if (!BASE) { console.error("BASE required"); process.exit(2); }
 const SLO = { readP95: 250, writeP95: 400, errorPct: 0.1, rtP95: 500 };
 const me = createHash("sha256").update(hostname()).digest("hex").slice(0, 8);
@@ -35,7 +35,7 @@ if (!out.separateHosts) {
 }
 const run = (script, args, env = {}) => { const r = spawnSync("node", [script, ...args], { env: { ...process.env, ...env }, encoding: "utf8", maxBuffer: 1 << 28 }); return r.stdout + r.stderr; };
 const firstJson = t => { const i = t.indexOf("{"); if (i < 0) return null; let d = 0; for (let j = i; j < t.length; j++) { if (t[j] === "{") d++; else if (t[j] === "}" && --d === 0) return JSON.parse(t.slice(i, j + 1)); } return null; };
-const cred = COOKIE ? ["--cookie", COOKIE] : [];
+const cred = TOKEN ? ["--token", TOKEN] : [];
 const seconds = arg("seconds", "60");
 const ids = arg("ids", "1:1298"), thinkMs = arg("think-ms", "0");
 const METRICS_TOKEN = process.env.METRICS_TOKEN;

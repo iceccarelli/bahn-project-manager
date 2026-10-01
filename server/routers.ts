@@ -28,6 +28,7 @@ import { loadPortfolioProjects } from "./infra/portfolioModel";
 import { pageAudit } from "./infra/auditQuery";
 import { searchGlobal } from "./infra/searchQuery";
 import { buildPortfolio, buildReelView } from "@shared/portfolio-view";
+import { AUDIT_DOCUMENT_KINDS } from "@shared/audit-contract";
 import type { PortfolioProject } from "@shared/portfolio-metrics";
 import { MapQuerySchema, MapStationQuerySchema } from "@shared/map-contract";
 import { BookSlotInputSchema, ListSlotsInputSchema, ReleaseSlotInputSchema } from "@shared/booking-contract";
@@ -48,6 +49,7 @@ const departmentScoped = new KeyedCache<Awaited<ReturnType<typeof readDepartment
 const portfolioRows = new KeyedCache<PortfolioProject[]>("portfolio-rows", 30_000, 100);
 const portfolioView = new KeyedCache<ReturnType<typeof buildPortfolio>>("portfolio", 30_000, 100);
 // 5 s burst absorber per (scope, user, term): typing the same prefix from many tabs costs one set of queries.
+const auditRecordWindow = new Map<string, { n: number; reset: number }>();
 const searchCache = new KeyedCache<{ q: string; entries: Awaited<ReturnType<typeof searchGlobal>> }>("search", 5_000, 2000);
 const dashboardScoped = new KeyedCache<Awaited<ReturnType<typeof readDashboard>>>("dashboard", 5_000);
 /** Per-project review statuses → shared/project-metrics.ts. `workspaces` null = all. */
@@ -97,9 +99,9 @@ export const appRouter = router({
         password: z.string(),
       }))
       .mutation(async ({ input, ctx }) => {
-        // Demo credentials are a development convenience. In production they are
-        // off unless explicitly enabled — production identity is OIDC (docs/auth.md).
-        if (process.env.NODE_ENV === "production" && process.env.ALLOW_DEMO_LOGIN !== "1") {
+        // Demo credentials are a development convenience and DO NOT EXIST in production (the boot also refuses
+        // ALLOW_DEMO_LOGIN there) — production identity is OIDC bearer tokens only (docs/auth.md).
+        if (process.env.NODE_ENV === "production") {
           throw new TRPCError({ code: "NOT_FOUND", message: "Not found" });
         }
         const { DEMO_USERS } = await import("./_core/demoUsers");
@@ -387,9 +389,9 @@ export const appRouter = router({
       .input(z.object({
         cursor: z.number().int().positive().optional(),
         limit: z.number().int().min(1).max(100).default(50),
-        entityType: z.enum(["project", "checklist", "booking"]).optional(),
+        entityType: z.enum(["project", "checklist", "booking", "user", "document"]).optional(),
         entityId: z.number().int().positive().optional(),
-        action: z.enum(["create", "update", "delete"]).optional(),
+        action: z.enum(["create", "update", "delete", "document"]).optional(),
         user: z.string().trim().min(1).max(100).optional(),
         label: z.string().trim().min(1).max(100).optional(),
         q: z.string().trim().min(1).max(100).optional(),
@@ -400,6 +402,21 @@ export const appRouter = router({
         if (!canViewAudit(ctx.principal)) throw new TRPCError({ code: "FORBIDDEN" });
         const { pool } = await requireServices();
         return pageAudit(pool, workspaceRestriction(ctx.principal), input);
+      }),
+    /**
+     * Durable document actions (PDF, export, mail, Teams). Authorized like a read of the project (or scoped to the caller's
+     * workspace), closed vocabulary, rate-limited per principal. Aggregate changes never come through here: those are audited
+     * inside their own transaction by the domain services.
+     */
+    record: protectedProcedure
+      .input(z.object({ kind: z.enum(AUDIT_DOCUMENT_KINDS), details: z.string().trim().min(1).max(500), projectId: z.number().int().positive().optional() }))
+      .mutation(async ({ input, ctx }) => {
+        const k = ctx.principal.id; const now = Date.now(); const w = auditRecordWindow.get(k);
+        if (w && now < w.reset) { if (++w.n > 120) throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "zu viele Protokolleinträge" }); } else auditRecordWindow.set(k, { n: 1, reset: now + 60_000 });
+        if (auditRecordWindow.size > 5000) auditRecordWindow.clear();
+        const { projects } = await requireServices();
+        await projects.recordDocumentAction(ctx.principal, input, { traceId: ctx.traceId, requestId: ctx.requestId });
+        return { ok: true as const };
       }),
     // There is no unscoped `audit.list`: `audit.page` is the only audit read (workspace-scoped, keyset-paginated).
   }),

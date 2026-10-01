@@ -52,8 +52,24 @@ function SsoLogin() {
   );
 }
 
+/** The production artifact has no credential form: if sign-in was not configured at build time it says so (it never falls back to demo auth). */
+function SignInNotConfigured() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-muted/30 px-4 py-12">
+      <Alert variant="destructive" className="max-w-md">
+        <AlertCircle className="h-4 w-4" />
+        <AlertTitle>Anmeldung nicht konfiguriert</AlertTitle>
+        <AlertDescription>Diese Installation wurde ohne Anmeldeanbieter (VITE_OIDC_AUTHORITY / VITE_OIDC_CLIENT_ID) gebaut. Bitte den Administrator kontaktieren.</AlertDescription>
+      </Alert>
+    </div>
+  );
+}
+
 export default function Login() {
-  return SERVER_MODE && OIDC ? <SsoLogin /> : <DemoLogin />;
+  if (!SERVER_MODE) return <DemoLogin />; // browser-local demo artifact
+  if (OIDC) return <SsoLogin />;
+  // server artifact without an IdP: demo credentials only on the Vite dev server, never in a built artifact
+  return import.meta.env.DEV ? <DemoLogin /> : <SignInNotConfigured />;
 }
 
 function DemoLogin() {

@@ -104,7 +104,7 @@ async function startServer() {
   app.use("/api/export", requirePrincipal(canExport));
 
   registerStorageProxy(app);
-  registerOAuthRoutes(app);
+  if (process.env.NODE_ENV !== "production") registerOAuthRoutes(app); // legacy OAuth/cookie login: development only
   registerExcelRoutes(app);
   // tRPC API
   app.use(

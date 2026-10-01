@@ -43,6 +43,8 @@ export const AUDIT_ACTIONS = {
   mailGeoeffnet: "E-Mail vorbereitet",
   /** A prefilled Teams chat was opened. */
   teamsGeoeffnet: "Teams-Nachricht vorbereitet",
+  /** A principal's role / workspace / department grant changed (observed from the verified identity). */
+  berechtigungGeaendert: "Berechtigung geändert",
 } as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];
@@ -72,6 +74,7 @@ export const AUDIT_TONE: Record<AuditAction, AuditTone> = {
   [AUDIT_ACTIONS.exportErzeugt]: "document",
   [AUDIT_ACTIONS.mailGeoeffnet]: "message",
   [AUDIT_ACTIONS.teamsGeoeffnet]: "message",
+  [AUDIT_ACTIONS.berechtigungGeaendert]: "update",
 };
 
 /**

@@ -96,15 +96,18 @@ interface ProjectDetailDialogProps {
 function ContactActions({
   contact,
   context,
+  projectId,
   size = "sm",
 }: {
   contact: Contact;
+  /** The project the message concerns (server build: scopes the audit row). */
+  projectId?: number;
   /** Everything the message says about where it came from. */
   context: MessageContext;
   size?: "sm" | "xs";
 }) {
   const h = size === "xs" ? "h-8" : "h-9";
-  const { recordMessage } = useAuditTrail();
+  const { recordMessage } = useAuditTrail(projectId);
   const subject = messageSubject(context);
   return (
     <div className="flex flex-wrap gap-2">
@@ -144,10 +147,12 @@ function ContactRow({
   roleLabel,
   name,
   context,
+  projectId,
   fallback,
   fallbackLabel,
 }: {
   roleLabel: string;
+  projectId?: number;
   name: string | null | undefined;
   context: MessageContext;
   /** Who to write to when the person has no address of their own. */
@@ -170,7 +175,7 @@ function ContactRow({
         <p className="break-words text-sm font-bold">{displayNameOf(resolution, name)}</p>
         {contact && <p className="break-all text-2xs text-muted-foreground">{contact.mail}</p>}
       </div>
-      {contact && <ContactActions contact={contact} context={context} size="xs" />}
+      {contact && <ContactActions projectId={projectId} contact={contact} context={context} size="xs" />}
 
       {!contact && (
         <p className="text-2xs leading-relaxed text-amber-700 dark:text-amber-500">
@@ -251,7 +256,7 @@ export function ProjectDetailDialog({
   onShowStation,
 }: ProjectDetailDialogProps) {
   const { user, session } = useAuth() as ReturnType<typeof useAuth> & { session?: { id: string } | null };
-  const { recordDocument, recordMessage } = useAuditTrail();
+  const { recordDocument, recordMessage } = useAuditTrail(project?.id);
   const [printing, setPrinting] = useState(false);
   const currentUser = user?.name || user?.email || "";
 
@@ -536,7 +541,7 @@ export function ProjectDetailDialog({
               Kontakt
             </h3>
             <div className="grid gap-3 sm:grid-cols-2">
-              <ContactRow
+              <ContactRow projectId={project?.id}
                 roleLabel="Projektleiter"
                 name={project.projektleiter}
                 context={contextFor()}
@@ -552,7 +557,7 @@ export function ProjectDetailDialog({
                     <p className="break-words text-sm font-bold">{bmContact.name}</p>
                     <p className="break-all text-2xs text-muted-foreground">{bmContact.mail}</p>
                   </div>
-                  <ContactActions contact={bmContact} context={contextFor()} size="xs" />
+                  <ContactActions projectId={project?.id} contact={bmContact} context={contextFor()} size="xs" />
                 </div>
               ) : (
                 <div className="rounded-xl border border-border/60 p-3">

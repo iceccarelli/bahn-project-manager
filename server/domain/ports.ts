@@ -1,3 +1,4 @@
+import type { AuditAction, AuditEntityType } from "@shared/audit-contract";
 /**
  * Ports. The domain layer depends on these interfaces only — never on MySQL,
  * Redis, HTTP or a realtime vendor. Concrete adapters live in server/infra and
@@ -66,14 +67,15 @@ export type IdempotencyClaim =
 export interface AuditRow {
   userId: number | null;
   userName: string;
-  entityType: "project" | "checklist" | "booking";
+  entityType: AuditEntityType;
   entityId: number;
-  action: "create" | "update" | "delete";
+  action: AuditAction;
   field: string | null;
   oldValue: string | null;
   newValue: string | null;
-  eventId: string;
-  aggregateVersion: number;
+  /** null for rows that are not an aggregate transition (document actions, authorization grants). */
+  eventId: string | null;
+  aggregateVersion: number | null;
   traceId: string;
   /** Authorization scope stamped in the writing transaction; null = unrestricted principals only. */
   workspace?: string | null;

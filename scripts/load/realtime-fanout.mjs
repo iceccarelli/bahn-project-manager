@@ -3,7 +3,7 @@
  * Realtime capacity probe: open N SSE connections, trigger ONE mutation, and
  * measure how long each connection takes to receive it.
  *
- *   node scripts/load/realtime-fanout.mjs --base http://127.0.0.1:3100 --cookie <session> \
+ *   node scripts/load/realtime-fanout.mjs --base http://127.0.0.1:3100 --token <oidc access token> \
  *        --connections 10000 --project 1 [--rounds 3] [--ramp-per-sec 1000]
  *
  * Latency = time from just before the mutation request is sent until the event
@@ -17,10 +17,10 @@ const arg = (k, d) => { const i = process.argv.indexOf(`--${k}`); return i > -1 
 // --base may list several instances (comma separated): connections are spread
 // round-robin across them, the mutation goes to the FIRST — so delivery to the
 // others proves the cross-instance bus (Redis) works.
-const BASES = arg("base", "http://127.0.0.1:3000").split(",").map(u => new URL(u)), BASE = BASES[0], COOKIE = arg("cookie", process.env.COOKIE);
+const BASES = arg("base", "http://127.0.0.1:3000").split(",").map(u => new URL(u)), BASE = BASES[0], TOKEN = arg("token", process.env.TOKEN);
 const N = Number(arg("connections", 1000)), PROJECT = Number(arg("project", 1)), ROUNDS = Number(arg("rounds", 3));
 const RAMP = Number(arg("ramp-per-sec", 2000)), SCOPE = arg("scope", `project:${PROJECT}`);
-if (!COOKIE) { console.error("--cookie required"); process.exit(2); }
+if (!TOKEN) { console.error("--token (OIDC bearer access token) required"); process.exit(2); }
 
 const agent = new http.Agent({ keepAlive: true, maxSockets: Infinity });
 let connected = 0, failed = 0, closed = 0, sentAt = 0;
@@ -30,7 +30,7 @@ const failures = new Map();
 
 function open(i) {
   return new Promise(resolve => {
-    const req = http.request({ host: BASES[i % BASES.length].hostname, port: BASES[i % BASES.length].port, path: `/api/realtime/stream?scopes=${encodeURIComponent(SCOPE)}`, agent, headers: { cookie: `app_session_id=${COOKIE}`, accept: "text/event-stream" } }, res => {
+    const req = http.request({ host: BASES[i % BASES.length].hostname, port: BASES[i % BASES.length].port, path: `/api/realtime/stream?scopes=${encodeURIComponent(SCOPE)}`, agent, headers: { authorization: `Bearer ${TOKEN}`, accept: "text/event-stream" } }, res => {
       if (res.statusCode !== 200) { failed++; failures.set(res.statusCode, (failures.get(res.statusCode) ?? 0) + 1); res.resume(); return resolve(false); }
       res.setEncoding("utf8");
       let buf = "", ready = false;
@@ -50,14 +50,14 @@ function open(i) {
 
 async function mutate(version, tag) {
   const r = await fetch(new URL("/api/trpc/projects.update", BASE), {
-    method: "POST", headers: { cookie: `app_session_id=${COOKIE}`, "content-type": "application/json" },
+    method: "POST", headers: { authorization: `Bearer ${TOKEN}`, "content-type": "application/json" },
     body: JSON.stringify({ json: { id: PROJECT, expectedVersion: version, changes: { kommentar: `fanout-${tag}` }, idempotencyKey: `fanout-${Date.now()}-${tag}-${Math.random().toString(36).slice(2)}` } }),
   });
   const j = await r.json();
   if (r.status !== 200) throw new Error(`mutation failed ${r.status} ${JSON.stringify(j).slice(0, 200)}`);
   return j.result.data.json.project.version;
 }
-const current = async () => (await (await fetch(new URL(`/api/trpc/projects.get?input=${encodeURIComponent(JSON.stringify({ json: { id: PROJECT } }))}`, BASE), { headers: { cookie: `app_session_id=${COOKIE}` } })).json()).result.data.json.version;
+const current = async () => (await (await fetch(new URL(`/api/trpc/projects.get?input=${encodeURIComponent(JSON.stringify({ json: { id: PROJECT } }))}`, BASE), { headers: { authorization: `Bearer ${TOKEN}` } })).json()).result.data.json.version;
 
 const t0 = performance.now();
 for (let i = 0; i < N; i += RAMP) {
