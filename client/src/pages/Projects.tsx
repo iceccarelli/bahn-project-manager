@@ -900,7 +900,7 @@ export default function Projects() {
                     )}
                   </thead>
                   <TableBody ref={streamRef} {...vrows.bodyProps}>
-                    {vrows.paddingTop > 0 && <tr aria-hidden="true" style={{ height: vrows.paddingTop }}><td colSpan={30} style={{ padding: 0, border: 0 }} /></tr>}
+                    {vrows.paddingTop > 0 && <tr data-spacer="" style={{ height: vrows.paddingTop }}><td colSpan={30} style={{ padding: 0, border: 0 }} /></tr>}
                     {vrows.items.map((vi) => {
                       const project = tableRows[vi.index];
                       if (!project) return null;
@@ -1030,7 +1030,7 @@ export default function Projects() {
                         </tr>
                       );
                     })}
-                    {vrows.paddingBottom > 0 && <tr aria-hidden="true" style={{ height: vrows.paddingBottom }}><td colSpan={30} style={{ padding: 0, border: 0 }} /></tr>}
+                    {vrows.paddingBottom > 0 && <tr data-spacer="" style={{ height: vrows.paddingBottom }}><td colSpan={30} style={{ padding: 0, border: 0 }} /></tr>}
                   </TableBody>
                 </table>
               </div>
@@ -1163,8 +1163,7 @@ export default function Projects() {
                 Height is now viewport-relative: 600 px of fixed map on a
                 667 px-tall phone left no page around it.
               */
-              <>
-              {SERVER_MODE ? (
+              SERVER_MODE ? (
                 <ServerMap
                   className="relative h-[65vh] min-h-[380px] w-full sm:h-[560px] lg:h-[600px]"
                   filters={{ search: search || undefined, bahnhofsmanagement: region || undefined, projektleiter: projektleiter || undefined, pruefer: pruefer || undefined, department: department || undefined, reviewStatus: status || undefined }}
@@ -1179,8 +1178,7 @@ export default function Projects() {
                   onProjectSelect={handleMapProjectSelect}
                   onStationSelect={handleStationSelect}
                 />
-              )}
-              </>
+              )
             )}
           </>
         )}

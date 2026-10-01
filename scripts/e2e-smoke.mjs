@@ -3428,7 +3428,7 @@ await check("the table streams without ever holding a row back", async () => {
   assert(during === after, `${during} rows mid-stream, ${after} after — rows are being withheld`);
   assert(during > 100, `only ${during} rows in the table set`);
   // virtualization: the set is complete, the DOM holds only the window — never every row
-  const inDom = await page.$$eval("table tbody tr:not([aria-hidden])", (r) => r.length);
+  const inDom = await page.$$eval("table tbody tr:not([data-spacer])", (r) => r.length);
   assert(inDom > 0 && inDom < 80, `${inDom} rows in the DOM for a set of ${during} — the table is not virtualized`);
   assert(streaming === "on", "the table did not stream at all");
 

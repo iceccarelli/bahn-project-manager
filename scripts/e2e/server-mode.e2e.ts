@@ -276,7 +276,7 @@ async function main() {
     await page.goto(`${URLS[1]}/psv-itk`);
     await page.waitForSelector('[data-testid="server-department-view"]', { timeout: 15000 });
     await page.waitForSelector("table tbody tr td", { timeout: 15000 });
-    const domRows = await page.$$eval("table tbody tr:not([aria-hidden])", r => r.length);
+    const domRows = await page.$$eval("table tbody tr:not([data-spacer])", r => r.length);
     const setSize = await rowSet(page);
     if (setSize <= 20 || domRows >= 80) throw new Error(`virtualization: ${domRows} DOM rows for a set of ${setSize}`);
     const kpi = await page.locator('[data-testid="server-department-view"] .text-4xl').first().innerText();

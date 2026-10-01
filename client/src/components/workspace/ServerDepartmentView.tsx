@@ -133,7 +133,7 @@ export function ServerDepartmentView({ department, title, subtitle, prueferLabel
                 </tr>
               </thead>
               <tbody {...v.bodyProps}>
-                {v.paddingTop > 0 && <tr aria-hidden="true" style={{ height: v.paddingTop }}><td colSpan={8} style={{ padding: 0, border: 0 }} /></tr>}
+                {v.paddingTop > 0 && <tr data-spacer="" style={{ height: v.paddingTop }}><td colSpan={8} style={{ padding: 0, border: 0 }} /></tr>}
                 {v.items.map(vi => {
                   const p = rows[vi.index];
                   if (!p) return null;
@@ -156,7 +156,7 @@ export function ServerDepartmentView({ department, title, subtitle, prueferLabel
                     </tr>
                   );
                 })}
-                {v.paddingBottom > 0 && <tr aria-hidden="true" style={{ height: v.paddingBottom }}><td colSpan={8} style={{ padding: 0, border: 0 }} /></tr>}
+                {v.paddingBottom > 0 && <tr data-spacer="" style={{ height: v.paddingBottom }}><td colSpan={8} style={{ padding: 0, border: 0 }} /></tr>}
               </tbody>
             </table>
           </div>

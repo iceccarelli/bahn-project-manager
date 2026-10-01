@@ -83,7 +83,7 @@ await page.waitForSelector("table tbody tr td", { timeout: 30000 });
 const timeToRowsMs = Date.now() - t0;
 await sleep(1500);
 const nodes = () => page.evaluate(() => document.getElementsByTagName("*").length);
-const rowsDom = () => page.evaluate(() => document.querySelectorAll("table tbody tr:not([aria-hidden])").length);
+const rowsDom = () => page.evaluate(() => document.querySelectorAll("table tbody tr:not([data-spacer])").length);
 const rowSet = () => page.evaluate(() => { const t = document.querySelector("table[data-row-count]"); return t ? Number(t.getAttribute("data-row-count")) : document.querySelectorAll("table tbody tr").length; });
 const heap = async () => (await cdp.send("Runtime.getHeapUsage") as { usedSize: number }).usedSize;
 const initial = { domNodes: await nodes(), tableRowsInDom: await rowsDom(), rowSet: await rowSet(), jsHeapMB: +(await heap() / 1048576).toFixed(1), transferredKB: Math.round(transferred / 1024), jsTransferredKB: Math.round(jsTransferred / 1024) };
