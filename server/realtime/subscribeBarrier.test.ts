@@ -120,6 +120,26 @@ describe("fanout topology", () => {
   });
 });
 
+describe("notification delivery throttling", () => {
+  it("a burst becomes a few live frames plus ONE hint to re-read the durable inbox; other event types are untouched", async () => {
+    const bus = new InProcessBus();
+    const app = express(); app.use(express.json());
+    registerRealtimeGateway(app, { subscriber: bus, notificationBurst: 3, notificationWindowMs: 5000, store: { versions: async () => new Map(), feedHead: async () => 1 }, resolve: async r => { const p = who(r); return p ? { principal: p } : null; } });
+    const server: Server = await new Promise(r => { const s = app.listen(0, "127.0.0.1", () => r(s)); });
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const s = await openSse(`${base}/api/realtime/stream?scopes=notifications:1,project:5`, { "x-u": "admin" });
+    await s.until(f => f.event === "hello");
+    for (let i = 0; i < 12; i++) await bus.publish(event(1, i + 1, {}, { eventType: "notification.created", aggregateType: "notification", aggregateId: String(i + 1), context: { recipient: "1", workspace: "Frankfurt" } }));
+    await bus.publish(event(5, 2, { kommentar: { from: null, to: "x" } }));
+    await sleep(250);
+    const notif = s.frames.filter(f => f.event === "domain" && f.data.aggregateType === "notification").length;
+    expect(notif).toBe(3);
+    expect(s.frames.filter(f => f.event === "hint")).toHaveLength(1);
+    expect(s.frames.some(f => f.event === "domain" && f.data.aggregateId === "5")).toBe(true);
+    s.close(); server.closeAllConnections(); server.close();
+  });
+});
+
 describe("dynamic scopes on a live stream", () => {
   let server: Server, base: string, bus: InProcessBus;
   beforeAll(async () => {

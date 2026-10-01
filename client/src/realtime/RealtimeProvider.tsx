@@ -97,8 +97,12 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         // creations/deletions/moves change the shell count; plain updates do not
         if (e.eventType !== "project.updated") void qc.invalidateQueries({ queryKey: serverKeys.shell() });
       },
-      onSync: ({ headSeq, reconnecting }) =>
-        reconnecting ? engine.resync(headSeq ?? undefined) : engine.catchUp(headSeq ?? undefined),
+      onHint: kind => { if (kind === "notifications") void qc.invalidateQueries({ queryKey: ["server", "notifications"] }); },
+      // every (re)connect re-reads the durable inbox + unread counter: nothing missed while offline stays hidden
+      onSync: ({ headSeq, reconnecting }) => {
+        void qc.invalidateQueries({ queryKey: ["server", "notifications"] });
+        return reconnecting ? engine.resync(headSeq ?? undefined) : engine.catchUp(headSeq ?? undefined);
+      },
     });
     const wanted = new Map<string, number>();
     let timer: ReturnType<typeof setTimeout> | null = null;

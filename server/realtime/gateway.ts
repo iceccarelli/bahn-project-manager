@@ -16,7 +16,7 @@
 import { randomUUID } from "node:crypto";
 import type { Express, Request, Response } from "express";
 import { isValidScope } from "@shared/domain-events";
-import { PRESENCE_STATES, type PresenceService, type PresenceState } from "./presence";
+import { PRESENCE_STATES, PresenceRateLimited, type PresenceService, type PresenceState } from "./presence";
 import { canSubscribe, canViewProject, workspaceRestriction, type Principal } from "../domain/permissions";
 import { OVERFLOW, type ProjectStore, type RealtimeSubscriber, type SubscriptionIterator } from "../domain/ports";
 import { resolveIdentity } from "../_core/identity";
@@ -37,6 +37,9 @@ export interface GatewayOptions {
   maxStreamScopes?: number;
   /** how long to wait for the transport to confirm the subscriptions before refusing the stream (503) */
   readyTimeoutMs?: number;
+  /** live notification frames per stream per window before the rest is collapsed into a `hint` */
+  notificationBurst?: number;
+  notificationWindowMs?: number;
   /** identity of this process for routing stream-control messages between instances */
   nodeId?: string;
   maxConnectionsPerPrincipal?: number;
@@ -225,6 +228,8 @@ export function registerRealtimeGateway(app: Express, opt: GatewayOptions) {
     const headSeq = (await head?.read(subscribedAt).catch(() => undefined)) ?? null;
     frame("hello", { serverTime: new Date().toISOString(), scopes: accepted, denied, headSeq, streamId });
 
+    const notifTimes: number[] = []; let lastHint = 0;
+    const notifBurst = opt.notificationBurst ?? Number(process.env.RT_NOTIF_BURST ?? 5), notifWindowMs = opt.notificationWindowMs ?? 10_000;
     try {
       for (;;) {
         const { value, done } = await iterator.next();
@@ -235,6 +240,17 @@ export function registerRealtimeGateway(app: Express, opt: GatewayOptions) {
         // not receive the post-move state.
         const visible = eventForPrincipal(principal, value);
         if (!visible) continue;
+        // Notification delivery is throttled per stream: a burst becomes the first few live frames and then ONE
+        // `hint` per window telling the client to re-read its (durable, SQL) inbox. Nothing is lost: the rows exist.
+        if (visible.aggregateType === "notification") {
+          const t = Date.now();
+          while (notifTimes.length && t - notifTimes[0]! > notifWindowMs) notifTimes.shift();
+          if (notifTimes.length >= notifBurst) {
+            if (t - lastHint >= notifWindowMs / 2) { lastHint = t; frame("hint", { kind: "notifications" }); m.rtNotificationsThrottled.inc(); }
+            continue;
+          }
+          notifTimes.push(t);
+        }
         m.rtEventAgeMs.observe(Math.max(0, Date.now() - Date.parse(visible.timestamp)));
         m.rtDelivered.inc();
         const ok = frame("domain", visible, visible.eventId);
@@ -279,14 +295,16 @@ export function registerPresenceRoutes(
     const { scope: sc, state, tabId } = (req.body ?? {}) as { scope?: unknown; state?: unknown; tabId?: unknown };
     if (!(PRESENCE_STATES as readonly unknown[]).includes(state) || typeof tabId !== "string" || !/^[A-Za-z0-9_-]{4,40}$/.test(tabId)) { res.status(400).json({ error: "invalid presence" }); return; }
     const a = await authorize(req, res, sc); if (!a) return;
-    await opt.presence.heartbeat(sc as string, { userId: a.principal.id, name: a.principal.name, tabId, state: state as PresenceState }, a.workspace);
+    try { await opt.presence.heartbeat(sc as string, { userId: a.principal.id, name: a.principal.name, tabId, state: state as PresenceState }, a.workspace); }
+    catch (e) { if (e instanceof PresenceRateLimited) { res.status(429).set("Retry-After", "10").json({ error: "too many presence updates" }); return; } throw e; }
     res.status(204).end();
   }));
   app.delete("/api/realtime/presence", guard(async (req, res) => {
     const a = await authorize(req, res, req.query.scope); if (!a) return;
     const tabId = String(req.query.tabId ?? "");
     if (!/^[A-Za-z0-9_-]{4,40}$/.test(tabId)) { res.status(400).json({ error: "invalid tab" }); return; }
-    await opt.presence.leave(req.query.scope as string, a.principal.id, tabId, a.workspace);
+    try { await opt.presence.leave(req.query.scope as string, a.principal.id, tabId, a.workspace); }
+    catch (e) { if (e instanceof PresenceRateLimited) { res.status(429).set("Retry-After", "10").json({ error: "too many presence updates" }); return; } throw e; }
     res.status(204).end();
   }));
   app.get("/api/realtime/presence", guard(async (req, res) => {

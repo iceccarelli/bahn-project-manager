@@ -1163,8 +1163,10 @@ export default function Projects() {
 
       {SERVER_MODE && !isLoading && (
         <ServerPager
+          // paging follows the table's own scroll position (virtualized); the sentinel would sit in view forever
+          auto={viewMode !== "table"}
           loaded={data?.projects.length ?? 0}
-          total={data?.total}
+          total={(data as { totalExact?: boolean } | undefined)?.totalExact === false ? undefined : data?.total}
           hasNextPage={!!pager.hasNextPage}
           isFetching={!!pager.isFetchingNextPage}
           onLoadMore={() => pager.fetchNextPage?.()}

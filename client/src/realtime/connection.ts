@@ -34,6 +34,8 @@ export interface ConnectionOptions {
    * stream with a `scopes` frame once the new channels are CONFIRMED; only then is an added scope considered live.
    */
   postScopes?(req: { streamId: string; requestId: string; add: string[]; remove: string[] }): Promise<{ ok: boolean; status: number }>;
+  /** the server collapsed a burst (e.g. notifications) into a hint: re-read the durable source */
+  onHint?(kind: string): void;
   /** called after added scopes are confirmed live: rows subscribed late must be reconciled with the server */
   onScopesLive?(added: string[]): void | Promise<void>;
   /** how many scopes go in the connect URL; the rest are added right after hello */
@@ -244,6 +246,10 @@ export class RealtimeConnection {
       case "domain": {
         const parsed = DomainEventSchema.safeParse(JSON.parse(f.data));
         if (parsed.success) this.o.onEvent(parsed.data);
+        break;
+      }
+      case "hint": {
+        try { this.o.onHint?.((JSON.parse(f.data) as { kind: string }).kind); } catch { /* ignore */ }
         break;
       }
       case "scopes": {

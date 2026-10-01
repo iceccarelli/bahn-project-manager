@@ -191,3 +191,26 @@ describe.skipIf(!hasTestDb)("read models + geo + map (real DB)", () => {
     expect(await store.unreadCount(kasselOnly.id, [])).toBe(0);
   });
 });
+
+describe.skipIf(!hasTestDb)("notification retention (real DB)", () => {
+  it("deletes old read and very old rows in batches, and keeps the unread counters exact", async () => {
+    const t = await createTestDatabase(5);
+    try {
+      const { purgeNotifications } = await import("./notificationRetention");
+      const day = 86_400_000, now = new Date("2026-10-01T00:00:00Z");
+      const ins = (u: string, ageDays: number, read: boolean, ws = "Frankfurt") => t.pool.query("INSERT INTO notifications (userId, kind, title, workspace, eventId, createdAt, readAt) VALUES (?,?,?,?,?,?,?)", [u, "workflow", "t", ws, randomUUID(), new Date(now.getTime() - ageDays * day), read ? new Date(now.getTime() - ageDays * day) : null]);
+      for (let i = 0; i < 5; i++) await ins("u1", 40, true);       // read, older than 30 d → deleted
+      for (let i = 0; i < 3; i++) await ins("u1", 10, true);       // read, recent → kept
+      for (let i = 0; i < 4; i++) await ins("u1", 60, false);      // unread, older than 30 d but < 180 d → kept
+      for (let i = 0; i < 2; i++) await ins("u1", 200, false);     // unread, older than 180 d → deleted + counter −2
+      await t.pool.query("INSERT INTO notification_unread (userId, workspace, n) VALUES ('u1','Frankfurt',6)");
+      const r = await purgeNotifications(t.pool as never, { now, batch: 4 });
+      expect(r).toEqual({ deleted: 7, unreadDeleted: 2 });
+      const [[c]] = (await t.pool.query("SELECT COUNT(*) n FROM notifications")) as unknown as [{ n: number }[]];
+      expect(Number(c.n)).toBe(7);
+      const [[u]] = (await t.pool.query("SELECT n FROM notification_unread WHERE userId='u1'")) as unknown as [{ n: number }[]];
+      expect(Number(u.n)).toBe(4);
+      expect(await purgeNotifications(t.pool as never, { now })).toEqual({ deleted: 0, unreadDeleted: 0 }); // idempotent
+    } finally { await t.drop(); }
+  });
+});

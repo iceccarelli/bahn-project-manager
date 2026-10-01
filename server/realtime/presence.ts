@@ -152,21 +152,91 @@ export function presenceEvent(scope: ScopeKey, entries: PresenceEntry[], workspa
 
 export const TTL_MS = 45_000;
 
+export interface PresenceLimits {
+  /** the same (user, tab, scope, state) heartbeat inside this window is a no-op: it never reaches Redis */
+  minHeartbeatIntervalMs: number;
+  /** at most one snapshot publish per scope per window; changes inside it are merged into ONE trailing publish */
+  coalesceMs: number;
+  /** per-user ceiling on heartbeat/leave calls (all scopes together) per window */
+  perUserMax: number;
+  perUserWindowMs: number;
+}
+export const DEFAULT_LIMITS: PresenceLimits = {
+  minHeartbeatIntervalMs: Number(process.env.PRESENCE_MIN_INTERVAL_MS ?? 5_000),
+  coalesceMs: Number(process.env.PRESENCE_COALESCE_MS ?? 500),
+  perUserMax: Number(process.env.PRESENCE_USER_MAX ?? 40),
+  perUserWindowMs: 10_000,
+};
+export class PresenceRateLimited extends Error {}
+
+/**
+ * Presence must never become a write hotspot. Three layers, none of which touch SQL:
+ *   1. per-user ceiling (a misbehaving client cannot flood Redis),
+ *   2. per-(user,tab,scope,state) heartbeat throttle (duplicate beats are dropped before Redis),
+ *   3. per-scope publish coalescing (a join storm yields one trailing snapshot, not N).
+ * State CHANGES (viewing → editing, a new scope, a leave) are never throttled: only repeats are.
+ */
 export class PresenceService {
-  constructor(private readonly store: PresenceStore, private readonly publisher: RealtimePublisher) {}
+  private lastBeat = new Map<string, { at: number; state: PresenceState }>();
+  private userWindow = new Map<string, { start: number; n: number }>();
+  private pending = new Map<ScopeKey, { timer: ReturnType<typeof setTimeout>; workspace: string | null }>();
+  private lastPublish = new Map<ScopeKey, number>();
+  readonly stats = { heartbeats: 0, throttled: 0, rateLimited: 0, published: 0, coalesced: 0 };
+
+  constructor(
+    private readonly store: PresenceStore,
+    private readonly publisher: RealtimePublisher,
+    private readonly limits: PresenceLimits = DEFAULT_LIMITS,
+    private readonly clock: () => number = Date.now,
+  ) {}
+
+  private admit(userId: string) {
+    const now = this.clock();
+    const w = this.userWindow.get(userId);
+    if (!w || now - w.start > this.limits.perUserWindowMs) { this.userWindow.set(userId, { start: now, n: 1 }); this.bound(this.userWindow); return; }
+    if (++w.n > this.limits.perUserMax) { this.stats.rateLimited++; throw new PresenceRateLimited(); }
+  }
+  /** keep the bookkeeping maps bounded (a long-running process sees many users) */
+  private bound(m: Map<string, unknown>) { if (m.size > 20_000) m.delete(m.keys().next().value as string); }
 
   async heartbeat(scope: ScopeKey, who: { userId: string; name: string | null; tabId: string; state: PresenceState }, workspace: string | null) {
     if (!isValidScope(scope)) throw new Error("bad scope");
+    this.admit(who.userId);
+    this.stats.heartbeats++;
+    const key = `${scope}|${who.userId}|${who.tabId}`;
+    const now = this.clock();
+    const prev = this.lastBeat.get(key);
+    if (prev && prev.state === who.state && now - prev.at < this.limits.minHeartbeatIntervalMs) { this.stats.throttled++; return; }
+    this.lastBeat.set(key, { at: now, state: who.state }); this.bound(this.lastBeat);
     if (workspace) await this.store.setWorkspace(scope, workspace);
     const changed = await this.store.heartbeat(scope, who, TTL_MS);
-    if (changed) await this.publish(scope, workspace);
+    if (changed) this.schedulePublish(scope, workspace);
   }
   async leave(scope: ScopeKey, userId: string, tabId: string, workspace: string | null) {
-    if (await this.store.leave(scope, userId, tabId)) await this.publish(scope, workspace);
+    this.admit(userId);
+    this.lastBeat.delete(`${scope}|${userId}|${tabId}`);
+    if (await this.store.leave(scope, userId, tabId)) this.schedulePublish(scope, workspace);
   }
   list(scope: ScopeKey) { return this.store.list(scope); }
-  async sweep() { for (const scope of await this.store.sweep()) await this.publish(scope, await this.store.workspaceOf(scope)); }
-  private async publish(scope: ScopeKey, workspace: string | null) {
-    await this.publisher.publish(presenceEvent(scope, await this.store.list(scope), workspace));
+  async sweep() { for (const scope of await this.store.sweep()) this.schedulePublish(scope, await this.store.workspaceOf(scope)); }
+
+  /** leading edge immediately, then at most one trailing publish per coalescing window */
+  private schedulePublish(scope: ScopeKey, workspace: string | null) {
+    const now = this.clock();
+    const last = this.lastPublish.get(scope) ?? 0;
+    const pend = this.pending.get(scope);
+    if (pend) { this.stats.coalesced++; return; }               // a trailing publish is already queued: it will carry the latest snapshot
+    if (now - last >= this.limits.coalesceMs) { void this.publish(scope, workspace); return; }
+    const timer = setTimeout(() => { this.pending.delete(scope); void this.publish(scope, workspace); }, this.limits.coalesceMs - (now - last));
+    (timer as { unref?: () => void }).unref?.();
+    this.pending.set(scope, { timer, workspace });
   }
+  private async publish(scope: ScopeKey, workspace: string | null) {
+    this.lastPublish.set(scope, this.clock()); this.bound(this.lastPublish as Map<string, unknown>);
+    this.stats.published++;
+    // always the CURRENT snapshot, whatever happened since this publish was scheduled
+    await this.publisher.publish(presenceEvent(scope, await this.store.list(scope), workspace)).catch(() => {});
+  }
+  /** test/shutdown hook */
+  flush() { for (const [, p] of this.pending) clearTimeout(p.timer); this.pending.clear(); }
 }

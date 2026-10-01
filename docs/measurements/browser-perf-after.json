@@ -1,0 +1,96 @@
+{
+  "label": "after",
+  "at": "2026-10-01T02:07:02.147Z",
+  "environment": "single host (browser + server + DB share CPU), Chromium headless, 1440x900, real 1,298-row dataset, MySQL 8.4",
+  "initial": {
+    "domNodes": 1469,
+    "tableRowsInDom": 21,
+    "rowSet": 100,
+    "jsHeapMB": 10.2,
+    "transferredKB": 1331,
+    "jsTransferredKB": 937
+  },
+  "afterScroll": {
+    "domNodes": 1903,
+    "tableRowsInDom": 29,
+    "rowSet": 200,
+    "jsHeapMB": 30.6
+  },
+  "scroll": {
+    "frames": 145,
+    "p50": 33.3,
+    "p95": 50,
+    "p99": 50.1,
+    "over50ms": 2
+  },
+  "webVitals": {
+    "lcpMs": 364,
+    "cls": 0.078,
+    "inpMs": 72,
+    "firstRowRenderedAtMs": 714,
+    "timeToRowsMs": 1174,
+    "longTasks": 5
+  },
+  "slowestInteractionsMs": [
+    72,
+    72,
+    64,
+    64,
+    64
+  ],
+  "map": {
+    "timeToFirstMarkerMs": 439,
+    "markers": 6
+  },
+  "largestTransfers": [
+    {
+      "url": "/assets/index-0xs-FdFJ.js",
+      "kb": 358
+    },
+    {
+      "url": "/assets/vendor-react-C2MEMIH7.js",
+      "kb": 196
+    },
+    {
+      "url": "/api/trpc/projects.list?batch=1&input=%7B%220%22%3A%7B%22json%22%3A%7B%22limit%2",
+      "kb": 179
+    },
+    {
+      "url": "/api/trpc/projects.list?batch=1&input=%7B%220%22%3A%7B%22json%22%3A%7B%22limit%2",
+      "kb": 179
+    },
+    {
+      "url": "/api/trpc/projects.list?batch=1&input=%7B%220%22%3A%7B%22json%22%3A%7B%22limit%2",
+      "kb": 170
+    },
+    {
+      "url": "/api/trpc/projects.list?batch=1&input=%7B%220%22%3A%7B%22json%22%3A%7B%22limit%2",
+      "kb": 168
+    },
+    {
+      "url": "/api/trpc/projects.list?batch=1&input=%7B%220%22%3A%7B%22json%22%3A%7B%22limit%2",
+      "kb": 165
+    },
+    {
+      "url": "/api/trpc/projects.list?batch=1&input=%7B%220%22%3A%7B%22json%22%3A%7B%22limit%2",
+      "kb": 165
+    }
+  ],
+  "listPayloadBytes": {
+    "before_reviews_details_total": {
+      "status": 200,
+      "raw": 241394,
+      "gzip": 15257
+    },
+    "after_table_projection": {
+      "status": 200,
+      "raw": 165281,
+      "gzip": 8890
+    },
+    "summary_only": {
+      "status": 200,
+      "raw": 24527,
+      "gzip": 3089
+    }
+  }
+}
