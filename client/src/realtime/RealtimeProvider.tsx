@@ -319,3 +319,19 @@ export function useShellSummary() {
   });
   return { projectCount: q.data?.projectCount ?? null, lastUpdatedAt: q.data?.lastUpdatedAt ?? null, isError: q.isError, isLoading: q.isLoading };
 }
+
+
+/**
+ * Remote changes of one project (who changed what, when), live from the sync engine. Empty without a provider (demo build) or
+ * without an id. Re-renders only when THIS project changes.
+ */
+export function useRecentChangesFor(id: number | null): import("./projectSyncEngine").RecentChange[] {
+  const rt = useOptionalRealtime();
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (!rt || id === null) return undefined;
+    const off = rt.engine.subscribe(c => { if ("id" in c && c.id === id) tick(n => n + 1); });
+    return () => { off(); };
+  }, [rt, id]);
+  return rt && id !== null ? rt.engine.recentChanges(id) : [];
+}

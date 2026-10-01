@@ -83,8 +83,12 @@ export function usePresenceReporter(scope: string | null, base: PresenceState) {
     const onChange = () => { if (currentState(base) !== last.current) beat(true); };
     activity.listeners.add(onChange);
     const idleCheck = setInterval(onChange, 5_000);
+    // closing the tab never unmounts React: say goodbye on pagehide (keepalive DELETE) instead of lingering for the TTL
+    const onPageHide = () => { void send("DELETE", scope).catch(() => {}); };
+    window.addEventListener("pagehide", onPageHide);
     return () => {
       stopped = true;
+      window.removeEventListener("pagehide", onPageHide);
       clearInterval(timer); clearInterval(idleCheck); activity.listeners.delete(onChange);
       void send("DELETE", scope).catch(() => {});
     };

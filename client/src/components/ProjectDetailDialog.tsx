@@ -35,13 +35,19 @@ import { SERVER_MODE } from "@/realtime/serverApi";
 import { PresenceStrip } from "@/realtime/presence";
 import { WatchToggle } from "@/realtime/notifications";
 import { useCallback, useMemo, useState } from "react";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
+  DialogPortal,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { InlineEditCell, StatusSelect } from "@/components/workspace/table-parts";
+import { RecentChangeLine } from "@/realtime/RecentChangeLine";
+import { useRecentChangesFor } from "@/realtime/RealtimeProvider";
+import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -91,6 +97,44 @@ interface ProjectDetailDialogProps {
   onOpenChange: (open: boolean) => void;
   /** Jump to every other project at this station. Hidden when not provided. */
   onShowStation?: (station: string) => void;
+  /**
+   * "drawer": a persistent, NON-modal side panel — the list behind it stays visible, scrollable and clickable (selecting
+   * another row switches the drawer), and closing it returns to the same list position. "dialog" (default): the modal.
+   */
+  variant?: "dialog" | "drawer";
+  /** Drawer editing: versioned project-field edit (conflicts surface through the shared conflict UI). */
+  onEdit?: (id: number, field: string, value: string) => Promise<void> | void;
+  /** Drawer editing: versioned department-review edit. */
+  onReviewEdit?: (id: number, department: string, field: "status" | "prueferName" | "pruefDatum", value: string) => Promise<void> | void;
+}
+
+/** The container of the detail content: a modal dialog, or the persistent right-hand drawer. */
+function DetailShell({ variant, open, onOpenChange, children }: { variant: "dialog" | "drawer"; open: boolean; onOpenChange: (o: boolean) => void; children: React.ReactNode }) {
+  if (variant === "drawer") {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange} modal={false}>
+        <DialogPortal>
+          <DialogPrimitive.Content
+            data-testid="project-drawer"
+            // non-modal: clicks and scrolls in the list behind it are NOT swallowed and do not close the drawer
+            onInteractOutside={(e) => e.preventDefault()}
+            onOpenAutoFocus={(e) => e.preventDefault()}
+            className="fixed inset-y-0 right-0 z-40 flex w-full flex-col overflow-hidden border-l bg-background shadow-2xl outline-none sm:w-[520px] lg:w-[540px] data-[state=open]:animate-in data-[state=open]:slide-in-from-right"
+          >
+            {children}
+            <DialogPrimitive.Close className="absolute right-3 top-3 rounded-md p-1.5 opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-primary" aria-label="Schließen">
+              <X className="h-4 w-4" aria-hidden="true" />
+            </DialogPrimitive.Close>
+          </DialogPrimitive.Content>
+        </DialogPortal>
+      </Dialog>
+    );
+  }
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="flex max-h-[92vh] w-[calc(100vw-1.5rem)] flex-col gap-0 overflow-hidden p-0 sm:w-full sm:max-w-3xl">{children}</DialogContent>
+    </Dialog>
+  );
 }
 
 function ContactActions({
@@ -254,7 +298,11 @@ export function ProjectDetailDialog({
   open,
   onOpenChange,
   onShowStation,
+  variant = "dialog",
+  onEdit,
+  onReviewEdit,
 }: ProjectDetailDialogProps) {
+  const recent = useRecentChangesFor(project?.id ?? null);
   const { user, session } = useAuth() as ReturnType<typeof useAuth> & { session?: { id: string } | null };
   const { recordDocument, recordMessage } = useAuditTrail(project?.id);
   const [printing, setPrinting] = useState(false);
@@ -373,17 +421,7 @@ export function ProjectDetailDialog({
   const bmContact = bahnhofsmanagementContact(project.bahnhofsmanagement);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      {/*
-        Full height minus the gutter on a phone, capped on a desktop. The body
-        scrolls, not the page behind it, and the header stays put — a 14-row
-        Fachprüfungen table plus the contact block is well past one screen on
-        a 667px phone.
-      */}
-      {/* `sm:max-w-3xl`, not `max-w-3xl`: DialogContent's own class list ends with
-          `sm:max-w-lg`, so an unprefixed override loses at every width the
-          dialog is actually wide at. Measured 512px before this. */}
-      <DialogContent className="flex max-h-[92vh] w-[calc(100vw-1.5rem)] flex-col gap-0 overflow-hidden p-0 sm:w-full sm:max-w-3xl">
+    <DetailShell variant={variant} open={open} onOpenChange={onOpenChange}>
         {/* pr-14: the primitive parks its close button at top-4 right-4, and on a
             375px phone the badge row wrapped straight under it — "6 offen" and
             the X occupied the same 40px. */}
@@ -492,7 +530,26 @@ export function ProjectDetailDialog({
           </div>
         </DialogHeader>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-5">
+        <div className="min-h-0 flex-1 overflow-y-auto p-5" data-testid="project-detail-body">
+          {recent.length > 0 && (
+            <section aria-labelledby="pd-live" className="mb-5 rounded-xl border border-sky-200 bg-sky-50/60 p-3 dark:border-sky-900 dark:bg-sky-950/30" data-testid="remote-activity">
+              <h3 id="pd-live" className="mb-1.5 text-2xs font-bold uppercase tracking-widest text-sky-800 dark:text-sky-300">Zuletzt geändert (live)</h3>
+              <div className="space-y-1">{recent.slice(0, 5).map((c) => <RecentChangeLine key={`${c.field}-${c.at}-${c.to}`} change={c} />)}</div>
+            </section>
+          )}
+          {onEdit && (
+            <section aria-labelledby="pd-edit" className="mb-5" data-testid="drawer-edit">
+              <h3 id="pd-edit" className="mb-2 text-2xs font-bold uppercase tracking-widest text-muted-foreground">Bearbeiten</h3>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                {([["projektstand", "Projektstand", project.projektstand], ["projektleiter", "Projektleiter", project.projektleiter], ["kommentar", "Kommentar", project.kommentar]] as const).map(([field, label, value]) => (
+                  <div key={field} className="min-w-0">
+                    <p className="text-2xs uppercase tracking-wider text-muted-foreground">{label}</p>
+                    <InlineEditCell label={label} value={value ?? ""} onSave={(v) => { void onEdit(project.id, field, v); }} className="block w-full truncate rounded px-1 py-0.5 text-left text-sm hover:bg-muted" />
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
           <section aria-labelledby="pd-stamm">
             <h3 id="pd-stamm" className="mb-3 text-2xs font-bold uppercase tracking-widest text-muted-foreground">
               Stammdaten
@@ -644,7 +701,9 @@ export function ProjectDetailDialog({
                           })()}
                         </td>
                         <td data-label="Status" className="px-3 py-2">
-                          {review ? (
+                          {review && onReviewEdit ? (
+                            <StatusSelect status={review.status} label={`Status von ${project.station || project.projektnummer} ${dept}`} onChange={(v) => { void onReviewEdit(project.id, dept, "status", v); }} />
+                          ) : review ? (
                             <Badge
                               className={`${statusBadgeClass(review.status)} ${statusPulseClass(review.status)} text-2xs font-bold`}
                             >
@@ -655,6 +714,9 @@ export function ProjectDetailDialog({
                           )}
                         </td>
                         <td data-label="Prüfer" className="px-3 py-2">
+                          {onReviewEdit && review && (
+                            <InlineEditCell label={`Prüfer von ${project.station || project.projektnummer} ${dept}`} value={review.prueferName ?? ""} onSave={(v) => { void onReviewEdit(project.id, dept, "prueferName", v); }} className="mb-0.5 block w-full truncate rounded px-1 text-left hover:bg-muted" />
+                          )}
                           <span className={prueferContact ? "font-semibold" : "text-muted-foreground"}>
                             {resolution.kind === "empty"
                               ? "—"
@@ -769,8 +831,7 @@ export function ProjectDetailDialog({
             </span>
           </p>
         </div>
-      </DialogContent>
-    </Dialog>
+    </DetailShell>
   );
 }
 

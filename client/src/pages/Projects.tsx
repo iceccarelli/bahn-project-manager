@@ -166,7 +166,18 @@ export default function Projects() {
   /** The card to scroll to and ring after arriving from the map. */
   const [focusProjectId, setFocusProjectId] = useState<number | null>(null);
   /** Which project the detail dialog is showing, if any. */
-  const [detailProjectId, setDetailProjectId] = useState<number | null>(null);
+  // The open project is URL state (?detail=<id>): a shareable, reload-safe link to "this list with this project open".
+  const [detailProjectId, setDetailProjectId] = useState<number | null>(() => {
+    const n = Number(typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("detail"));
+    return Number.isInteger(n) && n > 0 ? n : null;
+  });
+  useEffect(() => {
+    try {
+      const u = new URL(window.location.href);
+      if (detailProjectId === null) u.searchParams.delete("detail"); else u.searchParams.set("detail", String(detailProjectId));
+      if (u.href !== window.location.href) window.history.replaceState(window.history.state, "", u);
+    } catch { /* non-browser */ }
+  }, [detailProjectId]);
 
   // Server build: every focus (Dashboard bedarf / tone slice / map station group / one project) is a DRILL evaluated by the
   // server over authorized rows, so it is exact across ALL pages — the browser never filters a partially loaded list.
@@ -530,7 +541,7 @@ export default function Projects() {
   }, [focusProjectId, viewMode, visibleProjects]);
 
   return (
-    <div ref={revealRef} className="space-y-8 p-6 bg-background min-h-screen">
+    <div ref={revealRef} className={`space-y-8 p-6 bg-background min-h-screen transition-[padding] duration-200 ${detailProjectId !== null ? "lg:pr-[560px]" : ""}`}>
       {SERVER_MODE && (
         <div className="flex items-center justify-end gap-4" data-testid="server-mode-bar">
           <WorkspacePresence workspace={region || homeWorkspace} />
@@ -922,7 +933,7 @@ export default function Projects() {
                       if (!project) return null;
                       const reviews = project.reviews || [];
                       return (
-                        <tr key={project.id} {...vrows.rowProps(vi.index)} className="border-b hover:bg-muted/30 transition-colors group">
+                        <tr key={project.id} {...vrows.rowProps(vi.index)} aria-selected={detailProjectId === project.id} className={`border-b hover:bg-muted/30 transition-colors group ${detailProjectId === project.id ? "bg-primary/5 ring-1 ring-inset ring-primary/30" : ""}`}>
                           <td className="sticky left-0 z-10 w-[52px] min-w-[52px] bg-white px-3 py-3 font-mono font-medium text-muted-foreground dark:bg-zinc-950">
                             {project.id}
                           </td>
@@ -1213,6 +1224,9 @@ export default function Projects() {
       )}
 
       <ProjectDetailDialog
+        variant="drawer"
+        onEdit={(id, field, value) => applyEdit(id, field as never, value)}
+        onReviewEdit={(id, dept, field, value) => applyReviewEdit(id, dept, field as never, value)}
         project={detailProject}
         open={detailProjectId !== null}
         onOpenChange={(o) => {

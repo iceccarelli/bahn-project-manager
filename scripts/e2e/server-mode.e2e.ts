@@ -277,6 +277,42 @@ async function main() {
   });
 
   // ---------------- DOMAIN UNIFICATION: PSV-ITK is a Gewerk view over the same aggregate ------------------------
+  await step("DRAWER: details open as a persistent non-modal drawer — list stays scrollable, remote edits show live, edit inside is versioned, close returns to the same list position", async () => {
+    const P = await A.ctx.newPage();
+    try {
+      await P.goto(`${URLS[0]}/projects`);
+      await search(P, "Kaisertreppe");
+      await until(async () => (await row(P).count()) > 0, 15000, "row visible in drawer page");
+      await row(P).locator('button[aria-label*="Details zu Projekt"]').first().click();
+      const drawer = P.locator('[data-testid="project-drawer"]');
+      await drawer.waitFor({ state: "visible", timeout: 8000 });
+      if (!/detail=\d+/.test(P.url())) throw new Error(`drawer is not URL state: ${P.url()}`);
+      // non-modal: the list behind it still receives scrolling and stays rendered
+      const sc = P.locator('[data-testid="projects-scroll"]');
+      const before = await sc.evaluate(c => { c.scrollTop = 40; return c.scrollTop; });
+      if ((await row(P).count()) === 0) throw new Error("list vanished behind the drawer");
+      if (await P.locator('[data-radix-dialog-overlay], [data-state="open"][aria-hidden="true"].fixed.inset-0').count()) throw new Error("a modal overlay is present");
+      // a remote edit (B) appears in the drawer's live activity, no reload
+      const cur = (await q("SELECT projektstand s FROM projects WHERE id=?", [PID]))[0]?.s;
+      const rem = await apiUpdate(tokenB, PID, { projektstand: cur === "EP" ? "FA" : "EP" });
+      if (rem.status !== 200) throw new Error(`remote edit: ${JSON.stringify(rem.error)}`);
+      await until(async () => /Zuletzt geändert/.test((await P.locator('[data-testid="remote-activity"]').textContent().catch(() => "")) ?? ""), 8000, "remote activity in drawer");
+      // an edit inside the drawer is a versioned server mutation
+      const v0 = await ver(PID);
+      await drawer.locator('button[aria-label^="Projektleiter bearbeiten"]').click();
+      const input = drawer.getByLabel("Projektleiter bearbeiten");
+      await input.fill(`Drawer-E2E-${Date.now() % 1000}`); await input.press("Enter");
+      await until(async () => (await ver(PID)) > v0, 8000, "drawer edit committed");
+      // close: URL cleaned, list position unchanged
+      await P.keyboard.press("Escape");
+      await drawer.waitFor({ state: "detached", timeout: 5000 });
+      if (/detail=/.test(P.url())) throw new Error("?detail stayed after close");
+      const after = await sc.evaluate(c => c.scrollTop);
+      if (Math.abs(after - before) > 2) throw new Error(`list position moved ${before} → ${after}`);
+    } finally { await P.close().catch(() => {}); }
+    vN = await ver(PID);
+  });
+
   await step("PSV-ITK (server): the Gewerk page is the Project aggregate filtered to ITK — virtualized, read-model KPIs, and A's review edit reaches B live", async () => {
     const { page } = B;
     await page.goto(`${URLS[1]}/psv-itk`);
