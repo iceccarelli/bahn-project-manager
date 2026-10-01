@@ -1,0 +1,31 @@
+[
+  {
+    "topology": "before",
+    "clients": 1000,
+    "failed": 0,
+    "events": 150,
+    "visibleRowsPerClient": "all (9 workspace channels)",
+    "deliveries": 137000,
+    "deliveredPerEvent": 913.3,
+    "idealRelevantDeliveries": 4728,
+    "deliveriesPerRelevantRecipient": 28.98,
+    "bytesReceived": 67630000,
+    "bytesPerEvent": 450867,
+    "serverCounterDelta": null
+  },
+  {
+    "topology": "after",
+    "clients": 1000,
+    "failed": 0,
+    "events": 150,
+    "visibleRowsPerClient": 40,
+    "deliveries": 4718,
+    "deliveredPerEvent": 31.5,
+    "idealRelevantDeliveries": 4718,
+    "deliveriesPerRelevantRecipient": 1,
+    "bytesReceived": 2327896,
+    "bytesPerEvent": 15519,
+    "serverCounterDelta": 4718
+  }
+]
+{"comparison":{"deliveriesBefore":137000,"deliveriesAfter":4718,"reduction":"96.6 %","bytesReduction":"96.6 %"}}

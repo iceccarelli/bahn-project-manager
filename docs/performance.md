@@ -38,10 +38,10 @@ Exact totals come from `projects.count` (cached per authorization scope + filter
 
 | Topology | deliveries | per event | bytes | per relevant recipient |
 |---|---|---|---|---|
-| before: 9 workspace channels per client | 135,000 | 900 | 69 MB | 29.2 |
-| **after: `collection:<scope>` + `project:<id>` of the rows on screen** | **4,697** | **31** | **2.4 MB** | **1.0** |
+| before: 9 workspace channels per client | 137,000 | 913 | ~69 MB | 29.0 |
+| **after: `collection:<scope>` + `project:<id>` of the rows on screen** | **4,718** | **31** | **2.3 MB** | **1.0** |
 
-−96.5 % deliveries and bytes; delivery equals the relevant recipients exactly. Membership changes (create/delete/move)
+−96.6 % deliveries and bytes; delivery equals the relevant recipients exactly. Membership changes (create/delete/move)
 still reach every list because they ride the compact collection channel.
 
 ## Server-side budgets (carried from docs/scaling.md; NOT re-certified here)
