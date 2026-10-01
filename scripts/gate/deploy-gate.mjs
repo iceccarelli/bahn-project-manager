@@ -98,8 +98,14 @@ add("load-certification", "staged API + realtime load from a generator host that
   return { ok: j.separateHosts === true && j.verdict === "certified-for-tested-stages", evidence: `verdict=${j.verdict} separateHosts=${j.separateHosts}${j.refused ? ` refused: ${j.refused}` : ""}` };
 });
 
+// --only a,b : run just these checks and merge them into the existing report (same commit only), so a
+// long gate can be run in pieces. Checks never run stay "not-run": the merged report is still all-or-nothing.
+const only = new Set((process.argv.includes("--only") ? process.argv[process.argv.indexOf("--only") + 1] : "").split(",").filter(Boolean));
+let prior = [];
+if (only.size && existsSync("artifacts/deployment-gate.json")) { try { const old = JSON.parse(readFileSync("artifacts/deployment-gate.json", "utf8")); if (old.commit === commit) prior = old.results; } catch { /* start fresh */ } }
 const results = [];
 for (const c of checks) {
+  if (only.size && !only.has(c.id)) { const p = prior.find(x => x.id === c.id); results.push(p ?? { id: c.id, title: c.title, status: "not-run", evidence: "not selected (--only)", ms: null }); continue; }
   process.stderr.write(`[gate] ${c.id} … `);
   const r = await c.run().catch(e => ({ ok: false, evidence: String(e) }));
   const status = r.ok === true ? "pass" : r.ok === false ? "fail" : "not-run";

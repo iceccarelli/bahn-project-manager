@@ -1,7 +1,6 @@
 /** Proves staging-smoke.mjs itself works: boots the built server-mode bundle + a test IdP locally and runs it. */
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
-import { existsSync } from "node:fs";
 import { SignJWT, exportJWK, generateKeyPair } from "jose";
 const { publicKey, privateKey } = await generateKeyPair("RS256");
 const jwk = { ...(await exportJWK(publicKey)), kid: "s", alg: "RS256", use: "sig" };

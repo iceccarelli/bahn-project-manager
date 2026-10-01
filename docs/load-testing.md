@@ -12,13 +12,24 @@ single-box measurements that found and fixed real defects.
 | `explain.mjs` | plan + median/p95 for the list/search/outbox queries, with/without each index | yes |
 | `run-server.sh` | starts the **built** bundle `dist/index.js` (`REDIS_URL`, ports, pools via env) | yes |
 | `mint-session.mjs` | signed session cookie for the seeded users | yes |
-| `api-bench.mjs` | closed-loop HTTP/tRPC driver: `read`, `mixed`, `write-distinct`, `write-same` + consistency check | yes (≤100 VUs) |
+| `api-bench.mjs` | closed-loop HTTP/tRPC driver: `read`, `mixed`, `write-distinct`, `write-same` (hot project) + consistency check. `--ids MIN:MAX` (default **1:1298**, the real dataset, so no artificial 404s; use `--ids 1:200000` for the synthetic DB) and `--think-ms N` (per-VU think time) | yes (≤100 VUs; 50-VU run on the real 1,298-row dataset on MySQL 8.4: 0 % errors, hot-project run 0 lost/duplicated writes) |
 | `realtime-fanout.mjs` | N SSE connections, one mutation, per-connection propagation latency; multi-instance via comma list | yes (≤10,000 conn) |
 | `k6-api.js` | ramping 100→10,000 VU suite with think time and SLO thresholds | **no — k6 not installable here** |
 
 Reproduce: `node scripts/load/setup-db.mjs mysql://u:p@127.0.0.1:3306 bahn_load 200000 && pnpm build:server &&
 JWT_SECRET=… scripts/load/run-server.sh && node scripts/load/realtime-fanout.mjs --base http://127.0.0.1:3100
 --cookie "$(JWT_SECRET=… node scripts/load/mint-session.mjs)" --connections 10000 --project 5`.
+
+## `certify.mjs` stages (external host only)
+
+`BASE=https://… COOKIE|TOKEN=… METRICS_TOKEN=… node scripts/load/certify.mjs --ids 1:1298 [--think-ms 1000] [--stages-api 100,500,1000,2500,5000,10000]`
+
+mixed read/write API stages (each samples the server's outbox backlog, dead letters, pool in-use/queued, shed and unhandled
+counters before/after, and `/api/ready` afterwards) → `concurrent-writes` (200 VUs, distinct + shared projects) → `hot-project`
+(200 VUs on one row; every success must be exactly one version bump) → realtime stages 1,000…10,000 → **not-run** entries for
+unique-users, reconnect-storm, redis-restart, app-instance-restart, relay-interruption, db-degradation and soak, because those
+need an IdP the deployment trusts or orchestrator access to the stack. Any `not-run` keeps the verdict `not-certified`.
+CPU/RSS of the server are read from the host's own monitoring (not visible to a remote client) and must be attached by the operator.
 
 ## Results (sandbox: 4 vCPU/16 GB, MariaDB 10.11, Node 22, generator co-located, loopback)
 

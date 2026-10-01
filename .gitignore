@@ -150,4 +150,5 @@ _diag*.mjs
 # `git add`. Anchored to the root, which is the only place transfer files land.
 /*.patch
 dist-e2e/
+dist-oidc/
 artifacts/

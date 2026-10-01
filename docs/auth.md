@@ -20,8 +20,25 @@ statements, `provisionFailures` 0 (docs/load-testing.md). Before this change eve
 against a 10-connection pool. Resolved identities are cached 30 s per credential hash **with single-flight**.
 
 **Not verified against a live Entra tenant** — no tenant is available here. What is verified is the validation logic
-with Entra-shaped tokens and in the two-browser proof (a local test IdP + JWKS). **NOT DONE:** the browser sign-in (MSAL redirect/popup) that obtains the token;
-`setAccessTokenProvider()` in `client/src/realtime/serverApi.ts` is the hook it plugs into.
+with Entra-shaped tokens and in the two-browser proof (a local test IdP + JWKS). 
+
+## Browser sign-in (implemented; proven only against a mock authority)
+
+`client/src/realtime/oidcClient.ts`: OIDC **authorization code + PKCE (S256)**, no client secret, discovery from
+`VITE_OIDC_AUTHORITY` (Entra v2.0 compatible), redirect URI `/auth/callback`. Build-time config: `VITE_OIDC_AUTHORITY`,
+`VITE_OIDC_CLIENT_ID`, `VITE_OIDC_SCOPE`. With these set the Login page shows only "Mit Microsoft anmelden" (no password form).
+
+* Token storage: access token in memory + `sessionStorage` (per tab) with its expiry; **never `localStorage`**; no refresh token,
+  no id token. An expired token is not sent; the user is bounced through the IdP again (silent when the IdP session lives).
+* The token is sent as `Authorization: Bearer` on tRPC, the SSE stream, presence and the (authenticated) legacy snapshot.
+* Logout clears the token + flow state, clears the query cache, calls `auth.logout`, then ends the IdP session
+  (`end_session_endpoint` when advertised) and returns to `/login`.
+* The callback checks `state` (single-use), exchanges the code with the stored verifier, and only follows same-origin
+  relative `returnTo` paths.
+* The CSP `connect-src` admits the IdP origin derived from `OIDC_ISSUER` (the browser calls discovery + token endpoints).
+* The server stays the authority: it re-validates signature/iss/aud/exp on every request. Missing workspace claim = no
+  access; only the literal `["ALL"]` grants all workspaces to a non-admin; unknown roles = viewer. Proven end to end in
+  `scripts/e2e/oidc-browser.e2e.ts` (mock authority, real browser, real server bundle). **Not proven against Entra.**
 
 ## Demo credentials
 

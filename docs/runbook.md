@@ -76,6 +76,6 @@ BVB-EEA, PSV-ITK, Projektanmeldung, Audit and the Gewerk workspaces still read t
 labelled "lokaler Datenbestand, nicht live" and their writes are disabled). Header search / Ask Bahn have no server
 search yet in server mode. The map shows the loaded rows only (no viewport/cluster queries). Handlungsbedarf/tone chips
 need the whole dataset and are not offered in server mode. Not built: read-model tables for dashboard aggregates,
-`@tanstack/react-virtual` tables, offline queue/IndexedDB, MSAL browser login, web-vitals/Sentry wiring,
+`@tanstack/react-virtual` tables, offline queue/IndexedDB, web-vitals/Sentry wiring,
 notification email/push, mention/system/deadline-reminder producers, presence rate limiting, a Postgres migration (no
 evidence it is needed). Staging and load certification: see docs/staging.md and docs/load-testing.md.

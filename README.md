@@ -4,7 +4,7 @@
 
 # Bahn Project Manager
 
-> Enterprise platform for managing Deutsche Bahn infrastructure and station‑development projects across 14 technical departments (*Fachbereiche*). Single‑page React app, data‑driven from a 1,298‑project dataset, deployed as a static SPA on Vercel.
+> Application for managing Deutsche Bahn infrastructure and station‑development projects across 14 technical departments (*Fachbereiche*). Single‑page React app, data‑driven from a 1,298‑project dataset, deployed as a static browser-local demo on Vercel. The multi-user, server-authoritative system is a separate container deployment that is **not yet deployed or certified** — see [docs/topology.md](docs/topology.md) and [docs/staging.md](docs/staging.md).
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react)](https://react.dev/)
@@ -61,7 +61,7 @@ Every row below was confirmed by running the command against `main` (commit `135
 | **Persistence** | Everything is `localStorage`‑only. Edits, new projects and audit entries do **not** survive on another device or browser. |
 | **Backend** | `server/` (Express + tRPC) and `drizzle/` (MySQL schema) exist and compile, but Vercel serves **static files only** — `vercel.json` defines no API routes. The server is not reachable in production. |
 | **Database** | No `DATABASE_URL` is provisioned. `getDb()` returns `null` gracefully. The MySQL schema and seed scripts are ready but unused. |
-| **Real auth** | `@azure/msal-browser` / `@azure/msal-react` are installed but not integrated. Login is two hard‑coded demo users. |
+| **Real auth** | This static (Vercel) build uses two hard‑coded demo users. The container/server build has OIDC code + PKCE browser sign‑in (`docs/auth.md`), proven against a mock authority only — not against Microsoft Entra. |
 | **CI deploy** | Deploy jobs are guarded and skip cleanly unless `VERCEL_TOKEN` etc. are set; Vercel's Git integration handles deploys instead. |
 
 ---
@@ -227,7 +227,7 @@ pnpm build                   # vite build → dist/public (what Vercel runs)
 - Switch `_core/api/client.ts` from `localStorage` to real `fetch('/api/trpc/…')`; keep `localStorage` as an offline cache only.
 
 ### P2 — Real authentication
-- Register an Entra ID app, wire `msalInstance.loginPopup()` in place of `loginDemo()`, validate JWTs server‑side, and map security groups to admin/user roles. Remove the hard‑coded demo users.
+- Register the Entra ID apps (see `docs/staging.md`), run the staging smoke with real tokens, and map security groups to roles/workspaces. The static demo users stay only in the static build.
 
 ### P3 — Quality & performance
 - Fix the two correctness lint families (`noArrayIndexKey`, `useExhaustiveDependencies`); then progressively clear the style warnings or relax those rules in `biome.json` deliberately.
@@ -253,7 +253,7 @@ pnpm build                   # vite build → dist/public (what Vercel runs)
 | Deploy | Vercel (static SPA) | ✅ |
 | Backend | Express + tRPC 11 | ⏸ compiles, not deployed |
 | ORM / DB | Drizzle 0.44 / MySQL schema | ⏸ ready, not provisioned |
-| Auth | MSAL packages | ⏸ installed, not integrated |
+| Auth | OIDC code + PKCE (own client, no MSAL) | ✅ built, proven vs mock IdP · ⏸ not proven vs Entra |
 
 ---
 
