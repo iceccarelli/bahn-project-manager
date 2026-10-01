@@ -84,7 +84,7 @@ add("oidc-browser", "real browser sign-in (code + PKCE), storage audit, logout, 
 });
 add("chaos-local", "fault-injection convergence (instance/Redis/DB faults, reconnect storm) — single host", async () => {
   if (skip.has("chaos-local")) return { ok: null, evidence: "skipped by flag" };
-  const r = sh("pnpm exec tsx scripts/load/chaos.ts --clients 300", {}, 1_200_000); return { ok: r.code === 0, evidence: r.out.trim().split("\n").pop(), ms: r.ms };
+  const r = sh(`pnpm exec tsx scripts/load/chaos.ts --clients 300 --db-base ${process.env.E2E_DB_BASE ?? "mysql://bahn:bahn@127.0.0.1:3306"}`, {}, 1_200_000); return { ok: r.code === 0, evidence: r.out.trim().split("\n").pop(), ms: r.ms };
 });
 add("staging-smoke", "smoke test of a DEPLOYED https environment", async () => {
   if (!process.env.STAGING_URL || !process.env.SMOKE_TOKEN || !process.env.SMOKE_TOKEN_RESTRICTED || !process.env.SMOKE_TOKEN_NOCLAIM) return { ok: null, evidence: "STAGING_URL / SMOKE_TOKEN / SMOKE_TOKEN_RESTRICTED / SMOKE_TOKEN_NOCLAIM not all set — no staging environment was exercised" };
