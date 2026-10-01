@@ -25,6 +25,10 @@ const trpc = async (proc, input, method = "GET", anon = false) => {
 };
 
 await check("transport is HTTPS (or explicitly local)", async () => { if (!/^https:|^http:\/\/(127\.0\.0\.1|localhost)/.test(url)) throw new Error(`not https: ${url}`); return url.startsWith("https") ? "https" : "local http"; });
+await check("at least two app instances serve this URL (distinct X-Instance across 60 requests)", async () => {
+  const seen = new Set(); for (let i = 0; i < 60; i++) { const r = await fetch(`${url}/api/health`, { headers: { connection: "close" } }); seen.add(r.headers.get("x-instance")); }
+  if (seen.size < 2) throw new Error(`only ${seen.size} instance id(s) answered: ${[...seen]}`); return `${seen.size} instances`;
+});
 await check("liveness /api/health", async () => { const r = await fetch(`${url}/api/health`); if (!r.ok) throw new Error(r.status); });
 await check("readiness /api/ready (database reachable)", async () => { const r = await fetch(`${url}/api/ready`); if (!r.ok) throw new Error(r.status); });
 await check("SPA is served with the security headers (CSP, nosniff, frame denial, HSTS on https)", async () => {

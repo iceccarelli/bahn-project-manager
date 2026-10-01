@@ -51,6 +51,12 @@ RUN pnpm run check
 # Default 0 = the static, browser-local app (what the current Vercel deployment serves).
 ARG VITE_SERVER_MODE=0
 ENV VITE_SERVER_MODE=$VITE_SERVER_MODE
+# Browser sign-in (OIDC code + PKCE; Entra v2.0 compatible). Public values, baked into the SPA at build time.
+# Both empty = no SSO button (the server still validates bearer tokens).
+ARG VITE_OIDC_AUTHORITY=
+ARG VITE_OIDC_CLIENT_ID=
+ARG VITE_OIDC_SCOPE="openid profile"
+ENV VITE_OIDC_AUTHORITY=$VITE_OIDC_AUTHORITY VITE_OIDC_CLIENT_ID=$VITE_OIDC_CLIENT_ID VITE_OIDC_SCOPE=$VITE_OIDC_SCOPE
 RUN NODE_ENV=production pnpm run build:client
 RUN NODE_ENV=production pnpm run build:server
 

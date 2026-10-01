@@ -34,6 +34,13 @@ add("db-integration", "real-database + real-Redis + realtime integration suites"
   const r = sh("pnpm vitest run"); const m = tests(r.out);
   return { ok: r.code === 0 && !!m && Number(m[3] ?? 0) === 0, evidence: m ? `${m[2]} passed, ${m[1] ?? 0} failed, ${m[3] ?? 0} skipped (must be 0 skipped)` : r.out.slice(-400), ms: r.ms };
 });
+add("mysql-version", "the database under test is the intended production engine (MySQL 8.4, not MariaDB)", async () => {
+  if (!process.env.TEST_DATABASE_URL) return { ok: null, evidence: "TEST_DATABASE_URL not set" };
+  const r = sh(`node -e 'const m=require("mysql2/promise");(async()=>{const c=await m.createConnection(process.env.TEST_DATABASE_URL);const[[v]]=await c.query("SELECT VERSION() v,@@version_comment c");console.log(JSON.stringify(v));await c.end()})()'`);
+  let v; try { v = JSON.parse(r.out.trim().split("\n").pop()); } catch { return { ok: false, evidence: `could not read version: ${r.out.slice(-200)}`, ms: r.ms }; }
+  const want = process.env.REQUIRE_MYSQL_PREFIX ?? "8.4.";
+  return { ok: v.v.startsWith(want) && !/mariadb/i.test(v.v + v.c), evidence: `${v.v} (${v.c}); required prefix ${want}`, ms: r.ms };
+});
 add("security", "authorization, recipient-safe events, OIDC validation, CSRF, production guards", async () => {
   if (!process.env.TEST_DATABASE_URL) return { ok: null, evidence: "needs TEST_DATABASE_URL (leak regressions run against the real DB)" };
   const r = sh('pnpm vitest run server/domain/permissions.test.ts server/_core server/domain/notificationPolicy.test.ts server/realtime/presence.test.ts server/realtime/e2e.db.test.ts server/realtime/gateway.test.ts server/routers.db.test.ts'); const m = tests(r.out);
@@ -45,6 +52,7 @@ add("bundle-inspection", "server entry chunk: no demo credentials, no devDepende
   if (!existsSync("dist-e2e/index.js")) return { ok: null, evidence: "no bundle (build-server-mode skipped or failed)" };
   const js = readFileSync("dist-e2e/index.js", "utf8"); const problems = [];
   if (/password:\s*"admin"|admin@bahn\.de/.test(js)) problems.push("demo credentials in entry chunk");
+  for (const f of ["data.json", "schedule.json"]) if (existsSync(`dist-e2e/public/${f}`)) problems.push(`${f} is in the PUBLIC directory of the server-mode build (unauthenticated dataset download)`);
   if (/from ["'](vite|@vitejs|vitest|tsx|playwright|esbuild)["']/.test(js)) problems.push("devDependency imported by entry chunk");
   if (!/domain_events/.test(js)) problems.push("event pipeline missing from bundle");
   const mig = ["0004_event_pipeline.sql", "0005_change_feed.sql", "0006_notifications.sql"].filter(f => !existsSync(`drizzle/${f}`));
@@ -66,12 +74,20 @@ add("server-mode-browser", "two-browser proof against two instances + Redis + re
   const r = sh("pnpm exec tsx scripts/e2e/server-mode.e2e.ts", {}, 1_200_000); const m = /(\d+) passed, (\d+) failed/.exec(r.out);
   return { ok: r.code === 0 && !!m && m[2] === "0", evidence: m ? `${m[1]} passed, ${m[2]} failed (artifacts/e2e-server-mode.json)` : r.out.slice(-300), ms: r.ms };
 });
+add("oidc-browser", "real browser sign-in (code + PKCE), storage audit, logout, token refusal, legacy-snapshot protection — mock authority, NOT Entra", async () => {
+  if (skip.has("oidc-browser")) return { ok: null, evidence: "skipped by flag" };
+  if (!process.env.E2E_DB_BASE) return { ok: null, evidence: "E2E_DB_BASE not set" };
+  const b = sh("OUT=dist-oidc VITE_OIDC_AUTHORITY=http://127.0.0.1:3290/ VITE_OIDC_CLIENT_ID=bahn-spa VITE_OIDC_SCOPE='openid profile' scripts/e2e/build-server-mode.sh");
+  if (b.code !== 0) return { ok: false, evidence: b.out.slice(-300), ms: b.ms };
+  const r = sh("OUT=dist-oidc pnpm exec tsx scripts/e2e/oidc-browser.e2e.ts", {}, 900_000); const m = /(\d+)\/(\d+) passed/.exec(r.out);
+  return { ok: r.code === 0 && !!m && m[1] === m[2], evidence: m ? `${m[1]}/${m[2]} passed (artifacts/e2e-oidc-browser.json)` : r.out.slice(-300), ms: r.ms };
+});
 add("chaos-local", "fault-injection convergence (instance/Redis/DB faults, reconnect storm) — single host", async () => {
   if (skip.has("chaos-local")) return { ok: null, evidence: "skipped by flag" };
   const r = sh("pnpm exec tsx scripts/load/chaos.ts --clients 300", {}, 1_200_000); return { ok: r.code === 0, evidence: r.out.trim().split("\n").pop(), ms: r.ms };
 });
 add("staging-smoke", "smoke test of a DEPLOYED https environment", async () => {
-  if (!process.env.STAGING_URL || !process.env.SMOKE_TOKEN) return { ok: null, evidence: "STAGING_URL / SMOKE_TOKEN not set — no staging environment was exercised" };
+  if (!process.env.STAGING_URL || !process.env.SMOKE_TOKEN || !process.env.SMOKE_TOKEN_RESTRICTED || !process.env.SMOKE_TOKEN_NOCLAIM) return { ok: null, evidence: "STAGING_URL / SMOKE_TOKEN / SMOKE_TOKEN_RESTRICTED / SMOKE_TOKEN_NOCLAIM not all set — no staging environment was exercised" };
   if (!process.env.STAGING_URL.startsWith("https://")) return { ok: false, evidence: "staging must be https" };
   const r = sh("node scripts/gate/staging-smoke.mjs"); return { ok: r.code === 0, evidence: `exit ${r.code}`, ms: r.ms };
 });
