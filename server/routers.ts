@@ -6,14 +6,6 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { sdk } from "./_core/sdk";
 import {
-  createDepartmentReview,
-  getBvbEeaList,
-  createBvbEea,
-  updateBvbEea,
-  getPsvItkList,
-  createPsvItk,
-  updatePsvItk,
-  createAuditEntry,
   getAuditLog,
   getFilterOptions,
   getSearchSuggestions,
@@ -26,6 +18,7 @@ import {
   SyncInputSchema,
   UpdateProjectInputSchema,
   UpdateReviewInputSchema,
+  CreateReviewInputSchema,
   MAX_PAGE_SIZE,
 } from "@shared/project-contract";
 import { requireServices } from "./_core/services";
@@ -34,6 +27,8 @@ import { SingleFlightCache } from "./infra/singleFlightCache";
 import { KeyedCache, scopeKey } from "./infra/keyedCache";
 import { readDashboard } from "./infra/readModels";
 import { MapQuerySchema, MapStationQuerySchema } from "@shared/map-contract";
+import { BookSlotInputSchema, ListSlotsInputSchema, ReleaseSlotInputSchema } from "@shared/booking-contract";
+import { SaveChecklistInputSchema, SubmitChecklistInputSchema } from "@shared/checklist-contract";
 import type { MysqlProjectStore } from "./infra/mysqlProjectStore";
 import { canViewAudit, workspaceRestriction } from "./domain/permissions";
 import { m } from "./observability/metrics";
@@ -47,12 +42,6 @@ async function shellSummaryCached(load: () => Promise<{ projectCount: number; la
   shellCache = { at: Date.now(), value };
   return value;
 }
-
-/** audit_log.userId is the legacy numeric id when there is one; OIDC identities are recorded by name. */
-const auditActor = (p: import("./domain/permissions").Principal) => ({
-  userId: /^\d+$/.test(p.id) ? Number(p.id) : null,
-  userName: p.name || p.email || p.id,
-});
 
 // The read is a few tiny indexed lookups; this short cache only absorbs bursts (one load per scope per 5 s).
 const dashboardScoped = new KeyedCache<Awaited<ReturnType<typeof readDashboard>>>("dashboard", 5_000);
@@ -240,6 +229,13 @@ export const appRouter = router({
         }
       }),
 
+    createReview: protectedProcedure
+      .input(CreateReviewInputSchema)
+      .mutation(async ({ input, ctx }) => {
+        const { projects } = await requireServices();
+        return projects.createReview(ctx.principal, input, { traceId: ctx.traceId, requestId: ctx.requestId });
+      }),
+
     /** Follow / unfollow a project (recipient set of the notification policy). */
     watch: protectedProcedure
       .input(z.object({ projectId: z.number().int().positive(), on: z.boolean() }))
@@ -266,38 +262,6 @@ export const appRouter = router({
       .input(z.object({ term: z.string().trim().min(1).max(100) }))
       .query(async ({ input }) => {
         return getSearchSuggestions(input.term);
-      }),
-  }),
-
-  // ============= DEPARTMENT REVIEWS =============
-  reviews: router({
-    // reviews.update (unversioned, unevented) was removed: use projects.updateReview.
-
-    create: protectedProcedure
-      .input(z.object({
-        projectId: z.number(),
-        department: z.string(),
-        prueferName: z.string().optional(),
-        datum: z.string().optional(),
-        status: z.string().optional(),
-      }))
-      .mutation(async ({ input, ctx }) => {
-        const id = await createDepartmentReview({
-          ...input,
-          datum: input.datum ? new Date(input.datum) : null,
-        });
-
-        await createAuditEntry({
-          ...auditActor(ctx.principal),
-          entityType: 'review',
-          entityId: id!,
-          action: 'create',
-          field: null,
-          oldValue: null,
-          newValue: JSON.stringify(input),
-        });
-
-        return { id };
       }),
   }),
 
@@ -342,6 +306,42 @@ export const appRouter = router({
     }),
   }),
 
+  // ============= BOOKINGS (Fachspezialistenprüfung calendar) =============
+  bookings: router({
+    list: protectedProcedure.input(ListSlotsInputSchema).query(async ({ input, ctx }) => {
+      const { bookings } = await requireServices();
+      return bookings.list(ctx.principal, input);
+    }),
+    book: protectedProcedure.input(BookSlotInputSchema).mutation(async ({ input, ctx }) => {
+      const { bookings } = await requireServices();
+      return bookings.book(ctx.principal, input, { traceId: ctx.traceId, requestId: ctx.requestId });
+    }),
+    release: protectedProcedure.input(ReleaseSlotInputSchema).mutation(async ({ input, ctx }) => {
+      const { bookings } = await requireServices();
+      return bookings.release(ctx.principal, input, { traceId: ctx.traceId, requestId: ctx.requestId });
+    }),
+  }),
+
+  // ============= CHECKLISTS (Projektanmeldung) =============
+  checklists: router({
+    list: protectedProcedure.input(z.object({ status: z.enum(["draft", "submitted", "cancelled"]).optional(), limit: z.number().int().min(1).max(200).default(50) }).default({ limit: 50 })).query(async ({ input, ctx }) => {
+      const { checklists } = await requireServices();
+      return checklists.list(ctx.principal, input);
+    }),
+    get: protectedProcedure.input(z.object({ id: z.number().int().positive() })).query(async ({ input, ctx }) => {
+      const { checklists } = await requireServices();
+      return checklists.get(ctx.principal, input.id);
+    }),
+    save: protectedProcedure.input(SaveChecklistInputSchema).mutation(async ({ input, ctx }) => {
+      const { checklists } = await requireServices();
+      return checklists.save(ctx.principal, input, { traceId: ctx.traceId, requestId: ctx.requestId });
+    }),
+    submit: protectedProcedure.input(SubmitChecklistInputSchema).mutation(async ({ input, ctx }) => {
+      const { checklists } = await requireServices();
+      return checklists.submit(ctx.principal, input, { traceId: ctx.traceId, requestId: ctx.requestId });
+    }),
+  }),
+
   // ============= MAP =============
   // Bounding-box queries over the geo read model. Same authorization + filters as the list; never the list as source.
   map: router({
@@ -355,85 +355,8 @@ export const appRouter = router({
     }),
   }),
 
-  // ============= BVB-EEA =============
-  bvbEea: router({
-    list: protectedProcedure.query(async () => {
-      return getBvbEeaList();
-    }),
-
-    create: protectedProcedure
-      .input(z.object({
-        projektnummer: z.string().optional(),
-        bahnhofsmanagement: z.string().optional(),
-        station: z.string().optional(),
-        bahnhofsnummer: z.string().optional(),
-        streckennummer: z.string().optional(),
-        projektbeschreibung: z.string().optional(),
-        projektleiter: z.string().optional(),
-        eigvAnzeige: z.string().optional(),
-        kommentar: z.string().optional(),
-        freigabeNummer: z.string().optional(),
-        kosteneinsparung: z.string().optional(),
-      }))
-      .mutation(async ({ input }) => {
-        const id = await createBvbEea({
-          ...input,
-          eigvAnzeige: input.eigvAnzeige ? new Date(input.eigvAnzeige) : null,
-        });
-        return { id };
-      }),
-
-    update: protectedProcedure
-      .input(z.object({
-        id: z.number().int().positive(),
-        field: z.enum(["projektnummer","bahnhofsmanagement","station","bahnhofsnummer","streckennummer","projektbeschreibung","projektleiter","kommentar","freigabeNummer","kosteneinsparung"]),
-        value: z.string().max(5000).nullable(),
-      }))
-      .mutation(async ({ input }) => {
-        await updateBvbEea(input.id, { [input.field]: input.value });
-        return { success: true };
-      }),
-  }),
-
-  // ============= PSV-ITK =============
-  psvItk: router({
-    list: protectedProcedure.query(async () => {
-      return getPsvItkList();
-    }),
-
-    create: protectedProcedure
-      .input(z.object({
-        projektnummer: z.string().optional(),
-        bahnhofsmanagement: z.string().optional(),
-        station: z.string().optional(),
-        bahnhofsnummer: z.string().optional(),
-        streckennummer: z.string().optional(),
-        projektbeschreibung: z.string().optional(),
-        projektstand: z.string().optional(),
-        projektleiter: z.string().optional(),
-        terminProjektvorstellung: z.string().optional(),
-        itkPruefer: z.string().optional(),
-        kommentar: z.string().optional(),
-      }))
-      .mutation(async ({ input }) => {
-        const id = await createPsvItk({
-          ...input,
-          terminProjektvorstellung: input.terminProjektvorstellung ? new Date(input.terminProjektvorstellung) : null,
-        });
-        return { id };
-      }),
-
-    update: protectedProcedure
-      .input(z.object({
-        id: z.number().int().positive(),
-        field: z.enum(["projektnummer","bahnhofsmanagement","station","bahnhofsnummer","streckennummer","projektbeschreibung","projektstand","projektleiter","itkPruefer","kommentar"]),
-        value: z.string().max(5000).nullable(),
-      }))
-      .mutation(async ({ input }) => {
-        await updatePsvItk(input.id, { [input.field]: input.value });
-        return { success: true };
-      }),
-  }),
+  // BVB-EEA and PSV-ITK are Gewerk views over the Project aggregate (department EEA / ITK reviews). Their former
+  // standalone tables had unauthenticated-by-role write endpoints here; they were removed (see docs/data-plane.md).
 
   // ============= AUDIT LOG =============
   audit: router({

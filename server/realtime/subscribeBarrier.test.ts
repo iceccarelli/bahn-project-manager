@@ -120,6 +120,27 @@ describe("fanout topology", () => {
   });
 });
 
+describe("other aggregates ride the same transport with recipient-safe delivery", () => {
+  it("booking events reach the shared calendar channel; a principal without access to the booking's workspace gets no details", async () => {
+    const bus = new InProcessBus();
+    const app = express(); app.use(express.json());
+    registerRealtimeGateway(app, { subscriber: bus, store: { versions: async () => new Map(), feedHead: async () => 1 }, resolve: async r => { const p = who(r); return p ? { principal: p } : null; } });
+    const server: Server = await new Promise(r => { const s = app.listen(0, "127.0.0.1", () => r(s)); });
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const adminS = await openSse(`${base}/api/realtime/stream?scopes=collection:booking.all`, { "x-u": "admin" });
+    const miaS = await openSse(`${base}/api/realtime/stream?scopes=collection:booking.all`, { "x-u": "mia" });
+    await adminS.until(f => f.event === "hello"); await miaS.until(f => f.event === "hello");
+    await bus.publish(event(7, 2, { status: { from: "Frei", to: "Gebucht" }, station: { from: null, to: "Kassel Hbf" }, projektleitung: { from: null, to: "Anna" } }, { eventType: "booking.updated", aggregateType: "booking", context: { workspace: "Kassel" } }));
+    const a = await adminS.until(f => f.event === "domain"), m = await miaS.until(f => f.event === "domain");
+    expect(Object.keys(a.data.changes).sort()).toEqual(["projektleitung", "station", "status"]);
+    expect(Object.keys(m.data.changes)).toEqual(["status"]);
+    // a restricted principal may not subscribe to the unrestricted checklist feed or another workspace's
+    const denied = await fetch(`${base}/api/realtime/stream?scopes=collection:checklist.all`, { headers: { "x-u": "mia" } });
+    expect(denied.status).toBe(403);
+    adminS.close(); miaS.close(); server.closeAllConnections(); server.close();
+  });
+});
+
 describe("notification delivery throttling", () => {
   it("a burst becomes a few live frames plus ONE hint to re-read the durable inbox; other event types are untouched", async () => {
     const bus = new InProcessBus();

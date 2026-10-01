@@ -13,10 +13,12 @@ import {
   type ProjectSummary,
 } from "@shared/project-contract";
 import {
-  auditLog, departmentReviews, domainEvents, idempotencyKeys, notifications, notificationUnread, projects, projectWatchers, type Project,
+  auditLog, departmentReviews, projectChecklists, projectChecklistAnswers, scheduleSlots, type ProjectChecklist, type ScheduleSlot, domainEvents, idempotencyKeys, notifications, notificationUnread, projects, projectWatchers, type Project,
 } from "../../drizzle/schema";
 import type { AuditRow, IdempotencyClaim, ProjectStore, ProjectTx } from "../domain/ports";
 import { syncProjectGeo } from "./geoModel";
+import type { ChecklistDTO } from "@shared/checklist-contract";
+import type { SlotDTO } from "@shared/booking-contract";
 import { clusterCellDegrees, MAP_MAX_MARKERS, MAP_POINT_ZOOM, type MapQuery, type MapResult, type MapStation, type MapStationProjects, type MapStationQuery } from "@shared/map-contract";
 import * as rm from "./readModels";
 
@@ -125,8 +127,61 @@ async function loadEventsSince(x: Executor, aggregateId: number, after: number, 
   return rows.map(r => parseEnvelope(r.envelope));
 }
 
+const ymd = (d: Date) => d.toISOString().slice(0, 10);
+
+export function toSlotDTO(r: ScheduleSlot, redacted = false): SlotDTO {
+  return {
+    id: r.id, slotKey: r.slotKey, version: r.syncVersion, datum: ymd(r.datum), von: r.von, bis: r.bis, status: r.status,
+    station: redacted ? null : r.station, projektleitung: redacted ? null : r.projektleitung, projektstand: redacted ? null : r.projektstand,
+    info: redacted ? null : r.info, hinweis: redacted ? null : r.hinweis, projectId: redacted ? null : r.projectId, redacted,
+  };
+}
+
+const HEADER_FIELDS = ["projektnummer", "projektbezeichnung", "stationsname", "bahnhofsnummer", "streckennummer", "projektstand", "bahnhofsmanagement", "projektleitung", "pkpLink", "freischaltungFaa", "unterschriftenblatt", "mitProjektvorstellung", "anmerkungen"] as const;
+async function loadChecklist(x: Executor, id: number): Promise<ChecklistDTO | null> {
+  const [r] = await x.select().from(projectChecklists).where(eq(projectChecklists.id, id)).limit(1);
+  if (!r) return null;
+  const answers = await x.select().from(projectChecklistAnswers).where(eq(projectChecklistAnswers.checklistId, id)).orderBy(asc(projectChecklistAnswers.nr));
+  return toChecklistDTO(r, answers);
+}
+function toChecklistDTO(r: ProjectChecklist, answers: Array<{ questionKey: string; answer: string | null; secondary: string | null; comment: string | null }>): ChecklistDTO {
+  const header: Record<string, string | null> = Object.fromEntries(HEADER_FIELDS.map(f => [f, (r as unknown as Record<string, string | null>)[f] ?? null]));
+  for (const f of ["uebergabeDatum", "terminDatum"] as const) header[f] = r[f] ? r[f]!.toISOString().slice(0, 10) : null;
+  header.terminVon = r.terminVon; header.terminBis = r.terminBis;
+  return {
+    id: r.id, version: r.syncVersion, mode: r.mode as ChecklistDTO["mode"], status: r.status, projectId: r.projectId, header,
+    answers: Object.fromEntries(answers.map(a => [a.questionKey, { answer: a.answer, secondary: a.secondary, comment: a.comment }])),
+    createdBy: r.createdBy, submittedAt: r.submittedAt ? r.submittedAt.toISOString() : null, updatedAt: r.updatedAt.toISOString(),
+  };
+}
+
 function txAdapter(x: Executor): ProjectTx {
   return {
+    async lockSlot(id) {
+      const rows = await x.select().from(scheduleSlots).where(eq(scheduleSlots.id, id)).limit(1).for("update");
+      return rows[0] ?? null;
+    },
+    async updateSlotVersioned(id, expectedVersion, set) {
+      const [res] = await x.update(scheduleSlots).set({ ...set, syncVersion: expectedVersion + 1 }).where(and(eq(scheduleSlots.id, id), eq(scheduleSlots.syncVersion, expectedVersion)));
+      return (res as unknown as { affectedRows: number }).affectedRows === 1;
+    },
+    async lockChecklist(id) {
+      const rows = await x.select().from(projectChecklists).where(eq(projectChecklists.id, id)).limit(1).for("update");
+      return rows[0] ?? null;
+    },
+    async insertChecklist(values) {
+      const [res] = await x.insert(projectChecklists).values({ mode: "Projektanmeldung", ...values, syncVersion: 1 } as typeof projectChecklists.$inferInsert);
+      return Number((res as unknown as { insertId: number }).insertId);
+    },
+    async updateChecklistVersioned(id, expectedVersion, set) {
+      const [res] = await x.update(projectChecklists).set({ ...set, syncVersion: expectedVersion + 1 }).where(and(eq(projectChecklists.id, id), eq(projectChecklists.syncVersion, expectedVersion)));
+      return (res as unknown as { affectedRows: number }).affectedRows === 1;
+    },
+    async replaceAnswers(checklistId, rows) {
+      await x.delete(projectChecklistAnswers).where(eq(projectChecklistAnswers.checklistId, checklistId));
+      if (rows.length) await x.insert(projectChecklistAnswers).values(rows.map(r => ({ checklistId, ...r })));
+    },
+    checklistDetail: id => loadChecklist(x, id),
     async lockProject(id) {
       const rows = await x.select().from(projects).where(eq(projects.id, id)).limit(1).for("update");
       return rows[0] ?? null;
@@ -186,6 +241,12 @@ function txAdapter(x: Executor): ProjectTx {
         .for("update");
       const r = rows[0];
       return r ? { id: r.id, status: r.status, prueferName: r.prueferName, datum: r.datum } : null;
+    },
+    async insertReview(projectId, v) {
+      const [res] = await x.insert(departmentReviews).values({ projectId, department: v.department, status: v.status, prueferName: v.prueferName, datum: v.datum });
+      const [pre] = await x.select({ bm: projects.bahnhofsmanagement }).from(projects).where(eq(projects.id, projectId)).limit(1);
+      await rm.reviewDelta(x, { workspace: pre?.bm ?? null, department: v.department, status: v.status, pruefer: v.prueferName }, 1);
+      return Number((res as unknown as { insertId: number }).insertId);
     },
     async updateReview(id, set) {
       const [pre] = await x
@@ -466,6 +527,29 @@ export class MysqlProjectStore implements ProjectStore {
     const list = await rows<{ id: number; projektnummer: string | null; station: string | null; projektstand: string | null; projektleiter: string | null }>(
       sql`SELECT projects.id AS id, projects.projektnummer AS projektnummer, projects.station AS station, projects.projektstand AS projektstand, projects.projektleiter AS projektleiter ${from} ORDER BY projects.id DESC LIMIT 50`);
     return { stationKey: q.stationKey, total: Number(t?.n ?? 0), projects: list };
+  }
+
+  async slotDetail(id: number): Promise<SlotDTO | null> {
+    const [r] = await this.db.select().from(scheduleSlots).where(eq(scheduleSlots.id, id)).limit(1);
+    return r ? toSlotDTO(r) : null;
+  }
+  async listSlots(range: { from: string; to: string; status?: string }) {
+    const conds: SQL[] = [sql`${scheduleSlots.datum} >= ${new Date(`${range.from}T00:00:00Z`)}`, sql`${scheduleSlots.datum} < ${new Date(new Date(`${range.to}T00:00:00Z`).getTime() + 86_400_000)}`];
+    if (range.status) conds.push(sql`${scheduleSlots.status} = ${range.status}`);
+    return this.db.select().from(scheduleSlots).where(and(...conds)).orderBy(asc(scheduleSlots.datum), asc(scheduleSlots.von)).limit(5000);
+  }
+  checklistDetail(id: number) { return loadChecklist(this.db as unknown as Executor, id); }
+  async listChecklists(o: { workspaces: readonly string[] | null; principalId: string; isAdmin: boolean; status?: "draft" | "submitted" | "cancelled"; limit: number }) {
+    if (o.workspaces !== null && o.workspaces.length === 0) return [];
+    const conds: SQL[] = [];
+    if (o.status) conds.push(sql`${projectChecklists.status} = ${o.status}`);
+    if (o.workspaces !== null) conds.push(inArray(projectChecklists.bahnhofsmanagement, [...o.workspaces]));
+    // drafts are private to their author (admins see all)
+    if (!o.isAdmin) conds.push(sql`(${projectChecklists.status} <> 'draft' OR ${projectChecklists.createdBy} = ${o.principalId})`);
+    const rows = await this.db.select().from(projectChecklists).where(conds.length ? and(...conds) : undefined).orderBy(desc(projectChecklists.id)).limit(Math.min(o.limit, 200));
+    const out: ChecklistDTO[] = [];
+    for (const r of rows) out.push((await loadChecklist(this.db as unknown as Executor, r.id))!);
+    return out;
   }
 
   /** Exact COUNT(*) for a filter set. Deliberately a separate call: pages never pay for it. */

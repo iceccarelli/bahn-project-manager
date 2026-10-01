@@ -382,3 +382,37 @@ describe.skipIf(!hasTestDb)("ProjectService (real DB)", () => {
     });
   });
 });
+
+describe.skipIf(!hasTestDb)("ProjectService.createReview (real DB)", () => {
+  let t: Awaited<ReturnType<typeof createTestDatabase>>;
+  let svc: ProjectService;
+  beforeAll(async () => { t = await createTestDatabase(10); svc = new ProjectService(new MysqlProjectStore(t.db as never), () => {}); });
+  afterAll(async () => { await t?.drop(); });
+  const mk = (bm = "Frankfurt") => svc.create(admin, { fields: { station: "Köln Hbf", bahnhofsmanagement: bm }, idempotencyKey: key() }, ctx());
+
+  it("creates the review as part of the Project aggregate: version bump, audit, event, idempotent replay", async () => {
+    const { project } = await mk();
+    const k = key();
+    const input = { projectId: project.id, department: "ITK", expectedVersion: 1, fields: { status: "offen", prueferName: "Paula" }, idempotencyKey: k };
+    const r = await svc.createReview(markus, input, ctx());
+    expect(r.project.version).toBe(2);
+    expect(r.project.reviews).toHaveLength(1);
+    expect(r.project.reviews[0]).toMatchObject({ department: "ITK", status: "offen", prueferName: "Paula" });
+    const [audit] = (await t.pool.query("SELECT field, newValue FROM audit_log WHERE entityId=? AND field='review.ITK.status'", [project.id])) as unknown as [{ field: string; newValue: string }[]];
+    expect(audit).toHaveLength(1);
+    const replay = await svc.createReview(markus, input, ctx());
+    expect(replay.replayed).toBe(true);
+    expect(replay.project.version).toBe(2);
+    // a second review for the same Gewerk is refused, a stale version conflicts
+    await expect(svc.createReview(markus, { ...input, expectedVersion: 2, idempotencyKey: key() }, ctx())).rejects.toBeInstanceOf(ValidationError);
+    await expect(svc.createReview(admin, { ...input, department: "EEA", expectedVersion: 1, idempotencyKey: key() }, ctx())).rejects.toBeInstanceOf(ConflictError);
+  });
+
+  it("is authorized like every Project write: role, department and workspace", async () => {
+    const { project } = await mk("Kassel");
+    const base = { projectId: project.id, expectedVersion: 1, fields: {}, idempotencyKey: "" };
+    await expect(svc.createReview(viewer, { ...base, department: "ITK", idempotencyKey: key() }, ctx())).rejects.toBeInstanceOf(ForbiddenError);   // wrong role
+    await expect(svc.createReview(markus, { ...base, department: "EEA", idempotencyKey: key() }, ctx())).rejects.toBeInstanceOf(ForbiddenError);   // not his Gewerk
+    await expect(svc.createReview(mitteOnly, { ...base, department: "ITK", idempotencyKey: key() }, ctx())).rejects.toBeInstanceOf(NotFoundError);   // other workspace: invisible
+  });
+});

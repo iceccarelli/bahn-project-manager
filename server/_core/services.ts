@@ -7,6 +7,8 @@
  */
 import type { Pool } from "mysql2/promise";
 import { getDb, getPool, getRelayPool } from "../db";
+import { BookingService } from "../domain/bookingService";
+import { ChecklistService } from "../domain/checklistService";
 import { ProjectService } from "../domain/projectService";
 import type { RealtimePublisher, RealtimeSubscriber } from "../domain/ports";
 import { MysqlProjectStore } from "../infra/mysqlProjectStore";
@@ -20,6 +22,8 @@ import { MemoryPresenceStore, PresenceService, RedisPresenceStore, type Presence
 export interface Services {
   store: MysqlProjectStore;
   projects: ProjectService;
+  bookings: BookingService;
+  checklists: ChecklistService;
   publisher: RealtimePublisher;
   subscriber: RealtimeSubscriber;
   relay: OutboxRelay;
@@ -62,6 +66,8 @@ export async function getServices(log: (msg: string, e?: unknown) => void = cons
   const outbox = new MysqlOutbox(relayPool);
   const relay = new OutboxRelay(outbox, bus, { onError: e => log("[outbox]", e) });
   const svc = new ProjectService(store, relay.nudge);
+  const bookings = new BookingService(store, relay.nudge);
+  const checklists = new ChecklistService(store, svc, relay.nudge);
 
   // Sampled gauges: cheap, and they make saturation visible before it hurts.
   const sampler = setInterval(async () => {
@@ -93,7 +99,7 @@ export async function getServices(log: (msg: string, e?: unknown) => void = cons
 
   relay.start();
   services = {
-    store, projects: svc, publisher: bus, subscriber: bus, relay, presence, pool,
+    store, projects: svc, bookings, checklists, publisher: bus, subscriber: bus, relay, presence, pool,
     async shutdown() {
       clearInterval(sampler);
       clearInterval(sweeper);

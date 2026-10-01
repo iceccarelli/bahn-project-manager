@@ -33,6 +33,18 @@ export function eventForPrincipal(p: Principal, e: DomainEvent): DomainEvent | n
     if (e.aggregateId.startsWith("project:")) return canViewProject(p, { bahnhofsmanagement: e.context?.workspace ?? null }) ? e : null;
     return e;
   }
+  // Booking calendar: everybody sees THAT a slot changed state; the details (who/what/where) only with access to the
+  // booking's Bahnhofsmanagement. Unknown BM = details for unrestricted principals only (default-deny).
+  if (e.aggregateType === "booking") {
+    if (canViewProject(p, { bahnhofsmanagement: e.context?.workspace ?? null })) return e;
+    const KEEP = new Set(["status", "datum", "von", "bis"]);
+    return { ...e, actorName: null, changes: Object.fromEntries(Object.entries(e.changes).filter(([f]) => KEEP.has(f))), context: { workspace: null } };
+  }
+  // Checklists: a draft belongs to its author (and admins); a submitted checklist to whoever sees its workspace.
+  if (e.aggregateType === "checklist") {
+    if (e.context?.recipient) return e.context.recipient === p.id || p.role === "admin" ? e : null;
+    return canViewProject(p, { bahnhofsmanagement: e.context?.workspace ?? null }) ? e : null;
+  }
   if (e.aggregateType !== "project") return null;
   const now = e.context?.workspace ?? null;
   const before = e.context?.workspaceBefore ?? null;

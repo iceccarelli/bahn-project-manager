@@ -5,7 +5,9 @@
  */
 import type { DomainEvent, ScopeKey } from "@shared/domain-events";
 import type { ProjectDetail, ProjectListItem, ListProjectsInput } from "@shared/project-contract";
-import type { Project } from "../../drizzle/schema";
+import type { Project, ProjectChecklist, ScheduleSlot } from "../../drizzle/schema";
+import type { ChecklistDTO } from "@shared/checklist-contract";
+import type { SlotDTO } from "@shared/booking-contract";
 
 // ---- Realtime -------------------------------------------------------------
 
@@ -64,7 +66,7 @@ export type IdempotencyClaim =
 export interface AuditRow {
   userId: number | null;
   userName: string;
-  entityType: "project";
+  entityType: "project" | "checklist" | "booking";
   entityId: number;
   action: "create" | "update" | "delete";
   field: string | null;
@@ -82,12 +84,25 @@ export interface ProjectTx {
   /** UPDATE … WHERE id=? AND syncVersion=? ; false when zero rows matched */
   updateVersioned(id: number, expectedVersion: number, set: Partial<Project>): Promise<boolean>;
   insertProject(values: Partial<Project>): Promise<number>;
+  // ---- booking aggregate ----
+  lockSlot(id: number): Promise<ScheduleSlot | null>;
+  /** UPDATE … WHERE id=? AND syncVersion=? ; false when zero rows matched */
+  updateSlotVersioned(id: number, expectedVersion: number, set: Partial<ScheduleSlot>): Promise<boolean>;
+  // ---- checklist aggregate ----
+  lockChecklist(id: number): Promise<ProjectChecklist | null>;
+  insertChecklist(values: Partial<ProjectChecklist>): Promise<number>;
+  updateChecklistVersioned(id: number, expectedVersion: number, set: Partial<ProjectChecklist>): Promise<boolean>;
+  /** replace all answers of a checklist (unique per questionKey) */
+  replaceAnswers(checklistId: number, rows: Array<{ questionKey: string; nr: number; answer: string | null; secondary: string | null; comment: string | null }>): Promise<void>;
+  checklistDetail(id: number): Promise<ChecklistDTO | null>;
   deleteProject(id: number): Promise<void>;
   watchersOf(projectId: number): Promise<string[]>;
   /** returns the notification id */
   insertNotification(row: { userId: string; kind: string; title: string; body: string | null; link: string; workspace: string | null; eventId: string }): Promise<number>;
   /** SELECT … FOR UPDATE on one department review of a project */
   lockReview(projectId: number, department: string): Promise<{ id: number; status: string | null; prueferName: string | null; datum: Date | null } | null>;
+  /** INSERT one department review (unique per project+department); returns its id */
+  insertReview(projectId: number, values: { department: string; status: string | null; prueferName: string | null; datum: Date | null }): Promise<number>;
   updateReview(id: number, set: { status?: string | null; prueferName?: string | null; datum?: Date | null }): Promise<void>;
   detail(id: number): Promise<ProjectDetail | null>;
   appendAudit(rows: AuditRow[]): Promise<void>;
@@ -105,6 +120,10 @@ export interface ProjectStore {
     visibility: { workspaces: readonly string[] | null },
     opts?: { offset?: number; stationPrefix?: string },
   ): Promise<{ items: ProjectListItem[]; nextCursor: string | null; total?: number }>;
+  slotDetail(id: number): Promise<SlotDTO | null>;
+  listSlots(range: { from: string; to: string; status?: string }): Promise<Array<ScheduleSlot>>;
+  listChecklists(o: { workspaces: readonly string[] | null; principalId: string; isAdmin: boolean; status?: "draft" | "submitted" | "cancelled"; limit: number }): Promise<ChecklistDTO[]>;
+  checklistDetail(id: number): Promise<ChecklistDTO | null>;
   versions(ids: number[]): Promise<Map<number, { version: number; bahnhofsmanagement: string | null }>>;
   eventsSince(aggregateId: number, afterVersion: number, limit: number): Promise<DomainEvent[]>;
   shellSummary(): Promise<{ projectCount: number; lastUpdatedAt: string | null }>;

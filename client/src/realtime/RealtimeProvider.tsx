@@ -22,6 +22,8 @@ export const serverKeys = {
   project: (id: number) => ["server", "project", id] as const,
   lists: () => ["server", "projects", "list"] as const,
   counts: () => ["server", "projects", "count"] as const,
+  bookings: () => ["server", "bookings"] as const,
+  checklists: () => ["server", "checklists"] as const,
   shell: () => ["server", "shell"] as const,
 };
 
@@ -75,7 +77,11 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       sync: known => serverApi.projects.sync.mutate({ known }) as never,
       changes: input => serverApi.projects.changes.query(input) as never,
       // notifications missed while offline arrive through the same feed
-      onOther: e => onNotification(e),
+      onOther: e => {
+        if (e.aggregateType === "booking") void qc.invalidateQueries({ queryKey: serverKeys.bookings() });
+        else if (e.aggregateType === "checklist") void qc.invalidateQueries({ queryKey: serverKeys.checklists() });
+        else onNotification(e);
+      },
     });
     const connection = new RealtimeConnection({
       url: "/api/realtime/stream",
@@ -93,6 +99,9 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       onEvent: e => {
         if (e.aggregateType === "presence") { presence.apply(e); return; }
         if (e.aggregateType === "notification") { onNotification(e); return; }
+        // other aggregates: the durable SQL read is the source, the event says WHICH query is stale
+        if (e.aggregateType === "booking") { void qc.invalidateQueries({ queryKey: serverKeys.bookings() }); return; }
+        if (e.aggregateType === "checklist") { void qc.invalidateQueries({ queryKey: serverKeys.checklists() }); return; }
         engine.applyEvent(e);
         // creations/deletions/moves change the shell count; plain updates do not
         if (e.eventType !== "project.updated") void qc.invalidateQueries({ queryKey: serverKeys.shell() });
