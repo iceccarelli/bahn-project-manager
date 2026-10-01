@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useCallback, useEffect } from "react";
+import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useVirtualRows } from "@/hooks/useVirtualRows";
 import { useReveal } from "@/hooks/useReveal";
 import { useLocation, useSearch as useRouteSearch } from "wouter";
 
@@ -8,6 +9,7 @@ import {
 import { useProjects, useFilters, type Project, type Review } from "@/hooks/useDataQuery";
 import { useProjectsPageExtras } from "@/hooks/useProjectsPage";
 import { SERVER_MODE } from "@/realtime/serverApi";
+import { useRowScopes } from "@/realtime/serverProjects";
 import ConnectionBadge from "@/realtime/ConnectionBadge";
 import { ServerPager } from "@/realtime/ServerPager";
 import { WorkspacePresence } from "@/realtime/presence";
@@ -174,6 +176,22 @@ export default function Projects() {
   const { data, isLoading, applyEdit, applyReviewEdit } = projectsQuery;
   // paging only exists in server mode (cursor pages); the local plane holds everything in memory
   const pager = projectsQuery as unknown as { hasNextPage?: boolean; isFetchingNextPage?: boolean; fetchNextPage?: () => void };
+
+  /* Table virtualization: the DOM holds the rows near the viewport, not every loaded row. */
+  const tableRows: Project[] = data?.projects ?? [];
+  const tableScrollRef = useRef<HTMLDivElement>(null);
+  const vrows = useVirtualRows(tableScrollRef, {
+    count: tableRows.length,
+    getKey: i => tableRows[i]?.id ?? i,
+    headerRows: expandedDepts.length > 0 ? 2 : 1,
+    headerHeight: expandedDepts.length > 0 ? 84 : 48,
+  });
+  // fanout ≈ relevant recipients: live-subscribe only the rows on screen (no-op without the realtime provider)
+  useRowScopes(useMemo(() => vrows.items.map(vi => tableRows[vi.index]?.id).filter((x): x is number => typeof x === "number"), [vrows.items, tableRows]));
+  // cursor paging driven by the scroll position: ask for the next page when the window nears the loaded end
+  useEffect(() => {
+    if (pager.hasNextPage && !pager.isFetchingNextPage && vrows.lastIndex >= tableRows.length - 15 && tableRows.length > 0) pager.fetchNextPage?.();
+  }, [vrows.lastIndex, tableRows.length, pager.hasNextPage, pager.isFetchingNextPage, pager]);
 
   const { data: filterOptions } = useFilters();
   const homeWorkspace = useHomeWorkspace();
@@ -728,11 +746,13 @@ export default function Projects() {
           <span>
             <span className="font-semibold text-foreground">
               {(viewMode === "cards" ? visibleProjects.length : data.total).toLocaleString("de-DE")}
+              {/* the exact total is a separate query: until it arrives, show the loaded range honestly */}
+              {viewMode !== "cards" && (data as { totalExact?: boolean }).totalExact === false ? "+" : ""}
             </span>{" "}
             {(viewMode === "cards" ? visibleProjects.length : data.total) === 1
               ? "Projekt"
               : "Projekte"}{" "}
-            gefunden
+            {viewMode !== "cards" && (data as { totalExact?: boolean }).totalExact === false ? "geladen" : "gefunden"}
             {stationFocus && viewMode === "cards" && (
               <span className="ml-1">von {data.total.toLocaleString("de-DE")} gefilterten</span>
             )}
@@ -796,8 +816,8 @@ export default function Projects() {
           <>
             {/* TABLE VIEW */}
             {viewMode === "table" && (
-              <div className="overflow-x-auto overflow-y-auto max-h-[75vh]">
-                <table className="w-full border-collapse text-2xs">
+              <div ref={tableScrollRef} className="overflow-x-auto overflow-y-auto max-h-[75vh]" data-testid="projects-scroll">
+                <table className="w-full border-collapse text-2xs" {...vrows.tableProps}>
                   <thead className="bg-white dark:bg-zinc-950 sticky top-0 z-20 border-b">
                     <tr>
                       <th className="sticky left-0 z-30 w-[52px] min-w-[52px] whitespace-nowrap border-b bg-white px-3 py-3 text-left font-semibold text-muted-foreground dark:bg-zinc-950">Nr.</th>
@@ -853,11 +873,14 @@ export default function Projects() {
                       </tr>
                     )}
                   </thead>
-                  <TableBody ref={streamRef}>
-                    {data?.projects.map((project: Project) => {
+                  <TableBody ref={streamRef} {...vrows.bodyProps}>
+                    {vrows.paddingTop > 0 && <tr aria-hidden="true" style={{ height: vrows.paddingTop }}><td colSpan={30} style={{ padding: 0, border: 0 }} /></tr>}
+                    {vrows.items.map((vi) => {
+                      const project = tableRows[vi.index];
+                      if (!project) return null;
                       const reviews = project.reviews || [];
                       return (
-                        <tr key={project.id} className="border-b hover:bg-muted/30 transition-colors group">
+                        <tr key={project.id} {...vrows.rowProps(vi.index)} className="border-b hover:bg-muted/30 transition-colors group">
                           <td className="sticky left-0 z-10 w-[52px] min-w-[52px] bg-white px-3 py-3 font-mono font-medium text-muted-foreground dark:bg-zinc-950">
                             {project.id}
                           </td>
@@ -981,6 +1004,7 @@ export default function Projects() {
                         </tr>
                       );
                     })}
+                    {vrows.paddingBottom > 0 && <tr aria-hidden="true" style={{ height: vrows.paddingBottom }}><td colSpan={30} style={{ padding: 0, border: 0 }} /></tr>}
                   </TableBody>
                 </table>
               </div>

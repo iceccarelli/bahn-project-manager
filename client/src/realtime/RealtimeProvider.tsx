@@ -21,6 +21,7 @@ import { authHeaders, extractConflict, isRetryable, serverApi } from "./serverAp
 export const serverKeys = {
   project: (id: number) => ["server", "project", id] as const,
   lists: () => ["server", "projects", "list"] as const,
+  counts: () => ["server", "projects", "count"] as const,
   shell: () => ["server", "shell"] as const,
 };
 
@@ -79,6 +80,16 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     const connection = new RealtimeConnection({
       url: "/api/realtime/stream",
       getHeaders: authHeaders,
+      // scopes of the open stream change in place (rows scrolled in/out of view) instead of reconnecting
+      postScopes: async req => {
+        const r = await fetch("/api/realtime/scopes", { method: "POST", headers: { ...(await authHeaders()), "content-type": "application/json" }, body: JSON.stringify(req), credentials: "include" });
+        return { ok: r.status === 202, status: r.status };
+      },
+      // rows that just became live-subscribed may have changed while they were not: reconcile exactly those
+      onScopesLive: added => {
+        const ids = added.filter(x => x.startsWith("project:")).map(x => Number(x.slice(8))).filter(Number.isInteger);
+        return ids.length ? engine.syncRows(ids).then(() => undefined) : undefined;
+      },
       onEvent: e => {
         if (e.aggregateType === "presence") { presence.apply(e); return; }
         if (e.aggregateType === "notification") { onNotification(e); return; }
@@ -113,10 +124,11 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       if (c.kind === "collection-stale") {
         // create / move-in: targeted authoritative refresh of the list queries + the shell count
         void qc.invalidateQueries({ queryKey: serverKeys.lists() });
+        void qc.invalidateQueries({ queryKey: serverKeys.counts() });
         void qc.invalidateQueries({ queryKey: serverKeys.shell() });
         return;
       }
-      if (c.kind === "remove") qc.removeQueries({ queryKey: serverKeys.project(c.id) });
+      if (c.kind === "remove") { qc.removeQueries({ queryKey: serverKeys.project(c.id) }); void qc.invalidateQueries({ queryKey: serverKeys.counts() }); }
       else qc.setQueryData(serverKeys.project(c.id), c.project);
       patchLists(qc, c);
     });

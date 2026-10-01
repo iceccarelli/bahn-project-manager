@@ -103,8 +103,11 @@ export function canSubscribe(p: Principal, scopeKey: string): boolean {
     case "user":
     case "notifications":
       return id === p.id || isAdmin(p);
+    case "collection":
     case "workspace": {
       const allowed = workspaceRestriction(p);
+      // "collection:all" is the unrestricted membership feed; a restricted principal subscribes per authorized workspace
+      if (kind === "collection" && id === "all") return allowed === null;
       return allowed === null || allowed.some(w => slugify(w) === id);
     }
     case "department":

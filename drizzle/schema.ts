@@ -1,5 +1,5 @@
 import {
-  int, bigint, mysqlEnum, mysqlTable, text, timestamp, varchar, datetime, json,
+  int, bigint, double, mysqlEnum, mysqlTable, text, timestamp, varchar, datetime, json,
   index, uniqueIndex, primaryKey
 } from "drizzle-orm/mysql-core";
 import { relations } from "drizzle-orm";
@@ -331,6 +331,61 @@ export const projectWatchers = mysqlTable("project_watchers", {
 }));
 
 // Relations
+/**
+ * Geo read model: where a project sits on the map. Derived from the station master (stations.json) by
+ * shared/stationGeo.ts and maintained in the SAME transaction as the project write (station /
+ * bahnhofsmanagement changes), so a map query is one indexed range scan — never a table scan, never a
+ * per-request name-matching pass. Rebuildable from `projects` at any time (server/infra/geoModel.ts).
+ */
+export const projectGeo = mysqlTable("project_geo", {
+  projectId: int("projectId").primaryKey(),
+  lat: double("lat").notNull(),
+  lng: double("lng").notNull(),
+  /** "<Bf. Nr.>" for a real station, "~bm:<BM>" for the regional fallback */
+  stationKey: varchar("stationKey", { length: 64 }).notNull(),
+  stationName: varchar("stationName", { length: 255 }).notNull(),
+  precision: mysqlEnum("precision", ["exact", "tokens", "fuzzy", "region"]).notNull(),
+}, (table) => ({
+  latLngIdx: index("project_geo_lat_lng_idx").on(table.lat, table.lng),
+  stationIdx: index("project_geo_station_idx").on(table.stationKey),
+}));
+
+/**
+ * Dashboard read models: pre-aggregated counters per workspace, updated from the domain write path
+ * (same transaction) so a dashboard request is a handful of tiny indexed reads and never a GROUP BY over the
+ * review table. A restricted principal reads only the rows of its own workspaces. Rebuildable
+ * (server/infra/readModels.ts#rebuildReadModels), and verified against a recompute in tests.
+ */
+export const rmProjectStats = mysqlTable("rm_project_stats", {
+  workspace: varchar("workspace", { length: 128 }).notNull(),
+  projects: int("projects").notNull().default(0),
+}, (table) => ({ pk: primaryKey({ columns: [table.workspace] }) }));
+
+export const rmReviewStats = mysqlTable("rm_review_stats", {
+  workspace: varchar("workspace", { length: 128 }).notNull(),
+  department: varchar("department", { length: 64 }).notNull(),
+  /** '' stands for "no status" so the key is total */
+  status: varchar("status", { length: 128 }).notNull(),
+  n: int("n").notNull().default(0),
+}, (table) => ({ pk: primaryKey({ columns: [table.workspace, table.department, table.status] }) }));
+
+export const rmPrueferLoad = mysqlTable("rm_pruefer_load", {
+  workspace: varchar("workspace", { length: 128 }).notNull(),
+  pruefer: varchar("pruefer", { length: 256 }).notNull(),
+  n: int("n").notNull().default(0),
+}, (table) => ({ pk: primaryKey({ columns: [table.workspace, table.pruefer] }) }));
+
+/**
+ * Unread-notification counter per (recipient, workspace): the bell reads a few rows instead of COUNT(*) over the
+ * inbox, and a workspace-restricted recipient sums only the workspaces they may still see.
+ */
+export const notificationUnread = mysqlTable("notification_unread", {
+  userId: varchar("userId", { length: 64 }).notNull(),
+  /** '' = notification without a workspace */
+  workspace: varchar("workspace", { length: 128 }).notNull(),
+  n: int("n").notNull().default(0),
+}, (table) => ({ pk: primaryKey({ columns: [table.userId, table.workspace] }) }));
+
 export const projectsRelations = relations(projects, ({ many }) => ({
   reviews: many(departmentReviews),
   checklists: many(projectChecklists),

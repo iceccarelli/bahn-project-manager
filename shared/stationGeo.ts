@@ -1,4 +1,13 @@
-import type { StationRecord } from "@/hooks/useStations";
+/** The station-master columns the geo index reads (structurally satisfied by the client's StationRecord and by stations.json rows). */
+export interface StationRecord {
+  "Bf. Nr.": number;
+  Station: string;
+  BM: string;
+  Kategorie: number | null;
+  lat: number | null;
+  lng: number | null;
+  retired?: boolean;
+}
 
 export interface Geo {
   lat: number;

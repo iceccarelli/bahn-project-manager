@@ -7,7 +7,6 @@ import { z } from "zod";
 import { sdk } from "./_core/sdk";
 import {
   createDepartmentReview,
-  getDashboardStats,
   getBvbEeaList,
   createBvbEea,
   updateBvbEea,
@@ -32,6 +31,10 @@ import {
 import { requireServices } from "./_core/services";
 import { deriveProjectMetrics } from "@shared/project-metrics";
 import { SingleFlightCache } from "./infra/singleFlightCache";
+import { KeyedCache, scopeKey } from "./infra/keyedCache";
+import { readDashboard } from "./infra/readModels";
+import { MapQuerySchema, MapStationQuerySchema } from "@shared/map-contract";
+import type { MysqlProjectStore } from "./infra/mysqlProjectStore";
 import { canViewAudit, workspaceRestriction } from "./domain/permissions";
 import { m } from "./observability/metrics";
 import { ConflictError } from "./domain/errors";
@@ -51,7 +54,8 @@ const auditActor = (p: import("./domain/permissions").Principal) => ({
   userName: p.name || p.email || p.id,
 });
 
-const dashboardCache = new SingleFlightCache("dashboard", 30_000, () => getDashboardStats());
+// The read is a few tiny indexed lookups; this short cache only absorbs bursts (one load per scope per 5 s).
+const dashboardScoped = new KeyedCache<Awaited<ReturnType<typeof readDashboard>>>("dashboard", 5_000);
 /** Per-project review statuses → shared/project-metrics.ts. `workspaces` null = all. */
 async function computeMetrics(workspaces: readonly string[] | null) {
   const { pool } = await requireServices();
@@ -70,6 +74,11 @@ async function computeMetrics(workspaces: readonly string[] | null) {
 }
 const metricsCache = new SingleFlightCache("metrics", 30_000, () => computeMetrics(null));
 const filterOptionsCache = new SingleFlightCache("filters", 60_000, () => getFilterOptions());
+// Restricted principals share results per NORMALIZED authorization scope (the key encodes the scope: never crosses scopes).
+const scopedFilterCache = new KeyedCache<Awaited<ReturnType<MysqlProjectStore["filterOptions"]>>>("filters-scoped", 60_000);
+const scopedMetricsCache = new KeyedCache<ReturnType<typeof computeMetrics> extends Promise<infer R> ? R : never>("metrics-scoped", 30_000);
+/** Exact totals: cached per (authorization scope, filter set). Pages never compute them. */
+const countCache = new KeyedCache<number>("count", 15_000, 1000);
 
 export const appRouter = router({
   system: systemRouter,
@@ -142,6 +151,19 @@ export const appRouter = router({
         const feedHead = await store.feedHead();
         const page = await store.list(input, { workspaces: workspaceRestriction(ctx.principal) });
         return { ...page, feedHead };
+      }),
+
+    /**
+     * Exact total for a filter set, requested separately from the pages (cursor pagination is authoritative).
+     * Cached per normalized authorization scope + filters; a stale-by-seconds total is fine for a header count.
+     */
+    count: protectedProcedure
+      .input(ListProjectsInputSchema.pick({ search: true, bahnhofsmanagement: true, projektstand: true, projektleiter: true, department: true, reviewStatus: true, pruefer: true }))
+      .query(async ({ input, ctx }) => {
+        const { store } = await requireServices();
+        const restriction = workspaceRestriction(ctx.principal);
+        const key = `${scopeKey(restriction)}#${JSON.stringify(Object.entries(input).filter(([, v]) => v !== undefined).sort())}`;
+        return { total: await countCache.get(key, () => store.count(input, { workspaces: restriction })), exact: true as const };
       }),
 
     get: protectedProcedure
@@ -306,15 +328,30 @@ export const appRouter = router({
   dashboard: router({
     // Aggregates are a server-side read model: computed once per TTL (single
     // flight, stale-while-revalidate), never per browser or per request.
-    stats: protectedProcedure.query(({ ctx }) => {
-      // Global aggregates would leak other workspaces' figures to a restricted principal.
-      if (workspaceRestriction(ctx.principal) !== null) throw new TRPCError({ code: "FORBIDDEN", message: "Dashboard nur mit Zugriff auf alle Workspaces" });
-      return dashboardCache.get();
+    // Served from the rm_* counters (updated in the write transactions), per authorization scope: a restricted
+    // principal gets exactly the aggregates of its own workspaces, an unrestricted one the global figures.
+    stats: protectedProcedure.query(async ({ ctx }) => {
+      const restriction = workspaceRestriction(ctx.principal);
+      const { pool } = await requireServices();
+      return dashboardScoped.get(scopeKey(restriction), () => readDashboard(pool, restriction));
     }),
     /** KPI cards: shared/project-metrics.ts run server-side over (project, status) rows. */
     metrics: protectedProcedure.query(({ ctx }) => {
       const restriction = workspaceRestriction(ctx.principal);
-      return restriction === null ? metricsCache.get() : computeMetrics(restriction);
+      return restriction === null ? metricsCache.get() : scopedMetricsCache.get(scopeKey(restriction), () => computeMetrics(restriction));
+    }),
+  }),
+
+  // ============= MAP =============
+  // Bounding-box queries over the geo read model. Same authorization + filters as the list; never the list as source.
+  map: router({
+    query: protectedProcedure.input(MapQuerySchema).query(async ({ input, ctx }) => {
+      const { store } = await requireServices();
+      return store.mapQuery(input, { workspaces: workspaceRestriction(ctx.principal) });
+    }),
+    station: protectedProcedure.input(MapStationQuerySchema).query(async ({ input, ctx }) => {
+      const { store } = await requireServices();
+      return store.mapStation(input, { workspaces: workspaceRestriction(ctx.principal) });
     }),
   }),
 
@@ -419,7 +456,7 @@ export const appRouter = router({
       if (restriction === null) return filterOptionsCache.get();
       // Restricted principals: only their own workspaces' options; names from other workspaces stay hidden.
       const { store } = await requireServices();
-      return store.filterOptions(restriction);
+      return scopedFilterCache.get(scopeKey(restriction), () => store.filterOptions(restriction));
     }),
   }),
 

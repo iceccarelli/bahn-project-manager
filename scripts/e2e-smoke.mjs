@@ -176,6 +176,17 @@ async function check(name, fn) {
     console.log(`  FAIL ${name}\n         ${err instanceof Error ? err.message : err}`);
   }
 }
+/**
+ * Size of the table's row SET. The Projekte table is virtualized, so the DOM holds only the rows near the
+ * viewport; the set size is published as data-row-count (and aria-rowcount) on the table itself.
+ * Tables that are not virtualized fall back to counting rows.
+ */
+const rowCount = (page) =>
+  page.evaluate(() => {
+    const t = document.querySelector("table[data-row-count]");
+    return t ? Number(t.dataset.rowCount) : document.querySelectorAll("table tbody tr").length;
+  });
+
 const assert = (cond, msg) => { if (!cond) throw new Error(msg); };
 
 await page.goto(U("/login"));
@@ -248,7 +259,7 @@ console.log("\n== filtering and sorting ==");
 await check("search narrows the table", async () => {
   await go("/projects");
   await page.waitForSelector("table tbody tr", { timeout: 30000 });
-  const before = await page.locator("tbody tr").count();
+  const before = await rowCount(page);
   await page.locator('input[aria-label^="Projekte durchsuchen"]').fill("Frankfurt");
   /*
    * Waits for the table to be narrower, not for 900 ms.
@@ -261,12 +272,12 @@ await check("search narrows the table", async () => {
    */
   await page
     .waitForFunction(
-      (n) => document.querySelectorAll("tbody tr").length < n,
+      (n) => { const t = document.querySelector("table[data-row-count]"); return (t ? Number(t.dataset.rowCount) : document.querySelectorAll("tbody tr").length) < n; },
       before,
       { timeout: 20000 },
     )
     .catch(() => {});
-  const after = await page.locator("tbody tr").count();
+  const after = await rowCount(page);
   assert(after > 0 && after < before, `rows ${before} -> ${after}`);
 });
 
@@ -433,7 +444,7 @@ await check("the created project reaches the projects table", async () => {
     landed.searchParams.get("q") === createdNumber,
     `landed unfiltered: q=${landed.searchParams.get("q")}`,
   );
-  const rows = await page.locator("tbody tr").count();
+  const rows = await rowCount(page);
   assert(rows >= 1, "created project not in the table");
   assert(rows < 100, `landing did not filter — ${rows} rows`);
 });
@@ -1011,7 +1022,7 @@ for (const [route, dept, label] of [
       `${label}: ${open}+${done}+${blocked} exceeds the total ${total}`,
     );
 
-    const rows = await page.$$eval("table tbody tr", (r) => r.length);
+    const rows = await rowCount(page);
     assert(rows === total, `${label}: KPI says ${total}, the table renders ${rows}`);
 
     // And the same number the page derives, derived independently here.
@@ -1032,13 +1043,13 @@ for (const [route, dept, label] of [
   await check(`${label}: search, filter panel and chips actually narrow the set`, async () => {
     await go(route);
     await page.waitForSelector("table tbody tr", { timeout: 20000 });
-    const before = await page.$$eval("table tbody tr", (r) => r.length);
+    const before = await rowCount(page);
 
     const box = page.getByLabel(`${label} Prüfungen durchsuchen`);
     await box.fill("Frankfurt");
     await page.getByRole("button", { name: "Suchen" }).click();
     await page.waitForTimeout(600);
-    const after = await page.$$eval("table tbody tr", (r) => r.length);
+    const after = await rowCount(page);
     assert(after > 0 && after < before, `${label}: search gave ${after} of ${before} rows`);
 
     // The active filter is visible and removable — not an invisible state the
@@ -1047,7 +1058,7 @@ for (const [route, dept, label] of [
     assert(await chip.count() > 0, `${label}: the search is not shown as a removable chip`);
     await chip.first().click();
     await page.waitForTimeout(600);
-    const restored = await page.$$eval("table tbody tr", (r) => r.length);
+    const restored = await rowCount(page);
     assert(restored === before, `${label}: clearing the chip left ${restored} of ${before} rows`);
 
     // exact: the chips' accessible names begin with "Filter" too, and
@@ -1167,7 +1178,7 @@ await check("the three tabs are independent surfaces, not one shared state", asy
   // narrow another — and the KPI row would keep reporting the unfiltered set.
   await go("/bvb-eea");
   await page.waitForSelector("table tbody tr", { timeout: 20000 });
-  const eeaRows = await page.$$eval("table tbody tr", (r) => r.length);
+  const eeaRows = await rowCount(page);
   const box = page.getByLabel("BVB-EEA Prüfungen durchsuchen");
   await box.fill("Frankfurt");
   await page.getByRole("button", { name: "Suchen" }).click();
@@ -1185,13 +1196,13 @@ await check("the three tabs are independent surfaces, not one shared state", asy
 
   await go("/bvb-eea");
   await page.waitForSelector("table tbody tr", { timeout: 20000 });
-  const back = await page.$$eval("table tbody tr", (r) => r.length);
+  const back = await rowCount(page);
   assert(back === eeaRows, `BVB-EEA came back filtered: ${back} of ${eeaRows} rows`);
 
   // And the two tabs really do scope to different Gewerke.
   await go("/psv-itk");
   await page.waitForSelector("table tbody tr", { timeout: 20000 });
-  const itkRows = await page.$$eval("table tbody tr", (r) => r.length);
+  const itkRows = await rowCount(page);
   assert(itkRows !== eeaRows, `both tabs render ${itkRows} rows — they are not scoped`);
 });
 
@@ -1433,7 +1444,7 @@ await check("the page filter box suggests from the same index and never navigate
   await page.keyboard.press("Enter");
   await page.waitForTimeout(900);
   assert(/\/bvb-eea/.test(page.url()), `choosing a suggestion left the page: ${page.url()}`);
-  const rows = await page.$$eval("table tbody tr", (r) => r.length);
+  const rows = await rowCount(page);
   assert(rows > 0, "the suggestion filtered the table down to nothing");
 });
 
@@ -1535,7 +1546,7 @@ await check("setting a status to \"nicht erforderlich\" removes the row from tha
   // table disagree.
   await go("/psv-itk");
   await page.waitForSelector("table tbody tr", { timeout: 30000 });
-  const rowsBefore = await page.$$eval("table tbody tr", (r) => r.length);
+  const rowsBefore = await rowCount(page);
   const kpiBefore = await page.$$eval(".grid .text-4xl", (els) =>
     Number(els[0].textContent.replace(/\./g, "")),
   );
@@ -1549,7 +1560,7 @@ await check("setting a status to \"nicht erforderlich\" removes the row from tha
   await page.locator(`${cell} select`).first().selectOption("nicht erforderlich");
   await page.waitForTimeout(1200);
 
-  const rowsAfter = await page.$$eval("table tbody tr", (r) => r.length);
+  const rowsAfter = await rowCount(page);
   const kpiAfter = await page.$$eval(".grid .text-4xl", (els) =>
     Number(els[0].textContent.replace(/\./g, "")),
   );
@@ -1567,7 +1578,7 @@ await check("setting a status to \"nicht erforderlich\" removes the row from tha
   await page.waitForTimeout(900);
   await go("/psv-itk");
   await page.waitForSelector("table tbody tr", { timeout: 30000 });
-  const restored = await page.$$eval("table tbody tr", (r) => r.length);
+  const restored = await rowCount(page);
   assert(restored === rowsBefore, `after restoring, rows are ${restored}, expected ${rowsBefore}`);
 });
 
@@ -3410,12 +3421,15 @@ await check("the table streams without ever holding a row back", async () => {
    * appears, never whether it exists — so the count taken mid-animation has to
    * equal the count taken after it settles.
    */
-  const during = await page.$$eval("table tbody tr", (r) => r.length);
+  const during = await rowCount(page);
   const streaming = await page.$eval("table tbody", (b) => b.getAttribute("data-stream"));
   await page.waitForTimeout(1400);
-  const after = await page.$$eval("table tbody tr", (r) => r.length);
+  const after = await rowCount(page);
   assert(during === after, `${during} rows mid-stream, ${after} after — rows are being withheld`);
-  assert(during > 100, `only ${during} rows in the table`);
+  assert(during > 100, `only ${during} rows in the table set`);
+  // virtualization: the set is complete, the DOM holds only the window — never every row
+  const inDom = await page.$$eval("table tbody tr:not([aria-hidden])", (r) => r.length);
+  assert(inDom > 0 && inDom < 80, `${inDom} rows in the DOM for a set of ${during} — the table is not virtualized`);
   assert(streaming === "on", "the table did not stream at all");
 
   // And every row is opaque once the wave has passed.

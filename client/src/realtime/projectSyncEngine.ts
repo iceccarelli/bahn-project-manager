@@ -285,6 +285,22 @@ export class ProjectSyncEngine {
     return changed;
   }
 
+  /**
+   * Reconcile specific rows with the server (rows that just became live-subscribed may have changed
+   * while they were not). Cheap: one `sync` of the held versions; returns how many rows changed.
+   */
+  async syncRows(ids: number[]): Promise<number> {
+    const known = ids.flatMap(id => { const v = this.server.get(id)?.version; return v === undefined ? [] : [{ id, version: v }]; });
+    let changed = 0;
+    for (let i = 0; i < known.length; i += 200) {
+      const chunk = known.slice(i, i + 200);
+      const res = await this.deps.sync(chunk);
+      this.applyRecovery(res);
+      for (const k of chunk) if (this.server.get(k.id)?.version !== k.version) changed++;
+    }
+    return changed;
+  }
+
   // ---- optimistic edits ---------------------------------------------------
 
   /** Overlay a local edit immediately. Returns nothing to hold: rollback is by mutationId. */

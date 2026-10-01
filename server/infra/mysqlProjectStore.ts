@@ -13,9 +13,12 @@ import {
   type ProjectSummary,
 } from "@shared/project-contract";
 import {
-  auditLog, departmentReviews, domainEvents, idempotencyKeys, notifications, projects, projectWatchers, type Project,
+  auditLog, departmentReviews, domainEvents, idempotencyKeys, notifications, notificationUnread, projects, projectWatchers, type Project,
 } from "../../drizzle/schema";
 import type { AuditRow, IdempotencyClaim, ProjectStore, ProjectTx } from "../domain/ports";
+import { syncProjectGeo } from "./geoModel";
+import { clusterCellDegrees, MAP_MAX_MARKERS, MAP_POINT_ZOOM, type MapQuery, type MapResult, type MapStation, type MapStationProjects, type MapStationQuery } from "@shared/map-contract";
+import * as rm from "./readModels";
 
 type Db = MySql2Database<Record<string, never>>;
 // drizzle's transaction handle has the same query surface as the db
@@ -50,6 +53,13 @@ const DETAIL_COLUMNS = {
   kommentar: projects.kommentar,
   projektLink: projects.projektLink,
   createdAt: projects.createdAt,
+};
+const TABLE_COLUMNS = {
+  bahnhofsnummer: projects.bahnhofsnummer,
+  streckennummer: projects.streckennummer,
+  projektbeschreibung: projects.projektbeschreibung,
+  kommentar: projects.kommentar,
+  projektLink: projects.projektLink,
 };
 type SummaryRow = Pick<Project, keyof typeof SUMMARY_COLUMNS>;
 
@@ -122,18 +132,38 @@ function txAdapter(x: Executor): ProjectTx {
       return rows[0] ?? null;
     },
     async updateVersioned(id, expectedVersion, set) {
+      // read models follow workspace/station changes: capture the "before" while the row is still locked by the caller
+      const moves = "bahnhofsmanagement" in set || "station" in set;
+      let before: { bm: string | null; station: string | null } | null = null;
+      if (moves) {
+        const [pre] = await x.select({ bm: projects.bahnhofsmanagement, station: projects.station }).from(projects).where(eq(projects.id, id)).limit(1);
+        before = pre ?? null;
+      }
       const [res] = await x
         .update(projects)
         .set({ ...set, syncVersion: expectedVersion + 1 })
         .where(and(eq(projects.id, id), eq(projects.syncVersion, expectedVersion)));
       // mysql2 reports matched rows in affectedRows (CLIENT_FOUND_ROWS default)
-      return (res as unknown as { affectedRows: number }).affectedRows === 1;
+      const ok = (res as unknown as { affectedRows: number }).affectedRows === 1;
+      if (ok && before) {
+        const bm = "bahnhofsmanagement" in set ? (set.bahnhofsmanagement ?? null) : before.bm;
+        const station = "station" in set ? (set.station ?? null) : before.station;
+        if (bm !== before.bm) await rm.moveWorkspace(x, id, before.bm, bm);
+        if (bm !== before.bm || station !== before.station) await syncProjectGeo(x, id, station, bm);
+      }
+      return ok;
     },
     async insertProject(values) {
       const [res] = await x.insert(projects).values({ ...values, syncVersion: 1 } as typeof projects.$inferInsert);
-      return Number((res as unknown as { insertId: number }).insertId);
+      const id = Number((res as unknown as { insertId: number }).insertId);
+      await rm.projectDelta(x, values.bahnhofsmanagement ?? null, 1);
+      await syncProjectGeo(x, id, values.station ?? null, values.bahnhofsmanagement ?? null);
+      return id;
     },
     async deleteProject(id) {
+      const [pre] = await x.select({ bm: projects.bahnhofsmanagement }).from(projects).where(eq(projects.id, id)).limit(1);
+      if (pre) await rm.removeProject(x, id, pre.bm); // BEFORE the rows disappear
+      await x.execute(sql`DELETE FROM project_geo WHERE projectId = ${id}`);
       await x.delete(departmentReviews).where(eq(departmentReviews.projectId, id));
       await x.delete(projectWatchers).where(eq(projectWatchers.projectId, id));
       await x.delete(projects).where(eq(projects.id, id));
@@ -144,6 +174,7 @@ function txAdapter(x: Executor): ProjectTx {
     },
     async insertNotification(row) {
       const [res] = await x.insert(notifications).values({ ...row, kind: row.kind as never, createdAt: new Date() });
+      await x.execute(sql`INSERT INTO notification_unread (userId, workspace, n) VALUES (${row.userId}, ${row.workspace ?? ""}, 1) ON DUPLICATE KEY UPDATE n = n + 1`);
       return Number((res as unknown as { insertId: number }).insertId);
     },
     async lockReview(projectId, department) {
@@ -157,7 +188,14 @@ function txAdapter(x: Executor): ProjectTx {
       return r ? { id: r.id, status: r.status, prueferName: r.prueferName, datum: r.datum } : null;
     },
     async updateReview(id, set) {
+      const [pre] = await x
+        .select({ department: departmentReviews.department, status: departmentReviews.status, pruefer: departmentReviews.prueferName, bm: projects.bahnhofsmanagement })
+        .from(departmentReviews).innerJoin(projects, eq(projects.id, departmentReviews.projectId)).where(eq(departmentReviews.id, id)).limit(1);
       await x.update(departmentReviews).set(set).where(eq(departmentReviews.id, id));
+      if (pre && (("status" in set && (set.status ?? null) !== pre.status) || ("prueferName" in set && (set.prueferName ?? null) !== pre.pruefer))) {
+        await rm.reviewDelta(x, { workspace: pre.bm, department: pre.department, status: pre.status, pruefer: pre.pruefer }, -1);
+        await rm.reviewDelta(x, { workspace: pre.bm, department: pre.department, status: "status" in set ? (set.status ?? null) : pre.status, pruefer: "prueferName" in set ? (set.prueferName ?? null) : pre.pruefer }, 1);
+      }
     },
     detail: id => loadDetail(x, id),
     async appendAudit(rows: AuditRow[]) {
@@ -299,14 +337,23 @@ export class MysqlProjectStore implements ProjectStore {
   }
   async unreadCount(userId: string, workspaces: readonly string[] | null) {
     if (workspaces !== null && workspaces.length === 0) return 0;
-    const conds: SQL[] = [eq(notifications.userId, userId), sql`${notifications.readAt} IS NULL`];
-    if (workspaces !== null) conds.push(inArray(notifications.workspace, [...workspaces]));
-    const [r] = await this.db.select({ n: sql<number>`COUNT(*)` }).from(notifications).where(and(...conds));
+    // counter table: a few rows per user (one per workspace), never COUNT(*) over the inbox
+    const conds: SQL[] = [eq(notificationUnread.userId, userId)];
+    if (workspaces !== null) conds.push(inArray(notificationUnread.workspace, [...workspaces]));
+    const [r] = await this.db.select({ n: sql<number>`COALESCE(SUM(${notificationUnread.n}), 0)` }).from(notificationUnread).where(and(...conds));
     return Number(r?.n ?? 0);
   }
   async markRead(userId: string, ids: number[] | "all") {
-    const cond = ids === "all" ? eq(notifications.userId, userId) : and(eq(notifications.userId, userId), inArray(notifications.id, ids));
-    await this.db.update(notifications).set({ readAt: new Date() }).where(and(cond, sql`${notifications.readAt} IS NULL`));
+    await this.db.transaction(async tx => {
+      const cond = ids === "all" ? eq(notifications.userId, userId) : and(eq(notifications.userId, userId), inArray(notifications.id, ids));
+      // lock the rows we are about to flip, so the counter change below matches exactly what this call changed
+      const flipped = await tx.select({ id: notifications.id, ws: notifications.workspace }).from(notifications).where(and(cond, sql`${notifications.readAt} IS NULL`)).for("update");
+      if (!flipped.length) return;
+      await tx.update(notifications).set({ readAt: new Date() }).where(inArray(notifications.id, flipped.map(f => f.id)));
+      const by = new Map<string, number>();
+      for (const f of flipped) by.set(f.ws ?? "", (by.get(f.ws ?? "") ?? 0) + 1);
+      for (const [w, n] of by) await tx.execute(sql`UPDATE notification_unread SET n = GREATEST(0, n - ${n}) WHERE userId = ${userId} AND workspace = ${w}`);
+    });
   }
 
   async filterOptions(workspaces: readonly string[]) {
@@ -340,16 +387,15 @@ export class MysqlProjectStore implements ProjectStore {
     return { projectCount: Number(row?.n ?? 0), lastUpdatedAt: iso(row?.last ? new Date(row.last) : null) };
   }
 
-  async list(
-    input: ListProjectsInput,
+  /** The WHERE predicates shared by list() and count(); null = the principal can see nothing. */
+  buildConds(
+    input: Pick<ListProjectsInput, "bahnhofsmanagement" | "projektstand" | "projektleiter" | "search" | "department" | "reviewStatus" | "pruefer">,
     visibility: { workspaces: readonly string[] | null },
-    opts: { offset?: number; stationPrefix?: string } = {},
-  ) {
-    const limit = Math.min(input.limit, MAX_PAGE_SIZE);
+    opts: { stationPrefix?: string } = {},
+  ): SQL[] | null {
     const conds: SQL[] = [];
-
     // null = unrestricted; [] = no workspace access (must return nothing, never everything)
-    if (visibility.workspaces !== null && visibility.workspaces.length === 0) return { items: [], nextCursor: null, ...(input.includeTotal ? { total: 0 } : {}) };
+    if (visibility.workspaces !== null && visibility.workspaces.length === 0) return null;
     if (visibility.workspaces !== null) conds.push(inArray(projects.bahnhofsmanagement, [...visibility.workspaces]));
     if (input.bahnhofsmanagement) conds.push(eq(projects.bahnhofsmanagement, input.bahnhofsmanagement));
     if (input.projektstand) conds.push(eq(projects.projektstand, input.projektstand));
@@ -381,6 +427,66 @@ export class MysqlProjectStore implements ProjectStore {
     if (reviewConds.length) {
       conds.push(sql`EXISTS (SELECT 1 FROM department_reviews r WHERE r.projectId = ${projects.id} AND ${sql.join(reviewConds, sql` AND `)})`);
     }
+    return conds;
+  }
+
+  /**
+   * Map markers inside a bounding box, from the geo read model. Authorization and filters are the SAME
+   * predicates as the list (workspace restriction included), so the map can never show what the table may not.
+   * Below MAP_POINT_ZOOM (or when the box holds too many stations) the answer is a grid of clusters.
+   */
+  async mapQuery(q: MapQuery, visibility: { workspaces: readonly string[] | null }): Promise<MapResult> {
+    const conds = this.buildConds(q, visibility);
+    if (conds === null) return { mode: "clusters", markers: [], total: 0 };
+    const box = sql`g.lat BETWEEN ${q.bbox.minLat} AND ${q.bbox.maxLat} AND g.lng BETWEEN ${q.bbox.minLng} AND ${q.bbox.maxLng}`;
+    const where = conds.length ? sql`${and(...conds)} AND ${box}` : box;
+    const from = sql`FROM project_geo g JOIN projects ON projects.id = g.projectId WHERE ${where}`;
+    const rows = async <T>(query: SQL) => ((await this.db.execute(query)) as unknown as [T[]])[0];
+    if (q.zoom >= MAP_POINT_ZOOM) {
+      const stations = await rows<{ k: string; name: string; lat: number; lng: number; n: number | string; prec: MapStation["precision"] }>(
+        sql`SELECT g.stationKey AS k, MIN(g.stationName) AS name, MIN(g.lat) AS lat, MIN(g.lng) AS lng, COUNT(*) AS n, MIN(g.\`precision\`) AS prec ${from} GROUP BY g.stationKey LIMIT ${MAP_MAX_MARKERS + 1}`);
+      if (stations.length <= MAP_MAX_MARKERS) {
+        return { mode: "stations", total: stations.reduce((a, r) => a + Number(r.n), 0), markers: stations.map(r => ({ kind: "station" as const, key: r.k, name: r.name, lat: Number(r.lat), lng: Number(r.lng), count: Number(r.n), precision: r.prec })) };
+      }
+    }
+    const cell = clusterCellDegrees(q.zoom);
+    const cl = await rows<{ gy: number | string; gx: number | string; lat: number; lng: number; n: number | string }>(
+      sql`SELECT FLOOR(g.lat / ${cell}) AS gy, FLOOR(g.lng / ${cell}) AS gx, AVG(g.lat) AS lat, AVG(g.lng) AS lng, COUNT(*) AS n ${from} GROUP BY gy, gx LIMIT ${MAP_MAX_MARKERS}`);
+    return { mode: "clusters", total: cl.reduce((a, r) => a + Number(r.n), 0), markers: cl.map(r => ({ kind: "cluster" as const, key: `${q.zoom}:${r.gy}:${r.gx}`, lat: Number(r.lat), lng: Number(r.lng), count: Number(r.n) })) };
+  }
+
+  /** The projects at one station marker (popup content), authorized and filtered like the map. */
+  async mapStation(q: MapStationQuery, visibility: { workspaces: readonly string[] | null }): Promise<MapStationProjects> {
+    const conds = this.buildConds(q, visibility);
+    if (conds === null) return { stationKey: q.stationKey, total: 0, projects: [] };
+    const where = conds.length ? sql`${and(...conds)} AND g.stationKey = ${q.stationKey}` : sql`g.stationKey = ${q.stationKey}`;
+    const from = sql`FROM project_geo g JOIN projects ON projects.id = g.projectId WHERE ${where}`;
+    const rows = async <T>(query: SQL) => ((await this.db.execute(query)) as unknown as [T[]])[0];
+    const [t] = await rows<{ n: number | string }>(sql`SELECT COUNT(*) AS n ${from}`);
+    const list = await rows<{ id: number; projektnummer: string | null; station: string | null; projektstand: string | null; projektleiter: string | null }>(
+      sql`SELECT projects.id AS id, projects.projektnummer AS projektnummer, projects.station AS station, projects.projektstand AS projektstand, projects.projektleiter AS projektleiter ${from} ORDER BY projects.id DESC LIMIT 50`);
+    return { stationKey: q.stationKey, total: Number(t?.n ?? 0), projects: list };
+  }
+
+  /** Exact COUNT(*) for a filter set. Deliberately a separate call: pages never pay for it. */
+  async count(
+    input: Pick<ListProjectsInput, "bahnhofsmanagement" | "projektstand" | "projektleiter" | "search" | "department" | "reviewStatus" | "pruefer">,
+    visibility: { workspaces: readonly string[] | null },
+  ): Promise<number> {
+    const conds = this.buildConds(input, visibility);
+    if (conds === null) return 0;
+    const [r] = await this.db.select({ n: sql<number>`COUNT(*)` }).from(projects).where(conds.length ? and(...conds) : undefined);
+    return Number(r?.n ?? 0);
+  }
+
+  async list(
+    input: ListProjectsInput,
+    visibility: { workspaces: readonly string[] | null },
+    opts: { offset?: number; stationPrefix?: string } = {},
+  ) {
+    const limit = Math.min(input.limit, MAX_PAGE_SIZE);
+    const conds = this.buildConds(input, visibility, opts);
+    if (conds === null) return { items: [], nextCursor: null, ...(input.includeTotal ? { total: 0 } : {}) };
 
     // Column and direction come from closed enums, never from raw input.
     const desc_ = input.dir === "desc";
@@ -414,8 +520,9 @@ export class MysqlProjectStore implements ProjectStore {
     }
 
     const wantDetails = input.expand.includes("details");
+    const wantTable = !wantDetails && input.expand.includes("table");
     const rows = await this.db
-      .select(wantDetails ? { ...SUMMARY_COLUMNS, ...DETAIL_COLUMNS } : SUMMARY_COLUMNS)
+      .select(wantDetails ? { ...SUMMARY_COLUMNS, ...DETAIL_COLUMNS } : wantTable ? { ...SUMMARY_COLUMNS, ...TABLE_COLUMNS } : SUMMARY_COLUMNS)
       .from(projects)
       .where(conds.length ? and(...conds) : undefined)
       .orderBy(...order)
@@ -429,7 +536,8 @@ export class MysqlProjectStore implements ProjectStore {
     const nextCursor = rows.length > limit && last ? encodeCursor({ v: cursorValue(last), id: last.id }) : null;
 
     let reviewsById: Map<number, NonNullable<ProjectListItem["reviews"]>> | null = null;
-    if (input.expand.includes("reviews") && page.length) {
+    const fullReviews = input.expand.includes("reviews");
+    if ((fullReviews || input.expand.includes("reviewSummary")) && page.length) {
       reviewsById = new Map();
       const rr = await this.db
         .select()
@@ -438,7 +546,9 @@ export class MysqlProjectStore implements ProjectStore {
         .orderBy(asc(departmentReviews.department));
       for (const r of rr) {
         const list = reviewsById.get(r.projectId) ?? [];
-        list.push({ id: r.id, department: r.department, prueferName: r.prueferName, datum: dateToWire(r.datum), status: r.status, updatedAt: r.updatedAt.toISOString() });
+        list.push(fullReviews
+          ? { id: r.id, department: r.department, prueferName: r.prueferName, datum: dateToWire(r.datum), status: r.status, updatedAt: r.updatedAt.toISOString() }
+          : { department: r.department, prueferName: r.prueferName, datum: dateToWire(r.datum), status: r.status });
         reviewsById.set(r.projectId, list);
       }
     }
@@ -450,6 +560,10 @@ export class MysqlProjectStore implements ProjectStore {
           bahnhofsnummer: d.bahnhofsnummer, streckennummer: d.streckennummer, projektbeschreibung: d.projektbeschreibung,
           eigvEinstufung: d.eigvEinstufung, kommentar: d.kommentar, projektLink: d.projektLink, createdAt: d.createdAt.toISOString(),
         });
+      }
+      if (wantTable) {
+        const d = r as unknown as Project;
+        Object.assign(item, { bahnhofsnummer: d.bahnhofsnummer, streckennummer: d.streckennummer, projektbeschreibung: d.projektbeschreibung, kommentar: d.kommentar, projektLink: d.projektLink });
       }
       if (reviewsById) item.reviews = reviewsById.get(r.id) ?? [];
       return item;

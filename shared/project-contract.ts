@@ -157,8 +157,10 @@ export interface ConflictInfo {
 export const PROJECT_SORTS = ["updatedAt", "id", "projektnummer", "station", "projektstand", "projektleiter", "bahnhofsmanagement"] as const;
 
 /** A list row: the summary plus whatever `expand` asked for. Reviews only when expanded. */
+/** A review as the table needs it. `id`/`updatedAt` are present only with the full `reviews` expansion. */
+export type ListReview = Pick<ProjectDetail["reviews"][number], "department" | "prueferName" | "datum" | "status"> & Partial<Pick<ProjectDetail["reviews"][number], "id" | "updatedAt">>;
 export type ProjectListItem = ProjectSummary &
-  Partial<Pick<ProjectDetail, "bahnhofsnummer" | "streckennummer" | "projektbeschreibung" | "eigvEinstufung" | "kommentar" | "projektLink" | "createdAt" | "reviews">>;
+  Partial<Pick<ProjectDetail, "bahnhofsnummer" | "streckennummer" | "projektbeschreibung" | "eigvEinstufung" | "kommentar" | "projektLink" | "createdAt">> & { reviews?: ListReview[] };
 export const MAX_PAGE_SIZE = 100;
 export const DEFAULT_PAGE_SIZE = 50;
 
@@ -176,7 +178,13 @@ export const ListProjectsInputSchema = z.object({
   reviewStatus: z.string().max(128).optional(),
   pruefer: z.string().max(256).optional(),
   /** optional detail expansion; the default row is the lean summary */
-  expand: z.array(z.enum(["reviews", "details"])).max(2).default([]),
+  /**
+   * Projection control. The default row is the lean summary.
+   *   table          exactly the extra fields the Projekte table renders (no eigvEinstufung/createdAt)
+   *   reviewSummary  reviews as {department, status, prueferName, datum} only (no ids/timestamps)
+   *   reviews        full review rows;  details  every detail field (what projects.get returns)
+   */
+  expand: z.array(z.enum(["reviews", "details", "table", "reviewSummary"])).max(4).default([]),
   includeTotal: z.boolean().default(false),
 });
 export type ListProjectsInput = z.infer<typeof ListProjectsInputSchema>;

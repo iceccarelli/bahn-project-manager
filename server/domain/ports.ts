@@ -26,8 +26,32 @@ export interface SubscriptionScope {
 export const OVERFLOW = Symbol("realtime.overflow");
 export type Delivery = DomainEvent | typeof OVERFLOW;
 
+/**
+ * What a subscription hands back. `ready` settles only when the transport has CONFIRMED every channel
+ * (Redis: the SUBSCRIBE reply arrived). A caller that must not miss anything published after "now"
+ * (the gateway, before it reads the feed head and says hello) awaits it first.
+ */
+export interface SubscriptionIterator extends AsyncIterator<Delivery> {
+  readonly ready: Promise<void>;
+  /** add/remove channels on a live subscription; resolves when the added channels are confirmed */
+  update(change: { add?: readonly ScopeKey[]; remove?: readonly ScopeKey[] }): Promise<void>;
+  readonly channels: ReadonlySet<ScopeKey>;
+}
+export interface Subscription extends AsyncIterable<Delivery> {
+  [Symbol.asyncIterator](): SubscriptionIterator;
+}
+
+/** Cross-instance control messages (e.g. "change the scopes of stream X, owned by node N"). Optional transport feature. */
+export interface ControlChannel {
+  /** send to the node that owns the stream; returns false if the transport is local-only and `node` is not this node */
+  sendControl(node: string, message: unknown): Promise<boolean>;
+  /** receive control messages addressed to `node`; returns an unsubscribe */
+  onControl(node: string, handler: (message: unknown) => void): Promise<() => void>;
+}
+
 export interface RealtimeSubscriber {
-  subscribe(scope: SubscriptionScope): AsyncIterable<Delivery>;
+  subscribe(scope: SubscriptionScope): Subscription;
+  readonly control?: ControlChannel;
 }
 
 // ---- Persistence ----------------------------------------------------------

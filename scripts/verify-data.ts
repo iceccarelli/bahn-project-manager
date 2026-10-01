@@ -25,7 +25,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildStationGeo, resolveAll } from "../client/src/lib/stationGeo";
+import { buildStationGeo, resolveAll } from "../shared/stationGeo";
 import type { StationRecord } from "../client/src/hooks/useStations";
 import { BAHNHOFSMANAGEMENT, STATION_BAHNHOFSMANAGEMENT } from "../shared/bahnhofsmanagement";
 import { CHECKLIST_QUESTIONS, DEPARTMENT_QUESTIONS } from "../shared/checklist";

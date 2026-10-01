@@ -10,6 +10,7 @@ import "dotenv/config";
 import mysql from "mysql2/promise";
 import { drizzle } from "drizzle-orm/mysql2";
 import { migrate } from "drizzle-orm/mysql2/migrator";
+import { rebuildGeo } from "../infra/geoModel";
 
 const url = process.env.DATABASE_URL;
 if (!url) { console.error("DATABASE_URL is required"); process.exit(2); }
@@ -19,6 +20,9 @@ try {
   const [[lock]] = (await conn.query("SELECT GET_LOCK('bahn:migrate', 120) AS got")) as any;
   if (Number(lock.got) !== 1) throw new Error("could not obtain migration lock within 120 s");
   await migrate(drizzle({ client: conn }), { migrationsFolder: process.env.MIGRATIONS_DIR ?? "drizzle" });
+  // read models that are derived from data (not from events) are brought up to date once per deploy; idempotent
+  const geo = await rebuildGeo(conn as never);
+  console.log(`geo read model: ${geo.placed} placed, ${geo.unplaced} unplaced`);
   await conn.query("SELECT RELEASE_LOCK('bahn:migrate')");
   console.log("migrations applied");
 } catch (e) {
