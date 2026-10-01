@@ -161,19 +161,9 @@ export default function Projects() {
   const routeSearch = useRouteSearch();
   const { recordDocument } = useAuditTrail();
   // Phone-width screens default to the card view (a 14-column table is not an operations surface at 390 px); same
-  // domain operations and authorization either way — only the presentation differs. The reader's explicit choice wins.
-  const [viewMode, setViewMode] = useState<"table" | "cards" | "map">(() => {
-    try {
-      const saved = localStorage.getItem("bpm-projects-view");
-      if (saved === "table" || saved === "cards" || saved === "map") return saved;
-    } catch { /* private window: fall through to the width default */ }
-    return typeof window !== "undefined" && window.matchMedia?.("(max-width: 639px)").matches ? "cards" : "table";
-  });
-  const viewChosen = useRef(false); // only an explicit choice is remembered; the width default is not a preference
-  useEffect(() => {
-    if (!viewChosen.current) { viewChosen.current = true; return; }
-    try { localStorage.setItem("bpm-projects-view", viewMode); } catch { /* private window */ }
-  }, [viewMode]);
+  // domain operations and authorization either way — only the presentation differs. Not persisted: it is a width default.
+  const [viewMode, setViewMode] = useState<"table" | "cards" | "map">(() =>
+    typeof window !== "undefined" && window.matchMedia?.("(max-width: 639px)").matches ? "cards" : "table");
   /** Set by the map; narrows the card view to one station's exact project ids. */
   const [stationFocus, setStationFocus] = useState<StationSelection | null>(null);
   /** The card to scroll to and ring after arriving from the map. */
