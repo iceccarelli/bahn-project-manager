@@ -13,6 +13,9 @@ export default defineConfig({
     },
   },
   test: {
+    // DB suites create a schema and run every migration in beforeAll; on a cold CI runner with suites running in parallel
+    // that exceeded the 10 s default (hook timeout, not an assertion). Hooks get headroom; test timeouts are unchanged.
+    hookTimeout: 60_000,
     globalSetup: ["./scripts/data/vitest-global-setup.ts"],
     environment: "node",
     include: [
