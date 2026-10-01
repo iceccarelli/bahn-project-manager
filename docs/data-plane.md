@@ -139,3 +139,20 @@ handful of rows for the caller's workspaces only; the map query (`map.query`, `m
 
 * `projektnummer` search: InnoDB tokenizes "G.011570020" to `011570020` ("G" is below the minimum token size), so
   `+G.011570020*` matched nothing on MySQL 8.4. The query is now tokenized like the index.
+
+## The mutation plane is enforced, not described
+
+`server/mutationPlane.test.ts` fails the build when:
+
+* a server file outside the classified writer list (`WRITERS`) contains an INSERT/UPDATE/DELETE or an ORM write — routers and
+  domain services may never write tables directly (they go through `ProjectTx`);
+* a tRPC mutation procedure exists that is not classified (domain / audit-only / personal state / dev-only);
+* an HTTP write route other than the ephemeral realtime scope/presence endpoints appears;
+* `shared/` or `client/` imports the database layer.
+
+Removed in this pass because they were dead and unscoped or bypassed the plane: the Excel import route, the Manus/Forge
+scaffolding (`llm`, image/voice/storage proxies, `notifyOwner`, Google-Maps proxy), the unmounted Express OData router, and
+unscoped read helpers in `server/db.ts`.
+
+Known, documented referential gap: deleting a project does not unlink `schedule_slots.projectId` /
+`project_checklists.projectId` (the link then resolves to NotFound; it is read-safe, not a write bypass).

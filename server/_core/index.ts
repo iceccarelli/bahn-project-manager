@@ -4,7 +4,6 @@ import { createServer } from "node:http";
 import net from "node:net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
-import { registerStorageProxy } from "./storageProxy";
 import { registerExcelRoutes } from "../excel";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
@@ -103,7 +102,6 @@ async function startServer() {
     };
   app.use("/api/export", requirePrincipal(canExport));
 
-  registerStorageProxy(app);
   if (process.env.NODE_ENV !== "production") registerOAuthRoutes(app); // legacy OAuth/cookie login: development only
   registerExcelRoutes(app);
   // tRPC API

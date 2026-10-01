@@ -1,7 +1,7 @@
-import { eq, like, and, or, sql, desc, asc, inArray, count } from "drizzle-orm";
+import { eq, sql, asc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import mysql, { type Pool } from "mysql2/promise";
-import { type InsertUser, users, projects, departmentReviews, auditLog } from "../drizzle/schema";
+import { type InsertUser, users, projects, departmentReviews } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 const makeDb = (pool: Pool) => drizzle({ client: pool });
@@ -140,104 +140,8 @@ export async function getUserByOpenId(openId: string) {
 
 // ============= PROJECT QUERIES =============
 
-export async function getProjects(params: {
-  showAll?: boolean;
-  page?: number;
-  pageSize?: number;
-  search?: string;
-  region?: string;
-  projektleiter?: string;
-  department?: string;
-  status?: string;
-  sortBy?: string;
-  sortDir?: 'asc' | 'desc';
-  minLat?: number;
-  maxLat?: number;
-  minLng?: number;
-  maxLng?: number;
-}) {
-  const db = await getDb();
-  if (!db) return { projects: [], total: 0 };
 
-  const { page = 1, pageSize = 50, search, region, projektleiter, sortBy = 'id', sortDir = 'asc', showAll = false, minLat: _minLat, maxLat: _maxLat, minLng: _minLng, maxLng: _maxLng } = params;
-  const offset = (page - 1) * pageSize;
 
-  const conditions: any[] = [];
-
-  if (search) {
-    conditions.push(
-      or(
-        like(projects.projektnummer, `%${search}%`),
-        like(projects.station, `%${search}%`),
-        like(projects.projektbeschreibung, `%${search}%`),
-        like(projects.projektleiter, `%${search}%`),
-        like(projects.bahnhofsmanagement, `%${search}%`)
-      )
-    );
-  }
-
-  if (region) {
-    conditions.push(eq(projects.bahnhofsmanagement, region));
-  }
-
-  if (projektleiter) {
-    conditions.push(like(projects.projektleiter, `%${projektleiter}%`));
-  }
-
-  // Geo-filtering is handled client-side since projects don't have lat/lng in schema
-  // Reserved for future enhancement if coordinates are added to the schema
-
-  const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
-
-  // Get total count
-  const countResult = await db
-    .select({ total: count() })
-    .from(projects)
-    .where(whereClause);
-  const total = countResult[0]?.total ?? 0;
-
-  // Get paginated projects
-  const sortColumn = (projects as any)[sortBy] || projects.id;
-  const orderFn = sortDir === 'desc' ? desc : asc;
-
-  const query = db
-    .select()
-    .from(projects)
-    .where(whereClause)
-    .orderBy(orderFn(sortColumn));
-
-  const projectList = showAll
-    ? await query
-    : await query.limit(pageSize).offset(offset);
-
-  return { projects: projectList, total };
-}
-
-export async function getProjectWithReviews(projectId: number) {
-  const db = await getDb();
-  if (!db) return null;
-
-  const projectResult = await db.select().from(projects).where(eq(projects.id, projectId)).limit(1);
-  if (projectResult.length === 0) return null;
-
-  const reviews = await db
-    .select()
-    .from(departmentReviews)
-    .where(eq(departmentReviews.projectId, projectId));
-
-  return { ...projectResult[0], reviews };
-}
-
-export async function getProjectReviews(projectIds: number[]) {
-  const db = await getDb();
-  if (!db) return [];
-  if (projectIds.length === 0) return [];
-
-  return db
-    .select()
-    .from(departmentReviews)
-    .where(inArray(departmentReviews.projectId, projectIds));
-}
 
 // ============= DEPARTMENT REVIEW QUERIES =============
 
@@ -245,88 +149,9 @@ export async function getProjectReviews(projectIds: number[]) {
 
 // ============= AUDIT LOG =============
 
-export async function getAuditLog(params: { entityType?: string; entityId?: number; limit?: number }) {
-  const db = await getDb();
-  if (!db) return [];
-
-  const conditions: any[] = [];
-  if (params.entityType) conditions.push(eq(auditLog.entityType, params.entityType));
-  if (params.entityId) conditions.push(eq(auditLog.entityId, params.entityId));
-
-  const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
-
-  return db
-    .select()
-    .from(auditLog)
-    .where(whereClause)
-    .orderBy(desc(auditLog.createdAt))
-    .limit(params.limit ?? 100);
-}
 
 // ============= FILTER OPTIONS =============
 
-export async function getSearchSuggestions(term: string) {
-  const db = await getDb();
-  if (!db) return [];
-
-  // Prefix match on the raw column: the utf8mb4_unicode_ci collation is already
-  // case-insensitive, and LIKE 'x%' can use the column index (LOWER() and %x% cannot).
-  const searchLike = `${term.replace(/[\\%_]/g, m => `\\${m}`)}%`;
-
-  const projectSuggestions = await db
-    .selectDistinct({
-      value: projects.station,
-      type: sql<string>`'station'`,
-    })
-    .from(projects)
-    .where(like(projects.station, searchLike))
-    .union(
-      db.selectDistinct({
-        value: projects.projektnummer,
-        type: sql<string>`'projektnummer'`,
-      })
-      .from(projects)
-      .where(like(projects.projektnummer, searchLike))
-    )
-    .union(
-      db.selectDistinct({
-        value: projects.projektleiter,
-        type: sql<string>`'projektleiter'`,
-      })
-      .from(projects)
-      .where(like(projects.projektleiter, searchLike))
-    )
-    .union(
-      db.selectDistinct({
-        value: projects.bahnhofsmanagement,
-        type: sql<string>`'region'`,
-      })
-      .from(projects)
-      .where(like(projects.bahnhofsmanagement, searchLike))
-    );
-
-  const reviewSuggestions = await db
-    .selectDistinct({
-      value: departmentReviews.prueferName,
-      type: sql<string>`'pruefer'`,
-    })
-    .from(departmentReviews)
-    .where(like(departmentReviews.prueferName, searchLike))
-    .union(
-      db.selectDistinct({
-        value: departmentReviews.department,
-        type: sql<string>`'department'`,
-      })
-      .from(departmentReviews)
-      .where(like(departmentReviews.department, searchLike))
-    );
-
-  const combinedSuggestions = [...projectSuggestions, ...reviewSuggestions]
-    .filter(s => s.value !== null && s.value !== '' && s.value !== 'Zuordnung erforderlich')
-    .map(s => s.value);
-
-  return Array.from(new Set(combinedSuggestions)).slice(0, 10); // Limit to 10 unique suggestions
-}
 
 export async function getFilterOptions() {
   const db = await getDb();

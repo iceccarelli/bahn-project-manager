@@ -488,7 +488,3 @@ export const appRouter = router({
 });
 
 export type AppRouter = typeof appRouter;
-
-// Note: The full Express OData router (odataRouter) is exported from ./odata/router
-// and should be mounted in server/_core/index.ts like:
-// app.use("/odata", expressODataRouter);
