@@ -54,6 +54,12 @@ export interface ControlChannel {
 
 export interface RealtimeSubscriber {
   subscribe(scope: SubscriptionScope): Subscription;
+  /**
+   * Called when the shared transport (Redis) came back after an outage. Pub/sub is fire-and-forget, so anything published
+   * while this process's subscriber was down is gone: the gateway tells every open stream to catch up from the durable
+   * feed immediately instead of waiting for the next event or the periodic poll.
+   */
+  onTransportRecovered?(cb: () => void): () => void;
   readonly control?: ControlChannel;
 }
 

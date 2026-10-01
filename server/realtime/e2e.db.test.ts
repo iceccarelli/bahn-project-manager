@@ -179,7 +179,8 @@ describe.skipIf(!hasTestDb)("realtime data plane (real DB, real HTTP/SSE)", () =
     B.conn.start();
     await until(() => B.conn.getStatus().state === "connected" && B.conn.getStatus().lastSyncedChanges !== null, 10000, "resync");
     expect(B.engine.get(p.id)).toMatchObject({ version: 4, kommentar: "three" });
-    expect(B.conn.getStatus().lastSyncedChanges).toBe(3); // "Wiederverbunden · 3 Änderungen synchronisiert"
+    // three edits of ONE project are one changed project, however recovery was split between feed and snapshot
+    expect(B.conn.getStatus().lastSyncedChanges).toBe(1); // "Wiederverbunden · 1 Projekt aktualisiert"
     expect(states).toContain("resynchronizing");
     // the UI never said "connected" between reconnecting and finishing resync
     const i = states.lastIndexOf("resynchronizing");

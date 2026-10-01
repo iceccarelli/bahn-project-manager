@@ -49,7 +49,7 @@ for (const f of walk("deploy").filter((x) => /docker-compose\.ya?ml$/.test(x))) 
 
 // ruleset <-> CI
 const ci = read(".github/workflows/ci.yml");
-const jobs = new Set([...ci.matchAll(/^  ([a-z0-9-]+):\s*$/gm)].map((m) => m[1]));
+const jobs = new Set([...ci.matchAll(/^ {2}([a-z0-9-]+):\s*$/gm)].map((m) => m[1]));
 const ruleset = JSON.parse(read(".github/rulesets/main.json"));
 const required = ruleset.rules.find((r) => r.type === "required_status_checks")?.parameters.required_status_checks.map((c) => c.context) ?? [];
 for (const c of required) if (!jobs.has(c)) bad(`ruleset requires "${c}" but ci.yml has no such job`);

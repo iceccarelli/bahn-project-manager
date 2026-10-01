@@ -108,7 +108,11 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         // creations/deletions/moves change the shell count; plain updates do not
         if (e.eventType !== "project.updated") void qc.invalidateQueries({ queryKey: serverKeys.shell() });
       },
-      onHint: kind => { if (kind === "notifications") void qc.invalidateQueries({ queryKey: ["server", "notifications"] }); },
+      onHint: kind => {
+        if (kind === "notifications") void qc.invalidateQueries({ queryKey: ["server", "notifications"] });
+        // the server's transport recovered from an outage: re-read the durable feed now (idempotent, shares one run)
+        if (kind === "catchup") void engine.catchUp().catch(() => {});
+      },
       // every (re)connect re-reads the durable inbox + unread counter: nothing missed while offline stays hidden
       onSync: ({ headSeq, reconnecting }) => {
         void qc.invalidateQueries({ queryKey: ["server", "notifications"] });

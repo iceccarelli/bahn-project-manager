@@ -8,7 +8,7 @@ DATABASE_URL=mysql://… JWT_SECRET=<≥32 random chars> \
 OIDC_ISSUER=https://login.microsoftonline.com/<tenant>/v2.0 OIDC_AUDIENCE=<api client id> \
 REDIS_URL=redis://… METRICS_TOKEN=<token> node dist/index.js
 ```
-`GET /api/health` liveness · `GET /api/ready` readiness (`SELECT 1` + Redis `PING`) · `GET /api/metrics` (token).
+`GET /api/health` liveness · `GET /api/ready` readiness: **503** if MySQL is unreachable or the process is draining; **200 `degraded`** (`redis:"down"`) if only Redis is down — Redis is transport/cache, so the instance stays in rotation (writes commit, the outbox holds events, clients recover); alert on `bahn_redis_up == 0` · `GET /api/metrics` (token).
 Migrations: `node dist/migrate.js` (the image has no drizzle-kit; `pnpm db:push` is the dev-time generator) (`drizzle/0004_event_pipeline.sql` adds `domain_events`, `idempotency_keys`, audit columns,
 `projects_updatedAt_id_idx`, FULLTEXT index, append-only audit triggers). The FULLTEXT build and index creation lock/scan
 a large table — run off-peak.

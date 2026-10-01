@@ -269,3 +269,34 @@ describe("ProjectSyncEngine — review edits ride the same stream", () => {
     expect(engine.get(1)!.reviews[0]!.prueferName).toBe("Alt");
   });
 });
+
+
+describe("ProjectSyncEngine — resync reports distinct changed projects (one unit, however recovery was split)", () => {
+  const e = (id: number, v: number, field: string) => event(id, v, { [field]: { from: null, to: `${field}${v}` } });
+
+  it("three edits of one project are ONE changed project — through the feed, a snapshot, or both", async () => {
+    // feed delivers two of the three; the snapshot delivers the last: 3 events + 1 snapshot diff used to be counted as 3 and 2
+    const feed = async () => ({ events: [e(1, 2, "kommentar"), e(1, 3, "projektleiter")], cursor: 2, hasMore: false });
+    const sync = vi.fn(async () => ({ events: [], snapshots: [project({ id: 1, version: 4, kommentar: "kommentar2" } as never)], deleted: [] }));
+    const { engine } = make(sync, feed as never);
+    engine.seed(project());
+    engine.initCursor(0);
+    expect(await engine.resync()).toBe(1);
+    expect(engine.get(1)!.version).toBe(4);
+  });
+
+  it("counts every distinct project exactly once: updated + deleted; unchanged projects are not counted", async () => {
+    const feed = async () => ({ events: [e(1, 2, "kommentar"), e(1, 3, "projektleiter")], cursor: 2, hasMore: false });
+    const sync = vi.fn(async () => ({ events: [], snapshots: [], deleted: [2] }));
+    const { engine } = make(sync, feed as never);
+    engine.seed(project({ id: 1 } as never)); engine.seed(project({ id: 2 } as never)); engine.seed(project({ id: 3 } as never));
+    engine.initCursor(0);
+    expect(await engine.resync()).toBe(2); // project 1 (two events) + project 2 (deleted); project 3 untouched
+  });
+
+  it("nothing changed while offline → 0 (the badge stays 'Live')", async () => {
+    const { engine } = make();
+    engine.seed(project()); engine.initCursor(0);
+    expect(await engine.resync()).toBe(0);
+  });
+});

@@ -229,11 +229,11 @@ export class ProjectSyncEngine {
             // received live but parked behind a failed recovery must still be applied here; a
             // duplicate of an applied event is `stale` and costs nothing.
             const d = decideEvent(this.server.get(id)?.version, e);
-            if (d.kind === "apply") { this.commit(id, e); n++; }
-            else if (d.kind === "gap") { this.buffer(id, e); await this.recover(id); n++; }
+            if (d.kind === "apply") { this.commit(id, e); n++; this.touched?.add(id); }
+            else if (d.kind === "gap") { this.buffer(id, e); await this.recover(id); n++; this.touched?.add(id); }
           } else if (!alreadySeen) {
             // Unknown aggregate (created / moved in / removed): signalled once; a repeat would only re-trigger list refetches
-            this.applyUnseen(e); n++;
+            this.applyUnseen(e); n++; this.touched?.add(id);
           }
         }
         this.feedCursor = Math.max(this.feedCursor, page.cursor);
@@ -263,26 +263,34 @@ export class ProjectSyncEngine {
     }
   }
 
+  /** Aggregates touched by feed events while a resync is running (see resync). */
+  private touched: Set<number> | null = null;
+
   /**
-   * Full reconnect recovery for every tracked aggregate. Returns how many
-   * aggregates changed, for "Wiederverbunden · 3 Änderungen synchronisiert".
+   * Full reconnect recovery for every tracked aggregate.
+   *
+   * Returns the number of DISTINCT PROJECTS whose state differs from what this client held when the recovery started
+   * (updated, created/moved in, deleted/moved out). One unit, however the change arrived: three edits of one project are one
+   * changed project, whether they came through the feed, a snapshot or both — so the badge's "N Projekte aktualisiert" is an
+   * operational fact, not an artifact of how recovery happened to be split (it used to add feed events to snapshot diffs).
    */
   async resync(upTo?: number): Promise<number> {
-    let changed = await this.catchUp(upTo).catch(() => 0);
-    const known = this.cursor();
-    if (known.length === 0) return changed;
-    this.buffered.clear(); // anything parked is covered by the snapshot/events below
-    for (let i = 0; i < known.length; i += 200) {
-      const chunk = known.slice(i, i + 200);
-      const before = new Map(chunk.map(k => [k.id, k.version]));
-      const res = await this.deps.sync(chunk);
-      this.applyRecovery(res);
-      for (const k of chunk) {
-        const now = this.server.get(k.id)?.version;
-        if (now !== before.get(k.id)) changed++;
+    const held = new Map(this.cursor().map(k => [k.id, k.version]));
+    this.touched = new Set();
+    try {
+      await this.catchUp(upTo).catch(() => 0);
+      const known = this.cursor();
+      if (known.length > 0) {
+        this.buffered.clear(); // anything parked is covered by the snapshot/events below
+        for (let i = 0; i < known.length; i += 200) {
+          const res = await this.deps.sync(known.slice(i, i + 200));
+          this.applyRecovery(res);
+        }
       }
-    }
-    return changed;
+      const changed = new Set(this.touched);
+      for (const [id, v] of held) if (this.server.get(id)?.version !== v) changed.add(id); // updated or removed
+      return changed.size;
+    } finally { this.touched = null; }
   }
 
   /**
