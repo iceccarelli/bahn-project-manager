@@ -34,6 +34,7 @@ import {
 import type { StatusTone } from "@shared/status-appearance";
 import { toast } from "sonner";
 import { MapView, type StationSelection } from "@/components/Map";
+import ServerMap from "@/components/ServerMap";
 import { ProjectDetailDialog } from "@/components/ProjectDetailDialog";
 import { documentFilename } from "@shared/generated-stamp";
 import { useAuditTrail } from "@/hooks/useAuditTrail";
@@ -1138,19 +1139,22 @@ export default function Projects() {
                 667 px-tall phone left no page around it.
               */
               <>
-              {SERVER_MODE && (
-                <p className="mb-2 text-xs text-muted-foreground" role="note">
-                  Die Karte zeigt die bereits geladenen Projekte ({data?.projects.length ?? 0}). Viewport-Abfragen für den gesamten Bestand sind im Servermodus noch nicht angebunden.
-                </p>
-              )}
+              {SERVER_MODE ? (
+                <ServerMap
+                  className="relative h-[65vh] min-h-[380px] w-full sm:h-[560px] lg:h-[600px]"
+                  filters={{ search: search || undefined, bahnhofsmanagement: region || undefined, projektleiter: projektleiter || undefined, pruefer: pruefer || undefined, department: department || undefined, reviewStatus: status || undefined }}
+                  onProjectSelect={(id) => setDetailProjectId(id)}
+                />
+              ) : (
               <MapView
-                projects={data?.projects || []}
-                initialCenter={{ lat: 51.1657, lng: 10.4515 }}
-                initialZoom={6}
-                className="h-[65vh] min-h-[380px] sm:h-[560px] lg:h-[600px] w-full relative"
-                onProjectSelect={handleMapProjectSelect}
-                onStationSelect={handleStationSelect}
-              />
+                  projects={data?.projects || []}
+                  initialCenter={{ lat: 51.1657, lng: 10.4515 }}
+                  initialZoom={6}
+                  className="h-[65vh] min-h-[380px] sm:h-[560px] lg:h-[600px] w-full relative"
+                  onProjectSelect={handleMapProjectSelect}
+                  onStationSelect={handleStationSelect}
+                />
+              )}
               </>
             )}
           </>

@@ -6,6 +6,8 @@
 import { readFileSync } from "node:fs";
 import mysql from "mysql2/promise";
 import { ingestProjects } from "../../shared/ingest";
+import { rebuildReadModels } from "../../server/infra/readModels";
+import { rebuildGeo } from "../../server/infra/geoModel";
 
 const url = process.argv[2];
 if (!url) { console.error("usage: seed-real.ts <mysql-url-with-db>"); process.exit(2); }
@@ -24,6 +26,9 @@ for (let i = 0; i < projects.length; i += 200) {
   const reviews = chunk.flatMap(p => (p.reviews ?? []).map((r: any) => [p.id, r.department, r.prueferName ?? null, date(r.pruefDatum), r.status ?? null]));
   if (reviews.length) await db.query("INSERT IGNORE INTO department_reviews (projectId,department,prueferName,datum,status) VALUES ?", [reviews]);
 }
+// bulk loads bypass the domain write path, so the derived read models are rebuilt from the base tables
+await rebuildReadModels(db as never);
+const geo = await rebuildGeo(db as never);
 const [[c]] = (await db.query("SELECT COUNT(*) n, (SELECT COUNT(*) FROM department_reviews) r FROM projects")) as any;
-console.log(JSON.stringify({ projects: c.n, reviews: c.r }));
+console.log(JSON.stringify({ projects: c.n, reviews: c.r, geoPlaced: geo.placed, geoUnplaced: geo.unplaced }));
 await db.end();
