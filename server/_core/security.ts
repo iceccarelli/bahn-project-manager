@@ -17,25 +17,36 @@ import type { NextFunction, Request, Response } from "express";
 /** Opaque per-host id so a load test can PROVE its generator is not the server host. */
 export const INSTANCE_ID = createHash("sha256").update(hostname()).digest("hex").slice(0, 8);
 
-export const CSP = [
-  "default-src 'self'",
-  "script-src 'self'",
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https://*.tile.openstreetmap.org",
-  "font-src 'self' data:",
-  "connect-src 'self'",
-  "worker-src 'self' blob:",
-  "object-src 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "frame-ancestors 'none'",
-].join("; ");
+/**
+ * connect-src admits the IdP origin (OIDC discovery + token endpoint are called from the browser) and
+ * nothing else. It is derived from OIDC_ISSUER; CSP_CONNECT_EXTRA (space separated origins) covers an
+ * authority whose endpoints live on another host. Scripts stay 'self' only.
+ */
+export function buildCsp(env: NodeJS.ProcessEnv = process.env): string {
+  const origins = new Set<string>(["'self'"]);
+  try { if (env.OIDC_ISSUER) origins.add(new URL(env.OIDC_ISSUER).origin); } catch { /* assertProductionConfig reports a bad issuer */ }
+  for (const o of (env.CSP_CONNECT_EXTRA ?? "").split(/\s+/).filter(Boolean)) { try { origins.add(new URL(o).origin); } catch { /* ignore */ } }
+  return [
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob: https://*.tile.openstreetmap.org",
+    "font-src 'self' data:",
+    `connect-src ${[...origins].join(" ")}`,
+    "worker-src 'self' blob:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+  ].join("; ");
+}
+export const CSP = buildCsp();
 
 const allowedOrigins = () =>
   new Set((process.env.ALLOWED_ORIGINS ?? "").split(",").map(s => s.trim()).filter(Boolean));
 
 export function securityHeaders(_req: Request, res: Response, next: NextFunction) {
-  res.setHeader("Content-Security-Policy", CSP);
+  res.setHeader("Content-Security-Policy", buildCsp());
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");

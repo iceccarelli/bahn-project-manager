@@ -8,20 +8,23 @@ import { useQuery } from "@tanstack/react-query";
 import superjson from "superjson";
 import type { AppRouter } from "../../../server/routers";
 import type { ConflictInfo } from "@shared/project-contract";
+import { TOKEN_KEY, browserDeps, currentToken, settingsFromEnv } from "./oidcClient";
 
 export const SERVER_MODE = import.meta.env.VITE_SERVER_MODE === "1";
 
 /**
- * Default token source until MSAL is integrated: a token placed in
- * sessionStorage (per-tab, cleared on close) by the sign-in flow. Registered
- * providers (setAccessTokenProvider) take precedence.
+ * Token source. With VITE_OIDC_AUTHORITY/CLIENT_ID set (real sign-in) the token comes from the OIDC
+ * client (memory + sessionStorage, expiry-checked, never localStorage). Without OIDC configuration
+ * (local dev / tests with an injected token) a raw sessionStorage token is honoured. Either way the
+ * server re-validates signature, issuer, audience and expiry on every request.
  */
-export const TOKEN_STORAGE_KEY = "bahn.access_token";
+export const TOKEN_STORAGE_KEY = TOKEN_KEY;
+export const OIDC = settingsFromEnv(import.meta.env as Record<string, string | undefined>, typeof location === "undefined" ? "" : location.origin);
 const storageProvider = async (): Promise<string | null> => {
-  try { return sessionStorage.getItem(TOKEN_STORAGE_KEY); } catch { return null; }
+  try { return OIDC ? currentToken(browserDeps()) : sessionStorage.getItem(TOKEN_KEY); } catch { return null; }
 };
 let tokenProvider: (() => Promise<string | null>) | null = storageProvider;
-/** MSAL (or any OIDC library) registers how to obtain the current access token. */
+/** Another OIDC library may register how to obtain the current access token. */
 export const setAccessTokenProvider = (p: (() => Promise<string | null>) | null) => { tokenProvider = p ?? storageProvider; };
 
 export const authHeaders = async (): Promise<Record<string, string>> => {

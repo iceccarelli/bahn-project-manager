@@ -1,0 +1,1 @@
+import{r}from"./vendor-react-B78YhOhl.js";import{b1 as a}from"./index-oPMbQra_.js";function s(n=null){const e=r.useRef(null);return r.useEffect(()=>{const t=requestAnimationFrame(()=>a(e.current));return()=>cancelAnimationFrame(t)},[n]),e}export{s as u};

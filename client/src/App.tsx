@@ -8,6 +8,7 @@ import { QueryClientProvider } from "@/_core/query/QueryProvider";
 import AuthGate from "@/components/AuthGate";
 import DashboardLayout from "@/components/DashboardLayout";
 import Login from "@/pages/Login";
+import AuthCallback from "@/pages/AuthCallback";
 import { useCrossTabSync } from "@/hooks/useCrossTabSync";
 import { SERVER_MODE } from "@/realtime/serverApi";
 import { RealtimeProvider } from "@/realtime/RealtimeProvider";
@@ -83,6 +84,7 @@ function App() {
             <Toaster />
             <Switch>
               <Route path="/login" component={Login} />
+              <Route path="/auth/callback" component={AuthCallback} />
               <Route>
                 <AuthGate>
                   <LiveData>

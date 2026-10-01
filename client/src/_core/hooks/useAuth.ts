@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, useMemo } from "react";
-import { SERVER_MODE, serverApi } from "@/realtime/serverApi";
+import { OIDC, SERVER_MODE, serverApi } from "@/realtime/serverApi";
+import { browserDeps, clearAuth, signOutUrl } from "@/realtime/oidcClient";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 export type DemoUser = {
@@ -101,8 +102,15 @@ function useServerAuth() {
     [q.data],
   );
   const logout = useCallback(() => {
-    try { sessionStorage.removeItem("bahn.access_token"); } catch { /* ignore */ }
-    void serverApi.auth.logout.mutate().finally(() => { qc.clear(); window.location.assign("/login"); });
+    const d = browserDeps();
+    // Drop every client-side credential first, whatever the network does next.
+    try { clearAuth(d); } catch { /* ignore */ }
+    const leave = async () => {
+      qc.clear();
+      const idp = OIDC ? await signOutUrl(OIDC, d, `${window.location.origin}/login`) : null;
+      window.location.assign(idp ?? "/login");
+    };
+    void serverApi.auth.logout.mutate().catch(() => undefined).finally(leave);
   }, [qc]);
   return { user, loading: q.isLoading, isAuthenticated: !!user, logout, session: q.data ?? null };
 }
