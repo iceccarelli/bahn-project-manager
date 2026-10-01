@@ -1,0 +1,14 @@
+{
+  "_doc": "Regression budgets for the Projekte page (scripts/perf/browser-perf.ts). Measured baseline (docs/measurements/browser-perf-after.json): DOM 1469, rows in DOM 21, INP 72 ms, heap 10.2 MB, scroll p95 50 ms, LCP 364 ms, first marker 439 ms. Budgets leave headroom for CI-runner variance but fail on structural regressions (an unvirtualized table renders >1000 rows and >20k DOM nodes).",
+  "initial.domNodes": { "max": 2500, "baseline": 1469 },
+  "initial.tableRowsInDom": { "max": 40, "baseline": 21 },
+  "initial.jsHeapMB": { "max": 30, "baseline": 10.2 },
+  "initial.jsTransferredKB": { "max": 1200, "baseline": 937 },
+  "afterScroll.domNodes": { "max": 3200, "baseline": 1903 },
+  "afterScroll.tableRowsInDom": { "max": 60, "baseline": 29 },
+  "scroll.p95": { "max": 100, "baseline": 50 },
+  "webVitals.inpMs": { "max": 200, "baseline": 72 },
+  "webVitals.lcpMs": { "max": 2500, "baseline": 364 },
+  "webVitals.cls": { "max": 0.1, "baseline": 0.078 },
+  "map.timeToFirstMarkerMs": { "max": 3000, "baseline": 439 }
+}

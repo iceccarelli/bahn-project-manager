@@ -263,6 +263,46 @@ jobs:
         if: always()
         with: { name: e2e-server-artifacts, path: artifacts/ }
 
+  # ---------------------------------------------------------------------------
+  # UI performance regression gate: the production client against the real server, MySQL 8.4 and the 1,298-row dataset,
+  # measured in headless Chromium (DOM size, rows in DOM, heap, scroll frames, INP, LCP, CLS, first map marker) and
+  # compared with scripts/perf/thresholds.json. The virtualized table must not regress to rendering every loaded row.
+  # ---------------------------------------------------------------------------
+  ui-perf:
+    runs-on: ubuntu-latest
+    needs: [lint-typecheck]
+    timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.4
+        env: { MYSQL_ROOT_PASSWORD: root, MYSQL_DATABASE: bahn_perf }
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot" --health-interval=5s --health-timeout=5s --health-retries=20
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd="redis-cli ping" --health-interval=5s --health-timeout=3s --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: 'pnpm' }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: scripts/e2e/build-server-mode.sh
+      - run: DATABASE_URL=mysql://root:root@127.0.0.1:3306/bahn_perf node dist-e2e/migrate.js
+      - run: pnpm exec tsx scripts/e2e/seed-real.ts mysql://root:root@127.0.0.1:3306/bahn_perf
+      - run: pnpm exec tsx scripts/perf/browser-perf.ts --label ci
+        env:
+          PERF_DATABASE_URL: mysql://root:root@127.0.0.1:3306/bahn_perf
+          E2E_REDIS: redis://127.0.0.1:6379
+      - run: node scripts/perf/check-thresholds.mjs artifacts/browser-perf-ci.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: ui-perf, path: artifacts/ }
+
   # Migrations on the intended production engine, twice (idempotent), with the structure the app relies on.
   migrations-mysql84:
     runs-on: ubuntu-latest
