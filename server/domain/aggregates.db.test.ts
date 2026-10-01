@@ -30,7 +30,7 @@ describe.skipIf(!hasTestDb)("booking + checklist aggregates (real DB)", () => {
     store = new MysqlProjectStore(t.db as never);
     projects = new ProjectService(store, () => {});
     bookings = new BookingService(store, () => {});
-    checklists = new ChecklistService(store, projects, () => {});
+    checklists = new ChecklistService(store, projects, bookings, () => {});
     for (let i = 0; i < 6; i++) {
       const [r] = (await t.pool.query("INSERT INTO schedule_slots (slotKey, datum, von, bis) VALUES (?,?,?,?)", [`2026-11-0${i + 1}T09:00`, `2026-11-0${i + 1}`, "09:00", "09:50"])) as unknown as [{ insertId: number }];
       slot.push(r.insertId);
@@ -157,6 +157,21 @@ describe.skipIf(!hasTestDb)("booking + checklist aggregates (real DB)", () => {
     // submitted checklists follow the workspace rule
     expect((await checklists.get(kasselOnly, d.checklist.id)).status).toBe("submitted");
     await expect(checklists.get(mitteOnly, d.checklist.id)).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it("submit + slot is ONE transaction: a slot taken meanwhile rolls back the project, the reviews and the checklist; otherwise slot, project and checklist commit together", async () => {
+    const [r] = (await t.pool.query("INSERT INTO schedule_slots (slotKey, datum, von, bis) VALUES ('2026-12-01T10:00','2026-12-01','10:00','10:50')")) as unknown as [{ insertId: number }];
+    const slotId = r.insertId;
+    const d1 = await draft(markus), d2 = await draft(markus);
+    const projectsBefore = await count("SELECT COUNT(*) n FROM projects");
+    const first = await checklists.submit(markus, { id: d1.checklist.id, expectedVersion: 1, slot: { id: slotId, expectedVersion: 1, status: "Gebucht" }, idempotencyKey: key() }, ctx());
+    expect((await t.pool.query("SELECT status, projectId, syncVersion FROM schedule_slots WHERE id=?", [slotId]) as any)[0][0]).toMatchObject({ status: "Gebucht", projectId: first.projectId, syncVersion: 2 });
+    expect(await count("SELECT COUNT(*) n FROM projects")).toBe(projectsBefore + 1);
+    // the second submission wants the same slot
+    await expect(checklists.submit(markus, { id: d2.checklist.id, expectedVersion: 1, slot: { id: slotId, expectedVersion: 1 }, idempotencyKey: key() }, ctx())).rejects.toMatchObject({ info: { reason: "slot-taken" } });
+    expect(await count("SELECT COUNT(*) n FROM projects")).toBe(projectsBefore + 1);       // no second project
+    expect((await checklists.get(markus, d2.checklist.id)).status).toBe("draft");           // still a draft, retry with another slot is possible
+    expect(await verifyReadModels(t.pool)).toEqual([]);
   });
 
   it("submit is atomic: if the project cannot be created, nothing is left behind and the checklist stays a draft", async () => {

@@ -270,6 +270,38 @@ async function main() {
     await scrollRows(B.page, 0);
   });
 
+  // ---------------- DOMAIN UNIFICATION: PSV-ITK is a Gewerk view over the same aggregate ------------------------
+  await step("PSV-ITK (server): the Gewerk page is the Project aggregate filtered to ITK — virtualized, read-model KPIs, and A's review edit reaches B live", async () => {
+    const { page } = B;
+    await page.goto(`${URLS[1]}/psv-itk`);
+    await page.waitForSelector('[data-testid="server-department-view"]', { timeout: 15000 });
+    await page.waitForSelector("table tbody tr td", { timeout: 15000 });
+    const domRows = await page.$$eval("table tbody tr:not([aria-hidden])", r => r.length);
+    const setSize = await rowSet(page);
+    if (setSize <= 20 || domRows >= 80) throw new Error(`virtualization: ${domRows} DOM rows for a set of ${setSize}`);
+    const kpi = await page.locator('[data-testid="server-department-view"] .text-4xl').first().innerText();
+    if (!/\d/.test(kpi)) throw new Error(`KPI card shows "${kpi}" (read model not served)`);
+    // B (Frankfurt-only) sees Frankfurt reviews only
+    const sess = await api(URLS[1]!, tokenB, "dashboard.department", { department: "ITK" }, "GET");
+    const all = await api(URLS[0]!, tokenA, "dashboard.department", { department: "ITK" }, "GET");
+    if (!(sess.data.total > 0 && sess.data.total < all.data.total)) throw new Error(`department KPI scope: B ${sess.data.total} vs ALL ${all.data.total}`);
+    if (sess.data.byWorkspace.some((w: any) => w.workspace !== "Frankfurt")) throw new Error("B's department aggregate contains another workspace");
+    // live: filter to project 481 and watch the ITK status cell change when A edits it
+    await page.locator("#dept-search").fill(PNR);
+    await until(async () => (await rowSet(page)) === 1 && (await page.locator(`tbody tr button[aria-label^="Status ITK für Projekt"]`).count()) === 1, 10000, "exactly the ITK row of 481 (search by Projektnummer)");
+    const cellNow = async () => ((await page.locator(`tbody tr button[aria-label^="Status ITK für Projekt"]`).first().textContent({ timeout: 1500 }).catch(() => null)) ?? "").trim();
+    const before = await cellNow();
+    const target = before === "in Bearbeitung" ? "prüffähig" : "in Bearbeitung";
+    const v = await ver(PID);
+    const r = await api(URLS[0]!, tokenA, "projects.updateReview", { projectId: PID, department: "ITK", expectedVersion: v, changes: { status: target }, idempotencyKey: key() });
+    if (r.status !== 200) throw new Error(JSON.stringify(r.error));
+    await until(async () => (await cellNow()) === target, 8000, `B's ITK status to show ${target}`)
+      .catch(async e => { throw new Error(`${e.message} | before="${before}" now="${await cellNow()}" apiNow=${JSON.stringify((await api(URLS[1]!, tokenB, "projects.list", { limit: 5, search: PNR, department: "ITK", expand: ["table", "reviewSummary"] }, "GET")).data?.items?.length)} apiNoDept=${JSON.stringify((await api(URLS[1]!, tokenB, "projects.list", { limit: 5, search: PNR, expand: [] }, "GET")).data?.items?.length)} rows=${await page.locator("tbody tr").count()} body=${(await page.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ").slice(0, 500)}`); });
+    if (!(await noReload(page))) throw new Error("reloaded");
+    await page.goto(`${URLS[1]}/projects`); // restore B's page for the following steps
+    await search(page, "");
+  });
+
   await step("ITEM 2: A creates a project → B (online) gets it via the event-triggered targeted list refresh, no reload", async () => {
     await search(B.page, ""); // list of all Frankfurt projects, newest id first
     await until(async () => (await rowSet(B.page)) > 20, 10000, "B list loaded");

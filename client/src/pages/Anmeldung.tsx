@@ -12,6 +12,9 @@ import { Step5Bestaetigung } from "@/components/anmeldung/Step5Bestaetigung";
 import { visibleQuestions } from "@shared/checklist";
 import { useChecklistDraft, type ChecklistDraft } from "@/hooks/useChecklistDraft";
 import { bookSlot } from "@/hooks/useSchedule";
+import { SERVER_MODE } from "@/realtime/serverApi";
+import { useQueryClient } from "@tanstack/react-query";
+import { serverKeys } from "@/realtime/RealtimeProvider";
 import { CHECKLIST_MODES } from "@shared/checklist";
 import { Check, ChevronLeft, ChevronRight, FileDown, Mail, Save } from "lucide-react";
 import { recipientsFor } from "@shared/contacts";
@@ -53,6 +56,7 @@ export default function Anmeldung() {
    */
   type CreatedProject = Awaited<ReturnType<ChecklistDraft["submit"]>>["project"];
   const createdRef = useRef<CreatedProject | null>(null);
+  const qc = useQueryClient();
   const { recordDocument, recordMessage, recordEvent } = useAuditTrail();
   const updateProject = useUpdateProject();
   const [pdfState, setPdfState] = useState<"idle" | "working">("idle");
@@ -112,6 +116,22 @@ export default function Anmeldung() {
   };
 
   const handleSubmit = async () => {
+    if (SERVER_MODE) {
+      // The server books the slot in the same transaction as the project: nothing to compensate on a taken slot.
+      try {
+        const { project } = await draft.submit();
+        void qc.invalidateQueries({ queryKey: serverKeys.bookings() });
+        void qc.invalidateQueries({ queryKey: serverKeys.lists() });
+        setSubmitted({ projectId: project.id });
+        toast.success(`Fachspezialistenprüfung angemeldet — Projekt ${project.projektnummer ?? project.id} angelegt`);
+      } catch (err) {
+        const reason = (err as { data?: { conflict?: { reason?: string } } })?.data?.conflict?.reason;
+        void qc.invalidateQueries({ queryKey: serverKeys.bookings() });
+        if (reason === "slot-taken" || reason === "stale") { toast.warning("Der Termin war bereits vergeben — es wurde nichts angelegt. Bitte einen anderen wählen."); draft.setTermin(null); goTo(4); return; }
+        toast.error(err instanceof Error ? err.message : "Anmeldung fehlgeschlagen");
+      }
+      return;
+    }
     try {
       // Create once. On a retry after a rejected slot the project already
       // exists and only the booking is repeated.

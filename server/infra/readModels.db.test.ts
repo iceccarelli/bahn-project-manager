@@ -214,3 +214,34 @@ describe.skipIf(!hasTestDb)("notification retention (real DB)", () => {
     } finally { await t.drop(); }
   });
 });
+
+describe("fulltextQuery tokenizes like the index", async () => {
+  const { fulltextQuery } = await import("./mysqlProjectStore");
+  it("splits Projektnummern on punctuation (G.011570020 → 011570020), keeps umlauts, drops sub-minimum tokens", () => {
+    expect(fulltextQuery("G.011570020").boolean).toBe("+011570020*");
+    expect(fulltextQuery("Köln Hbf").boolean).toBe("+Köln* +Hbf*");
+    expect(fulltextQuery("Frankfurt (Main)-Hbf").boolean).toBe("+Frankfurt* +Main* +Hbf*");
+    expect(fulltextQuery("A-1").boolean).toBeNull();
+    expect(fulltextQuery("A-1").prefix).toBe("A 1");
+    expect(fulltextQuery("+++").boolean).toBeNull();
+  });
+});
+
+describe.skipIf(!hasTestDb)("search by Projektnummer finds real-format numbers (real DB)", () => {
+  it("G.011570020-style numbers are found by their full text, by a fragment, and by the number alone", async () => {
+    const t = await createTestDatabase(5);
+    try {
+      const store = new MysqlProjectStore(t.db as never);
+      const svc = new ProjectService(store, () => {});
+      const { project } = await svc.create(admin, { fields: { projektnummer: "G.011570020", station: "Koblenz Hbf Kaisertreppe", bahnhofsmanagement: "Koblenz" }, idempotencyKey: key() }, ctx());
+      for (const q of ["G.011570020", "011570020", "G.011570", "Kaisertreppe", "koblenz hbf"]) {
+        const r = await store.list({ limit: 10, sort: "id", dir: "desc", expand: [], search: q } as never, { workspaces: null });
+        expect(r.items.map(i => i.id), `search "${q}"`).toContain(project.id);
+      }
+      // still found after unrelated updates (InnoDB re-indexes updated rows)
+      const v = (await svc.get(admin, project.id)).version;
+      await svc.update(admin, { id: project.id, expectedVersion: v, changes: { projektstand: "FA" }, idempotencyKey: key() }, ctx());
+      expect((await store.list({ limit: 10, sort: "id", dir: "desc", expand: [], search: "G.011570020" } as never, { workspaces: null })).items.map(i => i.id)).toContain(project.id);
+    } finally { await t.drop(); }
+  });
+});

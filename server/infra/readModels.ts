@@ -118,3 +118,20 @@ export async function readDashboard(pool: Pool, workspaces: readonly string[] | 
     prueferWorkload: load.map(r => ({ name: r.pruefer, count: Number(r.n) })),
   };
 }
+
+export interface DepartmentStats { department: string; total: number; byStatus: Array<{ status: string | null; count: number }>; byWorkspace: Array<{ workspace: string | null; count: number }> }
+
+/** One Gewerk's review counters (BVB-EEA / PSV-ITK KPIs), from the read model, for the caller's workspaces only. */
+export async function readDepartment(pool: Pool, workspaces: readonly string[] | null, department: string): Promise<DepartmentStats> {
+  if (workspaces !== null && workspaces.length === 0) return { department, total: 0, byStatus: [], byWorkspace: [] };
+  const where = workspaces === null ? " WHERE department = ?" : " WHERE department = ? AND workspace IN (?)";
+  const args = workspaces === null ? [department] : [department, [...workspaces]];
+  const q = async <T>(s: string) => ((await pool.query(s, args)) as unknown as [T[]])[0];
+  const byStatus = await q<{ status: string; n: number }>(`SELECT status, SUM(n) AS n FROM rm_review_stats${where} GROUP BY status HAVING SUM(n) > 0 ORDER BY SUM(n) DESC`);
+  const byWs = await q<{ workspace: string; n: number }>(`SELECT workspace, SUM(n) AS n FROM rm_review_stats${where} GROUP BY workspace HAVING SUM(n) > 0 ORDER BY workspace`);
+  return {
+    department, total: byStatus.reduce((a, r) => a + Number(r.n), 0),
+    byStatus: byStatus.map(r => ({ status: r.status === "" ? null : r.status, count: Number(r.n) })),
+    byWorkspace: byWs.map(r => ({ workspace: r.workspace === "" ? null : r.workspace, count: Number(r.n) })),
+  };
+}

@@ -67,7 +67,7 @@ export async function getServices(log: (msg: string, e?: unknown) => void = cons
   const relay = new OutboxRelay(outbox, bus, { onError: e => log("[outbox]", e) });
   const svc = new ProjectService(store, relay.nudge);
   const bookings = new BookingService(store, relay.nudge);
-  const checklists = new ChecklistService(store, svc, relay.nudge);
+  const checklists = new ChecklistService(store, svc, bookings, relay.nudge);
 
   // Sampled gauges: cheap, and they make saturation visible before it hurts.
   const sampler = setInterval(async () => {

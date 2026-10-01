@@ -21,6 +21,7 @@ import type { ProjectChecklist } from "../../drizzle/schema";
 import { AggregateConflictError, ForbiddenError, IdempotencyKeyReuseError, NotFoundError, ValidationError } from "./errors";
 import { canEditProject, canViewProject, type Principal } from "./permissions";
 import { requestHash, type ProjectService, type RequestContext } from "./projectService";
+import type { BookingService } from "./bookingService";
 import type { AfterCommit, AuditRow, ProjectStore } from "./ports";
 
 const HEADER_COLS = ["projektnummer", "projektbezeichnung", "stationsname", "bahnhofsnummer", "streckennummer", "projektstand", "bahnhofsmanagement", "projektleitung", "pkpLink", "freischaltungFaa", "unterschriftenblatt", "mitProjektvorstellung", "anmerkungen", "terminVon", "terminBis"] as const;
@@ -32,6 +33,7 @@ export class ChecklistService {
   constructor(
     private readonly store: ProjectStore,
     private readonly projects: ProjectService,
+    private readonly bookings: BookingService,
     private readonly afterCommit: AfterCommit = () => {},
     private readonly clock: () => Date = () => new Date(),
   ) {}
@@ -92,7 +94,7 @@ export class ChecklistService {
   }
 
   async submit(p: Principal, input: SubmitChecklistInput, ctx: RequestContext): Promise<{ checklist: ChecklistDTO; projectId: number; eventId: string; replayed: boolean }> {
-    const hash = requestHash("checklist.submit", { id: input.id, v: input.expectedVersion });
+    const hash = requestHash("checklist.submit", { id: input.id, v: input.expectedVersion, slot: input.slot ?? null });
     const result = await this.store.transaction(async tx => {
       const claim = await tx.claimIdempotency(p.id, input.idempotencyKey, "checklist.submit", hash);
       if (claim.state === "mismatch") throw new IdempotencyKeyReuseError();
@@ -117,6 +119,14 @@ export class ChecklistService {
       const answers: ChecklistAnswers = Object.fromEntries(Object.entries(detail.answers).map(([k, a]) => [k, { answer: a.answer, secondary: (a.secondary as "Ja" | "Nein" | null) ?? null, comment: a.comment }]));
       for (const r of buildDepartmentReviews(answers)) await tx.insertReview(created.id, { department: r.department, status: r.status, prueferName: null, datum: null });
 
+      // optional slot booking, same transaction: if the slot is gone the project, reviews and checklist roll back with it
+      if (input.slot) {
+        await this.bookings.bookWithin(tx, p, ctx, {
+          id: input.slot.id, expectedVersion: input.slot.expectedVersion, status: input.slot.status,
+          station: cur.stationsname, projektleitung: cur.projektleitung, projektstand: cur.projektstand,
+          info: `${cur.projektleitung ?? ""} - ${cur.stationsname ?? ""} - ${cur.projektstand ?? ""}`, projectId: created.id,
+        });
+      }
       const ok = await tx.updateChecklistVersioned(cur.id, cur.syncVersion, { status: "submitted", projectId: created.id, submittedAt: this.clock(), submittedBy: p.name || p.email || p.id });
       if (!ok) throw new AggregateConflictError({ code: "VERSION_CONFLICT", aggregate: "checklist", id: cur.id, expectedVersion: input.expectedVersion, currentVersion: cur.syncVersion + 1, current: null, reason: "stale" });
       const after = (await tx.checklistDetail(cur.id))!;

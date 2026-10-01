@@ -1,4 +1,6 @@
 import { ReviewWorkspace } from "@/components/workspace/ReviewWorkspace";
+import { ServerDepartmentView } from "@/components/workspace/ServerDepartmentView";
+import { SERVER_MODE } from "@/realtime/serverApi";
 
 /**
  * The subtitle used to read "Verwaltung der EEA-Freigabeerklärungen".
@@ -17,6 +19,8 @@ import { ReviewWorkspace } from "@/components/workspace/ReviewWorkspace";
  * has, all scoped to the EEA reviews.
  */
 export default function BvbEea() {
+  // Server mode: the same Project aggregate, filtered to this Gewerk — one data plane, one permission model.
+  if (SERVER_MODE) return <ServerDepartmentView department="EEA" title="BVB-EEA Prüfungen" subtitle="Übersicht der EEA-Prüfungen" prueferLabel="EEA-Prüfer" />;
   return (
     <ReviewWorkspace
       department="EEA"

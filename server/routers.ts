@@ -25,7 +25,7 @@ import { requireServices } from "./_core/services";
 import { deriveProjectMetrics } from "@shared/project-metrics";
 import { SingleFlightCache } from "./infra/singleFlightCache";
 import { KeyedCache, scopeKey } from "./infra/keyedCache";
-import { readDashboard } from "./infra/readModels";
+import { readDashboard, readDepartment } from "./infra/readModels";
 import { MapQuerySchema, MapStationQuerySchema } from "@shared/map-contract";
 import { BookSlotInputSchema, ListSlotsInputSchema, ReleaseSlotInputSchema } from "@shared/booking-contract";
 import { SaveChecklistInputSchema, SubmitChecklistInputSchema } from "@shared/checklist-contract";
@@ -44,6 +44,7 @@ async function shellSummaryCached(load: () => Promise<{ projectCount: number; la
 }
 
 // The read is a few tiny indexed lookups; this short cache only absorbs bursts (one load per scope per 5 s).
+const departmentScoped = new KeyedCache<Awaited<ReturnType<typeof readDepartment>>>("department", 5_000, 500);
 const dashboardScoped = new KeyedCache<Awaited<ReturnType<typeof readDashboard>>>("dashboard", 5_000);
 /** Per-project review statuses → shared/project-metrics.ts. `workspaces` null = all. */
 async function computeMetrics(workspaces: readonly string[] | null) {
@@ -298,6 +299,12 @@ export const appRouter = router({
       const restriction = workspaceRestriction(ctx.principal);
       const { pool } = await requireServices();
       return dashboardScoped.get(scopeKey(restriction), () => readDashboard(pool, restriction));
+    }),
+    /** One Gewerk's counters (the BVB-EEA / PSV-ITK pages' KPIs), scoped to the caller's workspaces. */
+    department: protectedProcedure.input(z.object({ department: z.string().min(1).max(64) })).query(async ({ input, ctx }) => {
+      const restriction = workspaceRestriction(ctx.principal);
+      const { pool } = await requireServices();
+      return departmentScoped.get(`${input.department}#${scopeKey(restriction)}`, () => readDepartment(pool, restriction, input.department));
     }),
     /** KPI cards: shared/project-metrics.ts run server-side over (project, status) rows. */
     metrics: protectedProcedure.query(({ ctx }) => {

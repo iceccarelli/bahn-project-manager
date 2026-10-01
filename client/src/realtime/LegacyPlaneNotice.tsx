@@ -2,7 +2,7 @@ import { useLocation } from "wouter";
 import { SERVER_MODE } from "./serverApi";
 
 /** Routes whose data path is already the server (everything else still reads the static snapshot). */
-const SERVER_ROUTES = ["/projects"];
+const SERVER_ROUTES = ["/projects", "/bvb-eea", "/psv-itk", "/anmeldung"];
 
 /** Honest labelling in server mode for pages not yet migrated to the server data plane. */
 export default function LegacyPlaneNotice() {

@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
-import { authHeaders } from "@/realtime/serverApi";
+import { authHeaders, SERVER_MODE, serverApi } from "@/realtime/serverApi";
+import { serverKeys } from "@/realtime/RealtimeProvider";
 import type { TerminStatus } from "@shared/checklist";
 
 /**
@@ -21,6 +22,9 @@ export interface ScheduleSlot {
   projektstand: string | null;
   /** column F, e.g. "TBQ nicht verfügbar" */
   hinweis: string | null;
+  /** server mode: the slot aggregate's id and version (what a booking is sent against) */
+  serverId?: number;
+  serverVersion?: number;
 }
 
 /** A slot plus everything the picker needs to render and reason about it. */
@@ -112,16 +116,26 @@ export function useSchedule(options: ScheduleOptions = {}) {
   const { horizonDays = 180 } = options;
 
   const { data: slots = [], isLoading } = useQuery<ScheduleSlot[]>({
-    queryKey: ["schedule"],
+    queryKey: SERVER_MODE ? [...serverKeys.bookings(), horizonDays] : ["schedule"],
     queryFn: async () => {
+      if (SERVER_MODE) {
+        // The calendar is a server aggregate: authorized read, live-invalidated by booking events.
+        const from = new Date().toISOString().slice(0, 10);
+        const to = new Date(Date.now() + (horizonDays + 1) * 86_400_000).toISOString().slice(0, 10);
+        const rows = await serverApi.bookings.list.query({ from, to });
+        return rows.map(r => ({
+          id: r.slotKey, datum: r.datum, von: r.von, bis: r.bis, status: r.status, info: r.info, projektleitung: r.projektleitung,
+          station: r.station, projektstand: r.projektstand, hinweis: r.hinweis, serverId: r.id, serverVersion: r.version,
+        })) as ScheduleSlot[];
+      }
       const res = await fetch("/schedule.json", { headers: await authHeaders(), credentials: "include" });
       if (!res.ok) throw new Error(`schedule.json HTTP ${res.status}`);
       const json = await res.json();
       if (!Array.isArray(json)) throw new Error("schedule.json is not an array");
       return json as ScheduleSlot[];
     },
-    staleTime: Number.POSITIVE_INFINITY,
-    gcTime: Number.POSITIVE_INFINITY,
+    staleTime: SERVER_MODE ? 30_000 : Number.POSITIVE_INFINITY,
+    gcTime: SERVER_MODE ? 5 * 60_000 : Number.POSITIVE_INFINITY,
   });
 
   // Anchored to the day, not the millisecond, so the memo is stable across

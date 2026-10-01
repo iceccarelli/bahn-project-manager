@@ -31,7 +31,13 @@ export const SaveChecklistInputSchema = z.object({
 });
 export type SaveChecklistInput = z.infer<typeof SaveChecklistInputSchema>;
 
-export const SubmitChecklistInputSchema = z.object({ id: z.number().int().positive(), expectedVersion: z.number().int().min(1), idempotencyKey });
+export const SubmitChecklistInputSchema = z.object({
+  id: z.number().int().positive(),
+  expectedVersion: z.number().int().min(1),
+  /** book this calendar slot IN THE SAME TRANSACTION: a slot that was taken meanwhile rolls the whole submission back */
+  slot: z.object({ id: z.number().int().positive(), expectedVersion: z.number().int().min(1), status: z.enum(["Gebucht", "Vorgebucht für IM", "Vorgebucht für IT"]).default("Gebucht") }).optional(),
+  idempotencyKey,
+});
 export type SubmitChecklistInput = z.infer<typeof SubmitChecklistInputSchema>;
 
 export interface ChecklistDTO {
