@@ -308,8 +308,8 @@ function txAdapter(x: Executor): ProjectTx {
  * Terms for BOOLEAN MODE.
  *
  * InnoDB FULLTEXT tokenizes on every character that is not a letter, digit or underscore — so the Projektnummer
- * "G.011570020" is indexed as the single token "011570020" ("G" is below innodb_ft_min_token_size and dropped).
- * A query for "+G.011570020*" therefore asks for a token that does not exist and matches NOTHING (verified on MySQL 8.4).
+ * "G.992031294" is indexed as the single token "011570020" ("G" is below innodb_ft_min_token_size and dropped).
+ * A query for "+G.992031294*" therefore asks for a token that does not exist and matches NOTHING (verified on MySQL 8.4).
  * The query is tokenized the way the index is: split on non-word characters, keep tokens of at least 3 characters,
  * each as a required prefix. Input with no indexable token falls back to an index-usable LIKE prefix.
  */

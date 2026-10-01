@@ -13,6 +13,7 @@ export default defineConfig({
     },
   },
   test: {
+    globalSetup: ["./scripts/data/vitest-global-setup.ts"],
     environment: "node",
     include: [
       "server/**/*.test.ts", 

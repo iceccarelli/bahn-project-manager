@@ -94,3 +94,36 @@ those lists). Not done: presence rate limiting per principal; departments' prese
 ## Notifications delivery
 
 See docs/data-plane.md. `notification.created` events share the envelope, outbox and feed with project events.
+
+
+## Topology after the fanout change (what a client subscribes to)
+
+| View | Channels | Carries |
+|---|---|---|
+| Global Projects / Gewerk list | `collection:all` (unrestricted) or `collection:<workspace>` per authorized workspace | ONLY create / delete / move-in / move-out (`isMembershipEvent`) |
+| …plus the rows on screen | `project:<id>` per virtual row (held 15 s after scrolling away) | every edit of exactly those rows |
+| Project detail | `project:<id>` | everything about that project |
+| Workspace view (opt-in) | `workspace:<slug>` | every event of the workspace (no list subscribes to this by default) |
+| Calendar | `collection:booking.all` (+ `agg:booking.<id>`) | booking events, redacted per recipient |
+| Checklists | `collection:checklist.<ws>` / `agg:checklist.<id>` | submitted: workspace rule; drafts: author only |
+| Bell / presence | `notifications:<self>` / `project:<id>`, `workspace:<ws>` | as before |
+
+Scopes of an OPEN stream change in place: `POST /api/realtime/scopes {streamId, requestId, add, remove}` → `202`; the
+owner answers with a `scopes` frame once the channels are **confirmed** (a request that reaches another instance is
+forwarded over Redis `bahn:ctl:<node>`). The client then reconciles exactly the rows that just became live
+(`projects.sync` version compare). Rows seeded in the cache but off screen are refreshed by the 30 s feed catch-up.
+
+## Subscribe barrier (hello means "nothing from now on is missed")
+
+`RedisBus` returns a `ready` promise per subscription, settled when Redis ACKNOWLEDGED every `SUBSCRIBE`. The gateway
+awaits it (3 s, else `503 Retry-After`) BEFORE reading the feed head and writing `hello`. Order: SUBSCRIBE acked → head
+read → hello → recovery from `projects.changes` for anything ≤ head that was not seen. The previous code issued the
+SUBSCRIBE fire-and-forget and read the head immediately, so an event numbered between the two could be neither live nor
+below the client's recovery cursor. Tested with a Redis whose SUBSCRIBE ack is delayed (`subscribeBarrier.test.ts`).
+
+## Limits that keep presence and notifications from becoming hotspots
+
+* Presence: duplicate heartbeats within 5 s are dropped before Redis; ≤ 40 calls / 10 s per user (429 beyond); one
+  leading + one trailing snapshot per scope per 500 ms. Never SQL.
+* Notifications: ≤ 5 live frames per stream per 10 s, then one `hint` that tells the client to re-read the durable inbox;
+  unread counters are a read model (`notification_unread`); retention job (read > 30 d, any > 180 d).

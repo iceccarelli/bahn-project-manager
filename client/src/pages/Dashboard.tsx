@@ -88,8 +88,8 @@ const GEWERKE = [
  * data.json that list was wrong in two ways at once:
  *
  *   - 8 of the 44 reviewers in the data were missing from it — 985 review rows,
- *     Haberla 512, Colak 250, Wagner 83, Matteka 46, "BSB des BM´s" 33,
- *     Eda Pourabbas 32, Ates 23, Herr 6. Colak alone would have ranked third in
+ *     Cornberg 512, Ravdorf 250, Ulmfeld 83, Cornfeld 46, "BSB des BM´s" 33,
+ *     Ulla Jarnhaus 32, Ulmborn 23, Herr 6. Ravdorf alone would have ranked third in
  *     the "Top Performer" list the page renders, and was absent from it.
  *   - "Zentrale" appeared twice, so two rows rendered with the same React key
  *     and its workload was counted twice in the panel total.
@@ -273,7 +273,7 @@ export default function Dashboard() {
    *
    * Three defects, all measured:
    *   - the roster was a hardcoded list missing 8 of the 44 reviewers in the
-   *     data (985 rows), so Colak — who ranks third by volume — never appeared
+   *     data (985 rows), so Ravdorf — who ranks third by volume — never appeared
    *     in "Top Performer" at all;
    *   - `includes(r.status)` on raw strings never counted the 80
    *     "Niederschrift erstellt (LP05-05-01-F31)" rows as completed;

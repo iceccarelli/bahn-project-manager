@@ -191,7 +191,7 @@ const assert = (cond, msg) => { if (!cond) throw new Error(msg); };
 
 await page.goto(U("/login"));
 await page.evaluate(() => localStorage.setItem("bahn-demo-user",
-  JSON.stringify({ id: 1, openId: "e2e", name: "Vincenzo Grimaldi", email: "v@db.de", role: "admin" })));
+  JSON.stringify({ id: 1, openId: "e2e", name: "Anna Hovdorf", email: "v@db.de", role: "admin" })));
 
 console.log("\n== navigation ==");
 for (const [label, route, marker] of [
@@ -341,9 +341,9 @@ await check("step 5 names who each Fachprüfung reaches", async () => {
   const body = await page.locator("body").innerText();
   // The off-by-two used to route ITK to a Brandschutz specialist and skip the
   // department's two busiest reviewers.
-  assert(body.includes("Emin Er"), "Emin Er not listed as an ITK recipient");
-  assert(body.includes("Daniel Goldhausen"), "Daniel Goldhausen not listed");
-  assert(!body.includes("Gorißen"), "a Brandschutz specialist is still on the ITK list");
+  assert(body.includes("Simon Lindborn"), "Simon Lindborn not listed as an ITK recipient");
+  assert(body.includes("Ralf Thornmann"), "Ralf Thornmann not listed");
+  assert(!body.includes("Froborn"), "a Brandschutz specialist is still on the ITK list");
 });
 
 
@@ -635,7 +635,7 @@ await check("contact links are real addresses, never constructed ones", async ()
 
   // Every address must exist in Hilfsdatei. Anything else is constructed.
   const known = new Set(
-    JSON.parse(fs.readFileSync("data/contacts.source.json", "utf8"))
+    JSON.parse(fs.readFileSync(`${process.env.PRIVATE_DATA_DIR ?? "fixtures/synthetic"}/contacts.source.json`, "utf8"))
       .map((c) => (c.mail || "").toLowerCase())
       .filter(Boolean),
   );
@@ -871,7 +871,7 @@ await check("both table row actions are separate 44px targets on touch", async (
   await touch.addInitScript(() =>
     localStorage.setItem(
       "bahn-demo-user",
-      JSON.stringify({ id: 1, openId: "e2e", name: "Vincenzo Grimaldi", email: "v@db.de", role: "admin" }),
+      JSON.stringify({ id: 1, openId: "e2e", name: "Anna Hovdorf", email: "v@db.de", role: "admin" }),
     ),
   );
   const tp = await touch.newPage();
@@ -935,7 +935,7 @@ await check("the detail dialog prints a Projektblatt stamped with date AND time"
     /^Projektblatt_.+_\d{4}-\d{2}-\d{2}_\d{4}\.pdf$/.test(name),
     `filename carries no date+time stamp: ${name}`,
   );
-  assert(name.includes("G.011540063"), `filename does not identify the project: ${name}`);
+  assert(name.includes("G.992322386"), `filename does not identify the project: ${name}`);
 
   const file = await download.path();
   const head = fs.readFileSync(file);
@@ -969,8 +969,8 @@ await check("mail and Teams carry a written message, not just an address", async
     const q = new URLSearchParams(href.slice(href.indexOf("?") + 1));
     const subject = q.get("subject") ?? "";
     const body = q.get("body") ?? "";
-    assert(subject.includes("G.011540063"), `subject does not name the project: ${subject}`);
-    assert(body.includes("Projektnummer: G.011540063"), "body does not carry the Projektnummer");
+    assert(subject.includes("G.992322386"), `subject does not name the project: ${subject}`);
+    assert(body.includes("Projektnummer: G.992322386"), "body does not carry the Projektnummer");
     assert(body.includes("Station: Langenselbold"), "body does not carry the Station");
     assert(
       body.includes("Erstellt aus dem Bahn Project Manager"),
@@ -982,7 +982,7 @@ await check("mail and Teams carry a written message, not just an address", async
   // A Teams chat has no subject field, so the message has to open with it.
   for (const href of links.teams) {
     const msg = new URLSearchParams(href.slice(href.indexOf("?") + 1)).get("message") ?? "";
-    assert(msg.startsWith("Projekt G.011540063"), "Teams message does not open with the subject");
+    assert(msg.startsWith("Projekt G.992322386"), "Teams message does not open with the subject");
     assert(msg.includes("Bahnhofsmanagement: Kassel"), "Teams message carries no context");
   }
   await page.keyboard.press("Escape");
@@ -2915,7 +2915,7 @@ await check("the mobile drawer is opaque, not a window onto the page", async () 
     await phone.evaluate(() =>
       localStorage.setItem(
         "bahn-demo-user",
-        JSON.stringify({ id: 1, openId: "e2e", name: "Vincenzo Grimaldi", email: "v@db.de", role: "admin" }),
+        JSON.stringify({ id: 1, openId: "e2e", name: "Anna Hovdorf", email: "v@db.de", role: "admin" }),
       ),
     );
     await phone.goto(U("/projects"), { waitUntil: "domcontentloaded" });
@@ -3382,7 +3382,7 @@ await check("reduced motion is served a page that was never hidden", async () =>
     await quiet.evaluate(() =>
       localStorage.setItem(
         "bahn-demo-user",
-        JSON.stringify({ id: 1, openId: "e2e", name: "Vincenzo Grimaldi", email: "v@db.de", role: "admin" }),
+        JSON.stringify({ id: 1, openId: "e2e", name: "Anna Hovdorf", email: "v@db.de", role: "admin" }),
       ),
     );
     await quiet.goto(U("/"), { waitUntil: "networkidle" });

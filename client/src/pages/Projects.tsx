@@ -144,15 +144,17 @@ export default function Projects() {
   const [toneFocus, setToneFocus] = useState<StatusTone | null>(null);
   /** ?gewerk=GA — set when the slice came from one Gewerk's own donut. */
   const [toneGewerk, setToneGewerk] = useState<string | null>(null);
-  const [region, setRegion] = useState<string>("");
-  const [projektleiter, setProjektleiter] = useState<string>("");
-  const [pruefer, setPruefer] = useState<string>("");
-  const [status, setStatus] = useState<string>("");
-  const [department, setDepartment] = useState<string>("");
+  /* Filter state lives in the URL (?region=…&status=…): a result set is a link you can share, bookmark and reload. */
+  const urlParam = (k: string) => (typeof window === "undefined" ? "" : (new URLSearchParams(window.location.search).get(k) ?? ""));
+  const [region, setRegion] = useState<string>(() => urlParam("region"));
+  const [projektleiter, setProjektleiter] = useState<string>(() => urlParam("leiter"));
+  const [pruefer, setPruefer] = useState<string>(() => urlParam("pruefer"));
+  const [status, setStatus] = useState<string>(() => urlParam("status"));
+  const [department, setDepartment] = useState<string>(() => urlParam("dept"));
   const [showFilters, setShowFilters] = useState(false);
   const [expandedDepts, setExpandedDepts] = useState<string[]>([]);
-  const [sortBy, setSortBy] = useState("id");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [sortBy, setSortBy] = useState(() => urlParam("sort") || "id");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">(() => (urlParam("dir") === "asc" ? "asc" : "desc"));
   const [, setLocation] = useLocation();
   const routeSearch = useRouteSearch();
   const { recordDocument } = useAuditTrail();
@@ -177,6 +179,29 @@ export default function Projects() {
   const { data, isLoading, applyEdit, applyReviewEdit } = projectsQuery;
   // paging only exists in server mode (cursor pages); the local plane holds everything in memory
   const pager = projectsQuery as unknown as { hasNextPage?: boolean; isFetchingNextPage?: boolean; fetchNextPage?: () => void };
+
+  // keyboard: "/" jumps to the search box (unless you are already typing somewhere)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "/" || e.ctrlKey || e.metaKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.closest("input, textarea, select, [contenteditable='true']"))) return;
+      e.preventDefault();
+      document.getElementById("projects-search")?.focus();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+
+  // mirror the filters into the address bar (replaceState: no history entry per keystroke, other params untouched)
+  useEffect(() => {
+    const u = new URL(window.location.href);
+    const set = (k: string, v: string, dflt = "") => { if (v && v !== dflt) u.searchParams.set(k, v); else u.searchParams.delete(k); };
+    set("q", search); set("region", region); set("leiter", projektleiter); set("pruefer", pruefer); set("status", status); set("dept", department);
+    set("sort", sortBy, "id"); set("dir", sortDir, "desc");
+    const next = `${u.pathname}${u.search}`;
+    if (next !== `${window.location.pathname}${window.location.search}`) window.history.replaceState(window.history.state, "", next);
+  }, [search, region, projektleiter, pruefer, status, department, sortBy, sortDir]);
 
   /* Table virtualization: the DOM holds the rows near the viewport, not every loaded row. */
   const tableRows: Project[] = data?.projects ?? [];
@@ -1055,7 +1080,7 @@ export default function Projects() {
                         230px row: as a flex row they overflowed the card, and
                         once both were allowed to shrink they split the width
                         evenly and BOTH became unreadable — "Zustimmun…" next to
-                        "G.011800063.01.…". A Projektnummer is an identifier;
+                        "G.990106916.01.…". A Projektnummer is an identifier;
                         half of one is worth nothing. Stacked, the status keeps
                         its full label and the number wraps in full.
                       */}

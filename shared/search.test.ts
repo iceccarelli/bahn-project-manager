@@ -25,7 +25,7 @@ describe("German folding", () => {
   });
 
   it("normalises punctuation and case so a pasted identifier still matches", () => {
-    expect(foldExpanded("  G.011540063 ")).toBe("g 011540063");
+    expect(foldExpanded("  G.992322386 ")).toBe("g 992322386");
     expect(foldExpanded("FFM Hbf.")).toBe("ffm hbf");
   });
 });

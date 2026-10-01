@@ -111,3 +111,31 @@ dialog) minus the actor; each recipient gets one `notifications` row **and** one
 they can still see the project's workspace). Reads (`notifications.list/unreadCount/markRead`) re-check the caller's
 current workspace access. The Header bell in server mode reads this source, not the audit log. No email/push channels
 yet; `mention`, `deadline` reminders and `system` notifications have no producers yet.
+
+
+## One domain path for every aggregate (after the unification)
+
+`authorize → transaction → idempotency claim → optimistic version → audit rows → outbox event → (relay) realtime → React Query`
+
+| Aggregate | Service | Events | Notes |
+|---|---|---|---|
+| Project (+ department reviews: create/update) | `ProjectService` | `project.*` | BVB-EEA and PSV-ITK are Gewerk **views** of this aggregate (department filter), not separate tables |
+| Checklist (Projektanmeldung) | `ChecklistService` | `checklist.*` | submit creates the project + 14 reviews and can book a slot in the SAME transaction |
+| Booking (calendar slot) | `BookingService` | `booking.updated` | double-booking impossible (row lock + version + status); details redacted per workspace |
+
+Removed: the standalone `bvbEea.*`, `psvItk.*` and `reviews.create` endpoints (any logged-in user could write any row;
+no role, workspace, version, event) and every runtime write in `server/db.ts` except user provisioning. The legacy tables
+are deprecated in `drizzle/schema.ts`.
+
+## Read models (updated in the write transaction; rebuildable; verified against a recompute in tests)
+
+`rm_project_stats`, `rm_review_stats`, `rm_pruefer_load` (dashboard, per workspace), `project_geo` (map: station →
+coordinates, resolved once per write by `shared/stationGeo.ts`), `notification_unread`. Dashboard / department KPIs read a
+handful of rows for the caller's workspaces only; the map query (`map.query`, `map.station`) is a bounding-box range scan
+(clusters below zoom 10 or above 1,500 stations) with the list's exact authorization and filters.
+`rebuildReadModels` / `rebuildGeo` repair drift; `verifyReadModels` is the test oracle.
+
+## Fixed on the way
+
+* `projektnummer` search: InnoDB tokenizes "G.011570020" to `011570020` ("G" is below the minimum token size), so
+  `+G.011570020*` matched nothing on MySQL 8.4. The query is now tokenized like the index.

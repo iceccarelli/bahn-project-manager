@@ -112,7 +112,7 @@ function clean(v: unknown): string | null {
   return s === "" ? null : s;
 }
 
-/** "Katja Behn - Hanau Hbf - Mieterumbau MaG" -> its three parts. */
+/** "Zoe Lorbach - Hanau Hbf - Mieterumbau MaG" -> its three parts. */
 function parseInfo(info: string | null) {
   if (!info) return { projektleitung: null, station: null, projektstand: null };
   const parts = info.split(" - ").map((p) => p.trim());

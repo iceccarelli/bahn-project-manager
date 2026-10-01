@@ -152,3 +152,16 @@ _diag*.mjs
 dist-e2e/
 dist-oidc/
 artifacts/
+
+# staged by scripts/data/stage-public-data.mjs (synthetic by default; real data is never committed)
+client/public/data.json
+client/public/schedule.json
+client/public/.data-source
+
+# derived reports of the REAL export contain names and before/after cell values: never committed
+data/normalize-report.json
+data/contacts.source.json
+data/contacts.report.json
+data/schedule.report.json
+data/*.xlsm
+ChecklisteBeispiel.pdf

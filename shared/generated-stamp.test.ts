@@ -49,8 +49,8 @@ describe("fileStamp", () => {
 
 describe("documentFilename", () => {
   it("puts the stamp last and keeps the identifying parts readable", () => {
-    expect(documentFilename("Projektblatt", ["G.011540063", "Langenselbold"], INSTANT)).toBe(
-      "Projektblatt_G.011540063_Langenselbold_2026-08-22_1407.pdf",
+    expect(documentFilename("Projektblatt", ["G.992322386", "Langenselbold"], INSTANT)).toBe(
+      "Projektblatt_G.992322386_Langenselbold_2026-08-22_1407.pdf",
     );
   });
 
@@ -73,8 +73,8 @@ describe("generatedFooter", () => {
     expect(generatedFooter(INSTANT)).toBe(
       "Erzeugt am 22.08.2026, 14:07 Uhr · Bahn Project Manager",
     );
-    expect(generatedFooter(INSTANT, "Vincenzo Grimaldi")).toBe(
-      "Erzeugt am 22.08.2026, 14:07 Uhr von Vincenzo Grimaldi · Bahn Project Manager",
+    expect(generatedFooter(INSTANT, "Anna Hovdorf")).toBe(
+      "Erzeugt am 22.08.2026, 14:07 Uhr von Anna Hovdorf · Bahn Project Manager",
     );
   });
 

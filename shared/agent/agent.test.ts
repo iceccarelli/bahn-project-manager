@@ -32,7 +32,7 @@ describe("it understands what was asked", () => {
   });
 
   it("lifts a Projektnummer out of the sentence", () => {
-    expect(extractEntities("zeig mir G.011540063 bitte", CTX).projektnummer).toBe("G.011540063");
+    expect(extractEntities("zeig mir G.992322386 bitte", CTX).projektnummer).toBe("G.992322386");
   });
 
   it("prefers the longest matching station name", () => {
@@ -62,7 +62,7 @@ describe("every answer is measured, never composed", () => {
 
   it("states the basis of its figures on every answer", () => {
     for (const skill of SKILLS) {
-      const a = skill.run(CTX, { department: "ITK", station: "Bensheim", projektnummer: "G.011540063" });
+      const a = skill.run(CTX, { department: "ITK", station: "Bensheim", projektnummer: "G.992322386" });
       expect(a.basis, skill.id).toBeTruthy();
       expect(a.intent, skill.id).toBe(skill.id);
     }
@@ -175,7 +175,7 @@ describe("every answer leads somewhere", () => {
   const ENTITIES = {
     department: "ITK",
     station: "Bensheim",
-    projektnummer: "G.011540063",
+    projektnummer: "G.992322386",
   };
 
   it("offers at least two next questions on every skill", () => {

@@ -21,7 +21,7 @@ const DB_BASE = process.env.E2E_DB_BASE ?? "mysql://bahn:bahn@127.0.0.1:3306";
 const DB_NAME = "bahn_e2e";
 const REDIS = process.env.E2E_REDIS ?? "redis://127.0.0.1:6390";
 const PORTS = [3200, 3201];
-const PID = 481, PNR = "G.011570020";
+const PID = 481, PNR = "G.992031294";
 const results: Array<{ name: string; ok: boolean; ms: number; detail?: string }> = [];
 const measurements: Record<string, number | string> = {};
 const children: ChildProcess[] = [];

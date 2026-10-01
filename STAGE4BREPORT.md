@@ -120,8 +120,8 @@ A sample export is attached as `Checkliste-Beispiel.pdf`.
 ```
 
 The last two assert the Stage 4a fix from the outside: the PDF must be a valid
-`%PDF-` over 10 kB with the right filename, and step 5 must list **Emin Er**
-and **Daniel Goldhausen** while **not** listing a Brandschutz specialist under
+`%PDF-` over 10 kB with the right filename, and step 5 must list **Simon Lindborn**
+and **Ralf Thornmann** while **not** listing a Brandschutz specialist under
 ITK.
 
 It exits non-zero on the first failure, so CI can gate on it.

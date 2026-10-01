@@ -57,6 +57,9 @@ ARG VITE_OIDC_AUTHORITY=
 ARG VITE_OIDC_CLIENT_ID=
 ARG VITE_OIDC_SCOPE="openid profile"
 ENV VITE_OIDC_AUTHORITY=$VITE_OIDC_AUTHORITY VITE_OIDC_CLIENT_ID=$VITE_OIDC_CLIENT_ID VITE_OIDC_SCOPE=$VITE_OIDC_SCOPE
+# The legacy snapshot is staged here: synthetic by default. A real export is supplied ONLY as a BuildKit secret
+# (docker build --secret id=private_data,src=<dir>) and never reaches a layer of the final image's public files.
+RUN node scripts/data/stage-public-data.mjs
 RUN NODE_ENV=production pnpm run build:client
 RUN NODE_ENV=production pnpm run build:server
 

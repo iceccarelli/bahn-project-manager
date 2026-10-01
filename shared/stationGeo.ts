@@ -144,8 +144,8 @@ function pickBest(candidates: Entry[]): Entry {
  *   3. token containment (one name's words fully contain the other's)
  *   4. BM centroid, reported as approximate
  *
- * Scoping every tier by BM is what stops "Sulzbach" / BM Saarbrücken from
- * landing on "Sulzbach (Taunus)" in BM Frankfurt, ~150 km away.
+ * Scoping every tier by BM is what stops "Sulzbach" / Karla Kesskamp from
+ * landing on "Sulzbach (Taunus)" in Ben Ravbrink, ~150 km away.
  */
 export function buildStationGeo(rows: StationRecord[]): StationGeoIndex {
   const entries: Entry[] = [];

@@ -51,7 +51,7 @@ async function seedPerfect() {
     }
 
     // Identity is `id`, NOT `projektnummer`. projektnummer is not unique — in
-    // client/public/data.json "G.011511006" alone appears on 48 projects — and
+    // client/public/data.json "G.993404401" alone appears on 48 projects — and
     // 15 rows have none at all, so matching on it collapsed distinct projects
     // into one another.
     const [existing] = await db.select().from(projects).where(eq(projects.id, projectId)).limit(1);

@@ -10,9 +10,9 @@
   },
   "packageManager": "pnpm@10.15.1",
   "scripts": {
-    "dev": "NODE_ENV=development tsx watch server/_core/index.ts",
+    "dev": "node scripts/data/stage-public-data.mjs && NODE_ENV=development tsx watch server/_core/index.ts",
     "build": "pnpm build:client",
-    "build:client": "vite build",
+    "build:client": "node scripts/data/stage-public-data.mjs && vite build",
     "build:server": "esbuild server/_core/index.ts server/_core/migrate.ts --platform=node --packages=external --bundle --format=esm --outdir=dist --splitting",
     "db:migrate:prod": "node dist/migrate.js",
     "gate": "node scripts/gate/deploy-gate.mjs",
@@ -24,9 +24,9 @@
     "format": "prettier --write .",
     "lint": "biome check .",
     "lint:staged": "lint-staged",
-    "test": "vitest run",
+    "test": "node scripts/data/stage-public-data.mjs && vitest run",
     "test:cov": "vitest run --coverage --reporter=verbose",
-    "e2e": "node scripts/e2e-smoke.mjs",
+    "e2e": "node scripts/data/stage-public-data.mjs && node scripts/e2e-smoke.mjs",
     "e2e:doctor": "node scripts/e2e-doctor.mjs",
     "check:map": "node scripts/check-map-chrome.mjs",
     "check:ui": "node scripts/check-ui.mjs",
@@ -45,7 +45,8 @@
     "dev:sync": "concurrently -n \"APP,SEED,SYNC\" -c \"blue,green,yellow\" \"pnpm dev\" \"pnpm seed:perfect --watch\" \"pnpm sync:json-db --watch\"",
     "docker:build": "docker build -t bahn-project-manager:local .",
     "docker:up": "docker compose up --build",
-    "docker:down": "docker compose down"
+    "docker:down": "docker compose down",
+    "data:stage": "node scripts/data/stage-public-data.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.693.0",

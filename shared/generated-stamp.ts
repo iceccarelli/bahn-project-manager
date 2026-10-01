@@ -69,7 +69,7 @@ export function safeFilePart(s: string | null | undefined): string {
 /**
  * A document filename with the generation stamp always last.
  *
- * `Projektblatt_G.011540063_Langenselbold_2026-08-22_1407.pdf`
+ * `Projektblatt_G.992322386_Langenselbold_2026-08-22_1407.pdf`
  *
  * Empty parts are dropped rather than leaving `__` in the name.
  */
