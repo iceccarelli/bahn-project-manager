@@ -24,7 +24,10 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import {
+  Bell,
+  CalendarClock,
   Clock3,
+  History,
   FileText,
   Layers,
   MapPin,
@@ -45,6 +48,9 @@ const KIND_ICON: Record<HitKind, typeof SearchIcon> = {
   person: User,
   region: MapPin,
   status: SlidersHorizontal,
+  audit: History,
+  buchung: CalendarClock,
+  benachrichtigung: Bell,
 };
 
 const RECENT_KEY = "bpm-recent-searches";
@@ -86,7 +92,7 @@ export function CommandSearch({ id = "app-search" }: { id?: string }) {
   // Nothing builds the index until somebody engages with the search — see
   // useSearchIndex. Building it at mount cost every navigation a few hundred
   // milliseconds of main thread for a box most visits never touch.
-  const index = useSearchIndex(open || query.trim().length > 0);
+  const index = useSearchIndex(open || query.trim().length > 0, query);
 
   // Deferred so a fast typist never waits on a scoring pass to see their own
   // character land. The scoring itself is synchronous and sub-millisecond.

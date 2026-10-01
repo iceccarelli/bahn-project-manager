@@ -60,7 +60,7 @@ import {
   Loader2,
 } from "lucide-react";
 import type { Project } from "@/hooks/useDataQuery";
-import { useAuditLog } from "@/hooks/useDataQuery";
+import { useProjectHistory } from "@/hooks/useAuditFeed";
 import { DEPARTMENTS, type Department } from "@shared/types";
 import { statusBadgeClass, statusPulseClass } from "@shared/status-appearance";
 import { normalizeReviewStatus, isOpen, isBlocking } from "@shared/review-status";
@@ -250,7 +250,6 @@ export function ProjectDetailDialog({
   onOpenChange,
   onShowStation,
 }: ProjectDetailDialogProps) {
-  const { data: auditEntries } = useAuditLog();
   const { user, session } = useAuth() as ReturnType<typeof useAuth> & { session?: { id: string } | null };
   const { recordDocument, recordMessage } = useAuditTrail();
   const [printing, setPrinting] = useState(false);
@@ -274,16 +273,8 @@ export function ProjectDetailDialog({
     [project],
   );
 
-  /** Audit entries that name this project. The trail stores free text, so the
-   *  match is on the Projektnummer when there is one and on the id otherwise. */
-  const history = useMemo(() => {
-    if (!project || !auditEntries) return [];
-    const needles = [project.projektnummer?.trim(), `#${project.id}`].filter(Boolean) as string[];
-    if (needles.length === 0) return [];
-    return auditEntries
-      .filter((e) => needles.some((n) => e.details?.includes(n)))
-      .slice(0, 8);
-  }, [project, auditEntries]);
+  /** The latest audit entries of this project (server: by entity id, authorized; demo: matched in the local trail). */
+  const history = useProjectHistory(project);
 
   /**
    * The Projektblatt.

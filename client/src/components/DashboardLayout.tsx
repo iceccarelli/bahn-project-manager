@@ -288,7 +288,8 @@ function DashboardLayoutContent({
         </SidebarInset>
         {/* Fixed to the viewport, so it belongs to the layout rather than to any
             one page — every route can be asked about. */}
-        <AskBahn />
+        {/* Ask Bahn answers from a browser-local snapshot; the server build has none, so it is not offered there until it is server-backed. */}
+        {!SERVER_MODE && <AskBahn />}
       </div>
     </div>
   );

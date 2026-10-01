@@ -119,6 +119,8 @@ function diffOf(
   return changes;
 }
 
+const labelOf = (station: string | null | undefined, nummer: string | null | undefined): string | null => (station?.trim() || nummer?.trim() || null)?.slice(0, 255) ?? null;
+
 export class ProjectService {
   constructor(
     private readonly store: ProjectStore,
@@ -230,7 +232,7 @@ export class ProjectService {
         workspace: newBm,
         workspaceBefore: newBm !== current.bahnhofsmanagement ? current.bahnhofsmanagement : null,
       });
-      await tx.appendAudit(this.auditRows(principal, event, "update", changes));
+      await tx.appendAudit(this.auditRows(principal, event, "update", changes, labelOf("station" in changes ? changes.station!.to : current.station, current.projektnummer)));
       await tx.appendEvent(event);
       await this.notifyWatchers(tx, principal, event, { id: input.id, projektnummer: current.projektnummer, station: "station" in changes ? changes.station!.to : current.station });
       const detail = (await tx.detail(input.id))!;
@@ -300,7 +302,7 @@ export class ProjectService {
       if (!ok) throw await this.conflict(tx, (await tx.lockProject(input.projectId)) ?? current, { id: input.projectId, expectedVersion: input.expectedVersion }, localValues, reviewValueOf);
 
       const event = this.buildEvent("project.updated", principal, ctx, input.projectId, input.expectedVersion + 1, changes, { workspace: current.bahnhofsmanagement });
-      await tx.appendAudit(this.auditRows(principal, event, "update", changes));
+      await tx.appendAudit(this.auditRows(principal, event, "update", changes, labelOf(current.station, current.projektnummer)));
       await tx.appendEvent(event);
       await this.notifyWatchers(tx, principal, event, { id: input.projectId, projektnummer: current.projektnummer, station: current.station });
       const res: MutationResult = { project: (await tx.detail(input.projectId))!, eventId: event.eventId, replayed: false };
@@ -340,7 +342,7 @@ export class ProjectService {
     const changes: Record<string, FieldChange> = {};
     for (const [k, to] of Object.entries(norm)) if (to !== null && to !== undefined) changes[k] = { from: null, to };
     const event = this.buildEvent("project.created", principal, ctx, id, 1, changes, { workspace: norm.bahnhofsmanagement ?? null });
-    await tx.appendAudit(this.auditRows(principal, event, "create", changes));
+    await tx.appendAudit(this.auditRows(principal, event, "create", changes, labelOf(norm.station, norm.projektnummer)));
     await tx.appendEvent(event);
     return { id, event, detail: (await tx.detail(id))! };
   }
@@ -367,7 +369,7 @@ export class ProjectService {
       // notify BEFORE the project (and its watcher rows) are removed
       await this.notifyWatchers(tx, principal, event, { id: input.id, projektnummer: current.projektnummer, station: current.station });
       await tx.deleteProject(input.id);
-      await tx.appendAudit(this.auditRows(principal, event, "delete", {}));
+      await tx.appendAudit(this.auditRows(principal, event, "delete", {}, labelOf(current.station, current.projektnummer)));
       await tx.appendEvent(event);
       const res = { eventId: event.eventId, replayed: false };
       await tx.completeIdempotency(principal.id, input.idempotencyKey, res);
@@ -409,7 +411,7 @@ export class ProjectService {
       const ok = await tx.updateVersioned(input.projectId, input.expectedVersion, {});
       if (!ok) throw await this.conflict(tx, (await tx.lockProject(input.projectId)) ?? current, { id: input.projectId, expectedVersion: input.expectedVersion }, localValues, () => null);
       const event = this.buildEvent("project.updated", principal, ctx, input.projectId, input.expectedVersion + 1, changes, { workspace: current.bahnhofsmanagement });
-      await tx.appendAudit(this.auditRows(principal, event, "update", changes));
+      await tx.appendAudit(this.auditRows(principal, event, "update", changes, labelOf(current.station, current.projektnummer)));
       await tx.appendEvent(event);
       await this.notifyWatchers(tx, principal, event, { id: input.projectId, projektnummer: current.projektnummer, station: current.station });
       const res: MutationResult = { project: (await tx.detail(input.projectId))!, eventId: event.eventId, replayed: false };
@@ -477,8 +479,11 @@ export class ProjectService {
     e: DomainEvent,
     action: AuditRow["action"],
     changes: Record<string, FieldChange>,
+    label: string | null = null,
   ): AuditRow[] {
     const base = {
+      workspace: e.context?.workspace ?? null,
+      entityLabel: label,
       userId: actorNumericId(principal),
       userName: principal.name || principal.email || principal.id,
       entityType: "project" as const,

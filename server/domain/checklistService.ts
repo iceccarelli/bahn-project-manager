@@ -149,7 +149,9 @@ export class ChecklistService {
       actorId: p.id, actorName: p.name, timestamp: this.clock().toISOString(), traceId: ctx.traceId, changes, context: { workspace, ...(draftRecipient ? { recipient: draftRecipient } : {}) } };
   }
   private audit(p: Principal, e: DomainEvent, action: AuditRow["action"], changes: Record<string, FieldChange>): AuditRow[] {
-    const base = { userId: /^\d+$/.test(p.id) ? Number(p.id) : null, userName: p.name || p.email || p.id, entityType: "checklist" as const, entityId: Number(e.aggregateId), action, eventId: e.eventId, aggregateVersion: e.aggregateVersion, traceId: e.traceId };
+    const base = { userId: /^\d+$/.test(p.id) ? Number(p.id) : null, userName: p.name || p.email || p.id, entityType: "checklist" as const, entityId: Number(e.aggregateId), action, eventId: e.eventId, aggregateVersion: e.aggregateVersion, traceId: e.traceId,
+      // a draft's trail is private to its author's events (recipient set): never scoped to a workspace
+      workspace: e.context?.recipient ? null : (e.context?.workspace ?? null) };
     const rows = Object.entries(changes);
     return rows.length ? rows.map(([field, c]) => ({ ...base, field, oldValue: c.from, newValue: c.to })) : [{ ...base, field: null, oldValue: null, newValue: null }];
   }

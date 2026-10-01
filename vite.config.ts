@@ -72,28 +72,21 @@ function vitePluginDataValidationAndCache(): Plugin {
 }
 
 /**
- * Server-mode builds must not publish the legacy snapshot as static files: anything under `public/`
- * is served to ANYONE, which would hand the whole dataset to unauthenticated and workspace-restricted
- * users and make the server's authorization decorative. The files are moved to `<outDir>/../legacy/`
- * and served by an authenticated route (server/_core/legacySnapshot.ts).
+ * The legacy snapshot (browser-local dataset) belongs to the DEMO artifact only. A server-mode build does not publish it
+ * at all: anything under `public/` is served to anyone, and the server has no route for it. The files are removed from
+ * the bundle, so a production image can never carry (or leak) a copy of the dataset, whatever was staged in client/public.
  */
 export const LEGACY_SNAPSHOT_FILES = ["data.json", "schedule.json"];
-function vitePluginLegacySnapshotOffPublic(): Plugin {
+function vitePluginNoSnapshotInServerBuild(): Plugin {
   return {
-    name: "legacy-snapshot-off-public",
+    name: "no-snapshot-in-server-build",
     apply: "build",
     writeBundle(options) {
       if (process.env.VITE_SERVER_MODE !== "1" || !options.dir) return;
-      const legacy = path.resolve(options.dir, "..", "legacy");
-      fs.mkdirSync(legacy, { recursive: true });
-      for (const f of LEGACY_SNAPSHOT_FILES) {
-        const from = path.join(options.dir, f);
-        if (fs.existsSync(from)) fs.renameSync(from, path.join(legacy, f));
-      }
+      for (const f of LEGACY_SNAPSHOT_FILES) fs.rmSync(path.join(options.dir, f), { force: true });
     },
   };
 }
-
 
 /**
  * Production / demo separation. `BUILD_TARGET` is set only by `build:production` and `build:demo`.
@@ -129,7 +122,7 @@ const plugins = [
     ? [jsxLocPlugin(), vitePluginManusRuntime()]
     : []),
   vitePluginDataValidationAndCache(),
-  vitePluginLegacySnapshotOffPublic(),
+  vitePluginNoSnapshotInServerBuild(),
   vitePluginBuildTarget(),
 ];
 

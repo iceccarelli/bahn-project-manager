@@ -32,7 +32,10 @@ export type HitKind =
   | "region"
   | "gewerk"
   | "status"
-  | "seite";
+  | "seite"
+  | "audit"
+  | "buchung"
+  | "benachrichtigung";
 
 export interface SearchEntry {
   kind: HitKind;
@@ -174,6 +177,9 @@ const KIND_BONUS: Record<HitKind, number> = {
   person: 40,
   region: 30,
   status: 20,
+  audit: 15,
+  buchung: 15,
+  benachrichtigung: 15,
 };
 
 /** Matching the entry's own name, rather than something it mentions. */
@@ -302,7 +308,7 @@ export function search(
 
 /** Group hits in the order the palette renders them, preserving rank inside. */
 export function groupHits(hits: readonly SearchHit[]): Array<{ kind: HitKind; hits: SearchHit[] }> {
-  const order: HitKind[] = ["seite", "gewerk", "station", "projekt", "person", "region", "status"];
+  const order: HitKind[] = ["seite", "gewerk", "station", "projekt", "person", "region", "status", "audit", "buchung", "benachrichtigung"];
   const out: Array<{ kind: HitKind; hits: SearchHit[] }> = [];
   for (const kind of order) {
     const group = hits.filter((h) => h.kind === kind);
@@ -319,6 +325,9 @@ export const KIND_LABEL: Record<HitKind, string> = {
   person: "Personen",
   region: "Bahnhofsmanagement",
   status: "Status",
+  audit: "Änderungshistorie",
+  buchung: "Buchungen",
+  benachrichtigung: "Benachrichtigungen",
 };
 
 /** Build one entry, folding the label together with any extra search terms. */

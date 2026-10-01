@@ -36,7 +36,7 @@ export function FilterSearch({
   // Nothing builds the index until somebody engages with the search — see
   // useSearchIndex. Building it at mount cost every navigation a few hundred
   // milliseconds of main thread for a box most visits never touch.
-  const index = useSearchIndex(open || value.trim().length > 1);
+  const index = useSearchIndex(open || value.trim().length > 1, value);
   const deferred = useDeferredValue(value);
   const suggestions = useMemo(
     () => (deferred.trim().length > 1 ? suggestTerms(index, deferred, 8) : []),

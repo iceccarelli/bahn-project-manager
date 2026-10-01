@@ -255,8 +255,16 @@ export const auditLog = mysqlTable("audit_log", {
   eventId: varchar("eventId", { length: 36 }),
   aggregateVersion: int("aggregateVersion"),
   traceId: varchar("traceId", { length: 64 }),
+  /**
+   * Authorization scope of the row (the aggregate's Bahnhofsmanagement at the time of the change). NULL = not visible
+   * to workspace-restricted principals (global, private or unknown scope). Stamped inside the writing transaction.
+   */
+  workspace: varchar("workspace", { length: 128 }),
+  /** Human label of the entity (station / Projektnummer) at the time of the change, so a deleted project is still readable. */
+  entityLabel: varchar("entityLabel", { length: 255 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (table) => ({
+  workspaceIdx: index("audit_workspace_id_idx").on(table.workspace, table.id),
   entityIdx: index("entity_idx").on(table.entityType, table.entityId),
   userIdx: index("user_idx").on(table.userId),
   createdAtIdx: index("createdAt_idx").on(table.createdAt),

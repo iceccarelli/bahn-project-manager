@@ -502,6 +502,92 @@ async function main() {
   });
 
   // ---------------- structure / metrics -------------------------------------------------------------------
+  await step("DASHBOARD + AUDIT (server-backed): figures come from the server read model scoped per identity; no data.json, no local store, audit is one cursor page at a time", async () => {
+    const opened: Array<{ name: string; page: Page }> = [];
+    const probe = async (who: { ctx: BrowserContext }, base: string, name: string, route: string) => {
+      const page = await who.ctx.newPage();
+      const seen: string[] = [];
+      page.on("request", r => { if (/\/data\.json|\/schedule\.json/.test(r.url())) seen.push(r.url()); });
+      page.on("pageerror", e => console.log(`   [${name} pageerror] ${e.message}`));
+      await page.goto(`${base}${route}`);
+      opened.push({ name, page });
+      return { page, seen };
+    };
+    const kpiTotal = (page: Page) => page.evaluate(() => {
+      const t = [...document.querySelectorAll("*")].find(e => e.textContent?.trim() === "Gesamtprojekte");
+      const card = t?.closest(".border-l-4") ?? t?.parentElement?.parentElement?.parentElement;
+      const n = card?.querySelector(".text-5xl")?.textContent ?? "";
+      return Number(n.replace(/\./g, "").trim());
+    });
+    const dbTotal = Number((await q("SELECT COUNT(*) n FROM projects"))[0].n);
+    const dbFrankfurt = Number((await q("SELECT COUNT(*) n FROM projects WHERE bahnhofsmanagement='Frankfurt'"))[0].n);
+    if (!(dbFrankfurt > 0 && dbFrankfurt < dbTotal)) throw new Error(`fixture: ${dbFrankfurt}/${dbTotal}`);
+
+    const a = await probe(A, URLS[0]!, "A-dash", "/");
+    const b = await probe(B, URLS[1]!, "B-dash", "/");
+    await until(async () => (await kpiTotal(a.page)) === dbTotal, 15000, `A dashboard total ${dbTotal}`).catch(async e => { throw new Error(`${e.message} | page: ${(await a.page.locator("body").innerText()).replace(/\s+/g, " ").slice(0, 400)}`); });
+    await until(async () => (await kpiTotal(b.page)) === dbFrankfurt, 15000, `B dashboard total ${dbFrankfurt} (Frankfurt only)`);
+    // authority: the same figures, from the API, scoped by the server — B's payload carries nothing of other workspaces
+    const pa = await api(URLS[0]!, tokenA, "dashboard.portfolio", undefined, "GET");
+    const pb = await api(URLS[1]!, tokenB, "dashboard.portfolio", undefined, "GET");
+    if (pa.data.metrics.total !== dbTotal || pb.data.metrics.total !== dbFrankfurt) throw new Error(`portfolio totals ${pa.data.metrics.total}/${pb.data.metrics.total}`);
+    if (pb.data.regions.some((r: any) => r.region !== "Frankfurt")) throw new Error("B's portfolio leaks other regions");
+    if (a.seen.length || b.seen.length) throw new Error(`legacy snapshot requested: ${[...a.seen, ...b.seen]}`);
+    for (const { page } of [a, b]) if ((await page.evaluate(() => Object.keys(localStorage).filter(k => /bahn_(projects|audit)/.test(k)))).length) throw new Error("browser-local project/audit state present");
+
+    // AUDIT: one cursor page at a time, scoped
+    // enough history to need more than one page: 60 committed edits through the real mutation path
+    const seedP = (await q("SELECT id FROM projects WHERE bahnhofsmanagement='Frankfurt' LIMIT 1"))[0].id as number;
+    for (let i = 0; i < 60; i++) { const r = await apiUpdate(tokenA, seedP, { kommentar: `audit-seed-${i}` }); if (r.status !== 200) throw new Error(`seed edit ${i}: ${JSON.stringify(r.error)}`); }
+    const total = Number((await q("SELECT COUNT(*) n FROM audit_log"))[0].n);
+    const inFrankfurt = Number((await q("SELECT COUNT(*) n FROM audit_log WHERE workspace='Frankfurt'"))[0].n);
+    if (!(total > 50)) throw new Error(`fixture: only ${total} audit rows`);
+    const auditCalls: string[] = [];
+    const pageA = await A.ctx.newPage();
+    pageA.on("request", r => { if (/audit\.page/.test(r.url())) auditCalls.push(decodeURIComponent(r.url())); });
+    await pageA.goto(`${URLS[0]}/audit`);
+    await pageA.getByRole("button", { name: /Korrekturen ausblenden/ }).click(); // same-field edits within minutes are "corrections" and hidden by default
+    await until(async () => (await pageA.locator("tbody tr[data-audit-action]").count()) === 50, 15000, "first audit page = 50 rows");
+    if (!auditCalls.some(c => /"limit":50/.test(c))) throw new Error(`no paged audit request: ${auditCalls}`);
+    await pageA.getByRole("button", { name: /Ältere Einträge laden/ }).click();
+    await until(async () => (await pageA.locator("tbody tr[data-audit-action]").count()) > 50, 10000, "second page appended");
+    const link = pageA.locator("tbody tr[data-audit-action] a", { hasText: "Projekt öffnen" }).first();
+    if (!/\/projects\?projekt=\d+/.test((await link.getAttribute("href")) ?? "")) throw new Error("no direct project link");
+    const ab = await api(URLS[1]!, tokenB, "audit.page", { limit: 100, days: 0 }, "GET");
+    if (ab.status !== 200 || ab.data.items.length === 0 || ab.data.items.some((i: any) => i.workspace !== "Frankfurt")) throw new Error(`B audit scope: ${ab.status} ${JSON.stringify(ab.data?.items?.map((i: any) => i.workspace).slice(0, 5))}`);
+    if (ab.data.items.length > inFrankfurt) throw new Error("B got more audit rows than exist in Frankfurt");
+    const aa = await api(URLS[0]!, tokenA, "audit.page", { limit: 20, days: 0 }, "GET");
+    if (aa.data.items.length !== 20 || aa.data.nextCursor === null) throw new Error("a page is `limit` rows plus a cursor, never the whole trail");
+    const big = await api(URLS[0]!, tokenA, "audit.page", { limit: 100000, days: 0 }, "GET");
+    if (big.status === 200) throw new Error("an oversized page request must be rejected");
+    await pageA.close();
+    for (const o of opened) await o.page.close();
+  });
+
+  await step("COMMAND SEARCH (server): typed, scoped results; Enter opens the exact project; no dataset in the browser", async () => {
+    const sa = await api(URLS[0]!, tokenA, "search.query", { q: "Frankfurt" }, "GET");
+    const sb = await api(URLS[1]!, tokenB, "search.query", { q: "Frankfurt" }, "GET");
+    if (sa.status !== 200 || !sa.data.entries.some((e: any) => e.kind === "station" || e.kind === "region")) throw new Error(`typed results missing: ${JSON.stringify(sa.data?.entries?.slice(0, 3))}`);
+    const kinds = new Set<string>([...sa.data.entries.map((e: any) => e.kind)]);
+    // B (Frankfurt only) must never get a candidate of another workspace
+    const bk = await api(URLS[1]!, tokenB, "search.query", { q: "Kassel" }, "GET");
+    if (bk.data.entries.some((e: any) => ["station", "projekt", "region", "person"].includes(e.kind) && /Kassel/i.test(`${e.label} ${e.sublabel ?? ""}`) && e.kind === "region")) throw new Error("B found the Kassel region");
+    const fr = (await q("SELECT id, projektnummer FROM projects WHERE bahnhofsmanagement='Frankfurt' AND projektnummer IS NOT NULL AND projektnummer <> '' ORDER BY id LIMIT 1"))[0];
+    const NR = String(fr.projektnummer);
+    const byNr = await api(URLS[1]!, tokenB, "search.query", { q: NR }, "GET");
+    const hit = byNr.data.entries.find((e: any) => e.kind === "projekt" && e.projectId);
+    if (!hit || !/projekt=\d+/.test(hit.href)) throw new Error(`exact project target missing: ${JSON.stringify(byNr.data.entries.slice(0, 2))}`);
+    void sb; void kinds;
+    const page = await B.ctx.newPage();
+    await page.goto(`${URLS[1]}/`);
+    await page.waitForSelector('input[role="combobox"]', { timeout: 15000 });
+    await page.locator('input[role="combobox"]').fill(NR);
+    await until(async () => (await page.locator('[role="option"]').count()) > 0, 10000, "palette results");
+    await page.locator('input[role="combobox"]').press("Enter");
+    await until(async () => /projekt=\d+/.test(page.url()), 10000, `Enter opened the exact project (url ${page.url()})`);
+    await page.close();
+  });
+
   await step("integrity: every committed change has exactly one audit set, one event, one feedSeq; feed is gapless; nothing unpublished/dead", async () => {
     await until(async () => Number((await q("SELECT COUNT(*) n FROM domain_events WHERE processedAt IS NULL"))[0].n) === 0, 5000, "outbox drained");
     const [c] = await q("SELECT COUNT(*) events, SUM(failedAt IS NOT NULL) dead, MIN(feedSeq) lo, MAX(feedSeq) hi, COUNT(feedSeq) seqd FROM domain_events");

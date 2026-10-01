@@ -1,29 +1,25 @@
-import { useMemo } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useAllData } from "@/hooks/useDataQuery";
-import { buildSearchIndex } from "@shared/search-index";
-import type { SearchEntry } from "@shared/search";
+import { buildSearchIndex, staticEntries } from "@shared/search-index";
+import { entry, type SearchEntry } from "@shared/search";
+import type { SearchWireResult } from "@shared/search-contract";
+import { SERVER_MODE, serverApi } from "@/realtime/serverApi";
 
 const EMPTY: SearchEntry[] = [];
 
 /**
- * The index, built once and shared.
+ * The searchable entries behind the command palette and the filter boxes.
  *
- * Two problems this solves, both measured rather than guessed:
+ *   server build: fixed pages/Gewerke (shared) + candidates the SERVER computes for the caller's authorization scope
+ *                 for the typed term (`search.query`, debounced, bounded). No dataset ever reaches the browser.
+ *   demo build:   built once from the browser-local rows (the only data a static deployment has).
  *
- * 1. Building it costs a few hundred milliseconds of main thread. The header
- *    search is on every route, so building at mount put that cost on every
- *    navigation — including /anmeldung, where the wizard's step buttons were
- *    still moving when the harness tried to click one. Nothing needs the index
- *    until somebody actually searches, so nothing builds it until then.
- *
- * 2. The header palette and each page's filter box would otherwise build their
- *    own copy of the same 3,000 entries. The cache is keyed on the projects
- *    array itself — a WeakMap, so a superseded array is collected with its
- *    index rather than held alive by a string key nobody clears.
+ * Both hooks exist in every artifact's source, but SERVER_MODE is a build-time constant, so exactly one runs.
  */
 const CACHE = new WeakMap<object, SearchEntry[]>();
 
-export function useSearchIndex(enabled: boolean): SearchEntry[] {
+function useLocalSearchIndex(enabled: boolean, _query: string): SearchEntry[] {
   const { data } = useAllData();
   const projects = data?.projects;
   return useMemo(() => {
@@ -35,3 +31,32 @@ export function useSearchIndex(enabled: boolean): SearchEntry[] {
     return built;
   }, [enabled, projects]);
 }
+
+const STATIC = staticEntries();
+
+function useServerSearchIndex(enabled: boolean, query: string): SearchEntry[] {
+  const deferred = useDeferredValue(query.trim());
+  // 150 ms typing debounce: a keystroke burst is one request
+  const [term, setTerm] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setTerm(deferred), 150);
+    return () => clearTimeout(t);
+  }, [deferred]);
+  const q = useQuery({
+    queryKey: ["server", "search", term],
+    enabled: enabled && term.length >= 2,
+    queryFn: () => serverApi.search.query.query({ q: term }) as Promise<SearchWireResult>,
+    staleTime: 10_000,
+    placeholderData: keepPreviousData,
+    retry: false,
+  });
+  return useMemo(() => {
+    if (!enabled) return EMPTY;
+    const dynamic = (q.data?.entries ?? []).map(e => entry(e.kind, e.label, e.href, { sublabel: e.sublabel, weight: e.weight, terms: e.terms, projectId: e.projectId }));
+    return [...STATIC, ...dynamic];
+  }, [enabled, q.data]);
+}
+
+export const useSearchIndex: (enabled: boolean, query?: string) => SearchEntry[] = SERVER_MODE
+  ? (useServerSearchIndex as (enabled: boolean, query?: string) => SearchEntry[])
+  : (useLocalSearchIndex as (enabled: boolean, query?: string) => SearchEntry[]);

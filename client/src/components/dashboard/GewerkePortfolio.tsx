@@ -42,8 +42,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, Info, Pause, Play } from "lucide-react";
 import { gewerkHref } from "@shared/search-index";
-import { RISK_WEIGHTS, type GewerkStanding, type PortfolioProject } from "@shared/portfolio-metrics";
-import { buildReel, type ReelAuditEntry, type ReelEntry } from "@shared/gewerk-reel";
+import { RISK_WEIGHTS, type GewerkStanding } from "@shared/portfolio-metrics";
+import type { ReelEntry } from "@shared/gewerk-reel";
+import { useReel } from "@/hooks/usePortfolio";
 import { TONE_APPEARANCE } from "@shared/status-appearance";
 
 /** How long one card stays in frame before the chain advances. */
@@ -53,7 +54,7 @@ const ENTRY_MS = 2200;
 /** How many cards the strip shows at once on a wide screen. */
 const WINDOW = 4;
 /** How many Einträge a reel plays. Small: a reel nobody finishes is a list. */
-const REEL_LIMIT = 6;
+const NO_REEL: ReelEntry[] = [];
 
 function Bar({ standing }: { standing: GewerkStanding }) {
   const total = Math.max(standing.required, 1);
@@ -308,12 +309,8 @@ function StandingCard({
 
 export function GewerkePortfolio({
   standings,
-  projects,
-  audit,
 }: {
   standings: readonly GewerkStanding[];
-  projects: readonly PortfolioProject[];
-  audit: readonly ReelAuditEntry[];
 }) {
   const [, setLocation] = useLocation();
   const [halted, setHalted] = useState(false);
@@ -350,10 +347,7 @@ export function GewerkePortfolio({
    * time is one scan, when it is asked for, and it is memoised so a re-render
    * mid-hover does not repeat it.
    */
-  const reel = useMemo(
-    () => (reading === null ? [] : buildReel(projects, audit, reading, REEL_LIMIT)),
-    [reading, projects, audit],
-  );
+  const reel = useReel(reading).data?.entries ?? NO_REEL;
 
   /**
    * A new card starts its reel at the beginning, not wherever the last one got

@@ -26,7 +26,7 @@ synchronisation. It now says so on every page (`preview-mode-notice`). It must n
 | DB | MySQL **8.4** (not MariaDB) | gate check `mysql-version`; the full suite green on that server |
 | Cache/bus | Redis 7, `noeviction` | realtime across both instances (smoke: second user receives the update live) |
 | Identity | OIDC IdP (Microsoft Entra ID), bearer access tokens | smoke tokens issued by the real IdP |
-| Static legacy data | `dist/legacy/*.json`, served only to all-workspace principals | smoke check "legacy snapshot is not public" |
+| Static legacy data | not shipped: the server artifact contains no `data.json` / `schedule.json` (removed at build, 404 at runtime) | build-target assertion, container gate, e2e "no dataset side door" |
 
 If the team decides on another container host (ECS, Cloud Run with min-instances + CPU always allocated, a VM with
 Compose, Kubernetes) the app image and the environment contract are unchanged; only `deploy/staging/` is replaced. If the

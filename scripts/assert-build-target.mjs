@@ -21,6 +21,7 @@ if (want === "production" && info.serverMode !== true) fail("SERVER_MODE=false i
 if (want === "demo" && info.serverMode !== false) fail("demo build has the server data plane enabled");
 
 if (want === "production") {
+  for (const f of ["data.json", "schedule.json"]) if (fs.existsSync(path.join(dir, f))) fail(`${f} (browser-local dataset) is shipped in the production artifact`);
   const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap(e => e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]);
   for (const f of walk(dir).filter(f => /\.(js|html)$/.test(f))) {
     if (fs.readFileSync(f, "utf8").includes("Daten liegen nur in diesem Browser")) fail(`demo notice shipped in ${path.relative(dir, f)}`);

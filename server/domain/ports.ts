@@ -75,6 +75,9 @@ export interface AuditRow {
   eventId: string;
   aggregateVersion: number;
   traceId: string;
+  /** Authorization scope stamped in the writing transaction; null = unrestricted principals only. */
+  workspace?: string | null;
+  entityLabel?: string | null;
 }
 
 /** Everything a project mutation may touch, all inside ONE database transaction. */

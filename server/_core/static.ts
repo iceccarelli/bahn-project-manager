@@ -21,7 +21,6 @@
 import express, { type Express } from "express";
 import fs from "node:fs";
 import path from "node:path";
-import { registerLegacySnapshot } from "./legacySnapshot";
 
 export function serveStatic(app: Express) {
   const distPath =
@@ -34,7 +33,9 @@ export function serveStatic(app: Express) {
     );
   }
 
-  registerLegacySnapshot(app, distPath); // before static: authenticated in server-mode builds
+  // The browser-local snapshot does not exist in the server artifact (vite removes it at build time) and there is no
+  // route that serves one: an unknown /data.json must be a 404, never the SPA shell pretending to be a dataset.
+  app.get(["/data.json", "/schedule.json"], (_req, res) => { res.status(404).json({ error: "not found" }); });
   app.use(express.static(distPath));
 
   // fall through to index.html if the file doesn't exist

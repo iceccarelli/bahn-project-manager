@@ -26,6 +26,11 @@ import { deriveProjectMetrics } from "@shared/project-metrics";
 import { SingleFlightCache } from "./infra/singleFlightCache";
 import { KeyedCache, scopeKey } from "./infra/keyedCache";
 import { readDashboard, readDepartment } from "./infra/readModels";
+import { loadPortfolioProjects } from "./infra/portfolioModel";
+import { pageAudit } from "./infra/auditQuery";
+import { searchGlobal } from "./infra/searchQuery";
+import { buildPortfolio, buildReelView } from "@shared/portfolio-view";
+import type { PortfolioProject } from "@shared/portfolio-metrics";
 import { MapQuerySchema, MapStationQuerySchema } from "@shared/map-contract";
 import { BookSlotInputSchema, ListSlotsInputSchema, ReleaseSlotInputSchema } from "@shared/booking-contract";
 import { SaveChecklistInputSchema, SubmitChecklistInputSchema } from "@shared/checklist-contract";
@@ -45,6 +50,12 @@ async function shellSummaryCached(load: () => Promise<{ projectCount: number; la
 
 // The read is a few tiny indexed lookups; this short cache only absorbs bursts (one load per scope per 5 s).
 const departmentScoped = new KeyedCache<Awaited<ReturnType<typeof readDepartment>>>("department", 5_000, 500);
+// Authorized portfolio rows per scope (one lean scan per scope per TTL, shared by every viewer of that scope); the
+// finished figures are derived from them once per scope per TTL as well.
+const portfolioRows = new KeyedCache<PortfolioProject[]>("portfolio-rows", 30_000, 100);
+const portfolioView = new KeyedCache<ReturnType<typeof buildPortfolio>>("portfolio", 30_000, 100);
+// 5 s burst absorber per (scope, user, term): typing the same prefix from many tabs costs one set of queries.
+const searchCache = new KeyedCache<{ q: string; entries: Awaited<ReturnType<typeof searchGlobal>> }>("search", 5_000, 2000);
 const dashboardScoped = new KeyedCache<Awaited<ReturnType<typeof readDashboard>>>("dashboard", 5_000);
 /** Per-project review statuses → shared/project-metrics.ts. `workspaces` null = all. */
 async function computeMetrics(workspaces: readonly string[] | null) {
@@ -306,6 +317,20 @@ export const appRouter = router({
       const { pool } = await requireServices();
       return departmentScoped.get(`${input.department}#${scopeKey(restriction)}`, () => readDepartment(pool, restriction, input.department));
     }),
+    /** Every Dashboard figure that needs row-level data, derived server-side for the caller's workspaces only. */
+    portfolio: protectedProcedure.query(async ({ ctx }) => {
+      const restriction = workspaceRestriction(ctx.principal);
+      const { pool } = await requireServices();
+      const key = scopeKey(restriction);
+      return portfolioView.get(key, async () => buildPortfolio(await portfolioRows.get(key, () => loadPortfolioProjects(pool, restriction)), Date.now()));
+    }),
+    /** The card "reel" of one Gewerk, built on demand (not for all fourteen on every mount). */
+    reel: protectedProcedure.input(z.object({ department: z.string().min(1).max(64) })).query(async ({ input, ctx }) => {
+      const restriction = workspaceRestriction(ctx.principal);
+      const { pool } = await requireServices();
+      const key = scopeKey(restriction);
+      return buildReelView(await portfolioRows.get(key, () => loadPortfolioProjects(pool, restriction)), input.department, []);
+    }),
     /** KPI cards: shared/project-metrics.ts run server-side over (project, status) rows. */
     metrics: protectedProcedure.query(({ ctx }) => {
       const restriction = workspaceRestriction(ctx.principal);
@@ -367,6 +392,25 @@ export const appRouter = router({
 
   // ============= AUDIT LOG =============
   audit: router({
+    /** Server-paginated (keyset), workspace-scoped, filterable. The only audit read the UI uses. */
+    page: protectedProcedure
+      .input(z.object({
+        cursor: z.number().int().positive().optional(),
+        limit: z.number().int().min(1).max(100).default(50),
+        entityType: z.enum(["project", "checklist", "booking"]).optional(),
+        entityId: z.number().int().positive().optional(),
+        action: z.enum(["create", "update", "delete"]).optional(),
+        user: z.string().trim().min(1).max(100).optional(),
+        label: z.string().trim().min(1).max(100).optional(),
+        q: z.string().trim().min(1).max(100).optional(),
+        statusOnly: z.boolean().optional(),
+        days: z.number().int().min(0).max(3650).default(30),
+      }).default({ limit: 50, days: 30 }))
+      .query(async ({ input, ctx }) => {
+        if (!canViewAudit(ctx.principal)) throw new TRPCError({ code: "FORBIDDEN" });
+        const { pool } = await requireServices();
+        return pageAudit(pool, workspaceRestriction(ctx.principal), input);
+      }),
     list: protectedProcedure
       .input(z.object({
         entityType: z.string().optional(),
@@ -377,6 +421,18 @@ export const appRouter = router({
         if (!canViewAudit(ctx.principal)) throw new TRPCError({ code: "FORBIDDEN" });
         return getAuditLog(input ?? {});
       }),
+  }),
+
+  // ============= GLOBAL SEARCH =============
+  search: router({
+    /** Typed, authorization-scoped candidates for the command palette (projects, stations, people, regions, audit, bookings, own notifications). */
+    query: protectedProcedure.input(z.object({ q: z.string().trim().min(2).max(80) })).query(async ({ input, ctx }) => {
+      const { pool } = await requireServices();
+      const workspaces = workspaceRestriction(ctx.principal);
+      const canAudit = canViewAudit(ctx.principal);
+      const key = `${scopeKey(workspaces)}|${canAudit}|${ctx.principal.id}|${input.q.toLowerCase()}`;
+      return searchCache.get(key, async () => ({ q: input.q, entries: await searchGlobal(pool, { workspaces, userId: ctx.principal.id, canAudit }, input.q) }));
+    }),
   }),
 
   // ============= FILTERS =============

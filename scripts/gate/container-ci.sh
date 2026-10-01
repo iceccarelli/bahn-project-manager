@@ -57,6 +57,7 @@ echo "$INFO"
 grep -q '"target":"production"' <<<"$INFO" && grep -q '"serverMode":true' <<<"$INFO" || fail "image does not contain a production, server-mode client"
 curl -fsS "http://127.0.0.1:$PORT/projects" | grep -qi "<div id=\"root\"" || fail "SPA index not served"
 CODE=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT/api/trpc/auth.session"); echo "unauthenticated tRPC -> $CODE"
+for f in data.json schedule.json; do [ "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT/$f")" = 404 ] || fail "$f is reachable in the production image"; done
 curl -sI "http://127.0.0.1:$PORT/" | grep -qi '^content-security-policy' || fail "CSP header missing"
 
 step "5. graceful shutdown (SIGTERM -> drain -> exit 0, well inside the grace period)"
