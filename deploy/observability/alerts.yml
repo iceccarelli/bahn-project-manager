@@ -1,0 +1,64 @@
+# Prometheus alert rules for the metrics this server actually exports (docs/observability.md).
+# Every metric named here is verified to exist by `pnpm check:consistency`. Thresholds are starting points to be
+# tuned against the staging load certification, not measured SLOs. Scrape EVERY instance (metrics are per-process).
+groups:
+  - name: bahn-project-manager
+    rules:
+      - alert: InstanceDown
+        expr: up{job="bahn"} == 0
+        for: 1m
+        labels: { severity: page }
+        annotations: { summary: "an app instance is not scrapeable", runbook: "docs/runbook.md#instance-down" }
+      - alert: RedisDown
+        expr: bahn_redis_up == 0
+        for: 1m
+        labels: { severity: page }
+        annotations: { summary: "Redis unreachable from {{ $labels.instance }} — writes still commit, realtime is catching up from the durable feed", runbook: "docs/runbook.md#redis-outage" }
+      - alert: OutboxBacklog
+        expr: bahn_outbox_backlog > 100
+        for: 1m
+        labels: { severity: page }
+        annotations: { summary: "unpublished outbox events — realtime delivery is behind", runbook: "docs/runbook.md#outbox-backlog" }
+      - alert: OutboxDeadLetter
+        expr: increase(bahn_outbox_dead_letters_total[10m]) > 0
+        labels: { severity: page }
+        annotations: { summary: "an event can never be published and was quarantined", runbook: "docs/runbook.md#outbox-backlog" }
+      - alert: RealtimeEventLatencyHigh
+        expr: histogram_quantile(0.95, sum by (le) (rate(bahn_realtime_event_age_ms_bucket[5m]))) > 500
+        for: 5m
+        labels: { severity: ticket }
+        annotations: { summary: "p95 commit→subscriber latency above 500 ms" }
+      - alert: SlowConsumersDropped
+        expr: rate(bahn_realtime_events_dropped_total[5m]) > 0
+        for: 5m
+        labels: { severity: ticket }
+        annotations: { summary: "clients are being told to resync because they cannot keep up" }
+      - alert: RequestsShed
+        expr: rate(bahn_requests_shed_total[5m]) > 0
+        for: 2m
+        labels: { severity: page }
+        annotations: { summary: "DB pool queue is full — requests are rejected with 429", runbook: "docs/scaling.md" }
+      - alert: DbPoolSaturated
+        expr: bahn_db_pool_queued_requests > 0
+        for: 2m
+        labels: { severity: ticket }
+        annotations: { summary: "requests are waiting for a DB connection" }
+      - alert: ApiLatencyHigh
+        expr: histogram_quantile(0.95, sum by (le) (rate(bahn_http_request_ms_bucket[5m]))) > 800
+        for: 5m
+        labels: { severity: ticket }
+        annotations: { summary: "API p95 above 800 ms" }
+      - alert: ConflictRateHigh
+        expr: rate(bahn_conflicts_total[15m]) / clamp_min(rate(bahn_mutations_total[15m]), 0.001) > 0.1
+        for: 15m
+        labels: { severity: ticket }
+        annotations: { summary: "more than 10 % of mutations end in a version conflict — two teams editing the same projects?" }
+      - alert: UnhandledRejections
+        expr: increase(bahn_unhandled_rejections_total[10m]) > 0
+        labels: { severity: ticket }
+        annotations: { summary: "process-level unhandled rejection — find the missing catch" }
+      - alert: AuthVerificationSlow
+        expr: histogram_quantile(0.95, sum by (le) (rate(bahn_auth_verify_ms_bucket[5m]))) > 250
+        for: 10m
+        labels: { severity: ticket }
+        annotations: { summary: "OIDC verification slow — IdP / JWKS reachability" }

@@ -404,6 +404,9 @@ async function main() {
     await until(async () => await dialog.isVisible(), 8000, "structured conflict dialog on B");
     const text = await dialog.innerText();
     if (!text.includes(`A-Wert-${choose}`) || !text.includes(`B-Wert-${choose}`) || !/Konflikt/.test(text)) throw new Error(`dialog: ${text}`);
+    // the diff names the clash: the conflicting field is marked, with base / current / attempted values side by side
+    const clash = dialog.locator('[data-testid="conflict-diff"] tr[data-conflict="true"]');
+    if ((await clash.count()) !== 1 || !/Konflikt/.test(await clash.innerText())) throw new Error("conflict diff does not mark the clashing field");
     if ((await q("SELECT projektleiter p FROM projects WHERE id=?", [PID]))[0].p !== `A-Wert-${choose}`) throw new Error("B silently overwrote A");
     if ((await ver(PID)) !== v0 + 1) throw new Error("version moved although B was rejected");
     if (choose === "server") {

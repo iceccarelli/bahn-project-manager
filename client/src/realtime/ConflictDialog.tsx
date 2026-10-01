@@ -27,14 +27,21 @@ export default function ConflictDialog({
                   : "Dasselbe Feld wurde geändert. Sie entscheiden, welcher Wert gilt."}
               </AlertDialogDescription>
             </AlertDialogHeader>
-            <table className="w-full text-sm" aria-label="Konfliktdetails">
-              <thead><tr className="text-left text-muted-foreground"><th>Feld</th><th>Aktuell (Server)</th><th>Ihre Änderung</th></tr></thead>
+            <table className="w-full text-sm" aria-label="Konfliktdetails" data-testid="conflict-diff">
+              <thead><tr className="text-left text-muted-foreground"><th>Feld</th><th>Ihre Ausgangsbasis</th><th>Aktuell (Server)</th><th>Ihre Änderung</th><th><span className="sr-only">Status</span></th></tr></thead>
               <tbody>
-                {Object.keys(conflict.localValues).map(f => (
-                  <tr key={f} className={conflict.conflictingFields.includes(f) ? "font-semibold" : ""}>
-                    <td>{fieldLabel(f)}</td><td>{conflict.serverValues[f] ?? "—"}</td><td>{conflict.localValues[f] ?? "—"}</td>
-                  </tr>
-                ))}
+                {Object.keys(conflict.localValues).map(f => {
+                  const clash = conflict.conflictingFields.includes(f);
+                  return (
+                    <tr key={f} className={clash ? "bg-red-50 font-semibold dark:bg-red-950/30" : ""} data-conflict={clash ? "true" : "false"}>
+                      <td>{fieldLabel(f)}</td>
+                      <td>{conflict.changedSince[f] ? (conflict.changedSince[f]!.from ?? "—") : (conflict.serverValues[f] ?? "—")}</td>
+                      <td>{conflict.serverValues[f] ?? "—"}</td>
+                      <td>{conflict.localValues[f] ?? "—"}</td>
+                      <td className={clash ? "text-red-700 dark:text-red-300" : "text-muted-foreground"}>{clash ? "Konflikt" : "unverändert"}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
             <AlertDialogFooter>

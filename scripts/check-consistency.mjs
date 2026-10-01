@@ -56,5 +56,14 @@ for (const c of required) if (!jobs.has(c)) bad(`ruleset requires "${c}" but ci.
 const MUST = ["lint-typecheck", "test", "build", "e2e", "e2e-server", "container", "migrations-mysql84", "image", "ui-perf"];
 for (const c of MUST) if (!required.includes(c)) bad(`ruleset does not require "${c}"`);
 
+// alert rules <-> exported metrics, and runbook anchors they point to
+const metricsSrc = read("server/observability/metrics.ts");
+const exported = new Set([...metricsSrc.matchAll(/(?:counter|gauge|histogram)\(\s*"([a-z0-9_]+)"/g)].map((m) => m[1]));
+const alerts = read("deploy/observability/alerts.yml");
+for (const m of new Set([...alerts.matchAll(/\b(bahn_[a-z0-9_]+)/g)].map((x) => x[1].replace(/_bucket$/, "")))) if (!exported.has(m)) bad(`alerts.yml uses metric "${m}" which the server does not export`);
+const runbook = read("docs/runbook.md");
+const anchors = new Set([...runbook.matchAll(/^#{1,4} (.+)$/gm)].map((m) => m[1].toLowerCase().replace(/[^a-z0-9 -]/g, "").trim().replace(/ /g, "-")));
+for (const a of new Set([...alerts.matchAll(/runbook\.md#([a-z0-9-]+)/g)].map((x) => x[1]))) if (!anchors.has(a)) bad(`alerts.yml points at docs/runbook.md#${a}, which is not a heading`);
+
 if (problems.length) { console.error("consistency: FAIL\n - " + problems.join("\n - ")); process.exit(1); }
 console.log(`consistency: ok (${required.length} required checks, all present in ci.yml)`);

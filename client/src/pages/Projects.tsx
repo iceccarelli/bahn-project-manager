@@ -160,7 +160,20 @@ export default function Projects() {
   const [, setLocation] = useLocation();
   const routeSearch = useRouteSearch();
   const { recordDocument } = useAuditTrail();
-  const [viewMode, setViewMode] = useState<"table" | "cards" | "map">("table");
+  // Phone-width screens default to the card view (a 14-column table is not an operations surface at 390 px); same
+  // domain operations and authorization either way — only the presentation differs. The reader's explicit choice wins.
+  const [viewMode, setViewMode] = useState<"table" | "cards" | "map">(() => {
+    try {
+      const saved = localStorage.getItem("bpm-projects-view");
+      if (saved === "table" || saved === "cards" || saved === "map") return saved;
+    } catch { /* private window: fall through to the width default */ }
+    return typeof window !== "undefined" && window.matchMedia?.("(max-width: 639px)").matches ? "cards" : "table";
+  });
+  const viewChosen = useRef(false); // only an explicit choice is remembered; the width default is not a preference
+  useEffect(() => {
+    if (!viewChosen.current) { viewChosen.current = true; return; }
+    try { localStorage.setItem("bpm-projects-view", viewMode); } catch { /* private window */ }
+  }, [viewMode]);
   /** Set by the map; narrows the card view to one station's exact project ids. */
   const [stationFocus, setStationFocus] = useState<StationSelection | null>(null);
   /** The card to scroll to and ring after arriving from the map. */
@@ -327,6 +340,8 @@ export default function Projects() {
     const projektRaw = params.get("projekt");
     const projekt = projektRaw === null ? Number.NaN : Number(projektRaw);
     setProjectFocus(Number.isInteger(projekt) && projekt > 0 ? projekt : null);
+    // a link to one project (command search, notification) lands on that row AND shows it in the drawer
+    if (Number.isInteger(projekt) && projekt > 0) setDetailProjectId(projekt);
 
     // Arriving with either focus clears the leftover text search: the reader
     // asked for a set, not for that set intersected with whatever was typed

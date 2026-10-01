@@ -27,6 +27,23 @@ Client: `pnpm build:production` (the Dockerfile does this) is the server artifac
 | Conflicts spike | many editors on same project | expected; check `bahn_conflicts_total`; UI offers rebase |
 | Boot error "Unsafe production configuration" | missing/weak `JWT_SECRET`, `DATABASE_URL`, IdP | fix env |
 
+## Alert playbooks
+
+Alert rules live in `deploy/observability/alerts.yml`; each `runbook:` annotation lands here.
+
+### Instance down
+`/api/ready` answers 503 (MySQL unreachable or draining) or the process is gone. The load balancer already removed it. Check
+`docker logs` for `[shutdown]` / boot errors (`Unsafe production configuration`), then DB reachability. Other instances keep serving.
+
+### Redis outage
+`bahn_redis_up == 0`, `/api/ready` reports `degraded`. Writes still commit; the outbox backlog waits; open streams receive a
+catch-up hint when Redis returns. Restore Redis; confirm `bahn_redis_up == 1` and `bahn_outbox_backlog → 0`. Proven by the
+server-mode e2e step "CHAOS: Redis outage".
+
+### Outbox backlog
+`bahn_outbox_backlog > 100` for a minute: realtime is behind (data is safe). Check the relay leader (`GET_LOCK('bahn:outbox-relay')`),
+the relay pool's DB reachability and Redis. Dead letters (`bahn_outbox_dead_letters_total`): inspect `failedAt`/`failureReason`.
+
 ## Recovering a lost realtime layer
 
 Realtime is derived state. After any Redis/relay/bus outage: restart, done. Clients reconnect, call `projects.sync` with
