@@ -205,8 +205,9 @@ async function main() {
     if (v !== vN + 1) throw new Error(`version ${v} != ${vN + 1}`);
     const [audit] = await q("SELECT userName,field,oldValue,newValue,aggregateVersion,eventId,traceId FROM audit_log WHERE entityId=? AND field='projektstand' ORDER BY id DESC LIMIT 1", [PID]);
     if (!audit || audit.aggregateVersion !== v || audit.newValue !== target || audit.oldValue !== before || !audit.traceId) throw new Error(`audit ${JSON.stringify(audit)}`);
-    const [ev] = await q("SELECT aggregateVersion,processedAt,feedSeq FROM domain_events WHERE eventId=?", [audit.eventId]);
-    if (!ev || ev.aggregateVersion !== v || !ev.processedAt || !ev.feedSeq) throw new Error(`outbox ${JSON.stringify(ev)}`);
+    // the relay publishes first (B's DOM changed) and marks the row processed right after: wait for that, never sample once
+    const ev = await until(async () => { const [e] = await q("SELECT aggregateVersion,processedAt,feedSeq FROM domain_events WHERE eventId=?", [audit.eventId]); return e?.processedAt ? e : null; }, 5000, "outbox row processed");
+    if (ev.aggregateVersion !== v || !ev.feedSeq) throw new Error(`outbox ${JSON.stringify(ev)}`);
     const sse = (await B.page.evaluate(() => (window as any).__sse.join(""))) as string;
     if (!sse.includes(audit.eventId)) throw new Error("B's stream never carried the event");
     measurements.audit_actor = audit.userName;
