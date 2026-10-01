@@ -2060,12 +2060,12 @@ var t = initTRPC.context().create({
   }
 });
 var router = t.router;
-var timing = t.middleware(async ({ path: path2, type, next }) => {
+var timing = t.middleware(async ({ path: path3, type, next }) => {
   const start = performance.now();
   try {
     return await next();
   } finally {
-    m.httpMs.observe(performance.now() - start, { path: path2, type });
+    m.httpMs.observe(performance.now() - start, { path: path3, type });
   }
 });
 var domainErrors = t.middleware(async ({ next }) => {
@@ -4492,18 +4492,46 @@ async function createContext(opts) {
 
 // server/_core/static.ts
 import express from "express";
+import fs2 from "node:fs";
+import path2 from "node:path";
+
+// server/_core/legacySnapshot.ts
 import fs from "node:fs";
 import path from "node:path";
+var LEGACY_FILES = ["data.json", "schedule.json"];
+function registerLegacySnapshot(app, publicDir) {
+  const legacyDir = path.resolve(publicDir, "..", "legacy");
+  for (const f of LEGACY_FILES) {
+    app.get(`/${f}`, async (req, res, next) => {
+      const file = path.join(legacyDir, f);
+      if (!fs.existsSync(file)) return next();
+      const id = await resolveIdentity(req).catch(() => null);
+      if (!id) {
+        res.status(401).json({ error: "unauthenticated" });
+        return;
+      }
+      if (workspaceRestriction(id.principal) !== null) {
+        res.status(403).json({ error: "forbidden" });
+        return;
+      }
+      res.setHeader("Cache-Control", "private, no-store");
+      res.sendFile(file);
+    });
+  }
+}
+
+// server/_core/static.ts
 function serveStatic(app) {
-  const distPath = process.env.NODE_ENV === "development" ? path.resolve(import.meta.dirname, "../..", "dist", "public") : path.resolve(import.meta.dirname, "public");
-  if (!fs.existsSync(distPath)) {
+  const distPath = process.env.NODE_ENV === "development" ? path2.resolve(import.meta.dirname, "../..", "dist", "public") : path2.resolve(import.meta.dirname, "public");
+  if (!fs2.existsSync(distPath)) {
     console.error(
       `Could not find the build directory: ${distPath}, make sure to build the client first`
     );
   }
+  registerLegacySnapshot(app, distPath);
   app.use(express.static(distPath));
   app.use("*", (_req, res) => {
-    res.sendFile(path.resolve(distPath, "index.html"));
+    res.sendFile(path2.resolve(distPath, "index.html"));
   });
 }
 
@@ -4901,7 +4929,7 @@ async function startServer() {
     })
   );
   if (process.env.NODE_ENV === "development") {
-    const { setupVite } = await import("./vite-WDDAV25V.js");
+    const { setupVite } = await import("./vite-L7ARY4FY.js");
     await setupVite(app, server);
   } else {
     serveStatic(app);

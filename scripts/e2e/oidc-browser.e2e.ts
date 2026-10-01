@@ -205,6 +205,16 @@ await step("a user signed in as a restricted principal sees only their workspace
   await B.ctx.close();
 });
 
+await step("legacy snapshot is not a side door: /data.json and /schedule.json are 401 anonymous, 403 workspace-restricted, 200 only for all-workspace principals", async () => {
+  if (existsSync(`${process.env.OUT ?? "dist-oidc"}/public/data.json`)) throw new Error("data.json is still in the public directory");
+  const get = async (f: string, who?: Who) => { const r = await fetch(`${APP}/${f}`, { headers: who ? { authorization: `Bearer ${await sign(who, "1h")}` } : {} }); return { status: r.status, ct: r.headers.get("content-type") ?? "", len: Number(r.headers.get("content-length") ?? 0), text: r.status === 200 ? "" : await r.text() }; };
+  for (const f of ["data.json", "schedule.json"]) {
+    const anon = await get(f), fr = await get(f, { oid: "f2", name: "F", roles: ["editor"], workspaces: ["Frankfurt"] }), none = await get(f, { oid: "n2", name: "N", roles: ["editor"] }), all = await get(f, { oid: "a2", name: "A", roles: ["editor"], workspaces: ["ALL"] });
+    if (anon.status !== 401 || fr.status !== 403 || none.status !== 403 || all.status !== 200 || !all.ct.includes("json")) throw new Error(`${f}: ${JSON.stringify({ anon: anon.status, fr: fr.status, none: none.status, all: all.status, ct: all.ct })}`);
+    if (/projektnummer|Koblenz/.test(anon.text + fr.text + none.text)) throw new Error(`${f} content leaked in an error body`);
+  }
+});
+
 await browser.close(); idp.close(); srv.kill("SIGTERM");
 const failed = results.filter(r => !r.ok);
 mkdirSync("artifacts", { recursive: true });

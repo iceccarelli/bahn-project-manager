@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
+import { authHeaders } from "@/realtime/serverApi";
 import type { TerminStatus } from "@shared/checklist";
 
 /**
@@ -113,7 +114,7 @@ export function useSchedule(options: ScheduleOptions = {}) {
   const { data: slots = [], isLoading } = useQuery<ScheduleSlot[]>({
     queryKey: ["schedule"],
     queryFn: async () => {
-      const res = await fetch("/schedule.json");
+      const res = await fetch("/schedule.json", { headers: await authHeaders(), credentials: "include" });
       if (!res.ok) throw new Error(`schedule.json HTTP ${res.status}`);
       const json = await res.json();
       if (!Array.isArray(json)) throw new Error("schedule.json is not an array");

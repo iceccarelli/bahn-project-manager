@@ -71,6 +71,29 @@ function vitePluginDataValidationAndCache(): Plugin {
   };
 }
 
+/**
+ * Server-mode builds must not publish the legacy snapshot as static files: anything under `public/`
+ * is served to ANYONE, which would hand the whole dataset to unauthenticated and workspace-restricted
+ * users and make the server's authorization decorative. The files are moved to `<outDir>/../legacy/`
+ * and served by an authenticated route (server/_core/legacySnapshot.ts).
+ */
+export const LEGACY_SNAPSHOT_FILES = ["data.json", "schedule.json"];
+function vitePluginLegacySnapshotOffPublic(): Plugin {
+  return {
+    name: "legacy-snapshot-off-public",
+    apply: "build",
+    writeBundle(options) {
+      if (process.env.VITE_SERVER_MODE !== "1" || !options.dir) return;
+      const legacy = path.resolve(options.dir, "..", "legacy");
+      fs.mkdirSync(legacy, { recursive: true });
+      for (const f of LEGACY_SNAPSHOT_FILES) {
+        const from = path.join(options.dir, f);
+        if (fs.existsSync(from)) fs.renameSync(from, path.join(legacy, f));
+      }
+    },
+  };
+}
+
 const isProduction = process.env.NODE_ENV === "production";
 
 const plugins = [
@@ -83,6 +106,7 @@ const plugins = [
     ? [jsxLocPlugin(), vitePluginManusRuntime()]
     : []),
   vitePluginDataValidationAndCache(),
+  vitePluginLegacySnapshotOffPublic(),
 ];
 
 export default defineConfig({

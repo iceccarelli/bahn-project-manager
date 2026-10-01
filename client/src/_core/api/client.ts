@@ -15,6 +15,7 @@ import type { Project, Review, Stats, AuditLogEntry } from "@/hooks/useDataQuery
 import { describeIngest, ingestProjects } from "@shared/ingest";
 import { ProjectSchema, ReviewSchema } from "@shared/validation";
 import { cacheStore, writeStore } from "./localStore";
+import { authHeaders } from "@/realtime/serverApi";
 
 export interface ProjectUpdateInput {
   id: number;
@@ -133,7 +134,7 @@ async function initializeStorage() {
 
   try {
     // 1. Try local /data.json first (fastest + most reliable)
-    const res = await fetch(LOCAL_DATA_JSON_URL);
+    const res = await fetch(LOCAL_DATA_JSON_URL, { headers: await authHeaders(), credentials: "include" });
     if (res.ok) {
       const result = ingestProjects(await res.json());
       // Cache only what validated. Writing the raw payload back would put the
