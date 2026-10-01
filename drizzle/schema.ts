@@ -1,6 +1,6 @@
 import {
-  int, mysqlEnum, mysqlTable, text, timestamp, varchar, datetime, json,
-  index, uniqueIndex
+  int, bigint, mysqlEnum, mysqlTable, text, timestamp, varchar, datetime, json,
+  index, uniqueIndex, primaryKey
 } from "drizzle-orm/mysql-core";
 import { relations } from "drizzle-orm";
 
@@ -56,6 +56,8 @@ export const projects = mysqlTable("projects", {
   projektleiterIdx: index("projektleiter_idx").on(table.projektleiter),
   syncVersionIdx: index("syncVersion_idx").on(table.syncVersion),
   regionStandIdx: index("region_stand_idx").on(table.bahnhofsmanagement, table.projektstand),
+  // Keyset pagination for the default list order (updatedAt DESC, id DESC).
+  updatedAtIdIdx: index("projects_updatedAt_id_idx").on(table.updatedAt, table.id),
 }));
 
 // Department Reviews
@@ -212,11 +214,120 @@ export const auditLog = mysqlTable("audit_log", {
   field: varchar("field", { length: 128 }),
   oldValue: text("oldValue"),
   newValue: text("newValue"),
+  /**
+   * Link to the domain event written in the same transaction. Null for rows
+   * written before the event pipeline existed. audit_log is append-only: a
+   * database trigger (migration 0004) rejects UPDATE and DELETE.
+   */
+  eventId: varchar("eventId", { length: 36 }),
+  aggregateVersion: int("aggregateVersion"),
+  traceId: varchar("traceId", { length: 64 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (table) => ({
   entityIdx: index("entity_idx").on(table.entityType, table.entityId),
   userIdx: index("user_idx").on(table.userId),
   createdAtIdx: index("createdAt_idx").on(table.createdAt),
+}));
+
+/**
+ * Transactional outbox AND replay log for domain events.
+ *
+ * A row is inserted in the same transaction as the aggregate change and its
+ * audit rows. The relay publishes unprocessed rows after commit and stamps
+ * processedAt. Rows are retained (not deleted on publish) so a client that
+ * missed events can be replayed from aggregateVersion.
+ *
+ * (aggregateType, aggregateId, aggregateVersion) is UNIQUE: two writers can
+ * never both produce version N of one aggregate, which is the ordering
+ * guarantee the client gap detector relies on.
+ */
+export const domainEvents = mysqlTable("domain_events", {
+  id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
+  eventId: varchar("eventId", { length: 36 }).notNull(),
+  eventType: varchar("eventType", { length: 64 }).notNull(),
+  aggregateType: varchar("aggregateType", { length: 32 }).notNull(),
+  aggregateId: int("aggregateId").notNull(),
+  aggregateVersion: int("aggregateVersion").notNull(),
+  /** the full wire envelope, exactly as it is published */
+  envelope: json("envelope").notNull(),
+  createdAt: datetime("createdAt", { fsp: 3 }).notNull(),
+  processedAt: datetime("processedAt", { fsp: 3 }),
+  /**
+   * Dead letter: set (together with processedAt, so the relay skips the row)
+   * when the stored envelope can never be published, e.g. it fails schema
+   * validation. Transient bus failures are NOT dead-lettered; they retry.
+   * Clients detect the resulting version gap and recover from state.
+   */
+  failedAt: datetime("failedAt", { fsp: 3 }),
+  /**
+   * Position in the authoritative change feed. Assigned by the (single) outbox
+   * relay in publication order, so it is gapless and commit-ordered — unlike
+   * `id`, where a slow transaction can commit after a later id. Clients keep it
+   * as their resume cursor; see docs/data-plane.md "Collection recovery".
+   */
+  feedSeq: bigint("feedSeq", { mode: "number" }),
+  failureReason: varchar("failureReason", { length: 512 }),
+}, (table) => ({
+  eventIdUnique: uniqueIndex("domain_events_eventId_uq").on(table.eventId),
+  aggregateVersionUnique: uniqueIndex("domain_events_aggregate_version_uq").on(
+    table.aggregateType, table.aggregateId, table.aggregateVersion,
+  ),
+  // (processedAt, id): measured 0.8 ms vs 26 ms at a 100k backlog — the relay orders by id,
+  // and (processedAt, createdAt, id) forced a filesort of the whole backlog every poll.
+  feedSeqUnique: uniqueIndex("domain_events_feedSeq_uq").on(table.feedSeq),
+  // relay: resume rows that already have a sequence, in sequence order, without scanning processed history
+  pendingSeqIdx: index("domain_events_pending_seq_idx").on(table.processedAt, table.feedSeq),
+  outboxIdx: index("domain_events_outbox_idx").on(table.processedAt, table.id),
+}));
+
+/**
+ * Idempotency ledger. Inserted inside the mutation's own transaction, so the
+ * key exists if and only if the side effects committed.
+ */
+export const idempotencyKeys = mysqlTable("idempotency_keys", {
+  actorId: varchar("actorId", { length: 64 }).notNull(),
+  idempotencyKey: varchar("idempotencyKey", { length: 128 }).notNull(),
+  operation: varchar("operation", { length: 64 }).notNull(),
+  /** sha256 of the canonical request, so a reused key with a new body is rejected */
+  requestHash: varchar("requestHash", { length: 64 }).notNull(),
+  response: json("response"),
+  createdAt: datetime("createdAt", { fsp: 3 }).notNull(),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.actorId, table.idempotencyKey] }),
+  createdAtIdx: index("idempotency_createdAt_idx").on(table.createdAt),
+}));
+
+/**
+ * User notifications, produced inside the same transaction as the change that
+ * caused them (domain event → policy → row + outbox event → realtime → center).
+ * `workspace` lets reads re-check the recipient's CURRENT workspace access.
+ */
+export const notifications = mysqlTable("notifications", {
+  id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
+  /** principal id of the recipient */
+  userId: varchar("userId", { length: 64 }).notNull(),
+  kind: mysqlEnum("kind", ["critical", "workflow", "assignment", "mention", "deadline", "system"]).notNull(),
+  title: varchar("title", { length: 256 }).notNull(),
+  body: varchar("body", { length: 1024 }),
+  link: varchar("link", { length: 256 }),
+  workspace: varchar("workspace", { length: 128 }),
+  /** the domain event that caused it */
+  eventId: varchar("eventId", { length: 36 }).notNull(),
+  createdAt: datetime("createdAt", { fsp: 3 }).notNull(),
+  readAt: datetime("readAt", { fsp: 3 }),
+}, (table) => ({
+  userIdx: index("notifications_user_idx").on(table.userId, table.id),
+  userEventUnique: uniqueIndex("notifications_user_event_uq").on(table.userId, table.eventId),
+}));
+
+/** Who follows which project (the recipient set of the current notification policy). */
+export const projectWatchers = mysqlTable("project_watchers", {
+  projectId: int("projectId").notNull(),
+  userId: varchar("userId", { length: 64 }).notNull(),
+  createdAt: datetime("createdAt", { fsp: 3 }).notNull(),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.projectId, table.userId] }),
+  userIdx: index("watchers_user_idx").on(table.userId),
 }));
 
 // Relations
@@ -260,6 +371,7 @@ export type PsvItk = typeof psvItk.$inferSelect;
 export type InsertPsvItk = typeof psvItk.$inferInsert;
 export type AuditLog = typeof auditLog.$inferSelect;
 export type InsertAuditLog = typeof auditLog.$inferInsert;
+export type DomainEventRow = typeof domainEvents.$inferSelect;
 export type ProjectChecklist = typeof projectChecklists.$inferSelect;
 export type InsertProjectChecklist = typeof projectChecklists.$inferInsert;
 export type ProjectChecklistAnswer = typeof projectChecklistAnswers.$inferSelect;

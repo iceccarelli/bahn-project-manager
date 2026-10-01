@@ -9,6 +9,13 @@ import { registerExcelRoutes } from "../excel";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic } from "./static";
+import { assertProductionConfig, cors, sameOriginForCookies, securityHeaders } from "./security";
+import { resolveIdentity } from "./identity";
+import { getServices } from "./services";
+import { closeDb } from "../db";
+import { canExport, isAdmin } from "../domain/permissions";
+import { registerPresenceRoutes, registerRealtimeGateway } from "../realtime/gateway";
+import { m, renderMetrics } from "../observability/metrics";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -30,11 +37,25 @@ async function findAvailablePort(startPort = 3000): Promise<number> {
 }
 
 async function startServer() {
+  assertProductionConfig();
+  // Last line of defence, not a substitute for handling errors at boundaries:
+  // count and log, and keep serving the other connections. Alert on this metric.
+  process.on("unhandledRejection", (reason) => {
+    m.unhandled.inc();
+    console.error("[unhandledRejection]", reason);
+  });
   const app = express();
   const server = createServer(app);
-  // Configure body parser with larger size limit for file uploads
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ limit: "50mb", extended: true }));
+  // Behind Vercel/nginx/ALB: trust the first proxy hop for protocol and client IP.
+  app.set("trust proxy", 1);
+  app.disable("x-powered-by");
+  app.use(securityHeaders);
+  app.use(cors);
+  app.use(sameOriginForCookies);
+  // API bodies are small JSON. (The old 50 MB limit applied to every route;
+  // the Excel import streams its own body with its own 25 MB cap.)
+  app.use(express.json({ limit: "256kb" }));
+  app.use(express.urlencoded({ limit: "256kb", extended: false }));
   // Liveness/readiness probe. Plain HTTP rather than the tRPC `system.health`
   // procedure, because Docker HEALTHCHECK, Kubernetes probes and load-balancer
   // checks all speak GET-and-look-at-the-status-code, not tRPC.
@@ -45,6 +66,41 @@ async function startServer() {
       uptime: Math.round(process.uptime()),
     });
   });
+
+  // Data-plane services (DB pool, bus, outbox relay). Absent when DATABASE_URL
+  // is unset — the static SPA deployment — in which case /api/trpc data routes
+  // answer with an error rather than pretending.
+  const services = await getServices();
+  app.get("/api/ready", async (_req, res) => {
+    try {
+      if (!services) throw new Error("no database configured");
+      await services.pool.query("SELECT 1");
+      res.status(200).json({ status: "ready" });
+    } catch {
+      res.status(503).json({ status: "unavailable" });
+    }
+  });
+  // Prometheus scrape. Token-protected; no token configured = endpoint off.
+  app.get("/api/metrics", (req, res) => {
+    const token = process.env.METRICS_TOKEN;
+    if (!token || req.headers.authorization !== `Bearer ${token}`) { res.status(404).end(); return; }
+    res.type("text/plain; version=0.0.4").send(renderMetrics());
+  });
+  if (services) {
+    registerRealtimeGateway(app, { subscriber: services.subscriber, store: services.store });
+    registerPresenceRoutes(app, { presence: services.presence, store: services.store, onError: e => console.error("[presence]", e) });
+  }
+
+  // Bulk export/import were reachable by anyone. They are privileged now.
+  const requirePrincipal = (allow: (p: import("../domain/permissions").Principal) => boolean) =>
+    async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+      const id = await resolveIdentity(req);
+      if (!id) { res.status(401).json({ error: "unauthenticated" }); return; }
+      if (!allow(id.principal)) { res.status(403).json({ error: "forbidden" }); return; }
+      next();
+    };
+  app.use("/api/export", requirePrincipal(canExport));
+  app.use("/api/import", requirePrincipal(isAdmin));
 
   registerStorageProxy(app);
   registerOAuthRoutes(app);
@@ -101,7 +157,13 @@ async function startServer() {
     if (shuttingDown) return;
     shuttingDown = true;
     console.log(`${signal} received — draining connections`);
-    server.close((err) => {
+    // SSE streams never end on their own; ending them lets clients reconnect
+    // to a healthy instance instead of holding the drain open.
+    server.closeIdleConnections?.();
+    setTimeout(() => server.closeAllConnections?.(), 5_000).unref();
+    server.close(async (err) => {
+      await services?.shutdown().catch(() => {});
+      await closeDb().catch(() => {});
       if (err) {
         console.error("Error during shutdown:", err);
         process.exit(1);

@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useState, useMemo } from "react";
+import { OIDC, SERVER_MODE, serverApi } from "@/realtime/serverApi";
+import { browserDeps, clearAuth, signOutUrl } from "@/realtime/oidcClient";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 export type DemoUser = {
   id: number;
@@ -73,7 +76,46 @@ export function logoutDemo() {
   window.dispatchEvent(new CustomEvent(AUTH_EVENT, { detail: null }));
 }
 
-export function useAuth() {
+/**
+ * Server mode: identity is what the SERVER says (`auth.session`, resolved from
+ * the bearer token or session cookie). Nothing is read from localStorage, so
+ * a browser cannot assert a role by editing its own storage.
+ */
+function useServerAuth() {
+  const qc = useQueryClient();
+  const q = useQuery({
+    queryKey: ["server", "session"],
+    queryFn: () => serverApi.auth.session.query(),
+    staleTime: 60_000,
+    retry: false,
+  });
+  // memoised: consumers use `user` as an effect dependency, a fresh object per render would loop them
+  const user = useMemo<DemoUser | null>(
+    () =>
+      q.data
+        ? {
+            id: Number(q.data.id), name: q.data.name ?? q.data.email ?? "Benutzer", email: q.data.email ?? "",
+            role: q.data.role === "admin" ? "admin" : "user", openId: q.data.id, loginMethod: "server",
+            createdAt: "", updatedAt: "", lastSignedIn: "",
+          }
+        : null,
+    [q.data],
+  );
+  const logout = useCallback(() => {
+    const d = browserDeps();
+    // Drop every client-side credential first, whatever the network does next.
+    try { clearAuth(d); } catch { /* ignore */ }
+    const leave = async () => {
+      qc.clear();
+      const idp = OIDC ? await signOutUrl(OIDC, d, `${window.location.origin}/login`) : null;
+      window.location.assign(idp ?? "/login");
+    };
+    void serverApi.auth.logout.mutate().catch(() => undefined).finally(leave);
+  }, [qc]);
+  return { user, loading: q.isLoading, isAuthenticated: !!user, logout, session: q.data ?? null };
+}
+
+function useLocalAuth() {
   const [user, setUser] = useState<DemoUser | null>(() => getStoredUser());
   const [loading, setLoading] = useState(true);
 
@@ -122,3 +164,5 @@ export function useAuth() {
     logout,
   };
 }
+
+export const useAuth: typeof useLocalAuth = SERVER_MODE ? (useServerAuth as unknown as typeof useLocalAuth) : useLocalAuth;

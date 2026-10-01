@@ -1,9 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { AuditMeta } from "@shared/audit-entry";
 import { useCallback, useMemo } from "react";
+import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { apiClient } from "@/_core/api/client";
 import { BAHNHOFSMANAGEMENT } from "@shared/bahnhofsmanagement";
+import { SERVER_MODE } from "@/realtime/serverApi";
+import { useServerFilters, useServerProjects } from "@/realtime/serverProjects";
 import type {
   ProjectUpdateInput,
   ReviewUpdateInput,
@@ -89,8 +92,22 @@ export const queryKeys = {
 // QUERY HOOKS
 // ============================================================================
 
+/**
+ * Server mode: the local dataset is loaded ONLY on the not-yet-migrated pages
+ * (Dashboard, BVB-EEA, PSV-ITK, Anmeldung, Audit, Gewerk workspaces). The
+ * Projekte page and the global chrome (header search, Ask Bahn, shell) never
+ * trigger a download of /data.json.
+ */
+const SERVER_ROUTES = ["/projects"];
+function useLegacyPlaneEnabled(): boolean {
+  const [path] = useLocation();
+  return !SERVER_MODE || !SERVER_ROUTES.some(r => path.startsWith(r));
+}
+
 export function useAllProjects() {
+  const legacyEnabled = useLegacyPlaneEnabled();
   return useQuery({
+    enabled: legacyEnabled,
     queryKey: queryKeys.projects.list({ showAll: true }),
     queryFn: async () => {
       const projects = await apiClient.projects.list();
@@ -108,7 +125,9 @@ export function useProject(id: number) {
 }
 
 export function useDashboardStats() {
+  const legacyEnabled = useLegacyPlaneEnabled();
   return useQuery({
+    enabled: legacyEnabled,
     queryKey: queryKeys.stats.dashboard(),
     queryFn: () => apiClient.dashboard.getStats(),
   });
@@ -305,7 +324,7 @@ export function useProjectEdits() {
   };
 }
 
-export function useProjects(params: {
+function useLocalProjects(params: {
   search?: string;
   region?: string;
   projektleiter?: string;
@@ -426,7 +445,7 @@ export function useProjects(params: {
   };
 }
 
-export function useFilters() {
+function useLocalFilters() {
   const { data: allProjectsData, isLoading, isError } = useAllProjects();
 
   const data: Filters = useMemo(() => {
@@ -505,5 +524,16 @@ export function useAllData() {
     isEmpty: !isLoading && !isError && data === null,
   };
 }
+
+/**
+ * The Projekte page's data plane. Local mode filters the in-browser dataset;
+ * server mode (VITE_SERVER_MODE=1) pages, filters and searches on the server.
+ * SERVER_MODE is a build-time constant, so one branch of hooks runs for the
+ * lifetime of the app.
+ */
+export const useProjects: typeof useLocalProjects = SERVER_MODE
+  ? (useServerProjects as unknown as typeof useLocalProjects)
+  : useLocalProjects;
+export const useFilters: typeof useLocalFilters = SERVER_MODE ? useServerFilters : useLocalFilters;
 
 export type { ProjectUpdateInput, ReviewUpdateInput, ProjectCreateInput };

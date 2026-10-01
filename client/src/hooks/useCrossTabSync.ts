@@ -32,6 +32,7 @@
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/hooks/useDataQuery";
+import { SERVER_MODE } from "@/realtime/serverApi";
 
 /**
  * Keys whose contents are rendered somewhere. Matched by prefix, so a schema
@@ -52,6 +53,9 @@ export function useCrossTabSync(): void {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    // Server mode has ONE data plane. A localStorage write in another tab must
+    // never invalidate (or, worse, be treated as newer than) server-owned queries.
+    if (SERVER_MODE) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
 
     const refresh = () => {

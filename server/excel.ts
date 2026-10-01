@@ -161,8 +161,18 @@ export function registerExcelRoutes(app: Express) {
         return;
       }
 
+      const MAX_IMPORT_BYTES = 25 * 1024 * 1024;
+      let received = 0;
       const chunks: Buffer[] = [];
-      req.on('data', (chunk) => chunks.push(chunk));
+      req.on('data', (chunk) => {
+        received += chunk.length;
+        if (received > MAX_IMPORT_BYTES) {
+          if (!res.headersSent) res.status(413).json({ error: 'File too large (25 MB max)' });
+          req.destroy();
+          return;
+        }
+        chunks.push(chunk);
+      });
       req.on('end', async () => {
         try {
           const buffer = Buffer.concat(chunks);

@@ -29,6 +29,27 @@
       "when": 1787179654896,
       "tag": "0003_right_bullseye",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1790774015715,
+      "tag": "0004_event_pipeline",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1790778813793,
+      "tag": "0005_change_feed",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1790781501903,
+      "tag": "0006_notifications",
+      "breakpoints": true
     }
   ]
 }

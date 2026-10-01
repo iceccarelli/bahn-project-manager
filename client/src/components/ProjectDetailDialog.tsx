@@ -31,6 +31,9 @@
  * derived from the address already on file, so it opens a chat with the same
  * person the mail button writes to.
  */
+import { SERVER_MODE } from "@/realtime/serverApi";
+import { PresenceStrip } from "@/realtime/presence";
+import { WatchToggle } from "@/realtime/notifications";
 import { useCallback, useMemo, useState } from "react";
 import {
   Dialog,
@@ -248,7 +251,7 @@ export function ProjectDetailDialog({
   onShowStation,
 }: ProjectDetailDialogProps) {
   const { data: auditEntries } = useAuditLog();
-  const { user } = useAuth();
+  const { user, session } = useAuth() as ReturnType<typeof useAuth> & { session?: { id: string } | null };
   const { recordDocument, recordMessage } = useAuditTrail();
   const [printing, setPrinting] = useState(false);
   const currentUser = user?.name || user?.email || "";
@@ -420,6 +423,12 @@ export function ProjectDetailDialog({
             {project.station || "Ohne Station"}
           </DialogTitle>
 
+          {SERVER_MODE && project ? (
+            <div className="flex items-center justify-between gap-2">
+              <PresenceStrip projectId={project.id} selfId={session?.id} />
+              <WatchToggle projectId={project.id} />
+            </div>
+          ) : null}
           <DialogDescription className="text-sm leading-relaxed">
             {project.projektbeschreibung?.trim() || "Keine Projektbeschreibung hinterlegt."}
           </DialogDescription>

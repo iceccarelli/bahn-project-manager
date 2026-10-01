@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useAuth, loginDemo } from "@/_core/hooks/useAuth";
+import { OIDC, SERVER_MODE, serverApi } from "@/realtime/serverApi";
+import { beginSignIn, browserDeps } from "@/realtime/oidcClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,7 +10,53 @@ import { Label } from "@/components/ui/label";
 import { Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
+/** Server mode: the server decides (cookie session from auth.demoLogin, which is off in production). */
+async function attemptLogin(email: string, password: string): Promise<boolean> {
+  if (!SERVER_MODE) return loginDemo(email, password);
+  try {
+    await serverApi.auth.demoLogin.mutate({ email, password });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Real sign-in (server mode + OIDC configured): no credential form exists, the IdP owns the credentials. */
+function SsoLogin() {
+  const { isAuthenticated } = useAuth();
+  const [, navigate] = useLocation();
+  useEffect(() => { if (isAuthenticated) navigate("/"); }, [isAuthenticated, navigate]);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const go = async () => {
+    if (!OIDC) return;
+    setBusy(true); setError(null);
+    try { window.location.assign(await beginSignIn(OIDC, browserDeps(), "/")); }
+    catch (e) { setError(e instanceof Error ? e.message : "Anmeldung nicht möglich"); setBusy(false); }
+  };
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-muted/30 px-4 py-12">
+      <Card className="w-full max-w-md border-none shadow-xl">
+        <CardHeader className="space-y-1 text-center">
+          <CardTitle className="text-2xl">Bahn Project Manager</CardTitle>
+          <CardDescription>Melden Sie sich mit Ihrem Unternehmenskonto an</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          {error && (<Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertTitle>Fehler</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>)}
+          <Button onClick={go} disabled={busy} className="w-full">
+            {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Mit Microsoft anmelden
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function Login() {
+  return SERVER_MODE && OIDC ? <SsoLogin /> : <DemoLogin />;
+}
+
+function DemoLogin() {
   const { isAuthenticated, loading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
   const [email, setEmail] = useState("");
@@ -31,10 +79,10 @@ export default function Login() {
     // Simulate network delay
     await new Promise(resolve => setTimeout(resolve, 800));
 
-    const success = loginDemo(email, password);
+    const success = await attemptLogin(email, password);
     if (success) {
       setSuccess(true);
-      setTimeout(() => setLocation("/"), 500);
+      setTimeout(() => (SERVER_MODE ? window.location.assign("/") : setLocation("/")), 500);
     } else {
       setError("Ungültige E-Mail oder Passwort. Bitte versuchen Sie es erneut.");
       setIsLoading(false);
@@ -53,10 +101,10 @@ export default function Login() {
 
     await new Promise(resolve => setTimeout(resolve, 800));
     
-    const success = loginDemo(demoEmail, demoPass);
+    const success = await attemptLogin(demoEmail, demoPass);
     if (success) {
       setSuccess(true);
-      setTimeout(() => setLocation("/"), 500);
+      setTimeout(() => (SERVER_MODE ? window.location.assign("/") : setLocation("/")), 500);
     } else {
       setError("Demo-Login fehlgeschlagen.");
       setIsLoading(false);

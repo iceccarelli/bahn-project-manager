@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useAuth } from "./useAuth";
+import { SERVER_MODE } from "@/realtime/serverApi";
 
 export interface PresenceUser {
   id: string;
@@ -41,11 +42,12 @@ function savePresence(presence: Record<string, PresenceUser>) {
 
 export function usePresence(): PresenceState {
   const { user: authUser, isAuthenticated } = useAuth();
-  const [presence, setPresence] = useState<Record<string, PresenceUser>>(() => getStoredPresence());
+  const [presence, setPresence] = useState<Record<string, PresenceUser>>(() => (SERVER_MODE ? {} : getStoredPresence()));
   const [isLoading] = useState(false);
   
   const updateMyPresence = useCallback(() => {
-    if (!isAuthenticated || !authUser) return;
+    // Server mode: localStorage presence is a second, per-browser truth. Real presence is server-side.
+    if (SERVER_MODE || !isAuthenticated || !authUser) return;
 
     const current = getStoredPresence();
     const now = new Date().toISOString();
@@ -89,7 +91,7 @@ export function usePresence(): PresenceState {
   }, []);
 
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (SERVER_MODE || !isAuthenticated) return;
     
     updateMyPresence();
     const heartbeat = setInterval(updateMyPresence, HEARTBEAT_INTERVAL);

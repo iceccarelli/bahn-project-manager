@@ -34,7 +34,9 @@ export function getSessionCookieOptions(
   return {
     httpOnly: true,
     path: "/",
-    sameSite: "none",
+    // Lax, not None: the SPA and API are same-site, and SameSite=None would send
+    // the session cookie on cross-site requests (CSRF surface) for no benefit.
+    sameSite: "lax",
     secure: isSecureRequest(req),
   };
 }

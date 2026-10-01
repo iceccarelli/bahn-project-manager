@@ -15,6 +15,7 @@ import type { Project, Review, Stats, AuditLogEntry } from "@/hooks/useDataQuery
 import { describeIngest, ingestProjects } from "@shared/ingest";
 import { ProjectSchema, ReviewSchema } from "@shared/validation";
 import { cacheStore, writeStore } from "./localStore";
+import { authHeaders } from "@/realtime/serverApi";
 
 export interface ProjectUpdateInput {
   id: number;
@@ -133,7 +134,7 @@ async function initializeStorage() {
 
   try {
     // 1. Try local /data.json first (fastest + most reliable)
-    const res = await fetch(LOCAL_DATA_JSON_URL);
+    const res = await fetch(LOCAL_DATA_JSON_URL, { headers: await authHeaders(), credentials: "include" });
     if (res.ok) {
       const result = ingestProjects(await res.json());
       // Cache only what validated. Writing the raw payload back would put the
@@ -215,6 +216,21 @@ function currentSurface(): string {
   return surfaceForPath(window.location.pathname);
 }
 
+/**
+ * Server mode has one write path: the server. Every local mutation below is a
+ * localStorage write, so in server mode it must not run — it would create a
+ * second, competing project state.
+ */
+export class LocalPlaneDisabledError extends Error {
+  constructor(op: string) {
+    super(`${op}: im Servermodus nicht verfügbar (lokale Datenhaltung deaktiviert)`);
+    this.name = "LocalPlaneDisabledError";
+  }
+}
+const assertLocalPlane = (op: string) => {
+  if (import.meta.env.VITE_SERVER_MODE === "1") throw new LocalPlaneDisabledError(op);
+};
+
 export const apiClient = {
   projects: {
     async list(): Promise<Project[]> {
@@ -227,6 +243,7 @@ export const apiClient = {
     },
 
     async create(input: ProjectCreateInput): Promise<Project> {
+      assertLocalPlane("projects.create");
       const projects = await this.list();
       const maxId = projects.length > 0 ? Math.max(...projects.map((p) => p.id)) : 0;
 
@@ -278,6 +295,7 @@ export const apiClient = {
     },
 
     async update(input: ProjectUpdateInput): Promise<Project> {
+      assertLocalPlane("projects.update");
     const projects = await this.list();
     const index = projects.findIndex((p) => p.id === input.id);
     if (index === -1) throw new Error("Project not found");
@@ -319,6 +337,7 @@ export const apiClient = {
   },
 
     async delete(id: number): Promise<void> {
+      assertLocalPlane("projects.delete");
       const projects = await this.list();
       const filtered = projects.filter((p) => p.id !== id);
       writeStore(STORAGE_KEY_PROJECTS, JSON.stringify(filtered));
@@ -340,6 +359,7 @@ export const apiClient = {
 
   reviews: {
     async update(input: ReviewUpdateInput): Promise<Project> {
+      assertLocalPlane("reviews.update");
     const projects = await apiClient.projects.list();
     const index = projects.findIndex((p) => p.id === input.projectId);
     if (index === -1) throw new Error("Project not found");
@@ -432,6 +452,7 @@ export const apiClient = {
 
     /** Create or update a draft. Returns the stored checklist, with its id. */
     async save(input: ProjectChecklist): Promise<ProjectChecklist> {
+      assertLocalPlane("checklists.save");
       const all = await this.list();
       const now = new Date().toISOString();
       let saved: ProjectChecklist;

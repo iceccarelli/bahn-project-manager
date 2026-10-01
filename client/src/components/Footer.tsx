@@ -1,5 +1,5 @@
 import { ArrowUp, Package } from "lucide-react";
-import { useAllProjects } from "@/hooks/useDataQuery";
+import { useShellSummary } from "@/hooks/useShellSummary";
 
 /**
  * Global footer.
@@ -52,7 +52,7 @@ const SUPPORT_LINKS = [
 ] as const;
 
 export default function Footer() {
-  const { data, isError, isLoading } = useAllProjects();
+  const { projectCount, isError, isLoading } = useShellSummary();
 
   const scrollToTop = () => {
     document
@@ -66,7 +66,7 @@ export default function Footer() {
       ? { dot: "bg-white/40", text: "Daten werden geladen" }
       : {
           dot: "bg-emerald-400",
-          text: `${(data?.projects?.length ?? 0).toLocaleString("de-DE")} Projekte geladen`,
+          text: `${(projectCount ?? 0).toLocaleString("de-DE")} Projekte geladen`,
         };
 
   return (

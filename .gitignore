@@ -149,3 +149,6 @@ _diag*.mjs
 # so nothing broke, but an update to it would have been silently skipped by
 # `git add`. Anchored to the root, which is the only place transfer files land.
 /*.patch
+dist-e2e/
+dist-oidc/
+artifacts/

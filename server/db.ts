@@ -1,20 +1,71 @@
 import { eq, like, and, or, sql, desc, asc, inArray, count } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
+import mysql, { type Pool } from "mysql2/promise";
 import { type InsertUser, users, projects, departmentReviews, bvbEea, psvItk, auditLog } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
-let _db: ReturnType<typeof drizzle> | null = null;
+const makeDb = (pool: Pool) => drizzle({ client: pool });
+let _db: ReturnType<typeof makeDb> | null = null;
+let _pool: Pool | null = null;
+
+/**
+ * One explicit pool per process. Size and queue bound come from the
+ * environment so capacity is a deployment decision, not a driver default:
+ *   DB_POOL_SIZE   (default 10)   connections held by THIS process
+ *   DB_QUEUE_LIMIT (default 200)  waiting acquisitions before failing fast
+ * Total connections = instances x DB_POOL_SIZE; keep it under the server's
+ * max_connections (see docs/scaling.md).
+ */
+export function getPool(): Pool | null {
+  if (!_pool && process.env.DATABASE_URL) {
+    _pool = mysql.createPool({
+      uri: process.env.DATABASE_URL,
+      connectionLimit: Number(process.env.DB_POOL_SIZE ?? 10),
+      queueLimit: Number(process.env.DB_QUEUE_LIMIT ?? 200),
+      waitForConnections: true,
+      timezone: "Z",
+      dateStrings: false,
+      charset: "utf8mb4",
+    });
+  }
+  return _pool;
+}
+
+let _relayPool: Pool | null = null;
+
+/**
+ * Separate, tiny pool for background system work (outbox relay, metrics
+ * sampling). If it shared the request pool, a traffic spike would starve the
+ * relay and realtime delivery would stop exactly when load is highest.
+ */
+export function getRelayPool(): Pool | null {
+  if (!_relayPool && process.env.DATABASE_URL) {
+    _relayPool = mysql.createPool({
+      uri: process.env.DATABASE_URL,
+      connectionLimit: Number(process.env.RELAY_POOL_SIZE ?? 3),
+      queueLimit: 10,
+      waitForConnections: true,
+      timezone: "Z",
+      charset: "utf8mb4",
+    });
+  }
+  return _relayPool;
+}
 
 export async function getDb() {
-  if (!_db && process.env.DATABASE_URL) {
-    try {
-      _db = drizzle(process.env.DATABASE_URL);
-    } catch (error) {
-      console.warn("[Database] Failed to connect:", error);
-      _db = null;
-    }
+  if (!_db) {
+    const pool = getPool();
+    if (pool) _db = makeDb(pool);
   }
   return _db;
+}
+
+export async function closeDb() {
+  const pools = [_pool, _relayPool];
+  _pool = null;
+  _relayPool = null;
+  _db = null;
+  await Promise.all(pools.map(p => p?.end()));
 }
 
 export async function upsertUser(user: InsertUser): Promise<void> {
@@ -220,6 +271,18 @@ export async function updateDepartmentReview(id: number, data: Partial<typeof de
   await db.update(departmentReviews).set(data).where(eq(departmentReviews.id, id));
 }
 
+export async function getReviewContext(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select({ department: departmentReviews.department, bahnhofsmanagement: projects.bahnhofsmanagement })
+    .from(departmentReviews)
+    .innerJoin(projects, eq(projects.id, departmentReviews.projectId))
+    .where(eq(departmentReviews.id, id))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
 export async function createDepartmentReview(data: typeof departmentReviews.$inferInsert) {
   const db = await getDb();
   if (!db) return null;
@@ -373,7 +436,9 @@ export async function getSearchSuggestions(term: string) {
   const db = await getDb();
   if (!db) return [];
 
-  const searchLike = `%${term.toLowerCase()}%`;
+  // Prefix match on the raw column: the utf8mb4_unicode_ci collation is already
+  // case-insensitive, and LIKE 'x%' can use the column index (LOWER() and %x% cannot).
+  const searchLike = `${term.replace(/[\\%_]/g, m => `\\${m}`)}%`;
 
   const projectSuggestions = await db
     .selectDistinct({
@@ -381,14 +446,14 @@ export async function getSearchSuggestions(term: string) {
       type: sql<string>`'station'`,
     })
     .from(projects)
-    .where(like(sql`LOWER(${projects.station})`, searchLike))
+    .where(like(projects.station, searchLike))
     .union(
       db.selectDistinct({
         value: projects.projektnummer,
         type: sql<string>`'projektnummer'`,
       })
       .from(projects)
-      .where(like(sql`LOWER(${projects.projektnummer})`, searchLike))
+      .where(like(projects.projektnummer, searchLike))
     )
     .union(
       db.selectDistinct({
@@ -396,7 +461,7 @@ export async function getSearchSuggestions(term: string) {
         type: sql<string>`'projektleiter'`,
       })
       .from(projects)
-      .where(like(sql`LOWER(${projects.projektleiter})`, searchLike))
+      .where(like(projects.projektleiter, searchLike))
     )
     .union(
       db.selectDistinct({
@@ -404,7 +469,7 @@ export async function getSearchSuggestions(term: string) {
         type: sql<string>`'region'`,
       })
       .from(projects)
-      .where(like(sql`LOWER(${projects.bahnhofsmanagement})`, searchLike))
+      .where(like(projects.bahnhofsmanagement, searchLike))
     );
 
   const reviewSuggestions = await db
@@ -413,14 +478,14 @@ export async function getSearchSuggestions(term: string) {
       type: sql<string>`'pruefer'`,
     })
     .from(departmentReviews)
-    .where(like(sql`LOWER(${departmentReviews.prueferName})`, searchLike))
+    .where(like(departmentReviews.prueferName, searchLike))
     .union(
       db.selectDistinct({
         value: departmentReviews.department,
         type: sql<string>`'department'`,
       })
       .from(departmentReviews)
-      .where(like(sql`LOWER(${departmentReviews.department})`, searchLike))
+      .where(like(departmentReviews.department, searchLike))
     );
 
   const combinedSuggestions = [...projectSuggestions, ...reviewSuggestions]
