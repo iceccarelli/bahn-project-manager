@@ -286,7 +286,7 @@ export interface DataQuality {
    * 1,298 projects carry 385 distinct numbers; one of them appears 98 times.
    * That is not a defect to be cleaned up — it is how the workbook is
    * organised — but it decides what a search result means, what a PDF filename
-   * identifies, and whether "the project G.011598624" is a sentence anyone can
+   * identifies, and whether "the project G.999414489" is a sentence anyone can
    * act on. Reported as a fact, never as an error count.
    */
   distinctProjektnummern: number;

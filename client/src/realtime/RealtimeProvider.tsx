@@ -11,6 +11,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { scope as scopeKey, type DomainEvent } from "@shared/domain-events";
+import type { DEPARTMENTS } from "@shared/validation";
+type Department = (typeof DEPARTMENTS)[number];
 import { EDITABLE_PROJECT_FIELDS, reviewChangeKey, type ConflictInfo, type ProjectDetail, type ReviewField, type UpdateProjectInput } from "@shared/project-contract";
 import { ProjectSyncEngine, type ProjectChange } from "./projectSyncEngine";
 import { PresenceClientStore } from "./presence";
@@ -21,6 +23,9 @@ import { authHeaders, extractConflict, isRetryable, serverApi } from "./serverAp
 export const serverKeys = {
   project: (id: number) => ["server", "project", id] as const,
   lists: () => ["server", "projects", "list"] as const,
+  counts: () => ["server", "projects", "count"] as const,
+  bookings: () => ["server", "bookings"] as const,
+  checklists: () => ["server", "checklists"] as const,
   shell: () => ["server", "shell"] as const,
 };
 
@@ -74,20 +79,41 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       sync: known => serverApi.projects.sync.mutate({ known }) as never,
       changes: input => serverApi.projects.changes.query(input) as never,
       // notifications missed while offline arrive through the same feed
-      onOther: e => onNotification(e),
+      onOther: e => {
+        if (e.aggregateType === "booking") void qc.invalidateQueries({ queryKey: serverKeys.bookings() });
+        else if (e.aggregateType === "checklist") void qc.invalidateQueries({ queryKey: serverKeys.checklists() });
+        else onNotification(e);
+      },
     });
     const connection = new RealtimeConnection({
       url: "/api/realtime/stream",
       getHeaders: authHeaders,
+      // scopes of the open stream change in place (rows scrolled in/out of view) instead of reconnecting
+      postScopes: async req => {
+        const r = await fetch("/api/realtime/scopes", { method: "POST", headers: { ...(await authHeaders()), "content-type": "application/json" }, body: JSON.stringify(req), credentials: "include" });
+        return { ok: r.status === 202, status: r.status };
+      },
+      // rows that just became live-subscribed may have changed while they were not: reconcile exactly those
+      onScopesLive: added => {
+        const ids = added.filter(x => x.startsWith("project:")).map(x => Number(x.slice(8))).filter(Number.isInteger);
+        return ids.length ? engine.syncRows(ids).then(() => undefined) : undefined;
+      },
       onEvent: e => {
         if (e.aggregateType === "presence") { presence.apply(e); return; }
         if (e.aggregateType === "notification") { onNotification(e); return; }
+        // other aggregates: the durable SQL read is the source, the event says WHICH query is stale
+        if (e.aggregateType === "booking") { void qc.invalidateQueries({ queryKey: serverKeys.bookings() }); return; }
+        if (e.aggregateType === "checklist") { void qc.invalidateQueries({ queryKey: serverKeys.checklists() }); return; }
         engine.applyEvent(e);
         // creations/deletions/moves change the shell count; plain updates do not
         if (e.eventType !== "project.updated") void qc.invalidateQueries({ queryKey: serverKeys.shell() });
       },
-      onSync: ({ headSeq, reconnecting }) =>
-        reconnecting ? engine.resync(headSeq ?? undefined) : engine.catchUp(headSeq ?? undefined),
+      onHint: kind => { if (kind === "notifications") void qc.invalidateQueries({ queryKey: ["server", "notifications"] }); },
+      // every (re)connect re-reads the durable inbox + unread counter: nothing missed while offline stays hidden
+      onSync: ({ headSeq, reconnecting }) => {
+        void qc.invalidateQueries({ queryKey: ["server", "notifications"] });
+        return reconnecting ? engine.resync(headSeq ?? undefined) : engine.catchUp(headSeq ?? undefined);
+      },
     });
     const wanted = new Map<string, number>();
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -113,10 +139,11 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       if (c.kind === "collection-stale") {
         // create / move-in: targeted authoritative refresh of the list queries + the shell count
         void qc.invalidateQueries({ queryKey: serverKeys.lists() });
+        void qc.invalidateQueries({ queryKey: serverKeys.counts() });
         void qc.invalidateQueries({ queryKey: serverKeys.shell() });
         return;
       }
-      if (c.kind === "remove") qc.removeQueries({ queryKey: serverKeys.project(c.id) });
+      if (c.kind === "remove") { qc.removeQueries({ queryKey: serverKeys.project(c.id) }); void qc.invalidateQueries({ queryKey: serverKeys.counts() }); }
       else qc.setQueryData(serverKeys.project(c.id), c.project);
       patchLists(qc, c);
     });
@@ -238,7 +265,7 @@ function EditorProvider({ children }: { children: ReactNode }) {
     if (expectedVersion === undefined) { setError("Projekt nicht geladen"); return null; }
     const optimistic = Object.fromEntries(Object.entries(changes).map(([f, v]) => [reviewChangeKey(department, f as ReviewField), v ?? null]));
     return run(projectId, optimistic,
-      ({ mutationId, idempotencyKey }) => serverApi.projects.updateReview.mutate({ projectId, department, expectedVersion, changes, idempotencyKey, mutationId }),
+      ({ mutationId, idempotencyKey }) => serverApi.projects.updateReview.mutate({ projectId, department: department as Department, expectedVersion, changes, idempotencyKey, mutationId }),
       c => setConflict({ projectId, conflict: c, changes: {}, review: { department, changes } }));
   }, [engine, run]);
 
@@ -251,7 +278,7 @@ function EditorProvider({ children }: { children: ReactNode }) {
       setConflict(null);
       // the review path re-sends against the project's current version too
       if (c.review) return run(c.projectId, Object.fromEntries(Object.entries(c.review.changes).map(([f, v]) => [reviewChangeKey(c.review!.department, f as ReviewField), v ?? null])),
-        ({ mutationId, idempotencyKey }) => serverApi.projects.updateReview.mutate({ projectId: c.projectId, department: c.review!.department, expectedVersion: c.conflict.currentVersion, changes: c.review!.changes, idempotencyKey, mutationId }),
+        ({ mutationId, idempotencyKey }) => serverApi.projects.updateReview.mutate({ projectId: c.projectId, department: c.review!.department as Department, expectedVersion: c.conflict.currentVersion, changes: c.review!.changes, idempotencyKey, mutationId }),
         next => setConflict({ ...c, conflict: next }));
       return edit(c.projectId, c.changes, { expectedVersion: c.conflict.currentVersion });
     },

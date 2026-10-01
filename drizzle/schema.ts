@@ -1,5 +1,5 @@
 import {
-  int, bigint, mysqlEnum, mysqlTable, text, timestamp, varchar, datetime, json,
+  int, bigint, double, mysqlEnum, mysqlTable, text, timestamp, varchar, datetime, json,
   index, uniqueIndex, primaryKey
 } from "drizzle-orm/mysql-core";
 import { relations } from "drizzle-orm";
@@ -77,7 +77,8 @@ export const departmentReviews = mysqlTable("department_reviews", {
   statusIdx: index("status_idx").on(table.status),
 }));
 
-// BVB-EEA
+// BVB-EEA — DEPRECATED standalone table. The BVB-EEA page is the EEA Gewerk view over the Project aggregate
+// (department_reviews); nothing reads or writes this table at runtime. Kept only so existing data is not dropped silently.
 export const bvbEea = mysqlTable("bvb_eea", {
   id: int("id").autoincrement().primaryKey(),
   projektnummer: varchar("projektnummer", { length: 64 }),
@@ -98,7 +99,7 @@ export const bvbEea = mysqlTable("bvb_eea", {
   projektnummerIdx: index("bvb_projektnummer_idx").on(table.projektnummer),
 }));
 
-// PSV-ITK
+// PSV-ITK — DEPRECATED standalone table (see bvb_eea): the page is the ITK Gewerk view over the Project aggregate.
 export const psvItk = mysqlTable("psv_itk", {
   id: int("id").autoincrement().primaryKey(),
   projektnummer: varchar("projektnummer", { length: 64 }),
@@ -166,6 +167,8 @@ export const projectChecklists = mysqlTable("project_checklists", {
 
   submittedAt: timestamp("submittedAt"),
   submittedBy: varchar("submittedBy", { length: 256 }),
+  /** principal id of the author: a draft is visible to its author (and admins) only */
+  createdBy: varchar("createdBy", { length: 64 }),
   syncVersion: int("syncVersion").default(1).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -203,6 +206,36 @@ export const projectChecklistAnswers = mysqlTable("project_checklist_answers", {
   answerQuestionIdx: index("answer_questionKey_idx").on(table.questionKey),
 }));
 
+/**
+ * Fachspezialistenprüfung calendar ("Zeit auswählen"): one row per bookable slot. An aggregate of its own:
+ * versioned (optimistic), audited, evented. `bahnhofsmanagement` (resolved from the station) decides who may see
+ * the booking's details; everyone sees that a slot is taken, nobody sees whose without access.
+ */
+export const scheduleSlots = mysqlTable("schedule_slots", {
+  id: int("id").autoincrement().primaryKey(),
+  /** natural key from the workbook calendar, e.g. "2024-06-04T09:00" */
+  slotKey: varchar("slotKey", { length: 32 }).notNull(),
+  datum: datetime("datum").notNull(),
+  von: varchar("von", { length: 8 }).notNull(),
+  bis: varchar("bis", { length: 8 }).notNull(),
+  status: mysqlEnum("status", ["Frei", "Gebucht", "Vorgebucht für IM", "Vorgebucht für IT"]).default("Frei").notNull(),
+  station: varchar("station", { length: 256 }),
+  bahnhofsmanagement: varchar("bahnhofsmanagement", { length: 128 }),
+  projektleitung: varchar("projektleitung", { length: 256 }),
+  projektstand: varchar("projektstand", { length: 128 }),
+  info: varchar("info", { length: 512 }),
+  hinweis: varchar("hinweis", { length: 512 }),
+  projectId: int("projectId"),
+  checklistId: int("checklistId"),
+  syncVersion: int("syncVersion").default(1).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  slotKeyUnique: uniqueIndex("slot_key_uq").on(table.slotKey),
+  datumIdx: index("slot_datum_idx").on(table.datum),
+  statusDatumIdx: index("slot_status_datum_idx").on(table.status, table.datum),
+}));
+
 // Audit Log
 export const auditLog = mysqlTable("audit_log", {
   id: int("id").autoincrement().primaryKey(),
@@ -222,8 +255,16 @@ export const auditLog = mysqlTable("audit_log", {
   eventId: varchar("eventId", { length: 36 }),
   aggregateVersion: int("aggregateVersion"),
   traceId: varchar("traceId", { length: 64 }),
+  /**
+   * Authorization scope of the row (the aggregate's Bahnhofsmanagement at the time of the change). NULL = not visible
+   * to workspace-restricted principals (global, private or unknown scope). Stamped inside the writing transaction.
+   */
+  workspace: varchar("workspace", { length: 128 }),
+  /** Human label of the entity (station / Projektnummer) at the time of the change, so a deleted project is still readable. */
+  entityLabel: varchar("entityLabel", { length: 255 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (table) => ({
+  workspaceIdx: index("audit_workspace_id_idx").on(table.workspace, table.id),
   entityIdx: index("entity_idx").on(table.entityType, table.entityId),
   userIdx: index("user_idx").on(table.userId),
   createdAtIdx: index("createdAt_idx").on(table.createdAt),
@@ -331,6 +372,61 @@ export const projectWatchers = mysqlTable("project_watchers", {
 }));
 
 // Relations
+/**
+ * Geo read model: where a project sits on the map. Derived from the station master (stations.json) by
+ * shared/stationGeo.ts and maintained in the SAME transaction as the project write (station /
+ * bahnhofsmanagement changes), so a map query is one indexed range scan — never a table scan, never a
+ * per-request name-matching pass. Rebuildable from `projects` at any time (server/infra/geoModel.ts).
+ */
+export const projectGeo = mysqlTable("project_geo", {
+  projectId: int("projectId").primaryKey(),
+  lat: double("lat").notNull(),
+  lng: double("lng").notNull(),
+  /** "<Bf. Nr.>" for a real station, "~bm:<BM>" for the regional fallback */
+  stationKey: varchar("stationKey", { length: 64 }).notNull(),
+  stationName: varchar("stationName", { length: 255 }).notNull(),
+  precision: mysqlEnum("precision", ["exact", "tokens", "fuzzy", "region"]).notNull(),
+}, (table) => ({
+  latLngIdx: index("project_geo_lat_lng_idx").on(table.lat, table.lng),
+  stationIdx: index("project_geo_station_idx").on(table.stationKey),
+}));
+
+/**
+ * Dashboard read models: pre-aggregated counters per workspace, updated from the domain write path
+ * (same transaction) so a dashboard request is a handful of tiny indexed reads and never a GROUP BY over the
+ * review table. A restricted principal reads only the rows of its own workspaces. Rebuildable
+ * (server/infra/readModels.ts#rebuildReadModels), and verified against a recompute in tests.
+ */
+export const rmProjectStats = mysqlTable("rm_project_stats", {
+  workspace: varchar("workspace", { length: 128 }).notNull(),
+  projects: int("projects").notNull().default(0),
+}, (table) => ({ pk: primaryKey({ columns: [table.workspace] }) }));
+
+export const rmReviewStats = mysqlTable("rm_review_stats", {
+  workspace: varchar("workspace", { length: 128 }).notNull(),
+  department: varchar("department", { length: 64 }).notNull(),
+  /** '' stands for "no status" so the key is total */
+  status: varchar("status", { length: 128 }).notNull(),
+  n: int("n").notNull().default(0),
+}, (table) => ({ pk: primaryKey({ columns: [table.workspace, table.department, table.status] }) }));
+
+export const rmPrueferLoad = mysqlTable("rm_pruefer_load", {
+  workspace: varchar("workspace", { length: 128 }).notNull(),
+  pruefer: varchar("pruefer", { length: 256 }).notNull(),
+  n: int("n").notNull().default(0),
+}, (table) => ({ pk: primaryKey({ columns: [table.workspace, table.pruefer] }) }));
+
+/**
+ * Unread-notification counter per (recipient, workspace): the bell reads a few rows instead of COUNT(*) over the
+ * inbox, and a workspace-restricted recipient sums only the workspaces they may still see.
+ */
+export const notificationUnread = mysqlTable("notification_unread", {
+  userId: varchar("userId", { length: 64 }).notNull(),
+  /** '' = notification without a workspace */
+  workspace: varchar("workspace", { length: 128 }).notNull(),
+  n: int("n").notNull().default(0),
+}, (table) => ({ pk: primaryKey({ columns: [table.userId, table.workspace] }) }));
+
 export const projectsRelations = relations(projects, ({ many }) => ({
   reviews: many(departmentReviews),
   checklists: many(projectChecklists),
@@ -363,6 +459,7 @@ export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 export type Project = typeof projects.$inferSelect;
 export type InsertProject = typeof projects.$inferInsert;
+export type ScheduleSlot = typeof scheduleSlots.$inferSelect;
 export type DepartmentReview = typeof departmentReviews.$inferSelect;
 export type InsertDepartmentReview = typeof departmentReviews.$inferInsert;
 export type BvbEea = typeof bvbEea.$inferSelect;

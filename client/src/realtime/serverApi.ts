@@ -4,7 +4,9 @@
  * deployment keeps using the local data path until the API is deployed.
  */
 import { createTRPCClient, httpBatchLink, TRPCClientError } from "@trpc/client";
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { scope as scopeKey } from "@shared/domain-events";
 import superjson from "superjson";
 import type { AppRouter } from "../../../server/routers";
 import type { ConflictInfo } from "@shared/project-contract";
@@ -55,6 +57,24 @@ export function useHomeWorkspace(): string | null {
   const q = useQuery({ queryKey: ["server", "session"], queryFn: () => serverApi.auth.session.query(), staleTime: 60_000, enabled: SERVER_MODE });
   const ws = q.data?.workspaces;
   return Array.isArray(ws) && ws.length ? (ws[0] as string) : null;
+}
+
+/**
+ * The membership channels (`collection:*`) a list view needs. NOT every workspace channel: those carry every
+ * field edit of every project. A collection channel carries only create/delete/move events; edits to rows the
+ * client holds arrive on their own `project:<id>` channel.
+ *   unrestricted principal, no region filter → collection:all
+ *   region filter                              → collection:<region>
+ *   restricted principal                       → collection:<each authorized workspace> (or the filtered one)
+ */
+export function collectionScopesFor(workspaces: unknown, region?: string | null): string[] {
+  if (region) return [scopeKey.collection(region)];
+  if (workspaces === "ALL") return [scopeKey.collection("all")];
+  return Array.isArray(workspaces) ? (workspaces as string[]).map(w => scopeKey.collection(w)) : [];
+}
+export function useCollectionScopes(region?: string | null): string[] {
+  const q = useQuery({ queryKey: ["server", "session"], queryFn: () => serverApi.auth.session.query(), staleTime: 60_000, enabled: SERVER_MODE });
+  return useMemo(() => collectionScopesFor(q.data?.workspaces, region), [q.data?.workspaces, region]);
 }
 
 export function extractConflict(err: unknown): ConflictInfo | null {

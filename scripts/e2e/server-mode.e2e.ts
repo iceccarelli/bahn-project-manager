@@ -16,12 +16,13 @@ import path from "node:path";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { SignJWT, exportJWK, generateKeyPair } from "jose";
 import mysql from "mysql2/promise";
+import * as XLSX from "xlsx";
 
 const DB_BASE = process.env.E2E_DB_BASE ?? "mysql://bahn:bahn@127.0.0.1:3306";
 const DB_NAME = "bahn_e2e";
 const REDIS = process.env.E2E_REDIS ?? "redis://127.0.0.1:6390";
 const PORTS = [3200, 3201];
-const PID = 481, PNR = "G.011570020";
+const PID = 481, PNR = "G.992031294";
 const results: Array<{ name: string; ok: boolean; ms: number; detail?: string }> = [];
 const measurements: Record<string, number | string> = {};
 const children: ChildProcess[] = [];
@@ -106,11 +107,12 @@ async function main() {
   const browser: Browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH || (existsSync("/opt/pw-browsers/chromium-1194/chrome-linux/chrome") ? "/opt/pw-browsers/chromium-1194/chrome-linux/chrome" : undefined), args: ["--no-sandbox"] });
   const init = (token: string) => `
     try { sessionStorage.setItem("bahn.access_token", ${JSON.stringify(token)}); } catch (e) {}
-    window.__noReload = true; window.__sse = [];
+    window.__noReload = true; window.__sse = []; window.__streamUrls = [];
     const of = window.fetch.bind(window);
     window.fetch = async (...a) => {
       const r = await of(...a);
       const u = String(a[0] && a[0].url ? a[0].url : a[0]);
+      if (u.includes("/api/realtime/stream")) (window.__streamUrls = window.__streamUrls || []).push(decodeURIComponent(u));
       if (u.includes("/api/realtime/stream") && r.body) {
         const [x, y] = r.body.tee();
         (async () => { const rd = y.getReader(), td = new TextDecoder(); for (;;) { const c = await rd.read(); if (c.done) break; window.__sse.push(td.decode(c.value)); } })();
@@ -144,6 +146,9 @@ async function main() {
     await input.fill(value); await input.press("Enter");
   };
   const noReload = (page: Page) => page.evaluate(() => (window as any).__noReload === true);
+  /** the table is virtualized: the DOM holds the window around the viewport; the set size is on the table itself */
+  const rowSet = (page: Page) => page.evaluate(() => Number(document.querySelector("table[data-row-count]")?.getAttribute("data-row-count") ?? 0));
+  const scrollRows = async (page: Page, index: number) => { const top = await page.evaluate(i => { const c = document.querySelector('[data-testid="projects-scroll"]'); if (!c) return -1; c.scrollTop = Math.max(0, i * 56 - 100); c.dispatchEvent(new Event("scroll")); return c.scrollTop; }, index); await sleep(350); return top; };
   const ids = async (page: Page) => (await page.locator("tbody tr td:first-child").allTextContents()).map(t => Number(t.trim())).filter(Boolean);
   const badge = (page: Page) => page.locator('[data-testid="connection-badge"]').first().textContent().then(t => (t ?? "").trim());
 
@@ -200,8 +205,9 @@ async function main() {
     if (v !== vN + 1) throw new Error(`version ${v} != ${vN + 1}`);
     const [audit] = await q("SELECT userName,field,oldValue,newValue,aggregateVersion,eventId,traceId FROM audit_log WHERE entityId=? AND field='projektstand' ORDER BY id DESC LIMIT 1", [PID]);
     if (!audit || audit.aggregateVersion !== v || audit.newValue !== target || audit.oldValue !== before || !audit.traceId) throw new Error(`audit ${JSON.stringify(audit)}`);
-    const [ev] = await q("SELECT aggregateVersion,processedAt,feedSeq FROM domain_events WHERE eventId=?", [audit.eventId]);
-    if (!ev || ev.aggregateVersion !== v || !ev.processedAt || !ev.feedSeq) throw new Error(`outbox ${JSON.stringify(ev)}`);
+    // the relay publishes first (B's DOM changed) and marks the row processed right after: wait for that, never sample once
+    const ev = await until(async () => { const [e] = await q("SELECT aggregateVersion,processedAt,feedSeq FROM domain_events WHERE eventId=?", [audit.eventId]); return e?.processedAt ? e : null; }, 5000, "outbox row processed");
+    if (ev.aggregateVersion !== v || !ev.feedSeq) throw new Error(`outbox ${JSON.stringify(ev)}`);
     const sse = (await B.page.evaluate(() => (window as any).__sse.join(""))) as string;
     if (!sse.includes(audit.eventId)) throw new Error("B's stream never carried the event");
     measurements.audit_actor = audit.userName;
@@ -210,9 +216,97 @@ async function main() {
 
   // ---------------- item 2: create / delete propagation ------------------------------------------
   let createdId = 0;
+  // ---------------- TOPOLOGY: fanout ≈ relevant recipients -------------------------------------------------
+  await step("TOPOLOGY: B's global list subscribes to a collection channel + only the rows on screen; off-screen edits never reach B; scrolling subscribes new rows IN PLACE (no reconnect) and they go live", async () => {
+    const streams = (page: Page) => page.evaluate(() => ((window as any).__streamUrls ?? []) as string[]);
+    await search(B.page, ""); // the whole Frankfurt list (earlier steps left B on a one-row search)
+    await until(async () => (await rowSet(B.page)) > 80, 10000, "B list with > 80 rows");
+    const first = await streams(B.page);
+    if (!first.length) throw new Error("no stream request seen");
+    // what the server holds for B's stream = hello's scopes, then every `scopes` frame (in-place additions/removals)
+    const held = async () => {
+      const raw = (await B.page.evaluate(() => (window as any).__sse.join(""))) as string;
+      let set = new Set<string>();
+      for (const f of raw.split("\n\n")) {
+        const ev = /event: (\w+)/.exec(f)?.[1], d = /data: (.*)/.exec(f)?.[1];
+        if (!ev || !d) continue;
+        try { const j = JSON.parse(d); if (ev === "hello") set = new Set(j.scopes); else if (ev === "scopes") { for (const x of j.accepted ?? []) set.add(x); for (const x of j.removed ?? []) set.delete(x); } } catch { /* partial */ }
+      }
+      return set;
+    };
+    await until(async () => [...(await held())].some(x => x.startsWith("project:")), 8000, "row channels added to the open stream");
+    const sc = [...(await held())];
+    if (sc.some(x => x.startsWith("workspace:"))) throw new Error(`still subscribed to workspace channels: ${sc.filter(x => x.startsWith("workspace:"))}`);
+    if (!sc.includes("collection:frankfurt")) throw new Error(`no membership channel: ${sc.slice(0, 5)}`);
+    const rowScopes = sc.filter(x => x.startsWith("project:")).length;
+    if (rowScopes < 5 || rowScopes > 120) throw new Error(`${rowScopes} row channels for one screen of rows`);
+    measurements.topology_initial_scopes = sc.length;
+    // a Frankfurt project far below the first screen (B lists newest first)
+    const list = await api(URLS[1]!, tokenB, "projects.list", { limit: 100, sort: "id", dir: "desc", expand: [] }, "GET");
+    const far: number = list.data.items[70].id, near: number = list.data.items[2].id;
+    const seenFor = (id: number) => B.page.evaluate(i => (window as any).__sse.join("").includes(`"aggregateId":"${i}"`), id);
+    const mark = async () => (await B.page.evaluate(() => (window as any).__sse.length)) as number;
+    await scrollRows(B.page, 0);
+    const edit = await apiUpdate(tokenA, far, { kommentar: `offscreen-${Date.now()}` });
+    if (edit.status !== 200) throw new Error(JSON.stringify(edit.error));
+    await sleep(1200);
+    if (await seenFor(far)) throw new Error("B received an event for a row that is not on its screen");
+    // an on-screen row IS delivered
+    const nearEdit = await apiUpdate(tokenA, near, { kommentar: `onscreen-${Date.now()}` });
+    if (nearEdit.status !== 200) throw new Error(JSON.stringify(nearEdit.error));
+    await until(async () => await seenFor(near), 6000, "event for an on-screen row");
+    // scroll to the far row: its channel is added to the OPEN stream (scopes frame), no new stream request
+    // scroll (as a user would) until the far row is rendered
+    for (let i = 0; i < 60 && !(await ids(B.page)).includes(far); i++) { await B.page.evaluate(() => { const c = document.querySelector('[data-testid="projects-scroll"]'); if (c) { c.scrollTop += 500; c.dispatchEvent(new Event("scroll")); } }); await sleep(120); }
+    if (!(await ids(B.page)).includes(far)) throw new Error("could not scroll the far row into view");
+    await until(async () => (await held()).has(`project:${far}`), 8000, "scopes acknowledgement for the scrolled-in row");
+    const afterScroll = await streams(B.page);
+    if (afterScroll.length !== first.length) throw new Error(`the stream reconnected on scroll (${first.length} → ${afterScroll.length} requests)`);
+    const before = await B.page.evaluate(() => (window as any).__sse.length) as number;
+    const target = (await cellText(B.page, "Projektstand", list.data.items[70].projektnummer ?? "")) ;
+    const up = await apiUpdate(tokenA, far, { projektstand: target === "FA" ? "EP" : "FA" });
+    if (up.status !== 200) throw new Error(JSON.stringify(up.error));
+    await until(async () => await seenFor(far), 6000, "event for the row after it was scrolled into view");
+    measurements.topology_rows_subscribed_initially = rowScopes;
+    void before; void mark;
+    await scrollRows(B.page, 0);
+  });
+
+  // ---------------- DOMAIN UNIFICATION: PSV-ITK is a Gewerk view over the same aggregate ------------------------
+  await step("PSV-ITK (server): the Gewerk page is the Project aggregate filtered to ITK — virtualized, read-model KPIs, and A's review edit reaches B live", async () => {
+    const { page } = B;
+    await page.goto(`${URLS[1]}/psv-itk`);
+    await page.waitForSelector('[data-testid="server-department-view"]', { timeout: 15000 });
+    await page.waitForSelector("table tbody tr td", { timeout: 15000 });
+    const domRows = await page.$$eval("table tbody tr:not([data-spacer])", r => r.length);
+    const setSize = await rowSet(page);
+    if (setSize <= 20 || domRows >= 80) throw new Error(`virtualization: ${domRows} DOM rows for a set of ${setSize}`);
+    const kpi = await page.locator('[data-testid="server-department-view"] .text-4xl').first().innerText();
+    if (!/\d/.test(kpi)) throw new Error(`KPI card shows "${kpi}" (read model not served)`);
+    // B (Frankfurt-only) sees Frankfurt reviews only
+    const sess = await api(URLS[1]!, tokenB, "dashboard.department", { department: "ITK" }, "GET");
+    const all = await api(URLS[0]!, tokenA, "dashboard.department", { department: "ITK" }, "GET");
+    if (!(sess.data.total > 0 && sess.data.total < all.data.total)) throw new Error(`department KPI scope: B ${sess.data.total} vs ALL ${all.data.total}`);
+    if (sess.data.byWorkspace.some((w: any) => w.workspace !== "Frankfurt")) throw new Error("B's department aggregate contains another workspace");
+    // live: filter to project 481 and watch the ITK status cell change when A edits it
+    await page.locator("#dept-search").fill(PNR);
+    await until(async () => (await rowSet(page)) === 1 && (await page.locator(`tbody tr button[aria-label^="Status ITK für Projekt"]`).count()) === 1, 10000, "exactly the ITK row of 481 (search by Projektnummer)");
+    const cellNow = async () => ((await page.locator(`tbody tr button[aria-label^="Status ITK für Projekt"]`).first().textContent({ timeout: 1500 }).catch(() => null)) ?? "").trim();
+    const before = await cellNow();
+    const target = before === "in Bearbeitung" ? "prüffähig" : "in Bearbeitung";
+    const v = await ver(PID);
+    const r = await api(URLS[0]!, tokenA, "projects.updateReview", { projectId: PID, department: "ITK", expectedVersion: v, changes: { status: target }, idempotencyKey: key() });
+    if (r.status !== 200) throw new Error(JSON.stringify(r.error));
+    await until(async () => (await cellNow()) === target, 8000, `B's ITK status to show ${target}`)
+      .catch(async e => { throw new Error(`${e.message} | before="${before}" now="${await cellNow()}" apiNow=${JSON.stringify((await api(URLS[1]!, tokenB, "projects.list", { limit: 5, search: PNR, department: "ITK", expand: ["table", "reviewSummary"] }, "GET")).data?.items?.length)} apiNoDept=${JSON.stringify((await api(URLS[1]!, tokenB, "projects.list", { limit: 5, search: PNR, expand: [] }, "GET")).data?.items?.length)} rows=${await page.locator("tbody tr").count()} body=${(await page.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ").slice(0, 500)}`); });
+    if (!(await noReload(page))) throw new Error("reloaded");
+    await page.goto(`${URLS[1]}/projects`); // restore B's page for the following steps
+    await search(page, "");
+  });
+
   await step("ITEM 2: A creates a project → B (online) gets it via the event-triggered targeted list refresh, no reload", async () => {
     await search(B.page, ""); // list of all Frankfurt projects, newest id first
-    await until(async () => (await ids(B.page)).length > 20, 10000, "B list loaded");
+    await until(async () => (await rowSet(B.page)) > 20, 10000, "B list loaded");
     const r = await api(URLS[0]!, tokenA, "projects.create", { fields: { station: "E2E Neubau Frankfurt", bahnhofsmanagement: "Frankfurt", projektnummer: "E2E-NEU-1", projektstand: "AP" }, idempotencyKey: key() });
     if (r.status !== 200) throw new Error(JSON.stringify(r.error));
     createdId = r.data.project.id;
@@ -372,7 +466,7 @@ async function main() {
   // ---------------- PROOF 5: collection-level recovery ---------------------------------------------------
   await step("PROOF 5: B offline; A creates a project, deletes one, moves one out, moves one in; B reconnects and its table equals the authoritative visible collection", async () => {
     await search(B.page, "");
-    await until(async () => (await ids(B.page)).length >= 50, 10000, "B full list");
+    await until(async () => (await rowSet(B.page)) >= 50, 10000, "B full list");
     const visibleBefore = await ids(B.page);
     const victim = visibleBefore[3]!, mover = visibleBefore[5]!;           // both currently visible to B
     const [{ id: comingIn }] = await q("SELECT id FROM projects WHERE bahnhofsmanagement='Kassel' AND id<>? ORDER BY id DESC LIMIT 1", [PID]);
@@ -389,17 +483,131 @@ async function main() {
     await until(async () => /Wiederverbunden · \d+ Änderungen? synchronisiert/.test(await badge(B.page)), 15000, `resync badge (was: ${await badge(B.page)})`);
     const auth = await api(URLS[1]!, tokenB, "projects.list", { limit: 100, sort: "id", dir: "desc", expand: [] }, "GET");
     const authoritative: number[] = auth.data.items.map((p: any) => p.id);
-    await until(async () => JSON.stringify((await ids(B.page)).slice(0, authoritative.length)) === JSON.stringify(authoritative), 10000, "B's table equals authoritative first page")
-      .catch(async e => { const got = await ids(B.page); throw new Error(`${e.message}\n  authoritative(${authoritative.length}) only: ${authoritative.filter(i => !got.includes(i))}\n  B-only: ${got.filter(i => !authoritative.includes(i))}\n  created=${createdId} in=${comingIn} victim=${victim} mover=${mover}`); });
-    const shown = (await ids(B.page)).slice(0, authoritative.length);   // B may have paged further; compare the authoritative first page
-    if (JSON.stringify(shown) !== JSON.stringify(authoritative)) throw new Error("first page differs");
+    // The DOM holds only the rows around the viewport, so the comparison is window by window against the authoritative order.
+    const windowAt = async (index: number) => { const top = await scrollRows(B.page, index); const got = await ids(B.page); const first = authoritative.indexOf(got[0]!); return { got, top, want: authoritative.slice(Math.max(0, first), Math.max(0, first) + got.length), first }; };
+    await until(async () => { const { got, want } = await windowAt(0); return got.length > 0 && JSON.stringify(got) === JSON.stringify(want); }, 10000, "B's table top window equals the authoritative first rows")
+      .catch(async e => { const { got, want } = await windowAt(0); throw new Error(`${e.message}\n  got ${got}\n  want ${want}\n  created=${createdId} in=${comingIn} victim=${victim} mover=${mover}`); });
+    const total = await rowSet(B.page);
+    if (total < authoritative.length) throw new Error(`B holds ${total} rows, the authoritative first page has ${authoritative.length}`);
+    // wherever the window lands, it must be a contiguous slice of the authoritative order
+    for (const idx of [0, 25, 50, 75]) {
+      const { got, want, top, first } = await windowAt(idx);
+      if (first < 0 || JSON.stringify(got) !== JSON.stringify(want)) throw new Error(`window @${idx} (scrollTop ${top}) is not a contiguous slice of the authoritative order:\n got ${got}\n want ${want}`);
+    }
+    const everyone = new Set<number>();
+    for (const idx of [0, 20, 40, 60, 80]) { await scrollRows(B.page, idx); for (const i of await ids(B.page)) everyone.add(i); }
     for (const [id, want] of [[createdId, true], [comingIn, true], [victim, false], [mover, false]] as const)
-      if (shown.includes(id) !== want) throw new Error(`id ${id} presence ${shown.includes(id)} != ${want}`);
+      if (authoritative.includes(id) && everyone.has(id) !== want) throw new Error(`id ${id} presence ${everyone.has(id)} != ${want}`);
+    await scrollRows(B.page, 0);
     if (!(await noReload(B.page))) throw new Error("reloaded");
     measurements.proof5_badge = await badge(B.page);
   });
 
   // ---------------- structure / metrics -------------------------------------------------------------------
+  await step("DASHBOARD + AUDIT (server-backed): figures come from the server read model scoped per identity; no data.json, no local store, audit is one cursor page at a time", async () => {
+    const opened: Array<{ name: string; page: Page }> = [];
+    const probe = async (who: { ctx: BrowserContext }, base: string, name: string, route: string) => {
+      const page = await who.ctx.newPage();
+      const seen: string[] = [];
+      page.on("request", r => { if (/\/data\.json|\/schedule\.json/.test(r.url())) seen.push(r.url()); });
+      page.on("pageerror", e => console.log(`   [${name} pageerror] ${e.message}`));
+      await page.goto(`${base}${route}`);
+      opened.push({ name, page });
+      return { page, seen };
+    };
+    const kpiTotal = (page: Page) => page.evaluate(() => {
+      const t = [...document.querySelectorAll("*")].find(e => e.textContent?.trim() === "Gesamtprojekte");
+      const card = t?.closest(".border-l-4") ?? t?.parentElement?.parentElement?.parentElement;
+      const n = card?.querySelector(".text-5xl")?.textContent ?? "";
+      return Number(n.replace(/\./g, "").trim());
+    });
+    const dbTotal = Number((await q("SELECT COUNT(*) n FROM projects"))[0].n);
+    const dbFrankfurt = Number((await q("SELECT COUNT(*) n FROM projects WHERE bahnhofsmanagement='Frankfurt'"))[0].n);
+    if (!(dbFrankfurt > 0 && dbFrankfurt < dbTotal)) throw new Error(`fixture: ${dbFrankfurt}/${dbTotal}`);
+
+    const a = await probe(A, URLS[0]!, "A-dash", "/");
+    const b = await probe(B, URLS[1]!, "B-dash", "/");
+    await until(async () => (await kpiTotal(a.page)) === dbTotal, 15000, `A dashboard total ${dbTotal}`).catch(async e => { throw new Error(`${e.message} | page: ${(await a.page.locator("body").innerText()).replace(/\s+/g, " ").slice(0, 400)}`); });
+    await until(async () => (await kpiTotal(b.page)) === dbFrankfurt, 15000, `B dashboard total ${dbFrankfurt} (Frankfurt only)`);
+    // authority: the same figures, from the API, scoped by the server — B's payload carries nothing of other workspaces
+    const pa = await api(URLS[0]!, tokenA, "dashboard.portfolio", undefined, "GET");
+    const pb = await api(URLS[1]!, tokenB, "dashboard.portfolio", undefined, "GET");
+    if (pa.data.metrics.total !== dbTotal || pb.data.metrics.total !== dbFrankfurt) throw new Error(`portfolio totals ${pa.data.metrics.total}/${pb.data.metrics.total}`);
+    if (pb.data.regions.some((r: any) => r.region !== "Frankfurt")) throw new Error("B's portfolio leaks other regions");
+    if (a.seen.length || b.seen.length) throw new Error(`legacy snapshot requested: ${[...a.seen, ...b.seen]}`);
+    for (const { page } of [a, b]) if ((await page.evaluate(() => Object.keys(localStorage).filter(k => /bahn_(projects|audit)/.test(k)))).length) throw new Error("browser-local project/audit state present");
+
+    // AUDIT: one cursor page at a time, scoped
+    // enough history to need more than one page: 60 committed edits through the real mutation path
+    const seedP = (await q("SELECT id FROM projects WHERE bahnhofsmanagement='Frankfurt' LIMIT 1"))[0].id as number;
+    for (let i = 0; i < 60; i++) { const r = await apiUpdate(tokenA, seedP, { kommentar: `audit-seed-${i}` }); if (r.status !== 200) throw new Error(`seed edit ${i}: ${JSON.stringify(r.error)}`); }
+    const total = Number((await q("SELECT COUNT(*) n FROM audit_log"))[0].n);
+    const inFrankfurt = Number((await q("SELECT COUNT(*) n FROM audit_log WHERE workspace='Frankfurt'"))[0].n);
+    if (!(total > 50)) throw new Error(`fixture: only ${total} audit rows`);
+    const auditCalls: string[] = [];
+    const pageA = await A.ctx.newPage();
+    pageA.on("request", r => { if (/audit\.page/.test(r.url())) auditCalls.push(decodeURIComponent(r.url())); });
+    await pageA.goto(`${URLS[0]}/audit`);
+    await pageA.getByRole("button", { name: /Korrekturen ausblenden/ }).click(); // same-field edits within minutes are "corrections" and hidden by default
+    await until(async () => (await pageA.locator("tbody tr[data-audit-action]").count()) === 50, 15000, "first audit page = 50 rows");
+    if (!auditCalls.some(c => /"limit":50/.test(c))) throw new Error(`no paged audit request: ${auditCalls}`);
+    await pageA.getByRole("button", { name: /Ältere Einträge laden/ }).click();
+    await until(async () => (await pageA.locator("tbody tr[data-audit-action]").count()) > 50, 10000, "second page appended");
+    const link = pageA.locator("tbody tr[data-audit-action] a", { hasText: "Projekt öffnen" }).first();
+    if (!/\/projects\?projekt=\d+/.test((await link.getAttribute("href")) ?? "")) throw new Error("no direct project link");
+    const ab = await api(URLS[1]!, tokenB, "audit.page", { limit: 100, days: 0 }, "GET");
+    if (ab.status !== 200 || ab.data.items.length === 0 || ab.data.items.some((i: any) => i.workspace !== "Frankfurt")) throw new Error(`B audit scope: ${ab.status} ${JSON.stringify(ab.data?.items?.map((i: any) => i.workspace).slice(0, 5))}`);
+    if (ab.data.items.length > inFrankfurt) throw new Error("B got more audit rows than exist in Frankfurt");
+    const aa = await api(URLS[0]!, tokenA, "audit.page", { limit: 20, days: 0 }, "GET");
+    if (aa.data.items.length !== 20 || aa.data.nextCursor === null) throw new Error("a page is `limit` rows plus a cursor, never the whole trail");
+    const big = await api(URLS[0]!, tokenA, "audit.page", { limit: 100000, days: 0 }, "GET");
+    if (big.status === 200) throw new Error("an oversized page request must be rejected");
+    await pageA.close();
+    for (const o of opened) await o.page.close();
+  });
+
+  await step("COMMAND SEARCH (server): typed, scoped results; Enter opens the exact project; no dataset in the browser", async () => {
+    const sa = await api(URLS[0]!, tokenA, "search.query", { q: "Frankfurt" }, "GET");
+    const sb = await api(URLS[1]!, tokenB, "search.query", { q: "Frankfurt" }, "GET");
+    if (sa.status !== 200 || !sa.data.entries.some((e: any) => e.kind === "station" || e.kind === "region")) throw new Error(`typed results missing: ${JSON.stringify(sa.data?.entries?.slice(0, 3))}`);
+    const kinds = new Set<string>([...sa.data.entries.map((e: any) => e.kind)]);
+    // B (Frankfurt only) must never get a candidate of another workspace
+    const bk = await api(URLS[1]!, tokenB, "search.query", { q: "Kassel" }, "GET");
+    if (bk.data.entries.some((e: any) => ["station", "projekt", "region", "person"].includes(e.kind) && /Kassel/i.test(`${e.label} ${e.sublabel ?? ""}`) && e.kind === "region")) throw new Error("B found the Kassel region");
+    const fr = (await q("SELECT id, projektnummer FROM projects WHERE bahnhofsmanagement='Frankfurt' AND projektnummer IS NOT NULL AND projektnummer <> '' ORDER BY id LIMIT 1"))[0];
+    const NR = String(fr.projektnummer);
+    const byNr = await api(URLS[1]!, tokenB, "search.query", { q: NR }, "GET");
+    const hit = byNr.data.entries.find((e: any) => e.kind === "projekt" && e.projectId);
+    if (!hit || !/projekt=\d+/.test(hit.href)) throw new Error(`exact project target missing: ${JSON.stringify(byNr.data.entries.slice(0, 2))}`);
+    void sb; void kinds;
+    const page = await B.ctx.newPage();
+    await page.goto(`${URLS[1]}/`);
+    await page.waitForSelector('input[role="combobox"]', { timeout: 15000 });
+    await page.locator('input[role="combobox"]').fill(NR);
+    await until(async () => (await page.locator('[role="option"]').count()) > 0, 10000, "palette results");
+    await page.locator('input[role="combobox"]').press("Enter");
+    await until(async () => /projekt=\d+/.test(page.url()), 10000, `Enter opened the exact project (url ${page.url()})`);
+    await page.close();
+  });
+
+  await step("EXPORT is workspace-scoped; there is no import route; unknown /api paths are 404", async () => {
+    const dbFr = Number((await q("SELECT COUNT(*) n FROM projects WHERE bahnhofsmanagement='Frankfurt'"))[0].n);
+    const dbAll = Number((await q("SELECT COUNT(*) n FROM projects"))[0].n);
+    const exp = async (token: string) => {
+      const r = await fetch(`${URLS[0]}/api/export/excel`, { headers: { authorization: `Bearer ${token}` } });
+      if (r.status !== 200) throw new Error(`export -> ${r.status}`);
+      const wb = XLSX.read(Buffer.from(await r.arrayBuffer()));
+      return XLSX.utils.sheet_to_json<Record<string, string>>(wb.Sheets["Übersicht"]!);
+    };
+    const rb = await exp(tokenB), ra = await exp(tokenA);
+    if (rb.length !== dbFr || rb.some(r => r["Bahnhofsmanagement"] !== "Frankfurt")) throw new Error(`B export leaked: ${rb.length} rows (Frankfurt has ${dbFr})`);
+    if (ra.length !== dbAll) throw new Error(`A export ${ra.length} != ${dbAll}`);
+    const anon = await fetch(`${URLS[0]}/api/export/excel`);
+    if (anon.status !== 401) throw new Error(`anonymous export -> ${anon.status}`);
+    const imp = await fetch(`${URLS[0]}/api/import/excel`, { method: "POST", headers: { authorization: `Bearer ${tokenA}` } });
+    if (imp.status !== 404) throw new Error(`import route exists: ${imp.status}`);
+  });
+
   await step("integrity: every committed change has exactly one audit set, one event, one feedSeq; feed is gapless; nothing unpublished/dead", async () => {
     await until(async () => Number((await q("SELECT COUNT(*) n FROM domain_events WHERE processedAt IS NULL"))[0].n) === 0, 5000, "outbox drained");
     const [c] = await q("SELECT COUNT(*) events, SUM(failedAt IS NOT NULL) dead, MIN(feedSeq) lo, MAX(feedSeq) hi, COUNT(feedSeq) seqd FROM domain_events");

@@ -41,7 +41,7 @@ describe("checklist structure", () => {
   });
 
   it("maps Brandschutz to BS, not to a new department", () => {
-    // BS's busiest reviewers in data.json are Afteni (506) and Fey (449), the
+    // BS's busiest reviewers in data.json are Mettberg (506) and Fey (449), the
     // Brandschutz specialists in Hilfsdatei rows 6-7.
     expect(CHECKLIST_BY_KEY.brandschutz?.department).toBe("BS");
   });

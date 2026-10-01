@@ -235,7 +235,7 @@ export const CHECKLIST_QUESTIONS: readonly ChecklistQuestion[] = [
     question: "Sind Brandschutzkonzept, IVE-Studie oder\nsonstige Stellungnahmen notwendig?",
     kind: "gewerk",
     // BS is Brandschutz, not "bauliche Anlagen": the top BS reviewers in
-    // data.json are Afteni (506) and Fey (449), who are the Brandschutz
+    // data.json are Mettberg (506) and Fey (449), who are the Brandschutz
     // specialists in Hilfsdatei rows 6-7.
     department: "BS",
     answerType: "jaNein",

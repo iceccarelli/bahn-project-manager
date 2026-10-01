@@ -1,7 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { AuditMeta } from "@shared/audit-entry";
 import { useCallback, useMemo } from "react";
-import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { apiClient } from "@/_core/api/client";
 import { BAHNHOFSMANAGEMENT } from "@shared/bahnhofsmanagement";
@@ -98,10 +97,9 @@ export const queryKeys = {
  * Projekte page and the global chrome (header search, Ask Bahn, shell) never
  * trigger a download of /data.json.
  */
-const SERVER_ROUTES = ["/projects"];
 function useLegacyPlaneEnabled(): boolean {
-  const [path] = useLocation();
-  return !SERVER_MODE || !SERVER_ROUTES.some(r => path.startsWith(r));
+  // The server build has NO browser-local project plane: every page reads the server. The local plane exists only in the demo artifact.
+  return !SERVER_MODE;
 }
 
 export function useAllProjects() {
@@ -137,6 +135,7 @@ export function useAuditLog() {
   return useQuery({
     queryKey: queryKeys.audit.list(),
     queryFn: () => apiClient.audit.list(),
+    enabled: !SERVER_MODE, // server build: the trail is `audit.page` (see hooks/useAuditFeed)
   });
 }
 

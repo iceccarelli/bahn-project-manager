@@ -92,5 +92,9 @@ export function assertProductionConfig(env: NodeJS.ProcessEnv = process.env) {
   if (!env.JWT_SECRET || env.JWT_SECRET.length < 32 || /demo|change/i.test(env.JWT_SECRET)) problems.push("JWT_SECRET must be set to a random value of at least 32 characters");
   if (!env.DATABASE_URL) problems.push("DATABASE_URL is required");
   if (!env.OIDC_ISSUER && env.ALLOW_DEMO_LOGIN !== "1" && !env.OAUTH_SERVER_URL) problems.push("configure OIDC_ISSUER/OIDC_AUDIENCE (or explicitly ALLOW_DEMO_LOGIN=1 for a demo deployment)");
+  // Redis is the shared transport of the topology (realtime fan-out, presence, subscription barrier). Without it
+  // two instances silently stop seeing each other's events, so it is not optional unless a single node is declared.
+  if (!env.REDIS_URL && env.ALLOW_SINGLE_INSTANCE !== "1") problems.push("REDIS_URL is required (multi-instance realtime transport); set ALLOW_SINGLE_INSTANCE=1 only for a deliberate single-node deployment");
+  if (env.OIDC_ISSUER && !env.OIDC_AUDIENCE) problems.push("OIDC_AUDIENCE is required when OIDC_ISSUER is set");
   if (problems.length) throw new Error(`Unsafe production configuration:\n - ${problems.join("\n - ")}`);
 }

@@ -8,22 +8,21 @@
  *
  * No localStorage, no data.json, no showAll, no whole-dataset download.
  */
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { BAHNHOFSMANAGEMENT } from "@shared/bahnhofsmanagement";
 import { scope } from "@shared/domain-events";
 import type { ProjectDetail, ProjectListItem } from "@shared/project-contract";
 import { PROJECT_SORTS } from "@shared/project-contract";
 import { deriveProjectMetrics, type ProjectMetrics } from "@shared/project-metrics";
 import type { Filters, Project, Review } from "@/hooks/useDataQuery";
-import { serverApi } from "./serverApi";
+import { serverApi, useCollectionScopes } from "./serverApi";
 import ConflictDialog from "./ConflictDialog";
-import { serverKeys, useProjectEditor, useRt } from "./RealtimeProvider";
+import { serverKeys, useOptionalRealtime, useProjectEditor, useRt } from "./RealtimeProvider";
 
 /** server row → the shape the existing Projekte components render */
 export function toLegacyProject(p: ProjectListItem | ProjectDetail): Project & { syncVersion: number } {
   const reviews: Review[] = (p.reviews ?? []).map(r => ({
-    id: r.id, department: r.department, status: r.status, prueferName: r.prueferName, pruefDatum: r.datum,
+    id: r.id ?? 0, department: r.department, status: r.status, prueferName: r.prueferName, pruefDatum: r.datum,
   })) as Review[];
   return {
     id: p.id,
@@ -64,12 +63,16 @@ export function useServerProjects(params: ServerProjectsParams) {
     ...(params.pruefer ? { pruefer: params.pruefer } : {}),
     ...(params.department ? { department: params.department } : {}),
     ...(params.status ? { reviewStatus: params.status } : {}),
-    expand: ["reviews", "details"] as ("reviews" | "details")[],
-    includeTotal: true,
+    // Projection: exactly what the table renders. Detail-only fields (eigvEinstufung, createdAt) and review
+    // ids/timestamps stay on projects.get. Pages never ask for COUNT(*) — the total is a separate cached query.
+    expand: ["table", "reviewSummary"] as ("table" | "reviewSummary")[],
   }), [sort, params.sortDir, params.search, params.region, params.projektleiter, params.pruefer, params.department, params.status]);
 
-  // Realtime: every workspace channel; the server authorizes each one and reports denials.
-  useEffect(() => retain(BAHNHOFSMANAGEMENT.map(w => scope.workspace(w))), [retain]);
+  // Realtime topology: ONE compact membership channel (create/delete/move) for this view's authorization scope.
+  // Field edits arrive on `project:<id>` channels for the rows actually on screen (see useRowScopes) — a global
+  // Projects page no longer receives every edit of every project.
+  const collections = useCollectionScopes(params.region);
+  useEffect(() => (collections.length ? retain(collections) : undefined), [retain, collections]);
 
   const q = useInfiniteQuery({
     queryKey: [...serverKeys.lists(), input],
@@ -90,6 +93,24 @@ export function useServerProjects(params: ServerProjectsParams) {
     [q.data],
   );
 
+  // Exact total: requested separately (after the first page is on screen), cached server-side per authorization
+  // scope + filters. The loaded range is shown immediately; the total fills in when it arrives.
+  const countInput = useMemo(() => ({
+    ...(params.search ? { search: params.search } : {}),
+    ...(params.region ? { bahnhofsmanagement: params.region } : {}),
+    ...(params.projektleiter ? { projektleiter: params.projektleiter } : {}),
+    ...(params.pruefer ? { pruefer: params.pruefer } : {}),
+    ...(params.department ? { department: params.department } : {}),
+    ...(params.status ? { reviewStatus: params.status } : {}),
+  }), [params.search, params.region, params.projektleiter, params.pruefer, params.department, params.status]);
+  const countQ = useQuery({
+    queryKey: [...serverKeys.counts(), countInput],
+    queryFn: () => serverApi.projects.count.query(countInput),
+    enabled: !!q.data && !!q.hasNextPage, // a single page already IS the exact total
+    staleTime: 30_000,
+  });
+  const exactTotal = !q.hasNextPage && !!q.data ? projects.length : countQ.data?.total;
+
   const applyEdit = useCallback(async (id: number, field: string, value: unknown) => {
     await editor.edit(id, { [field]: value === "" ? null : (value as string | null) } as never);
   }, [editor]);
@@ -103,7 +124,8 @@ export function useServerProjects(params: ServerProjectsParams) {
   }, [editor]);
 
   return {
-    data: { projects, total: q.data?.pages[0]?.total ?? projects.length },
+    // `total` is the best known number; `totalExact` says whether it is the server's exact count.
+    data: { projects, total: exactTotal ?? projects.length, totalExact: exactTotal !== undefined },
     isLoading: q.isLoading,
     isFetchingNextPage: q.isFetchingNextPage,
     hasNextPage: !!q.hasNextPage,
@@ -146,4 +168,39 @@ export function useServerProjectDetail(id: number | null) {
 export function ConflictHost() {
   const editor = useProjectEditor();
   return <ConflictDialog conflict={editor.conflict?.conflict ?? null} onTakeServer={editor.takeServer} onRebase={() => { void editor.rebase(); }} />;
+}
+
+
+/**
+ * Live-subscribe exactly the rows on (or just around) the screen: `project:<id>` per visible row.
+ * Rows that scroll away stay subscribed for HOLD_MS (scrolling back and forth must not churn the stream),
+ * then are released. The stream's scopes change in place — no reconnect — and a row that becomes live is
+ * reconciled with the server (version compare) once its subscription is confirmed.
+ * Without a RealtimeProvider (static/local mode) this is a no-op.
+ */
+const HOLD_MS = 15_000;
+export function useRowScopes(ids: readonly number[]): void {
+  const rt = useOptionalRealtime();
+  const seen = useRef(new Map<number, number>());
+  const [held, setHeld] = useState<string>("");
+  const now = Date.now();
+  for (const id of ids) seen.current.set(id, now);
+  const visibleKey = ids.join(",");
+  useEffect(() => {
+    const t = Date.now();
+    for (const [id, at] of seen.current) if (t - at > HOLD_MS) seen.current.delete(id);
+    const next = [...seen.current.keys()].sort((a, b) => a - b).join(",");
+    setHeld(h => (h === next ? h : next));
+    const timer = setInterval(() => {
+      const tt = Date.now();
+      for (const [id, at] of seen.current) if (tt - at > HOLD_MS) seen.current.delete(id);
+      const n = [...seen.current.keys()].sort((a, b) => a - b).join(",");
+      setHeld(h => (h === n ? h : n));
+    }, 5_000);
+    return () => clearInterval(timer);
+  }, [visibleKey]);
+  useEffect(() => {
+    if (!rt || !held) return undefined;
+    return rt.retain(held.split(",").map(id => scope.project(id)));
+  }, [rt, held]);
 }

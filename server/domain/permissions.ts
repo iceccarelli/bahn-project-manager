@@ -103,8 +103,21 @@ export function canSubscribe(p: Principal, scopeKey: string): boolean {
     case "user":
     case "notifications":
       return id === p.id || isAdmin(p);
+    case "agg":
+      // per-row channels of the booking/checklist domains: authorization happens PER EVENT (eventForPrincipal)
+      return /^(booking|checklist)\.\d+$/.test(id);
+    case "collection":
     case "workspace": {
+      // the booking calendar is shared (details are redacted per recipient); checklist collections follow the workspace rule
+      if (kind === "collection" && id === "booking.all") return true;
+      if (kind === "collection" && id.startsWith("checklist.")) {
+        const allowed0 = workspaceRestriction(p);
+        const key = id.slice("checklist.".length);
+        return key === "all" ? allowed0 === null : allowed0 === null || allowed0.some(w => slugify(w) === key);
+      }
       const allowed = workspaceRestriction(p);
+      // "collection:all" is the unrestricted membership feed; a restricted principal subscribes per authorized workspace
+      if (kind === "collection" && id === "all") return allowed === null;
       return allowed === null || allowed.some(w => slugify(w) === id);
     }
     case "department":

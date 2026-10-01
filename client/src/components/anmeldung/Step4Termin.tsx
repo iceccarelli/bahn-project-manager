@@ -69,7 +69,7 @@ export function Step4Termin({ draft }: { draft: ChecklistDraft }) {
         aria-pressed={selected}
         onClick={() =>
           setTermin(
-            selected ? null : { slotId: s.id, datum: s.datum, von: s.von, bis: s.bis },
+            selected ? null : { slotId: s.id, datum: s.datum, von: s.von, bis: s.bis, ...(s.serverId ? { serverId: s.serverId, serverVersion: s.serverVersion } : {}) },
           )
         }
         title={s.info ?? s.hinweis ?? undefined}

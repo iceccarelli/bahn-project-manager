@@ -17,7 +17,7 @@ describe("contacts", () => {
   it("transcribes every Hilfsdatei row that carries an address", () => {
     expect(CONTACTS).toHaveLength(51);
     for (const c of CONTACTS) {
-      expect(c.mail, `row ${c.row}`).toMatch(/@deutschebahn\.com$/i);
+      expect(c.mail, `row ${c.row}`).toMatch(/@(deutschebahn\.com|example\.invalid)$/i);
       expect(c.row).toBeGreaterThan(0);
     }
   });
@@ -44,11 +44,11 @@ describe("contacts", () => {
     expect(itk.every((c) => c.group.includes("Telekommunikation"))).toBe(true);
   });
 
-  it("now reaches Emin Er and Daniel Goldhausen", () => {
-    // Er holds 471 of the 510 ITK reviews and had never been notified.
+  it("now reaches Simon Lindborn and Ralf Thornmann", () => {
+    // Lindborn holds 471 of the 510 ITK reviews and had never been notified.
     const mails = recipientsFor("ITK").map((c) => c.mail.toLowerCase());
-    expect(mails).toContain("emin.er@deutschebahn.com");
-    expect(mails).toContain("daniel.goldhausen@deutschebahn.com");
+    expect(mails).toContain("simon.lindborn@example.invalid");
+    expect(mails).toContain("ralf.thornmann@example.invalid");
   });
 
   it("changes nothing except ITK", () => {
@@ -100,13 +100,13 @@ describe("contacts", () => {
   });
 
   it("resolves a BM contact case-insensitively and tolerates null", () => {
-    expect(bahnhofsmanagementContact("frankfurt")?.name).toBe("Melanie Kühner");
+    expect(bahnhofsmanagementContact("frankfurt")?.name).toBe("Willi Morloh");
     expect(bahnhofsmanagementContact(null)).toBeNull();
-    expect(bahnhofsmanagementContact("  Mainz ")?.name).toBe("Andre Schulte");
+    expect(bahnhofsmanagementContact("  Mainz ")?.name).toBe("Paul Telhagen");
   });
 
   it("carries the HuBs and ITK-FM notify-only recipients", () => {
-    expect(notifyOnlyRecipients("huBs").map((c) => c.name)).toEqual(["Luigi La Rocca"]);
+    expect(notifyOnlyRecipients("huBs").map((c) => c.name)).toEqual(["Jonas Ivobach"]);
     expect(notifyOnlyRecipients("itkFm").length).toBeGreaterThanOrEqual(3);
   });
 
@@ -131,7 +131,7 @@ describe("displayName", () => {
   });
 
   it("prefers the name when there is one", () => {
-    const er = CONTACTS.find((c) => c.mail.toLowerCase() === "emin.er@deutschebahn.com");
-    expect(displayName(er as never)).toBe("Emin Er");
+    const er = CONTACTS.find((c) => c.mail.toLowerCase() === "simon.lindborn@example.invalid");
+    expect(displayName(er as never)).toBe("Simon Lindborn");
   });
 });

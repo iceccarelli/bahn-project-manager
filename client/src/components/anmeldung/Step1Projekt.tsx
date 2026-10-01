@@ -65,7 +65,7 @@ export function Step1Projekt({ draft }: { draft: ChecklistDraft }) {
         <Field
           id="projektnummer"
           label="Projektnummer *"
-          hint="z.B. G.011511006"
+          hint="z.B. G.993404401"
           error={issue("projektnummer")}
         >
           <Input

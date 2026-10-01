@@ -136,14 +136,14 @@ Each project in `client/public/data.json`:
 {
   "id": 1,
   # Projekt Antraggeber (BM) -> 
-  "projektnummer": "G.011511006", # Projektnummer OHNE (separat auswählbar) # Projektnummer von BM, von Vermietung, zum Erstellen BS konzepte
+  "projektnummer": "G.993404401", # Projektnummer OHNE (separat auswählbar) # Projektnummer von BM, von Vermietung, zum Erstellen BS konzepte
   "bahnhofsmanagement": "Kassel", # Region -> BM zu eintragen.
   "station": "Bad Hersfeld", 
   "bahnhofsnummer": null,
   "streckennummer": null,
   "projektbeschreibung": "Erhöhung des Hausbahnsteigs …",
   "projektstand": "EP",
-  "projektleiter": "Daniel Röthlinger",
+  "projektleiter": "Lindwerth Röthlinger",
   "terminProjektvorstellung": "2020-08-19", # Projektvorstellung => (Terminauswahlliste) Per Email Informiert ()=>{check.liste.muster}
   # smtp.protocol.IP.standorte
   # Tabelle (Termine FREI und nicht Parallel) 

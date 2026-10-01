@@ -5,8 +5,8 @@
  * Why this needs a resolver at all
  * ---------------------------------------------------------------------------
  * The two sources spell people differently. `Hilfsdatei` holds full names
- * ("Emin Er", "Stephan Hartung"). The review rows hold surnames ("Er",
- * "Hartung"). Matching on the full string finds almost nothing:
+ * ("Simon Lindborn", "Yannik Solddorf"). The review rows hold surnames ("Lindborn",
+ * "Solddorf"). Matching on the full string finds almost nothing:
  *
  *     exact full-name match   1 of 44 reviewer names      32 of 10,489 rows
  *
@@ -33,9 +33,9 @@
  * The remaining 12 names cover 835 rows. Eleven are real reviewers with no row
  * in `Hilfsdatei`:
  *
- *     Colak 250 · Vatter 149 · Engstfeld 127 · Wagner 83 · Oker 54 ·
- *     Matteka 46 · Haag 43 · Bär 23 · Ates 23 · Krejtschi 16 ·
- *     Frousiou-Bauer 15                                  (829 rows)
+ *     Ravdorf 250 · Hovbach 149 · Lorbrink 127 · Ulmfeld 83 · Dalkamp 54 ·
+ *     Cornfeld 46 · Trenbach 43 · Birkbrink 23 · Ulmborn 23 · Prellbrink 16 ·
+ *     Ivohagen 15                                  (829 rows)
  *
  * The twelfth is "Herr" (6 rows), which is a truncated entry rather than a
  * name — left as `unknown` rather than declared a placeholder, because what it
@@ -83,7 +83,7 @@ const norm = (s: string | null | undefined): string =>
     .toLowerCase()
     .replace(/\s+/g, " ");
 
-/** Last whitespace-separated token. "Duc Minh Nguyen" -> "nguyen". */
+/** Last whitespace-separated token. "Finja Frobach" -> "nguyen". */
 const surnameOf = (s: string | null | undefined): string => {
   const parts = norm(s).split(" ").filter(Boolean);
   return parts.length ? (parts[parts.length - 1] as string) : "";
@@ -102,7 +102,7 @@ const EXACT_INDEX: ReadonlyMap<string, Contact> = new Map(
  * The removal is the safety property: this file's whole premise is that a
  * surname identifies one person in `Hilfsdatei`, and the index enforces that
  * instead of trusting it. Today nothing is dropped (48 names, 48 surnames);
- * the moment a second Schmidt is added, both stop resolving and the UI shows
+ * the moment a second Wendrath is added, both stop resolving and the UI shows
  * the department's recipients instead of guessing between them.
  */
 const SURNAME_INDEX: ReadonlyMap<string, Contact> = (() => {
@@ -146,7 +146,7 @@ export type ContactResolution =
 /**
  * Resolve one name from the project or review data.
  *
- * Order matters: exact before surname, so "Emin Er" never falls through to a
+ * Order matters: exact before surname, so "Simon Lindborn" never falls through to a
  * surname lookup, and placeholders before both, so a phrase is never treated
  * as a name.
  */

@@ -54,7 +54,7 @@ describe.skipIf(!hasTestDb)("tRPC projects router (real DB)", () => {
     await expect(c.projects.get({ id: 1 })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
     await expect(c.projects.update({ id: 1, expectedVersion: 1, changes: { kommentar: "x" }, idempotencyKey: key() })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
     await expect(c.dashboard.stats()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
-    await expect(c.bvbEea.list()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(c.projects.createReview({ projectId: 1, department: "ITK", expectedVersion: 1, fields: {}, idempotencyKey: key() })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
   });
 
   it("create → get → update → CONFLICT carries the structured payload on error.data", async () => {
@@ -92,13 +92,16 @@ describe.skipIf(!hasTestDb)("tRPC projects router (real DB)", () => {
     expect((appRouter as any)._def.procedures["reviews.update"]).toBeUndefined();
     await expect(as(editor).projects.updateReview({ projectId: 1, department: "ITK", expectedVersion: 1, changes: { projectId: 9 } as never, idempotencyKey: key() })).rejects.toBeInstanceOf(TRPCError);
     await expect(as(editor).projects.updateReview({ projectId: 1, department: "ITK", expectedVersion: 1, changes: { id: "9" } as never, idempotencyKey: key() })).rejects.toBeInstanceOf(TRPCError);
-    await expect(as(editor).bvbEea.update({ id: 1, field: "id" as never, value: "9" })).rejects.toBeInstanceOf(TRPCError);
-    await expect(as(editor).psvItk.update({ id: 1, field: "createdAt" as never, value: "9" })).rejects.toBeInstanceOf(TRPCError);
+    // the standalone BVB-EEA / PSV-ITK / reviews.create write endpoints (role-less, unversioned, unaudited-by-event) no longer exist
+    for (const gone of ["bvbEea.list", "bvbEea.create", "bvbEea.update", "psvItk.list", "psvItk.create", "psvItk.update", "reviews.create"]) expect((appRouter as any)._def.procedures[gone]).toBeUndefined();
   });
 
   it("audit is restricted to roles that may view it", async () => {
-    await expect(as(viewer).audit.list()).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await expect(as(editor).audit.list()).resolves.toBeInstanceOf(Array);
+    await expect(as(viewer).audit.page()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(as(editor).audit.page()).resolves.toMatchObject({ items: expect.any(Array) });
+    // the unscoped legacy reads no longer exist
+    for (const gone of ["audit.list"]) expect((appRouter as any)._def.procedures[gone]).toBeUndefined();
+    expect((appRouter as any)._def.procedures["projects.searchSuggestions"]).toBeUndefined();
   });
 
   it("shellSummary is a cheap aggregate, not a project list", async () => {

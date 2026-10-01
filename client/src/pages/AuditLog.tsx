@@ -7,7 +7,10 @@ import {
   History, Search, Trash2, FilePlus2, PencilLine, ClipboardCheck, FileDown, Send,
   AlertOctagon, Undo2, CornerUpLeft,
 } from "lucide-react";
-import { useAuditLog } from "@/hooks/useDataQuery";
+import { useAuditFeed } from "@/hooks/useAuditFeed";
+import { SERVER_MODE } from "@/realtime/serverApi";
+import { projectHref } from "@shared/handlungsbedarf";
+import { Link } from "wouter";
 import { useTableStream } from "@/hooks/useTableStream";
 import { useAuditUndo } from "@/hooks/useAuditUndo";
 import { auditTone, type AuditTone } from "@shared/audit-actions";
@@ -95,16 +98,26 @@ const WINDOWS: ReadonlyArray<{ key: string; label: string; hours: number | null 
 ];
 
 export default function AuditLogPage() {
-  const { data: entries, isLoading } = useAuditLog();
+  // URL state is canonical and shareable: /audit?q=<text>
+  const [query, setQueryState] = useState(() => (typeof location === "undefined" ? "" : new URLSearchParams(location.search).get("q") ?? ""));
+  const setQuery = (v: string) => {
+    setQueryState(v);
+    try { const u = new URL(location.href); if (v) u.searchParams.set("q", v); else u.searchParams.delete("q"); history.replaceState(null, "", u); } catch { /* non-browser */ }
+  };
+  const [onlyCritical, setOnlyCritical] = useState(false);
+  const [hideCorrected, setHideCorrected] = useState(true);
+  const [windowKey, setWindowKey] = useState(SERVER_MODE ? "30d" : "all");
+  // Server build: the window, the text and "nur Statusänderungen" are filters ON THE SERVER (keyset-paginated, scoped to the
+  // caller's workspaces); the browser only ever holds the pages it has asked for. Demo build: filters over the local trail.
+  const days = WINDOWS.find((x) => x.key === windowKey)?.hours;
+  const feed = useAuditFeed({ days: days == null ? null : Math.ceil(days / 24), q: SERVER_MODE ? query : "", statusOnly: SERVER_MODE && onlyCritical });
+  const entries = feed.entries;
+  const isLoading = feed.isLoading;
   const streamRef = useTableStream();
   /* The page arrives a section at a time. Decoration only —
      see client/src/lib/motion.ts. */
   const revealRef = useReveal(null);
   const undo = useAuditUndo();
-  const [query, setQuery] = useState("");
-  const [onlyCritical, setOnlyCritical] = useState(false);
-  const [hideCorrected, setHideCorrected] = useState(true);
-  const [windowKey, setWindowKey] = useState("all");
 
   /*
    * A ticking clock, on purpose.
@@ -136,12 +149,12 @@ export default function AuditLogPage() {
     const q = query.trim().toLowerCase();
     return all.filter((e) => {
       const v = verdicts.get(e.id);
-      if (cutoff !== null && Date.parse(e.timestamp) < cutoff) return false;
-      if (onlyCritical && v?.severity !== "kritisch") return false;
+      if (!SERVER_MODE && cutoff !== null && Date.parse(e.timestamp) < cutoff) return false;
+      if (!SERVER_MODE && onlyCritical && v?.severity !== "kritisch") return false;
       // A change that was corrected inside the window is one person fixing
       // themselves. It stays in the record; it just does not lead the page.
       if (hideCorrected && v?.superseded) return false;
-      if (!q) return true;
+      if (SERVER_MODE || !q) return true;
       return `${e.action} ${e.details} ${e.user} ${describeChange(e.meta)}`
         .toLowerCase()
         .includes(q);
@@ -198,7 +211,7 @@ export default function AuditLogPage() {
           className="h-9 gap-2"
         >
           <AlertOctagon className="h-4 w-4" aria-hidden="true" />
-          Nur kritische
+          {SERVER_MODE ? "Nur Statusänderungen" : "Nur kritische"}
           <span className="rounded-full bg-black/10 px-1.5 text-2xs font-bold dark:bg-white/20">
             {criticalCount}
           </span>
@@ -337,6 +350,11 @@ export default function AuditLogPage() {
                           said which project they changed.
                         */}
                         <span className="block">{structured || e.details}</span>
+                        {e.meta?.projectId !== undefined && e.action !== "Projekt gelöscht" && (
+                          <Link href={projectHref(e.meta.projectId)} className="mt-0.5 inline-block text-2xs text-primary-strong underline-offset-2 hover:underline">
+                            Projekt öffnen
+                          </Link>
+                        )}
                         {v?.superseded && (
                           <span className="mt-1 inline-flex items-center gap-1 text-2xs text-muted-foreground">
                             <CornerUpLeft className="h-3 w-3" aria-hidden="true" />
@@ -347,7 +365,7 @@ export default function AuditLogPage() {
                         )}
                       </td>
                       <td className="px-4 py-2.5 text-right">
-                        {v?.undoable && e.meta?.field && (
+                        {!SERVER_MODE && v?.undoable && e.meta?.field && (
                           <Button
                             size="sm"
                             variant="outline"
@@ -367,6 +385,16 @@ export default function AuditLogPage() {
             </table>
           </div>
         </Card>
+      )}
+      {SERVER_MODE && feed.hasMore && (
+        <div className="flex justify-center">
+          <Button variant="outline" onClick={feed.loadMore} disabled={feed.loadingMore} className="h-9">
+            {feed.loadingMore ? "wird geladen …" : "Ältere Einträge laden"}
+          </Button>
+        </div>
+      )}
+      {SERVER_MODE && feed.isError && (
+        <p role="alert" className="text-sm text-destructive">Die Änderungshistorie ist nur für Bearbeiter und Administratoren abrufbar oder derzeit nicht erreichbar.</p>
       )}
     </div>
   );

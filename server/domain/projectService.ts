@@ -29,6 +29,7 @@ import {
   type ReviewField,
   type UpdateProjectInput,
   type UpdateReviewInput,
+  type CreateReviewInput,
   reviewChangeKey,
 } from "@shared/project-contract";
 import type { Project } from "../../drizzle/schema";
@@ -101,7 +102,7 @@ function stableStringify(v: unknown): string {
   const o = v as Record<string, unknown>;
   return `{${Object.keys(o).sort().map(k => `${JSON.stringify(k)}:${stableStringify(o[k])}`).join(",")}}`;
 }
-const requestHash = (op: string, body: unknown) =>
+export const requestHash = (op: string, body: unknown) =>
   createHash("sha256").update(op).update("\0").update(stableStringify(body)).digest("hex");
 
 const actorNumericId = (p: Principal) => (/^\d+$/.test(p.id) ? Number(p.id) : null);
@@ -117,6 +118,8 @@ function diffOf(
   }
   return changes;
 }
+
+const labelOf = (station: string | null | undefined, nummer: string | null | undefined): string | null => (station?.trim() || nummer?.trim() || null)?.slice(0, 255) ?? null;
 
 export class ProjectService {
   constructor(
@@ -229,7 +232,7 @@ export class ProjectService {
         workspace: newBm,
         workspaceBefore: newBm !== current.bahnhofsmanagement ? current.bahnhofsmanagement : null,
       });
-      await tx.appendAudit(this.auditRows(principal, event, "update", changes));
+      await tx.appendAudit(this.auditRows(principal, event, "update", changes, labelOf("station" in changes ? changes.station!.to : current.station, current.projektnummer)));
       await tx.appendEvent(event);
       await this.notifyWatchers(tx, principal, event, { id: input.id, projektnummer: current.projektnummer, station: "station" in changes ? changes.station!.to : current.station });
       const detail = (await tx.detail(input.id))!;
@@ -299,7 +302,7 @@ export class ProjectService {
       if (!ok) throw await this.conflict(tx, (await tx.lockProject(input.projectId)) ?? current, { id: input.projectId, expectedVersion: input.expectedVersion }, localValues, reviewValueOf);
 
       const event = this.buildEvent("project.updated", principal, ctx, input.projectId, input.expectedVersion + 1, changes, { workspace: current.bahnhofsmanagement });
-      await tx.appendAudit(this.auditRows(principal, event, "update", changes));
+      await tx.appendAudit(this.auditRows(principal, event, "update", changes, labelOf(current.station, current.projektnummer)));
       await tx.appendEvent(event);
       await this.notifyWatchers(tx, principal, event, { id: input.projectId, projektnummer: current.projektnummer, station: current.station });
       const res: MutationResult = { project: (await tx.detail(input.projectId))!, eventId: event.eventId, replayed: false };
@@ -319,21 +322,29 @@ export class ProjectService {
       if (claim.state === "mismatch") throw new IdempotencyKeyReuseError();
       if (claim.state === "replay") return { ...(claim.response as MutationResult), replayed: true };
 
-      if (!canCreateProject(principal, { bahnhofsmanagement: norm.bahnhofsmanagement ?? null })) throw new ForbiddenError();
-      const id = await tx.insertProject(toColumnValues(norm));
-      const changes: Record<string, FieldChange> = {};
-      for (const [k, to] of Object.entries(norm)) if (to !== null) changes[k] = { from: null, to };
-      const event = this.buildEvent("project.created", principal, ctx, id, 1, changes, {
-        workspace: norm.bahnhofsmanagement ?? null,
-      });
-      await tx.appendAudit(this.auditRows(principal, event, "create", changes));
-      await tx.appendEvent(event);
-      const res: MutationResult = { project: (await tx.detail(id))!, eventId: event.eventId, replayed: false };
+      const { detail, event } = await this.createWithin(tx, principal, ctx, norm);
+      const res: MutationResult = { project: detail, eventId: event.eventId, replayed: false };
       await tx.completeIdempotency(principal.id, input.idempotencyKey, res);
       return res;
     });
     if (!result.replayed) this.notifyAfterCommit();
     return result;
+  }
+
+  /**
+   * The creation steps inside an OPEN transaction (authorize → insert → audit → event). Used by `create` and by
+   * aggregates that create a project as part of their own transition (checklist submission), so both write the
+   * same audit rows and the same event as a direct create.
+   */
+  async createWithin(tx: ProjectTx, principal: Principal, ctx: RequestContext, norm: Partial<Record<EditableProjectField, string | null>>) {
+    if (!canCreateProject(principal, { bahnhofsmanagement: norm.bahnhofsmanagement ?? null })) throw new ForbiddenError();
+    const id = await tx.insertProject(toColumnValues(norm));
+    const changes: Record<string, FieldChange> = {};
+    for (const [k, to] of Object.entries(norm)) if (to !== null && to !== undefined) changes[k] = { from: null, to };
+    const event = this.buildEvent("project.created", principal, ctx, id, 1, changes, { workspace: norm.bahnhofsmanagement ?? null });
+    await tx.appendAudit(this.auditRows(principal, event, "create", changes, labelOf(norm.station, norm.projektnummer)));
+    await tx.appendEvent(event);
+    return { id, event, detail: (await tx.detail(id))! };
   }
 
   async delete(
@@ -358,7 +369,7 @@ export class ProjectService {
       // notify BEFORE the project (and its watcher rows) are removed
       await this.notifyWatchers(tx, principal, event, { id: input.id, projektnummer: current.projektnummer, station: current.station });
       await tx.deleteProject(input.id);
-      await tx.appendAudit(this.auditRows(principal, event, "delete", {}));
+      await tx.appendAudit(this.auditRows(principal, event, "delete", {}, labelOf(current.station, current.projektnummer)));
       await tx.appendEvent(event);
       const res = { eventId: event.eventId, replayed: false };
       await tx.completeIdempotency(principal.id, input.idempotencyKey, res);
@@ -369,6 +380,47 @@ export class ProjectService {
   }
 
   // ---- internals ----------------------------------------------------------
+
+  /** Create the review of one Gewerk for a project: same machinery as every Project edit (version, audit, event, notification). */
+  async createReview(principal: Principal, input: CreateReviewInput, ctx: RequestContext): Promise<MutationResult> {
+    const norm: Partial<Record<ReviewField, string | null>> = {};
+    for (const [f, v] of Object.entries(input.fields) as [ReviewField, string | null | undefined][]) {
+      if (v === undefined) continue;
+      if (f === "datum") {
+        const c = cleanStr(v);
+        if (c === null) norm[f] = null;
+        else { const d = new Date(c); if (Number.isNaN(d.getTime())) throw new ValidationError(`Ungültiges Datum: "${v}"`, f); norm[f] = dateToWire(d); }
+      } else norm[f] = cleanStr(v);
+    }
+    const hash = requestHash("project.createReview", { p: input.projectId, d: input.department, v: input.expectedVersion, c: norm });
+    const result = await this.store.transaction(async tx => {
+      const claim = await tx.claimIdempotency(principal.id, input.idempotencyKey, "project.createReview", hash);
+      if (claim.state === "mismatch") throw new IdempotencyKeyReuseError();
+      if (claim.state === "replay") return { ...(claim.response as MutationResult), replayed: true };
+
+      const current = await tx.lockProject(input.projectId);
+      if (!current || !canViewProject(principal, current)) throw new NotFoundError();
+      if (!canApproveReview(principal, current, input.department)) throw new ForbiddenError("Keine Berechtigung für dieses Gewerk");
+      const changes: Record<string, FieldChange> = {};
+      for (const f of ["status", "prueferName", "datum"] as ReviewField[]) changes[reviewChangeKey(input.department, f)] = { from: null, to: norm[f] ?? null };
+      const localValues = Object.fromEntries(Object.entries(changes).map(([k, c]) => [k, c.to]));
+      if (current.syncVersion !== input.expectedVersion) throw await this.conflict(tx, current, { id: input.projectId, expectedVersion: input.expectedVersion }, localValues, () => null);
+      if (await tx.lockReview(input.projectId, input.department)) throw new ValidationError(`Für ${input.department} existiert bereits eine Prüfung`, "department");
+
+      await tx.insertReview(input.projectId, { department: input.department, status: norm.status ?? null, prueferName: norm.prueferName ?? null, datum: norm.datum ? new Date(norm.datum) : null });
+      const ok = await tx.updateVersioned(input.projectId, input.expectedVersion, {});
+      if (!ok) throw await this.conflict(tx, (await tx.lockProject(input.projectId)) ?? current, { id: input.projectId, expectedVersion: input.expectedVersion }, localValues, () => null);
+      const event = this.buildEvent("project.updated", principal, ctx, input.projectId, input.expectedVersion + 1, changes, { workspace: current.bahnhofsmanagement });
+      await tx.appendAudit(this.auditRows(principal, event, "update", changes, labelOf(current.station, current.projektnummer)));
+      await tx.appendEvent(event);
+      await this.notifyWatchers(tx, principal, event, { id: input.projectId, projektnummer: current.projektnummer, station: current.station });
+      const res: MutationResult = { project: (await tx.detail(input.projectId))!, eventId: event.eventId, replayed: false };
+      await tx.completeIdempotency(principal.id, input.idempotencyKey, res);
+      return res;
+    });
+    if (!result.replayed && result.eventId) this.notifyAfterCommit();
+    return result;
+  }
 
   /**
    * Domain event → policy → one notification row + one outbox event per recipient, in the
@@ -427,8 +479,11 @@ export class ProjectService {
     e: DomainEvent,
     action: AuditRow["action"],
     changes: Record<string, FieldChange>,
+    label: string | null = null,
   ): AuditRow[] {
     const base = {
+      workspace: e.context?.workspace ?? null,
+      entityLabel: label,
       userId: actorNumericId(principal),
       userName: principal.name || principal.email || principal.id,
       entityType: "project" as const,

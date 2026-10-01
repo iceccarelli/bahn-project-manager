@@ -13,7 +13,7 @@ import { assertProductionConfig, cors, sameOriginForCookies, securityHeaders } f
 import { resolveIdentity } from "./identity";
 import { getServices } from "./services";
 import { closeDb } from "../db";
-import { canExport, isAdmin } from "../domain/permissions";
+import { canExport } from "../domain/permissions";
 import { registerPresenceRoutes, registerRealtimeGateway } from "../realtime/gateway";
 import { m, renderMetrics } from "../observability/metrics";
 
@@ -75,7 +75,8 @@ async function startServer() {
     try {
       if (!services) throw new Error("no database configured");
       await services.pool.query("SELECT 1");
-      res.status(200).json({ status: "ready" });
+      await services.pingShared();
+      res.status(200).json({ status: "ready", db: "ok", redis: process.env.REDIS_URL ? "ok" : "not-configured" });
     } catch {
       res.status(503).json({ status: "unavailable" });
     }
@@ -91,16 +92,16 @@ async function startServer() {
     registerPresenceRoutes(app, { presence: services.presence, store: services.store, onError: e => console.error("[presence]", e) });
   }
 
-  // Bulk export/import were reachable by anyone. They are privileged now.
+  // Export is privileged and workspace-scoped; there is no import route (it bypassed the domain pipeline).
   const requirePrincipal = (allow: (p: import("../domain/permissions").Principal) => boolean) =>
     async (req: express.Request, res: express.Response, next: express.NextFunction) => {
       const id = await resolveIdentity(req);
       if (!id) { res.status(401).json({ error: "unauthenticated" }); return; }
       if (!allow(id.principal)) { res.status(403).json({ error: "forbidden" }); return; }
+      res.locals.principal = id.principal; // handlers scope by it; they never re-derive identity
       next();
     };
   app.use("/api/export", requirePrincipal(canExport));
-  app.use("/api/import", requirePrincipal(isAdmin));
 
   registerStorageProxy(app);
   registerOAuthRoutes(app);
@@ -113,6 +114,8 @@ async function startServer() {
       createContext,
     })
   );
+  // an unknown API path is a 404, never the SPA shell answering 200 to a (possibly mutating) request
+  app.use("/api", (_req, res) => { res.status(404).json({ error: "not found" }); });
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
     /*

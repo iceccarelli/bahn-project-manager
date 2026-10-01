@@ -53,7 +53,7 @@ function AnswerBlock({
      *
      * A flex or grid child defaults to `min-width: auto`, which means it
      * refuses to shrink below its content. One audit entry whose value is
-     * "Projektblatt_G.011598624_Bruchenbr_cken_2026-08-23.pdf" — 52 characters
+     * "Projektblatt_G.999414489_Bruchenbr_cken_2026-08-23.pdf" — 52 characters
      * with nothing to break on — therefore widened the whole panel from the
      * inside. The reader got a horizontal scrollbar and an answer whose left
      * edge was off screen: "…derungshistorie, 0 davon kritisch."

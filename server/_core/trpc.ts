@@ -1,7 +1,7 @@
 import { NOT_ADMIN_ERR_MSG, UNAUTHED_ERR_MSG } from '@shared/const';
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
-import { ConflictError, DomainError } from "../domain/errors";
+import { AggregateConflictError, ConflictError, DomainError } from "../domain/errors";
 import { m } from "../observability/metrics";
 import type { TrpcContext } from "./context";
 
@@ -9,7 +9,7 @@ const t = initTRPC.context<TrpcContext>().create({
   transformer: superjson,
   errorFormatter({ shape, error }) {
     // Structured conflict payload for the client's merge/replace UI.
-    const conflict = error.cause instanceof ConflictError ? error.cause.info : undefined;
+    const conflict = error.cause instanceof ConflictError || error.cause instanceof AggregateConflictError ? error.cause.info : undefined;
     return { ...shape, data: { ...shape.data, ...(conflict ? { conflict } : {}) } };
   },
 });

@@ -1,4 +1,6 @@
 import { ReviewWorkspace } from "@/components/workspace/ReviewWorkspace";
+import { ServerDepartmentView } from "@/components/workspace/ServerDepartmentView";
+import { SERVER_MODE } from "@/realtime/serverApi";
 
 /**
  * The date column was headed "Datum" on a page titled "Projektvorstellungen",
@@ -9,6 +11,8 @@ import { ReviewWorkspace } from "@/components/workspace/ReviewWorkspace";
  * labels it "Prüfdatum", which is what it is.
  */
 export default function PsvItk() {
+  // Server mode: the same Project aggregate, filtered to this Gewerk — one data plane, one permission model.
+  if (SERVER_MODE) return <ServerDepartmentView department="ITK" title="PSV-ITK Prüfungen" subtitle="Übersicht der ITK-Prüfungen" prueferLabel="ITK-Prüfer" />;
   return (
     <ReviewWorkspace
       department="ITK"

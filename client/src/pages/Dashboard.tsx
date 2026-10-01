@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useMemo, useState } from 'react';
+import React, { lazy, Suspense, useState } from 'react';
 import { useReveal } from "@/hooks/useReveal";
 import { useNearViewport } from "@/hooks/useNearViewport";
 /*
@@ -19,19 +19,16 @@ const MapView = lazy(() =>
 import { GewerkePortfolio } from "@/components/dashboard/GewerkePortfolio";
 import { PortfolioRelief } from "@/components/dashboard/PortfolioRelief";
 import { PortfolioDiagnostics } from "@/components/dashboard/PortfolioDiagnostics";
-import {
-  agingOfOpenReviews,
-  dataQuality,
-  gewerkStandings,
-  reviewerConcentration,
-} from "@shared/portfolio-metrics";
-import { deriveProjectMetrics, percent } from '@shared/project-metrics';
+import { EMPTY_METRICS, percent } from '@shared/project-metrics';
+import { useLocalMapRows, usePortfolio, useProjectForDialog } from "@/hooks/usePortfolio";
+import ServerMap from "@/components/ServerMap";
+import { SERVER_MODE } from "@/realtime/serverApi";
 import { statusBadgeClass, statusPulseClass, TONE_APPEARANCE } from '@shared/status-appearance';
-import { bedarfHref, countBedarf, projectHref, requiredTones, stationHref } from '@shared/handlungsbedarf';
+import { bedarfHref, projectHref, stationHref } from '@shared/handlungsbedarf';
 import { Pie3D } from '@/components/dashboard/Pie3D';
 import { GewerkeCarousel } from '@/components/dashboard/GewerkeCarousel';
-import { APPROVED_STATUSES, normalizeReviewStatus, OPEN_STATUSES } from '@shared/review-status';
-import { formatGerman, toDate } from '@shared/date';
+import { normalizeReviewStatus } from '@shared/review-status';
+import { formatGerman } from '@shared/date';
 import { projectLinkNote, projectLinkUrl } from '@shared/project-link';
 import { useLocation } from 'wouter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -59,7 +56,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { useAllData, useAuditLog } from '@/hooks/useDataQuery';
+import { useActivityFeed } from '@/hooks/useAuditFeed';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
@@ -75,58 +72,6 @@ import { toast } from 'sonner';
  * GewerkePortfolio shows all fourteen.
  */
 
-const GEWERKE = [
-  "EEA", "ITK", "BS", "GA", "Energie", "HFT", "HKLS", 
-  "TBQ", "UM", "BIM", "LST", "Vermessung", 
-  "Baubetriebstechnologie", "Baubetriebsplanung"
-];
-
-/*
- * The reviewer roster is derived from the data, never listed by hand.
- *
- * It used to be a literal array of 37 entries. Measured against the shipped
- * data.json that list was wrong in two ways at once:
- *
- *   - 8 of the 44 reviewers in the data were missing from it — 985 review rows,
- *     Haberla 512, Colak 250, Wagner 83, Matteka 46, "BSB des BM´s" 33,
- *     Eda Pourabbas 32, Ates 23, Herr 6. Colak alone would have ranked third in
- *     the "Top Performer" list the page renders, and was absent from it.
- *   - "Zentrale" appeared twice, so two rows rendered with the same React key
- *     and its workload was counted twice in the panel total.
- *
- * A derived roster cannot drift from the data it describes.
- */
-function reviewerNames(projects: Project[]): string[] {
-  const seen = new Set<string>();
-  for (const p of projects) {
-    for (const r of p.reviews ?? []) {
-      const n = (r.prueferName ?? "").trim();
-      if (n) seen.add(n);
-    }
-  }
-  return [...seen].sort((a, b) => a.localeCompare(b, "de"));
-}
-
-interface Project {
-  id: number;
-  projektnummer: string | null;
-  station: string | null;
-  bahnhofsmanagement: string | null;
-  bahnhofsnummer: string | null;
-  streckennummer: string | null;
-  projektbeschreibung: string | null;
-  projektstand: string | null;
-  projektleiter: string | null;
-  terminProjektvorstellung: string | null;
-  kommentar: string | null;
-  projektLink: string | null;
-  reviews: Array<{
-    department: string;
-    status: string | null;
-    prueferName: string | null;
-    pruefDatum: string | null;
-  }>;
-}
 
 interface WorkloadItem {
   name: string;
@@ -149,296 +94,50 @@ export default function Dashboard() {
   const [, setLocation] = useLocation();
   const [mapAnchor, mapNear] = useNearViewport<HTMLDivElement>();
   const queryClient = useQueryClient();
-  const { data: allData, isLoading: dataLoading, isError: dataError } = useAllData();
-  const { data: auditEntries } = useAuditLog();
+  // ONE data shape for the page: the server's portfolio read model (server mode) or the same pure derivation over the
+  // demo's local rows. The page itself never aggregates a dataset — it renders finished figures.
+  const { data: view, isLoading: dataLoading, isError: dataError } = usePortfolio();
+  const auditEntries = useActivityFeed(8);
   const [selectedGewerke, setSelectedGewerke] = useState<string | null>(null);
   const [expandedFach, setExpandedFach] = useState<string | null>(null);
-  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const selectedProject = useProjectForDialog(selectedId);
+  // demo build only (the server build's map queries the server for exactly what is in view)
+  const localProjects = useLocalMapRows();
 
-  const projects: Project[] = allData?.projects || [];
-
-  // Every figure below comes from shared/project-metrics.ts, the same
-  // derivation Projects.tsx uses. Two reasons it moved out of this file:
-  //
-  //  1. "Abgeschlossen" was Math.round(totalProjects * 0.68) — a multiplier,
-  //     not a measurement. It read 883; the real figure is 573.
-  //  2. The remaining counters compared `r.status` to string literals, so
-  //     "Niederschrift erstellt (LP05-05-01-F31)" and the 3,306 other
-  //     annotated rows fell through every branch. normalizeReviewStatus maps
-  //     them onto the canonical 12 first.
-  const metrics = useMemo(() => deriveProjectMetrics(projects), [projects]);
+  const metrics = view?.metrics ?? EMPTY_METRICS;
   const totalProjects = metrics.total;
   const openReviews = metrics.openReviews;
   const criticalProjects = metrics.blocked;
   const completedProjects = metrics.completed;
-  const totalReviews = metrics.totalReviews;
+  const totalReviews = view?.totalReviews ?? 0;
   const decidedReviews = metrics.approvedReviews + metrics.blockedReviews;
   const successRate = decidedReviews > 0 ? (metrics.approvedReviews / decidedReviews) * 100 : 0;
   const avgReviewsPerProject = totalProjects > 0 ? totalReviews / totalProjects : 0;
+  const delayedProjects = view?.delayedProjects ?? 0;
 
-  // "Delayed" = presentation date is in the past but at least one review is still open.
-  const today = new Date();
-  // Was `r.status === "offen" || r.status === "in Bearbeitung"`, which is a
-  // third definition of "open" on a page that already had two. It missed
-  // Nachforderung and prüffähig entirely and every annotated variant, and
-  // reported 304 where the canonical OPEN_STATUSES gives 347. The date also
-  // went through `new Date()`, which parses a date-only string as UTC midnight
-  // and can shift a whole day west of Greenwich; toDate() is timezone-safe.
-  today.setHours(0, 0, 0, 0);
-  const delayedProjects = projects.filter(p => {
-    const d = toDate(p.terminProjektvorstellung);
-    const stillOpen = p.reviews.some(r => {
-      const s = normalizeReviewStatus(r.status);
-      return s !== null && (OPEN_STATUSES as readonly string[]).includes(s);
-    });
-    return d !== null && d < today && stillOpen;
-  }).length;
-
-  /*
-   * Every Bahnhofsmanagement, not the largest five.
-   *
-   * There are eight, they fit, and the three that were cut — Kaiserslautern,
-   * Mainz, Gießen — are 288 projects. A regional panel that hides three of
-   * eight regions answers "where is the work" wrongly for everyone who sits in
-   * one of them. The palette therefore has eight entries rather than five with
-   * a modulo, which silently gave the sixth region the first one's colour.
-   */
-  const regionDistribution = (() => {
-    const counts: Record<string, number> = {};
-    for (const p of projects) {
-      const region = (p.bahnhofsmanagement ?? "").trim();
-      if (region) counts[region] = (counts[region] || 0) + 1;
-    }
-    const palette = [
-      "#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ef4444",
-      "#0891b2", "#db2777", "#65a30d",
-    ];
-    return Object.entries(counts)
-      .sort((a, b) => b[1] - a[1])
-      .map(([region, count], i) => ({ region, count, color: palette[i % palette.length] }));
-  })();
+  // Every Bahnhofsmanagement, not the largest five (see git history); the unassigned remainder is stated.
+  const REGION_PALETTE = ["#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ef4444", "#0891b2", "#db2777", "#65a30d"];
+  const regionDistribution = (view?.regions ?? []).map((r, i) => ({ ...r, color: REGION_PALETTE[i % REGION_PALETTE.length]! }));
   const regionCount = regionDistribution.length;
-  /* Stated, not hidden: 126 projects carry no Bahnhofsmanagement at all, and a
-     panel whose bars do not sum to the total has to say why. */
   const regionAssigned = regionDistribution.reduce((a, r) => a + r.count, 0);
 
-  // `counts[review.status]` keyed on the raw string, so statusHex() fell
-  // through to its neutral fallback: TBQ's 80 "Niederschrift erstellt
-  // (LP05-05-01-F31)" rows rendered in exactly the grey used for the 688
-  // "nicht erforderlich" rows in the same pie — a completed sign-off painted
-  // as irrelevant. That is verbatim the regression status-appearance.ts was
-  // written to make impossible.
-  /*
-   * Per-Gewerk tone bands, from the same counter as the portfolio donut.
-   *
-   * It used to build a raw status histogram here and let the chart fold it —
-   * two foldings of the same data, and the chart's copy had no idea which
-   * projects were behind a band, so a slice inside „Status-Verteilung für EEA"
-   * carried a project count of zero and a link to the whole portfolio.
-   *
-   * `countTones(projects, gewerk)` scopes both the count and the predicate to
-   * the department in one place, so the figure on a slice and the set its link
-   * produces cannot disagree.
-   */
-  const gewerkeStatusData = GEWERKE.map((gew) => {
-    const { slices, required, notRequired } = requiredTones(projects, gew);
-    return { name: gew, slices, required, notRequired };
-  });
-
-  /*
-   * The honest per-Gewerk figures.
-   *
-   * `today` is pinned per render rather than read inside the derivation: an
-   * aging bucket that shifts between two calls in the same paint makes the
-   * panels disagree with each other for no reason a reader could ever explain.
-   */
-  const nowMs = useMemo(() => Date.now(), []);
-  const standings = useMemo(
-    () => gewerkStandings(projects, GEWERKE, nowMs),
-    [projects, nowMs],
-  );
-  const aging = useMemo(() => agingOfOpenReviews(projects, nowMs), [projects, nowMs]);
-  const concentration = useMemo(() => reviewerConcentration(projects), [projects]);
-  const quality = useMemo(() => dataQuality(projects), [projects]);
-
-  /* One line, and the whole page arrives a section at a time. Decoration
-     only — see client/src/lib/motion.ts. */
-  const revealRef = useReveal(projects.length);
-
-  /* The per-Gewerk slices moved into GewerkeCarousel, which owns which Gewerk
-     is on screen. `selectedGewerke` survives as the pin the carousel honours. */
-
-  /*
-   * Workload per reviewer.
-   *
-   * Three defects, all measured:
-   *   - the roster was a hardcoded list missing 8 of the 44 reviewers in the
-   *     data (985 rows), so Colak — who ranks third by volume — never appeared
-   *     in "Top Performer" at all;
-   *   - `includes(r.status)` on raw strings never counted the 80
-   *     "Niederschrift erstellt (LP05-05-01-F31)" rows as completed;
-   *   - the timeline row carried no department, so two Gewerke signed on the
-   *     same day for the same project collapsed onto one React key and 1,509
-   *     rows were dropped from the panel.
-   */
-  const fachWorkload: WorkloadItem[] = useMemo(() => {
-    const byName = new Map<string, WorkloadItem>();
-    for (const name of reviewerNames(projects)) {
-      byName.set(name, { name, incoming: 0, completed: 0, total: 0, timeline: [] });
-    }
-    for (const p of projects) {
-      for (const r of p.reviews ?? []) {
-        const name = (r.prueferName ?? "").trim();
-        const item = name ? byName.get(name) : undefined;
-        if (!item) continue;
-        const status = normalizeReviewStatus(r.status);
-        if (status && (OPEN_STATUSES as readonly string[]).includes(status)) item.incoming++;
-        if (status && (APPROVED_STATUSES as readonly string[]).includes(status)) item.completed++;
-        if (r.pruefDatum) {
-          item.timeline.push({
-            date: r.pruefDatum,
-            action: status ?? r.status ?? "Update",
-            project: p.station || p.projektnummer || "Ohne Station",
-            department: r.department ?? "",
-            projectId: p.id,
-          });
-        }
-      }
-    }
-    return [...byName.values()]
-      .map((f) => ({
-        ...f,
-        total: f.incoming + f.completed,
-        timeline: f.timeline.sort((a, b) => b.date.localeCompare(a.date)),
-      }))
-      .filter((f) => f.total > 0)
-      .sort((a, b) => b.total - a.total);
-  }, [projects]);
-
-  /*
-   * Status distribution over every review row.
-   *
-   * This was five hardcoded buckets matched by exact string. Measured against
-   * the shipped data: 15,646 non-null review rows, of which it plotted 14,587
-   * and silently dropped 1,059 — Projektkonfig. 474, Prüfung erfolgt 229,
-   * Niederschrift erstellt 180 + 80 annotated, zurückgestellt 44,
-   * Projektkonfiguration 33, prüffähig 19. Every one of the 260 Niederschrift
-   * sign-offs was missing from a chart headed "Alle Gewerke". It also painted
-   * Nachforderung red, while status-appearance.ts gives it the amber
-   * `attention` tone.
-   *
-   * Now: one bucket per canonical status, coloured by the same table the
-   * badges use, and a row whose status cannot be mapped is counted as
-   * unbekannt instead of vanishing.
-   */
-  /*
-   * The slices come from shared/handlungsbedarf.ts now, not from here.
-   *
-   * The grouping was already right — twelve statuses onto eight tones, so
-   * „Zustimmung erteilt" and „Niederschrift erstellt" are one green band
-   * rather than two slices sharing a colour. What was missing is that nothing
-   * else could reach the computation. The moment a slice became clickable, the
-   * Projekte page needed the same definition of „which rows are in this band"
-   * to decide what to list, and a second copy of that would drift on the day
-   * one side learned a status the other had not.
-   *
-   * `countTones` returns both the row count that sizes the slice and the
-   * number of distinct projects those rows sit in, so the landing page can
-   * reconcile the two on screen.
-   *
-   * Rows whose status is outside the vocabulary have no tone and therefore no
-   * band and no filter to land on. They are counted and stated in the
-   * subtitle rather than drawn as a slice that goes nowhere.
-   */
-  const { toneSlices, unmappedStatusRows, totalStatusRows, notRequiredRows } = useMemo(() => {
-    const { slices, required, notRequired } = requiredTones(projects);
-    let unmapped = 0;
-    for (const p of projects) {
-      for (const r of p.reviews ?? []) {
-        if (!r.status) continue;
-        if (normalizeReviewStatus(r.status) === null) unmapped++;
-      }
-    }
-    return {
-      toneSlices: slices,
-      unmappedStatusRows: unmapped,
-      totalStatusRows: required,
-      notRequiredRows: notRequired,
-    };
-  }, [projects]);
-
-  // Fixed: Proper typing for upcomingDeadlines (no more union type errors)
-  /**
-   * Reviews that carry a real Prüfdatum and are still open, soonest first.
-   *
-   * This used to be `projects.filter(has any pruefDatum).slice(0, 12)` with
-   * `deadline: criticalReview?.pruefDatum || "2026-06-15"` and
-   * `reviewer: ... || "Unbekannt"`. Three separate problems: the list was not
-   * sorted by date at all, so it showed twelve arbitrary projects rather than
-   * the nearest deadlines; a project whose critical review had no date got a
-   * hardcoded one, which is why every row read 2026-06-15; and an unknown
-   * reviewer was rendered as the literal word "Unbekannt".
-   */
-  const upcomingDeadlines = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const rows: Array<{
-      id: number;
-      station: string;
-      department: string;
-      due: Date;
-      dueLabel: string;
-      status: string;
-      reviewer: string | null;
-      overdue: boolean;
-    }> = [];
-    for (const p of projects) {
-      for (const r of p.reviews || []) {
-        const status = normalizeReviewStatus(r.status);
-        if (!status || !OPEN_STATUSES.includes(status)) continue;
-        const due = toDate(r.pruefDatum);
-        if (!due) continue; // no date on file — it is not a deadline
-        rows.push({
-          id: p.id,
-          station: p.station || p.projektnummer || `Projekt ${p.id}`,
-          department: r.department,
-          due,
-          dueLabel: due.toLocaleDateString("de-DE"),
-          status,
-          reviewer: r.prueferName?.trim() || null,
-          overdue: due < today,
-        });
-      }
-    }
-    return rows.sort((a, b) => a.due.getTime() - b.due.getTime()).slice(0, 12);
-  }, [projects]);
-
-  /**
-   * Real alerts, replacing five invented notifications ("Projekt Bad Hersfeld
-   * - Nachforderung von ITK", "vor 12 Min", and three more — two of which
-   * named stations outside RB Mitte entirely). Every figure here is counted
-   * from the review rows.
-   */
-  /*
-   * The four buckets now come from shared/handlungsbedarf.ts.
-   *
-   * They were counted here, inline, in a useMemo nothing else could reach.
-   * The moment the badges became links — "show me the 558" — a second
-   * implementation of "overdue" would have had to exist on the Projekte page
-   * to decide which projects to list, and two implementations drift the day
-   * one of them learns about a status the other has not. A badge reading 558
-   * over a page listing a different set is worse than a badge that links
-   * nowhere, because it looks like it worked.
-   *
-   * The module returns the row count (the workload, unchanged: 558/132/97/111)
-   * and the number of distinct projects those rows sit in, so the landing page
-   * can reconcile the two on screen instead of leaving a reader to notice.
-   */
-  const handlungsbedarf = useMemo(() => {
-    const midnight = new Date();
-    midnight.setHours(0, 0, 0, 0);
-    return countBedarf(projects, midnight.getTime());
-  }, [projects]);
+  const gewerkeStatusData = view?.gewerke ?? [];
+  const standings = view?.standings ?? [];
+  const aging = view?.aging;
+  const concentration = view?.concentration;
+  const quality = view?.quality;
+  const revealRef = useReveal(totalProjects);
+  const fachWorkload: WorkloadItem[] = view?.workload ?? [];
+  const toneSlices = view?.tones.slices ?? [];
+  const unmappedStatusRows = view?.tones.unmappedStatusRows ?? 0;
+  const totalStatusRows = view?.tones.required ?? 0;
+  const notRequiredRows = view?.tones.notRequired ?? 0;
+  const upcomingDeadlines = (view?.upcoming ?? []).map(u => ({
+    id: u.projectId, station: u.station, department: u.department, due: new Date(u.due),
+    dueLabel: new Date(u.due).toLocaleDateString("de-DE"), status: u.status, reviewer: u.reviewer, overdue: u.overdue,
+  }));
+  const handlungsbedarf = view?.bedarf ?? [];
 
   const relativeTime = (iso: string): string => {
     const diff = Date.now() - new Date(iso).getTime();
@@ -489,7 +188,7 @@ export default function Dashboard() {
     );
   }
 
-  if (dataError || !allData) {
+  if (dataError || !view) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center bg-background p-6">
         <Card className="max-w-md border-2 border-destructive/30">
@@ -647,14 +346,24 @@ export default function Dashboard() {
                   </div>
                 }
               >
+                {SERVER_MODE ? (
+                  <ServerMap
+                    filters={{}}
+                    initialCenter={{ lat: 51.1657, lng: 10.4515 }}
+                    initialZoom={6}
+                    className="relative h-full w-full"
+                    onProjectSelect={(id) => setLocation(projectHref(id))}
+                  />
+                ) : (
                 <MapView
-                  projects={projects}
+                  projects={localProjects}
                   initialCenter={{ lat: 51.1657, lng: 10.4515 }}
                   initialZoom={6}
                   className="relative h-full w-full"
                   onProjectSelect={(id) => setLocation(projectHref(id))}
                   onStationSelect={(station) => setLocation(stationHref(station))}
                 />
+                )}
               </Suspense>
             ) : (
               <div className="grid h-full w-full place-items-center rounded-lg border border-border bg-muted/30 px-4 text-center text-2xs text-muted-foreground">
@@ -738,11 +447,11 @@ export default function Dashboard() {
             among the six. Every number below is derived in
             shared/portfolio-metrics.ts and agrees with the Gewerk tabs.
           */}
-          <GewerkePortfolio standings={standings} projects={projects} audit={auditEntries || []} />
+          <GewerkePortfolio standings={standings} />
 
           {/* Aging, concentration and the trustworthiness of the rows every
               other panel is built on. */}
-          <PortfolioDiagnostics aging={aging} concentration={concentration} quality={quality} />
+          {aging && concentration && quality && <PortfolioDiagnostics aging={aging} concentration={concentration} quality={quality} />}
 
           {/*
             Detaillierte Ansicht per Gewerke — a carousel, not an empty state.
@@ -923,7 +632,7 @@ export default function Dashboard() {
                     key={`${d.id}-${d.department}`}
                     type="button"
                     onClick={() =>
-                      setSelectedProject(projects.find((pr) => pr.id === d.id) || null)
+                      setSelectedId(d.id)
                     }
                     className="flex w-full items-start gap-2.5 rounded-xl border bg-card p-2.5 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   >
@@ -1209,7 +918,7 @@ export default function Dashboard() {
       </div>
 
       {/* PROJECT DETAIL MODAL */}
-      <Dialog open={!!selectedProject} onOpenChange={() => setSelectedProject(null)}>
+      <Dialog open={!!selectedProject} onOpenChange={() => setSelectedId(null)}>
         <DialogContent className="max-w-5xl max-h-[90vh] overflow-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-3">

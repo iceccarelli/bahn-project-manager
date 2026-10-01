@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { planNotification } from "./notificationPolicy";
 import { event } from "../../client/src/realtime/testUtils";
 
-const p = { id: 481, projektnummer: "G.011570020", station: "Koblenz Hbf" };
+const p = { id: 481, projektnummer: "G.992031294", station: "Koblenz Hbf" };
 const plan = (changes: Record<string, { from: string | null; to: string | null }>, over = {}) => planNotification(event(481, 2, changes, over), p);
 
 describe("notification policy", () => {

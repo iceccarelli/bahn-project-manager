@@ -29,6 +29,17 @@ export interface ConnectionOptions {
    * On a reconnect the status is `resynchronizing` until it settles.
    */
   onSync?(hello: { headSeq: number | null; reconnecting: boolean }): Promise<number>;
+  /**
+   * Change the live stream's scopes without reconnecting (POST /api/realtime/scopes). The server answers on the
+   * stream with a `scopes` frame once the new channels are CONFIRMED; only then is an added scope considered live.
+   */
+  postScopes?(req: { streamId: string; requestId: string; add: string[]; remove: string[] }): Promise<{ ok: boolean; status: number }>;
+  /** the server collapsed a burst (e.g. notifications) into a hint: re-read the durable source */
+  onHint?(kind: string): void;
+  /** called after added scopes are confirmed live: rows subscribed late must be reconciled with the server */
+  onScopesLive?(added: string[]): void | Promise<void>;
+  /** how many scopes go in the connect URL; the rest are added right after hello */
+  initialScopeLimit?: number;
   heartbeatMs?: number;
   backoff?: { baseMs: number; maxMs: number };
   random?: () => number;
@@ -40,6 +51,14 @@ export class RealtimeConnection {
   private status: ConnectionStatus;
   private listeners = new Set<(s: ConnectionStatus) => void>();
   private scopes: string[] = [];
+  /** what the SERVER currently holds for this stream (confirmed), and its id */
+  private live = new Set<string>();
+  private denied = new Set<string>();
+  private streamId: string | null = null;
+  private acks = new Map<string, (f: { accepted: string[]; denied: string[]; removed: string[]; error?: string }) => void>();
+  private reconciling = false;
+  private reconcileAgain = false;
+  private reqSeq = 0;
   private abort: AbortController | null = null;
   private stopped = true;
   private hadConnection = false;
@@ -69,8 +88,53 @@ export class RealtimeConnection {
   setScopes(scopes: string[]) {
     const next = [...new Set(scopes)].sort();
     if (next.join() === this.scopes.join()) return;
+    const hadNone = this.scopes.length === 0;
     this.scopes = next;
-    if (!this.stopped) { this.abort?.abort(); this.hadConnection = true; /* re-subscribe with new scope set */ }
+    if (this.stopped) return;
+    // Live stream + a way to change it: adjust in place (no reconnect, no hello, no resync).
+    if (this.streamId && this.o.postScopes && !hadNone && this.status.state !== "reconnecting" && this.status.state !== "offline") { void this.reconcile(); return; }
+    // otherwise the next (re)connect carries the whole set
+    if (hadNone || !this.streamId || !this.o.postScopes) { this.abort?.abort(); this.hadConnection = this.hadConnection || !hadNone; }
+  }
+
+  /** Bring the server's confirmed scopes in line with the wanted ones. Serialized; falls back to a reconnect on any failure. */
+  private async reconcile(): Promise<void> {
+    if (this.reconciling) { this.reconcileAgain = true; return; }
+    this.reconciling = true;
+    try {
+      do {
+        this.reconcileAgain = false;
+        const streamId = this.streamId;
+        if (!streamId || !this.o.postScopes) return;
+        const want = new Set(this.scopes);
+        const add = [...want].filter(x => !this.live.has(x) && !this.denied.has(x));
+        const remove = [...this.live].filter(x => !want.has(x));
+        for (let i = 0; i < Math.max(add.length, remove.length); i += 100) {
+          const a = add.slice(i, i + 100), r = remove.slice(i, i + 100);
+          const requestId = `r${++this.reqSeq}`;
+          const ack = new Promise<{ accepted: string[]; denied: string[]; removed: string[]; error?: string } | null>(res => {
+            this.acks.set(requestId, f => res(f));
+            setTimeout(() => { if (this.acks.delete(requestId)) res(null); }, 6000);
+          });
+          let post: { ok: boolean; status: number };
+          try { post = await this.o.postScopes({ streamId, requestId, add: a, remove: r }); } catch { post = { ok: false, status: 0 }; }
+          if (!post.ok) { this.acks.delete(requestId); this.abort?.abort(); return; } // stream unknown/unreachable: reconnect with the full set
+          const f = await ack;
+          if (!f || f.error === "subscribe failed") { this.abort?.abort(); return; }
+          for (const x of f.accepted) this.live.add(x);
+          for (const x of f.removed) this.live.delete(x);
+          for (const x of f.denied) this.denied.add(x);
+          if (f.accepted.length) await Promise.resolve(this.o.onScopesLive?.(f.accepted)).catch(() => {});
+        }
+      } while (this.reconcileAgain);
+    } finally { this.reconciling = false; }
+  }
+
+  /** scopes for the connect URL: everything that is not a per-row scope first, then rows up to the limit */
+  private initialScopes(): string[] {
+    const limit = this.o.initialScopeLimit ?? 40;
+    const base = this.scopes.filter(x => !x.startsWith("project:")), rows = this.scopes.filter(x => x.startsWith("project:"));
+    return [...base, ...rows].slice(0, Math.max(limit, base.length));
   }
 
   start() {
@@ -117,12 +181,13 @@ export class RealtimeConnection {
         continue;
       }
       if (this.scopes.length === 0) { await this.sleep(200); continue; }
+      this.streamId = null; this.live.clear(); this.denied.clear(); this.acks.clear();
       const reconnecting = this.hadConnection;
       this.set(reconnecting ? "reconnecting" : "connecting");
       const abort = (this.abort = new AbortController());
       try {
         const headers = { Accept: "text/event-stream", ...(await this.o.getHeaders?.()) };
-        const res = await (this.o.fetchImpl ?? fetch)(`${this.o.url}?scopes=${encodeURIComponent(this.scopes.join(","))}`, {
+        const res = await (this.o.fetchImpl ?? fetch)(`${this.o.url}?scopes=${encodeURIComponent(this.initialScopes().join(","))}`, {
           headers, signal: abort.signal, credentials: "include", cache: "no-store",
         });
         if (!res.ok || !res.body) {
@@ -157,7 +222,15 @@ export class RealtimeConnection {
       case "hello": {
         this.hadConnection = true;
         let headSeq: number | null = null;
-        try { headSeq = (JSON.parse(f.data) as { headSeq?: number | null }).headSeq ?? null; } catch { /* keep null */ }
+        try {
+          const h = JSON.parse(f.data) as { headSeq?: number | null; streamId?: string; scopes?: string[]; denied?: string[] };
+          headSeq = h.headSeq ?? null;
+          this.streamId = h.streamId ?? null;
+          this.live = new Set(h.scopes ?? []);
+          this.denied = new Set(h.denied ?? []);
+        } catch { /* keep null */ }
+        // scopes beyond the connect-URL limit (and anything wanted since) are added without another round of reconnecting
+        if (this.streamId && this.o.postScopes) void this.reconcile();
         if (reconnecting && this.o.onSync) {
           this.set("resynchronizing");
           let n = 0;
@@ -173,6 +246,14 @@ export class RealtimeConnection {
       case "domain": {
         const parsed = DomainEventSchema.safeParse(JSON.parse(f.data));
         if (parsed.success) this.o.onEvent(parsed.data);
+        break;
+      }
+      case "hint": {
+        try { this.o.onHint?.((JSON.parse(f.data) as { kind: string }).kind); } catch { /* ignore */ }
+        break;
+      }
+      case "scopes": {
+        try { const d = JSON.parse(f.data) as { requestId: string; accepted: string[]; denied: string[]; removed: string[]; error?: string }; this.acks.get(d.requestId)?.(d); this.acks.delete(d.requestId); } catch { /* ignore */ }
         break;
       }
       case "resync":

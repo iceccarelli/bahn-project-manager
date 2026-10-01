@@ -49,7 +49,7 @@ describe("parseUnavailable", () => {
   });
 
   it("returns nothing for a note that is not an availability constraint", () => {
-    expect(parseUnavailable("wird Mittwoch angemeldet (Alexandra Gartmann)")).toEqual([]);
+    expect(parseUnavailable("wird Mittwoch angemeldet (Mara Morwerth)")).toEqual([]);
     expect(parseUnavailable(null)).toEqual([]);
   });
 });

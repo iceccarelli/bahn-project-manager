@@ -2,7 +2,7 @@
  * The text every outgoing mail and Teams message starts with.
  *
  * Before this, a mail button produced a subject and an empty body: the
- * recipient got "Projekt G.011540063 – Langenselbold" and a blank page, and the
+ * recipient got "Projekt G.992322386 – Langenselbold" and a blank page, and the
  * sender had to retype the context they were just looking at. Worse, nothing in
  * the message said where it came from, so a reply landed in a thread with no
  * way back to the record.
@@ -43,7 +43,7 @@ export interface MessageContext extends MessageSubject {
 const clean = (v: unknown): string => String(v ?? "").replace(/\s+/g, " ").trim();
 
 /**
- * `Projekt G.011540063 – Langenselbold – ITK`
+ * `Projekt G.992322386 – Langenselbold – ITK`
  *
  * Projektnummer first because that is what a recipient searches for, and it is
  * what makes the subject unique: 41 stations carry more than one project.

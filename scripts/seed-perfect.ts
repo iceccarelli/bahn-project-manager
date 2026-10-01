@@ -15,6 +15,14 @@ import { toDate } from "../shared/date";
 import { ProjectSchema } from "../shared/validation";
 import { SYNC_VERSION } from "../shared/const";
 
+// Operator tool that writes outside the domain pipeline (no audit, no events, no versioning, no read models).
+// Never against a production database unless explicitly acknowledged.
+if (process.env.NODE_ENV === "production" && process.env.I_UNDERSTAND_THIS_BYPASSES_THE_DOMAIN_PIPELINE !== "1") {
+  console.error("refusing to run in production: this script bypasses audit/events/versioning (see docs/data-plane.md)");
+  process.exit(2);
+}
+
+
 const DATA_JSON_PATH = path.resolve("public/data.json");
 
 async function seedPerfect() {
@@ -51,7 +59,7 @@ async function seedPerfect() {
     }
 
     // Identity is `id`, NOT `projektnummer`. projektnummer is not unique — in
-    // client/public/data.json "G.011511006" alone appears on 48 projects — and
+    // client/public/data.json "G.993404401" alone appears on 48 projects — and
     // 15 rows have none at all, so matching on it collapsed distinct projects
     // into one another.
     const [existing] = await db.select().from(projects).where(eq(projects.id, projectId)).limit(1);

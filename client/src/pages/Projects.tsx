@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useCallback, useEffect } from "react";
+import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useVirtualRows } from "@/hooks/useVirtualRows";
 import { useReveal } from "@/hooks/useReveal";
 import { useLocation, useSearch as useRouteSearch } from "wouter";
 
@@ -8,6 +9,7 @@ import {
 import { useProjects, useFilters, type Project, type Review } from "@/hooks/useDataQuery";
 import { useProjectsPageExtras } from "@/hooks/useProjectsPage";
 import { SERVER_MODE } from "@/realtime/serverApi";
+import { useRowScopes } from "@/realtime/serverProjects";
 import ConnectionBadge from "@/realtime/ConnectionBadge";
 import { ServerPager } from "@/realtime/ServerPager";
 import { WorkspacePresence } from "@/realtime/presence";
@@ -32,6 +34,7 @@ import {
 import type { StatusTone } from "@shared/status-appearance";
 import { toast } from "sonner";
 import { MapView, type StationSelection } from "@/components/Map";
+import ServerMap from "@/components/ServerMap";
 import { ProjectDetailDialog } from "@/components/ProjectDetailDialog";
 import { documentFilename } from "@shared/generated-stamp";
 import { useAuditTrail } from "@/hooks/useAuditTrail";
@@ -141,15 +144,17 @@ export default function Projects() {
   const [toneFocus, setToneFocus] = useState<StatusTone | null>(null);
   /** ?gewerk=GA — set when the slice came from one Gewerk's own donut. */
   const [toneGewerk, setToneGewerk] = useState<string | null>(null);
-  const [region, setRegion] = useState<string>("");
-  const [projektleiter, setProjektleiter] = useState<string>("");
-  const [pruefer, setPruefer] = useState<string>("");
-  const [status, setStatus] = useState<string>("");
-  const [department, setDepartment] = useState<string>("");
+  /* Filter state lives in the URL (?region=…&status=…): a result set is a link you can share, bookmark and reload. */
+  const urlParam = (k: string) => (typeof window === "undefined" ? "" : (new URLSearchParams(window.location.search).get(k) ?? ""));
+  const [region, setRegion] = useState<string>(() => urlParam("region"));
+  const [projektleiter, setProjektleiter] = useState<string>(() => urlParam("leiter"));
+  const [pruefer, setPruefer] = useState<string>(() => urlParam("pruefer"));
+  const [status, setStatus] = useState<string>(() => urlParam("status"));
+  const [department, setDepartment] = useState<string>(() => urlParam("dept"));
   const [showFilters, setShowFilters] = useState(false);
   const [expandedDepts, setExpandedDepts] = useState<string[]>([]);
-  const [sortBy, setSortBy] = useState("id");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [sortBy, setSortBy] = useState(() => urlParam("sort") || "id");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">(() => (urlParam("dir") === "asc" ? "asc" : "desc"));
   const [, setLocation] = useLocation();
   const routeSearch = useRouteSearch();
   const { recordDocument } = useAuditTrail();
@@ -174,6 +179,45 @@ export default function Projects() {
   const { data, isLoading, applyEdit, applyReviewEdit } = projectsQuery;
   // paging only exists in server mode (cursor pages); the local plane holds everything in memory
   const pager = projectsQuery as unknown as { hasNextPage?: boolean; isFetchingNextPage?: boolean; fetchNextPage?: () => void };
+
+  // keyboard: "/" jumps to the search box (unless you are already typing somewhere)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "/" || e.ctrlKey || e.metaKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.closest("input, textarea, select, [contenteditable='true']"))) return;
+      e.preventDefault();
+      document.getElementById("projects-search")?.focus();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+
+  // mirror the filters into the address bar (replaceState: no history entry per keystroke, other params untouched)
+  useEffect(() => {
+    const u = new URL(window.location.href);
+    const set = (k: string, v: string, dflt = "") => { if (v && v !== dflt) u.searchParams.set(k, v); else u.searchParams.delete(k); };
+    set("q", search); set("region", region); set("leiter", projektleiter); set("pruefer", pruefer); set("status", status); set("dept", department);
+    set("sort", sortBy, "id"); set("dir", sortDir, "desc");
+    const next = `${u.pathname}${u.search}`;
+    if (next !== `${window.location.pathname}${window.location.search}`) window.history.replaceState(window.history.state, "", next);
+  }, [search, region, projektleiter, pruefer, status, department, sortBy, sortDir]);
+
+  /* Table virtualization: the DOM holds the rows near the viewport, not every loaded row. */
+  const tableRows: Project[] = data?.projects ?? [];
+  const tableScrollRef = useRef<HTMLDivElement>(null);
+  const vrows = useVirtualRows(tableScrollRef, {
+    count: tableRows.length,
+    getKey: i => tableRows[i]?.id ?? i,
+    headerRows: expandedDepts.length > 0 ? 2 : 1,
+    headerHeight: expandedDepts.length > 0 ? 84 : 48,
+  });
+  // fanout ≈ relevant recipients: live-subscribe only the rows on screen (no-op without the realtime provider)
+  useRowScopes(useMemo(() => vrows.items.map(vi => tableRows[vi.index]?.id).filter((x): x is number => typeof x === "number"), [vrows.items, tableRows]));
+  // cursor paging driven by the scroll position: ask for the next page when the window nears the loaded end
+  useEffect(() => {
+    if (pager.hasNextPage && !pager.isFetchingNextPage && vrows.lastIndex >= tableRows.length - 15 && tableRows.length > 0) pager.fetchNextPage?.();
+  }, [vrows.lastIndex, tableRows.length, pager.hasNextPage, pager.isFetchingNextPage, pager]);
 
   const { data: filterOptions } = useFilters();
   const homeWorkspace = useHomeWorkspace();
@@ -728,11 +772,13 @@ export default function Projects() {
           <span>
             <span className="font-semibold text-foreground">
               {(viewMode === "cards" ? visibleProjects.length : data.total).toLocaleString("de-DE")}
+              {/* the exact total is a separate query: until it arrives, show the loaded range honestly */}
+              {viewMode !== "cards" && (data as { totalExact?: boolean }).totalExact === false ? "+" : ""}
             </span>{" "}
             {(viewMode === "cards" ? visibleProjects.length : data.total) === 1
               ? "Projekt"
               : "Projekte"}{" "}
-            gefunden
+            {viewMode !== "cards" && (data as { totalExact?: boolean }).totalExact === false ? "geladen" : "gefunden"}
             {stationFocus && viewMode === "cards" && (
               <span className="ml-1">von {data.total.toLocaleString("de-DE")} gefilterten</span>
             )}
@@ -796,8 +842,8 @@ export default function Projects() {
           <>
             {/* TABLE VIEW */}
             {viewMode === "table" && (
-              <div className="overflow-x-auto overflow-y-auto max-h-[75vh]">
-                <table className="w-full border-collapse text-2xs">
+              <div ref={tableScrollRef} className="overflow-x-auto overflow-y-auto max-h-[75vh]" data-testid="projects-scroll">
+                <table className="w-full border-collapse text-2xs" {...vrows.tableProps}>
                   <thead className="bg-white dark:bg-zinc-950 sticky top-0 z-20 border-b">
                     <tr>
                       <th className="sticky left-0 z-30 w-[52px] min-w-[52px] whitespace-nowrap border-b bg-white px-3 py-3 text-left font-semibold text-muted-foreground dark:bg-zinc-950">Nr.</th>
@@ -853,11 +899,14 @@ export default function Projects() {
                       </tr>
                     )}
                   </thead>
-                  <TableBody ref={streamRef}>
-                    {data?.projects.map((project: Project) => {
+                  <TableBody ref={streamRef} {...vrows.bodyProps}>
+                    {vrows.paddingTop > 0 && <tr data-spacer="" style={{ height: vrows.paddingTop }}><td colSpan={30} style={{ padding: 0, border: 0 }} /></tr>}
+                    {vrows.items.map((vi) => {
+                      const project = tableRows[vi.index];
+                      if (!project) return null;
                       const reviews = project.reviews || [];
                       return (
-                        <tr key={project.id} className="border-b hover:bg-muted/30 transition-colors group">
+                        <tr key={project.id} {...vrows.rowProps(vi.index)} className="border-b hover:bg-muted/30 transition-colors group">
                           <td className="sticky left-0 z-10 w-[52px] min-w-[52px] bg-white px-3 py-3 font-mono font-medium text-muted-foreground dark:bg-zinc-950">
                             {project.id}
                           </td>
@@ -981,6 +1030,7 @@ export default function Projects() {
                         </tr>
                       );
                     })}
+                    {vrows.paddingBottom > 0 && <tr data-spacer="" style={{ height: vrows.paddingBottom }}><td colSpan={30} style={{ padding: 0, border: 0 }} /></tr>}
                   </TableBody>
                 </table>
               </div>
@@ -1030,7 +1080,7 @@ export default function Projects() {
                         230px row: as a flex row they overflowed the card, and
                         once both were allowed to shrink they split the width
                         evenly and BOTH became unreadable — "Zustimmun…" next to
-                        "G.011800063.01.…". A Projektnummer is an identifier;
+                        "G.990106916.01.…". A Projektnummer is an identifier;
                         half of one is worth nothing. Stacked, the status keeps
                         its full label and the number wraps in full.
                       */}
@@ -1113,21 +1163,22 @@ export default function Projects() {
                 Height is now viewport-relative: 600 px of fixed map on a
                 667 px-tall phone left no page around it.
               */
-              <>
-              {SERVER_MODE && (
-                <p className="mb-2 text-xs text-muted-foreground" role="note">
-                  Die Karte zeigt die bereits geladenen Projekte ({data?.projects.length ?? 0}). Viewport-Abfragen für den gesamten Bestand sind im Servermodus noch nicht angebunden.
-                </p>
-              )}
+              SERVER_MODE ? (
+                <ServerMap
+                  className="relative h-[65vh] min-h-[380px] w-full sm:h-[560px] lg:h-[600px]"
+                  filters={{ search: search || undefined, bahnhofsmanagement: region || undefined, projektleiter: projektleiter || undefined, pruefer: pruefer || undefined, department: department || undefined, reviewStatus: status || undefined }}
+                  onProjectSelect={(id) => setDetailProjectId(id)}
+                />
+              ) : (
               <MapView
-                projects={data?.projects || []}
-                initialCenter={{ lat: 51.1657, lng: 10.4515 }}
-                initialZoom={6}
-                className="h-[65vh] min-h-[380px] sm:h-[560px] lg:h-[600px] w-full relative"
-                onProjectSelect={handleMapProjectSelect}
-                onStationSelect={handleStationSelect}
-              />
-              </>
+                  projects={data?.projects || []}
+                  initialCenter={{ lat: 51.1657, lng: 10.4515 }}
+                  initialZoom={6}
+                  className="h-[65vh] min-h-[380px] sm:h-[560px] lg:h-[600px] w-full relative"
+                  onProjectSelect={handleMapProjectSelect}
+                  onStationSelect={handleStationSelect}
+                />
+              )
             )}
           </>
         )}
@@ -1135,8 +1186,10 @@ export default function Projects() {
 
       {SERVER_MODE && !isLoading && (
         <ServerPager
+          // paging follows the table's own scroll position (virtualized); the sentinel would sit in view forever
+          auto={viewMode !== "table"}
           loaded={data?.projects.length ?? 0}
-          total={data?.total}
+          total={(data as { totalExact?: boolean } | undefined)?.totalExact === false ? undefined : data?.total}
           hasNextPage={!!pager.hasNextPage}
           isFetching={!!pager.isFetchingNextPage}
           onLoadMore={() => pager.fetchNextPage?.()}

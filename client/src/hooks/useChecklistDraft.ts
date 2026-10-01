@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { AUDIT_ACTIONS } from "@shared/audit-actions";
 import { apiClient } from "@/_core/api/client";
+import { SERVER_MODE, serverApi } from "@/realtime/serverApi";
 import {
   CHECKLIST_QUESTIONS,
   buildDepartmentReviews,
@@ -43,6 +44,9 @@ export interface TerminSelection {
   datum: string;
   von: string;
   bis: string;
+  /** server mode: the slot aggregate id + version the booking is made against */
+  serverId?: number;
+  serverVersion?: number;
 }
 
 export interface StepIssue {
@@ -204,9 +208,32 @@ export function useChecklistDraft() {
     [stepIssues],
   );
 
+  /** server mode: header/answers in the aggregate's wire shape */
+  const serverBody = useCallback(() => ({
+    mode,
+    header: {
+      projektnummer: header.projektnummer.trim() || null, projektbezeichnung: header.projektbezeichnung.trim() || null, stationsname: header.stationsname.trim() || null,
+      bahnhofsnummer: header.bahnhofsnummer.trim() || null, streckennummer: header.streckennummer.trim() || null, projektstand: header.projektstand.trim() || null,
+      bahnhofsmanagement: header.bahnhofsmanagement || null, projektleitung: header.projektleitung.trim() || null,
+      pkpLink: (answers.pkpLink?.answer ?? "").trim() || null, freischaltungFaa: answers.freischaltungFaa?.answer ?? null, unterschriftenblatt: answers.unterschriftenblatt?.answer ?? null,
+      mitProjektvorstellung: answers.mitProjektvorstellung?.answer ?? null, anmerkungen: answers.anmerkungen?.answer ?? null,
+      uebergabeDatum: answers.mitProjektvorstellung?.comment ?? null, terminDatum: termin?.datum ?? null, terminVon: termin?.von ?? null, terminBis: termin?.bis ?? null,
+    },
+    answers: Object.fromEntries(CHECKLIST_QUESTIONS.map(q => [q.key, { answer: answers[q.key]?.answer ?? null, secondary: answers[q.key]?.secondary ?? null, comment: answers[q.key]?.comment ?? null }])),
+  }), [answers, header, mode, termin]);
+
+  /** a stable key per user action: a retried save/submit is the SAME action */
+  const actionKey = useCallback((what: string) => `cl-${what}-${checklistId ?? "new"}-${syncVersion ?? 0}-${crypto.randomUUID()}`, [checklistId, syncVersion]);
+
   const saveDraft = useCallback(async () => {
     setSaving(true);
     try {
+      if (SERVER_MODE) {
+        const r = await serverApi.checklists.save.mutate({ ...(checklistId ? { id: checklistId, expectedVersion: syncVersion ?? 1 } : {}), ...serverBody(), idempotencyKey: actionKey("save") } as never);
+        setChecklistId(r.checklist.id);
+        setSyncVersion(r.checklist.version);
+        return { id: r.checklist.id, syncVersion: r.checklist.version } as never;
+      }
       const saved = await apiClient.checklists.save(toPayload("draft"));
       setChecklistId(saved.id ?? null);
       setSyncVersion(saved.syncVersion ?? 1);
@@ -230,6 +257,21 @@ export function useChecklistDraft() {
 
     setSaving(true);
     try {
+      if (SERVER_MODE) {
+        // 1) persist the draft (versioned), 2) submit: the SERVER creates the project + the 14 reviews, links them and books
+        //    the chosen slot in the same transaction. A slot that was taken meanwhile fails the whole submission.
+        const saved = await serverApi.checklists.save.mutate({ ...(checklistId ? { id: checklistId, expectedVersion: syncVersion ?? 1 } : {}), ...serverBody(), idempotencyKey: actionKey("save") } as never);
+        setChecklistId(saved.checklist.id);
+        setSyncVersion(saved.checklist.version);
+        const done = await serverApi.checklists.submit.mutate({
+          id: saved.checklist.id, expectedVersion: saved.checklist.version,
+          ...(termin?.serverId && termin.serverVersion ? { slot: { id: termin.serverId, expectedVersion: termin.serverVersion, status: "Gebucht" as const } } : {}),
+          idempotencyKey: actionKey("submit"),
+        });
+        setSyncVersion(done.checklist.version);
+        const project = await serverApi.projects.get.query({ id: done.projectId });
+        return { checklist: { id: done.checklist.id, syncVersion: done.checklist.version } as never, project: { id: project.id, projektnummer: project.projektnummer, terminProjektvorstellung: project.terminProjektvorstellung } as never, slotBooked: !!termin?.serverId };
+      }
       const saved = await apiClient.checklists.save({
         ...payload,
         submittedAt: new Date().toISOString(),
@@ -271,11 +313,11 @@ export function useChecklistDraft() {
         }`,
       );
 
-      return { checklist: saved, project };
+      return { checklist: saved, project, slotBooked: false };
     } finally {
       setSaving(false);
     }
-  }, [answers, header, requiredCount, reviews, termin, toPayload]);
+  }, [actionKey, answers, checklistId, header, requiredCount, reviews, serverBody, syncVersion, termin, toPayload]);
 
   return {
     mode,

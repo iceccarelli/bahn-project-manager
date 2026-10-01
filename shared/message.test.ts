@@ -7,7 +7,7 @@ import {
 } from "./message";
 
 const FULL = {
-  projektnummer: "G.011540063",
+  projektnummer: "G.992322386",
   station: "Langenselbold",
   department: "ITK",
   bahnhofsmanagement: "Kassel",
@@ -15,16 +15,16 @@ const FULL = {
   projektbeschreibung: "ABS HANAU-GELNHAUSEN",
   terminProjektvorstellung: "28.05.2024",
   status: "offen",
-  prueferName: "Emin Er",
+  prueferName: "Simon Lindborn",
   pruefDatum: "28.05.2024",
-  absender: "Vincenzo Grimaldi",
-  href: "https://bpm.example/projects?q=G.011540063",
+  absender: "Anna Hovdorf",
+  href: "https://bpm.example/projects?q=G.992322386",
   generatedAt: "22.08.2026, 14:07 Uhr",
 };
 
 describe("messageSubject", () => {
   it("leads with the Projektnummer, which is what a recipient searches for", () => {
-    expect(messageSubject(FULL)).toBe("Projekt G.011540063 – Langenselbold – ITK");
+    expect(messageSubject(FULL)).toBe("Projekt G.992322386 – Langenselbold – ITK");
   });
 
   it("drops the parts that are absent instead of leaving separators", () => {
@@ -42,14 +42,14 @@ describe("messageBody", () => {
 
   it("carries every fact the recipient needs to answer without opening anything", () => {
     for (const line of [
-      "Projektnummer: G.011540063",
+      "Projektnummer: G.992322386",
       "Station: Langenselbold",
       "Bahnhofsmanagement: Kassel",
       "Projektstand: EP",
       "Beschreibung: ABS HANAU-GELNHAUSEN",
       "Termin Projektvorstellung: 28.05.2024",
       "Status ITK: offen",
-      "Prüfer: Emin Er",
+      "Prüfer: Simon Lindborn",
       "Prüfdatum: 28.05.2024",
     ]) {
       expect(body, line).toContain(line);
@@ -58,7 +58,7 @@ describe("messageBody", () => {
 
   it("says where it came from, when, and how to get back", () => {
     expect(body).toContain("Erstellt aus dem Bahn Project Manager am 22.08.2026, 14:07 Uhr.");
-    expect(body).toContain("Projekt öffnen: https://bpm.example/projects?q=G.011540063");
+    expect(body).toContain("Projekt öffnen: https://bpm.example/projects?q=G.992322386");
   });
 
   it("omits a field rather than filling it with a placeholder", () => {
@@ -82,18 +82,18 @@ describe("messageBody", () => {
 
 describe("links", () => {
   it("puts subject AND body into the mailto", () => {
-    const href = mailtoWithContext("emin.er@deutschebahn.com", FULL);
-    expect(href.startsWith("mailto:emin.er@deutschebahn.com?")).toBe(true);
+    const href = mailtoWithContext("simon.lindborn@example.invalid", FULL);
+    expect(href.startsWith("mailto:simon.lindborn@example.invalid?")).toBe(true);
     const q = new URLSearchParams(href.slice(href.indexOf("?") + 1));
-    expect(q.get("subject")).toBe("Projekt G.011540063 – Langenselbold – ITK");
-    expect(q.get("body")).toContain("Projektnummer: G.011540063");
+    expect(q.get("subject")).toBe("Projekt G.992322386 – Langenselbold – ITK");
+    expect(q.get("body")).toContain("Projektnummer: G.992322386");
   });
 
   it("repeats the subject as the first line of a Teams message, which has no subject field", () => {
-    const href = teamsChatWithContext("emin.er@deutschebahn.com", FULL);
+    const href = teamsChatWithContext("simon.lindborn@example.invalid", FULL);
     const q = new URLSearchParams(href.slice(href.indexOf("?") + 1));
-    expect(q.get("users")).toBe("emin.er@deutschebahn.com");
-    expect(q.get("message")?.startsWith("Projekt G.011540063 – Langenselbold – ITK\n\n")).toBe(true);
+    expect(q.get("users")).toBe("simon.lindborn@example.invalid");
+    expect(q.get("message")?.startsWith("Projekt G.992322386 – Langenselbold – ITK\n\n")).toBe(true);
     expect(q.get("message")).toContain("Status ITK: offen");
   });
 

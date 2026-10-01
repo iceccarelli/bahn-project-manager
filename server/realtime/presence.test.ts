@@ -66,3 +66,44 @@ describe("PresenceService → event envelope → recipient filtering", () => {
     expect(eventForPrincipal(mitteOnly, presenceEvent("workspace:kassel", [], null))).toBeNull();
   });
 });
+
+describe("presence limits (never a write hotspot)", () => {
+  const mkSvc = (limits?: Partial<import("./presence").PresenceLimits>) => {
+    let now = 1_000_000; const published: unknown[] = []; const store = new MemoryPresenceStore();
+    let beats = 0; const orig = store.heartbeat.bind(store); store.heartbeat = async (...a) => { beats++; return orig(...a); };
+    const svc = new PresenceService(store, { publish: async e => { published.push(e); } }, { minHeartbeatIntervalMs: 5000, coalesceMs: 500, perUserMax: 6, perUserWindowMs: 10_000, ...limits }, () => now);
+    return { svc, published, beats: () => beats, advance: (ms: number) => { now += ms; } };
+  };
+  const who = (tabId = "tab-0001", state: "viewing" | "editing" = "viewing") => ({ userId: "u1", name: "U", tabId, state });
+
+  it("drops duplicate heartbeats before they reach the store, but never a state change", async () => {
+    const t = mkSvc();
+    await t.svc.heartbeat("project:1", who(), "Frankfurt");
+    await t.svc.heartbeat("project:1", who(), "Frankfurt");
+    await t.svc.heartbeat("project:1", who(), "Frankfurt");
+    expect(t.beats()).toBe(1);
+    await t.svc.heartbeat("project:1", who("tab-0001", "editing"), "Frankfurt"); // state change passes
+    expect(t.beats()).toBe(2);
+    t.advance(6000);
+    await t.svc.heartbeat("project:1", who("tab-0001", "editing"), "Frankfurt"); // window elapsed: keeps the TTL alive
+    expect(t.beats()).toBe(3);
+    expect(t.svc.stats.throttled).toBe(2);
+  });
+
+  it("caps one user's call rate across all scopes with a 429-class error", async () => {
+    const t = mkSvc();
+    for (let i = 0; i < 6; i++) await t.svc.heartbeat(`project:${i + 1}`, who(), "Frankfurt");
+    await expect(t.svc.heartbeat("project:99", who(), "Frankfurt")).rejects.toThrow();
+    t.advance(11_000);
+    await expect(t.svc.heartbeat("project:99", who(), "Frankfurt")).resolves.toBeUndefined();
+  });
+
+  it("coalesces a join storm into one leading and one trailing publish carrying the latest snapshot", async () => {
+    const t = mkSvc({ perUserMax: 1000, coalesceMs: 50 });
+    for (let i = 0; i < 20; i++) await t.svc.heartbeat("project:7", { userId: `u${i}`, name: `U${i}`, tabId: `tab-${1000 + i}`, state: "viewing" }, "Frankfurt");
+    await new Promise(r => setTimeout(r, 200));
+    expect(t.published.length).toBeLessThanOrEqual(3);          // not 20
+    const last = t.published.at(-1) as { changes: { members: { to: string } } };
+    expect(JSON.parse(last.changes.members.to)).toHaveLength(20); // the trailing snapshot is complete
+  });
+});

@@ -53,7 +53,11 @@ describe("production guards", () => {
     expect(() => assertProductionConfig({ NODE_ENV: "production", DATABASE_URL: "mysql://x" } as never)).toThrow(/JWT_SECRET/);
     expect(() => assertProductionConfig({ NODE_ENV: "production", DATABASE_URL: "mysql://x", JWT_SECRET: "demo-jwt-secret-change-in-production-2024" } as never)).toThrow(/JWT_SECRET/);
     expect(() => assertProductionConfig({ NODE_ENV: "production", DATABASE_URL: "mysql://x", JWT_SECRET: "x".repeat(40) } as never)).toThrow(/OIDC/);
-    expect(() => assertProductionConfig({ NODE_ENV: "production", DATABASE_URL: "mysql://x", JWT_SECRET: "x".repeat(40), OIDC_ISSUER: ISS, OIDC_AUDIENCE: AUD } as never)).not.toThrow();
+    expect(() => assertProductionConfig({ NODE_ENV: "production", DATABASE_URL: "mysql://x", JWT_SECRET: "x".repeat(40), OIDC_ISSUER: ISS, OIDC_AUDIENCE: AUD, REDIS_URL: "redis://r" } as never)).not.toThrow();
+    // Redis is the shared transport: required unless a single node is declared
+    expect(() => assertProductionConfig({ NODE_ENV: "production", DATABASE_URL: "mysql://x", JWT_SECRET: "x".repeat(40), OIDC_ISSUER: ISS, OIDC_AUDIENCE: AUD } as never)).toThrow(/REDIS_URL/);
+    expect(() => assertProductionConfig({ NODE_ENV: "production", DATABASE_URL: "mysql://x", JWT_SECRET: "x".repeat(40), OIDC_ISSUER: ISS, OIDC_AUDIENCE: AUD, ALLOW_SINGLE_INSTANCE: "1" } as never)).not.toThrow();
+    expect(() => assertProductionConfig({ NODE_ENV: "production", DATABASE_URL: "mysql://x", JWT_SECRET: "x".repeat(40), OIDC_ISSUER: ISS, REDIS_URL: "redis://r" } as never)).toThrow(/OIDC_AUDIENCE/);
     expect(() => assertProductionConfig({ NODE_ENV: "development" } as never)).not.toThrow();
   });
   it("CSRF: cross-origin cookie-authenticated POST is rejected; same-origin, bearer and non-browser pass", () => {

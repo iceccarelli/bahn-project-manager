@@ -16,7 +16,7 @@ PORT=${SIM_PORT:-3390}
 if (echo > "/dev/tcp/127.0.0.1/$PORT") 2>/dev/null; then echo "{\"check\":\"container-sim\",\"ok\":false,\"why\":\"port $PORT already in use\"}"; exit 1; fi
 # `exec` so $! is the node process itself and the trap really stops it
 ( cd "$TMP" && exec env NODE_ENV=production PORT=$PORT DATABASE_URL=${SIM_DATABASE_URL:?set SIM_DATABASE_URL} JWT_SECRET=$(printf 'x%.0s' $(seq 1 48)) \
-  OIDC_ISSUER=http://127.0.0.1:1/ OIDC_AUDIENCE=sim METRICS_TOKEN=sim node dist/index.js > "$TMP/out.log" 2>&1 ) &
+  ALLOW_SINGLE_INSTANCE=1 OIDC_ISSUER=http://127.0.0.1:1/ OIDC_AUDIENCE=sim METRICS_TOKEN=sim node dist/index.js > "$TMP/out.log" 2>&1 ) &
 PID=$!
 for _ in $(seq 1 60); do curl -fs "localhost:$PORT/api/ready" >/dev/null 2>&1 && break; sleep 0.5; done
 READY=$(curl -s -o /dev/null -w '%{http_code}' "localhost:$PORT/api/ready" || true)

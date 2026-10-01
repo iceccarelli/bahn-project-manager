@@ -44,20 +44,20 @@ describe("Hilfsdatei surnames", () => {
 
 describe("resolveContact", () => {
   it("matches a full name exactly", () => {
-    const r = resolveContact("Emin Er");
+    const r = resolveContact("Simon Lindborn");
     expect(r.kind).toBe("exact");
-    expect(contactOf(r)?.mail).toBe("emin.er@deutschebahn.com");
+    expect(contactOf(r)?.mail).toBe("simon.lindborn@example.invalid");
   });
 
   it("matches a surname-only Prüfer to the one person who holds it", () => {
-    const r = resolveContact("Er");
+    const r = resolveContact("Lindborn");
     expect(r.kind).toBe("surname");
-    expect(contactOf(r)?.name).toBe("Emin Er");
+    expect(contactOf(r)?.name).toBe("Simon Lindborn");
   });
 
   it("is case- and whitespace-insensitive", () => {
-    expect(contactOf(resolveContact("  hartung "))?.name).toBe("Stephan Hartung");
-    expect(contactOf(resolveContact("STEPHAN HARTUNG"))?.name).toBe("Stephan Hartung");
+    expect(contactOf(resolveContact("  solddorf "))?.name).toBe("Yannik Solddorf");
+    expect(contactOf(resolveContact("YANNIK SOLDDORF"))?.name).toBe("Yannik Solddorf");
   });
 
   it("classifies the workbook's non-person values as placeholders", () => {
@@ -69,7 +69,7 @@ describe("resolveContact", () => {
   });
 
   it("never invents an address for a name it does not know", () => {
-    const r = resolveContact("Colak");
+    const r = resolveContact("Ravdorf");
     expect(r.kind).toBe("unknown");
     expect(contactOf(r)).toBeNull();
     expect(resolutionNote(r)).toBe("Keine Adresse in der Hilfsdatei hinterlegt");
@@ -83,21 +83,21 @@ describe("resolveContact", () => {
 });
 
 describe("links", () => {
-  const c = { row: 13, group: "ITK", name: "Emin Er", mail: "emin.er@deutschebahn.com" };
+  const c = { row: 13, group: "ITK", name: "Simon Lindborn", mail: "simon.lindborn@example.invalid" };
 
   it("builds a mailto with an encoded subject", () => {
-    expect(mailtoHref(c, "Projekt G.011551488 – ITK")).toBe(
-      "mailto:emin.er@deutschebahn.com?subject=Projekt+G.011551488+%E2%80%93+ITK",
+    expect(mailtoHref(c, "Projekt G.991551762 – ITK")).toBe(
+      "mailto:simon.lindborn@example.invalid?subject=Projekt+G.991551762+%E2%80%93+ITK",
     );
   });
 
   it("omits the query entirely when there is no subject and no body", () => {
-    expect(mailtoHref(c)).toBe("mailto:emin.er@deutschebahn.com");
+    expect(mailtoHref(c)).toBe("mailto:simon.lindborn@example.invalid");
   });
 
   it("builds a Teams chat deep link from the address already on file", () => {
     expect(teamsChatHref(c)).toBe(
-      "https://teams.microsoft.com/l/chat/0/0?users=emin.er%40deutschebahn.com",
+      "https://teams.microsoft.com/l/chat/0/0?users=simon.lindborn%40example.invalid",
     );
   });
 });

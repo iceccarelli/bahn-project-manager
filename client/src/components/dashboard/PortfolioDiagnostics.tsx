@@ -19,6 +19,7 @@ import { AlertTriangle, CalendarClock, ShieldCheck, Users } from "lucide-react";
 import type { Aging, Concentration, DataQuality } from "@shared/portfolio-metrics";
 import { formatBytes, storageBudget } from "@shared/storage-budget";
 import { storageEntries } from "@/_core/api/localStore";
+import { SERVER_MODE } from "@/realtime/serverApi";
 
 function Panel({
   title,
@@ -97,7 +98,7 @@ export function PortfolioDiagnostics({
    * and a stale figure is exactly the figure nobody should be given about
    * remaining space.
    */
-  const budget = storageBudget(storageEntries());
+  const budget = storageBudget(SERVER_MODE ? {} : storageEntries());
   const overAYear = aging.cohorts.find((c) => c.key === "365+")?.count ?? 0;
 
   return (
@@ -189,7 +190,7 @@ export function PortfolioDiagnostics({
             anyone types anything, and at the cap a write throws and the change
             is refused. That is a number people are entitled to see coming.
           */}
-          <Row
+          {!SERVER_MODE && <Row
             label="lokaler Speicher"
             value={
               budget.usedBytes === 0
@@ -203,7 +204,7 @@ export function PortfolioDiagnostics({
                   ? "text-amber-700 dark:text-amber-400"
                   : undefined
             }
-          />
+          />}
           <Row
             label="Status außerhalb der Vokabulare"
             value={quality.unmappedStatus}

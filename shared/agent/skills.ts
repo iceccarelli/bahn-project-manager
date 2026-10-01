@@ -408,7 +408,7 @@ const blocked: Skill = {
 
 const findProject: Skill = {
   id: "find-project",
-  example: "Zeig mir G.011540063",
+  example: "Zeig mir G.992322386",
   keywords: ["projekt", "zeig", "offne", "öffne", "such", "finde", "wo ist"],
   weight: 85,
   needs: "projektnummer",

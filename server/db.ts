@@ -1,7 +1,7 @@
 import { eq, like, and, or, sql, desc, asc, inArray, count } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import mysql, { type Pool } from "mysql2/promise";
-import { type InsertUser, users, projects, departmentReviews, bvbEea, psvItk, auditLog } from "../drizzle/schema";
+import { type InsertUser, users, projects, departmentReviews, auditLog } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 const makeDb = (pool: Pool) => drizzle({ client: pool });
@@ -239,178 +239,11 @@ export async function getProjectReviews(projectIds: number[]) {
     .where(inArray(departmentReviews.projectId, projectIds));
 }
 
-export async function updateProject(id: number, data: Partial<typeof projects.$inferInsert>) {
-  const db = await getDb();
-  if (!db) return;
-
-  await db.update(projects).set(data).where(eq(projects.id, id));
-}
-
-export async function createProject(data: typeof projects.$inferInsert) {
-  const db = await getDb();
-  if (!db) return null;
-
-  const result = await db.insert(projects).values(data);
-  return result[0].insertId;
-}
-
-export async function deleteProject(id: number) {
-  const db = await getDb();
-  if (!db) return;
-
-  await db.delete(departmentReviews).where(eq(departmentReviews.projectId, id));
-  await db.delete(projects).where(eq(projects.id, id));
-}
-
 // ============= DEPARTMENT REVIEW QUERIES =============
-
-export async function updateDepartmentReview(id: number, data: Partial<typeof departmentReviews.$inferInsert>) {
-  const db = await getDb();
-  if (!db) return;
-
-  await db.update(departmentReviews).set(data).where(eq(departmentReviews.id, id));
-}
-
-export async function getReviewContext(id: number) {
-  const db = await getDb();
-  if (!db) return null;
-  const rows = await db
-    .select({ department: departmentReviews.department, bahnhofsmanagement: projects.bahnhofsmanagement })
-    .from(departmentReviews)
-    .innerJoin(projects, eq(projects.id, departmentReviews.projectId))
-    .where(eq(departmentReviews.id, id))
-    .limit(1);
-  return rows[0] ?? null;
-}
-
-export async function createDepartmentReview(data: typeof departmentReviews.$inferInsert) {
-  const db = await getDb();
-  if (!db) return null;
-
-  const result = await db.insert(departmentReviews).values(data);
-  return result[0].insertId;
-}
 
 // ============= DASHBOARD STATISTICS =============
 
-export async function getDashboardStats() {
-  const db = await getDb();
-  if (!db) return null;
-
-  // Total projects
-  const totalResult = await db.select({ total: count() }).from(projects);
-  const totalProjects = totalResult[0]?.total ?? 0;
-
-  // Status distribution across all departments
-  const statusDist = await db
-    .select({
-      status: departmentReviews.status,
-      count: count(),
-    })
-    .from(departmentReviews)
-    .groupBy(departmentReviews.status);
-
-  // Status per department
-  const deptStats = await db
-    .select({
-      department: departmentReviews.department,
-      status: departmentReviews.status,
-      count: count(),
-    })
-    .from(departmentReviews)
-    .groupBy(departmentReviews.department, departmentReviews.status);
-
-  // Projects per region
-  const regionStats = await db
-    .select({
-      region: projects.bahnhofsmanagement,
-      count: count(),
-    })
-    .from(projects)
-    .groupBy(projects.bahnhofsmanagement);
-
-  // Prüfer workload (top 20)
-  const prueferWorkload = await db
-    .select({
-      name: departmentReviews.prueferName,
-      count: count(),
-    })
-    .from(departmentReviews)
-    .where(
-      and(
-        sql`${departmentReviews.prueferName} IS NOT NULL`,
-        sql`${departmentReviews.prueferName} != 'Zuordnung erforderlich'`
-      )
-    )
-    .groupBy(departmentReviews.prueferName)
-    .orderBy(desc(count()))
-    .limit(20);
-
-  return {
-    totalProjects,
-    statusDistribution: statusDist,
-    departmentStats: deptStats,
-    regionStats,
-    prueferWorkload,
-  };
-}
-
-// ============= BVB-EEA QUERIES =============
-
-export async function getBvbEeaList() {
-  const db = await getDb();
-  if (!db) return [];
-
-  return db.select().from(bvbEea).orderBy(desc(bvbEea.id));
-}
-
-export async function createBvbEea(data: typeof bvbEea.$inferInsert) {
-  const db = await getDb();
-  if (!db) return null;
-
-  const result = await db.insert(bvbEea).values(data);
-  return result[0].insertId;
-}
-
-export async function updateBvbEea(id: number, data: Partial<typeof bvbEea.$inferInsert>) {
-  const db = await getDb();
-  if (!db) return;
-
-  await db.update(bvbEea).set(data).where(eq(bvbEea.id, id));
-}
-
-// ============= PSV-ITK QUERIES =============
-
-export async function getPsvItkList() {
-  const db = await getDb();
-  if (!db) return [];
-
-  return db.select().from(psvItk).orderBy(desc(psvItk.id));
-}
-
-export async function createPsvItk(data: typeof psvItk.$inferInsert) {
-  const db = await getDb();
-  if (!db) return null;
-
-  const result = await db.insert(psvItk).values(data);
-  return result[0].insertId;
-}
-
-export async function updatePsvItk(id: number, data: Partial<typeof psvItk.$inferInsert>) {
-  const db = await getDb();
-  if (!db) return;
-
-  await db.update(psvItk).set(data).where(eq(psvItk.id, id));
-}
-
 // ============= AUDIT LOG =============
-
-export async function createAuditEntry(data: typeof auditLog.$inferInsert) {
-  const db = await getDb();
-  if (!db) return;
-
-  await db.insert(auditLog).values(data);
-}
 
 export async function getAuditLog(params: { entityType?: string; entityId?: number; limit?: number }) {
   const db = await getDb();

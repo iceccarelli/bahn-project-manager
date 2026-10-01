@@ -4,7 +4,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { Project } from "@/hooks/useDataQuery";
 import { useStations } from "@/hooks/useStations";
-import { buildStationGeo, type MatchPrecision, type ResolvedStation } from "@/lib/stationGeo";
+import { buildStationGeo, type MatchPrecision, type ResolvedStation } from "@shared/stationGeo";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { MapPin, Info, Maximize, Minimize, LocateFixed, ChevronDown } from "lucide-react";

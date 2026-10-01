@@ -9,6 +9,14 @@ import { readFileSync } from 'node:fs';
 import mysql from 'mysql2/promise';
 import dotenv from 'dotenv';
 
+// Operator tool that writes outside the domain pipeline (no audit, no events, no versioning, no read models).
+// Never against a production database unless explicitly acknowledged.
+if (process.env.NODE_ENV === "production" && process.env.I_UNDERSTAND_THIS_BYPASSES_THE_DOMAIN_PIPELINE !== "1") {
+  console.error("refusing to run in production: this script bypasses audit/events/versioning (see docs/data-plane.md)");
+  process.exit(2);
+}
+
+
 dotenv.config();
 
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -113,12 +121,12 @@ async function main() {
   await connection.execute('DELETE FROM bvb_eea');
 
   const bvbEeaData = [
-    { projektnummer: null, bahnhofsmanagement: 'Darmstadt', station: 'Riedbahn RWS', projektbeschreibung: 'RWS Erneuerung', projektleiter: 'Ralf Neumann', kommentar: 'Dank richtiger EIGV-Einstufung durch Ali Aydogdu ist die Maßnahme von Anzeigeflichtig auf Anzeigrfrei eingestuft.' },
-    { projektnummer: 'G011560039', bahnhofsmanagement: 'Gießen', station: 'Niederwalgern', bahnhofsnummer: '4535', projektbeschreibung: 'provisorische PÜ / Blitzschutz mit Erneuerung der Stromverteilung', projektleiter: 'Alexander Roth', eigvAnzeige: '2025-08-22', kommentar: 'Freigabe am 04.11.2025', freigabeNummer: 'I.IP-MI-IW1-AA-001' },
-    { projektnummer: 'G.011520053', bahnhofsmanagement: 'Mainz', station: 'Bad Münster am Stein', projektbeschreibung: 'barrierefreier Umbau VST Bad Münster', projektleiter: 'Marie Rößler', kommentar: 'Im zugestimmten Planprüfbericht sind Mängel aufgeführt. Diese sind so schnell wie möglich zu beheben und dem PSV und BVB vorzulegen Eine Freigabe durch den BVB erfolgte am 16.02.2026.', freigabeNummer: 'I.IP-MI-IW1-AA-002' },
-    { projektnummer: null, bahnhofsmanagement: 'Gießen', station: 'Anzefahr', streckennummer: '3900', projektbeschreibung: '3900 werden beide Außenbahnsteige von 38er auf 55er SOK mittels provisorischem Metallbahnsteig erhöht, sowie Errichtung einer Zuwegung (Treppe und Rampe) inkl. Beleuchtung.', projektleiter: 'Alexander Babij', freigabeNummer: 'I.IP-MI-IW1-AA-003' },
-    { projektnummer: null, bahnhofsmanagement: 'Gießen', station: 'Anzefahr', streckennummer: '3900', projektbeschreibung: 'Bauzwischenzustand, da die neuen Verteiler nicht rechtzeitig geliefert werden können.', projektleiter: 'Alexander Babij', freigabeNummer: 'I.IP-MI-IW1-AA-004' },
-    { projektnummer: null, bahnhofsmanagement: 'Frankfurt', station: 'ZIM Mainz-Bischofsheim', projektbeschreibung: 'Erneuerung einer UV', projektleiter: 'Semih Yazlik', freigabeNummer: 'I.IP-MI-IW1-AA-005' },
+    { projektnummer: null, bahnhofsmanagement: 'Darmstadt', station: 'Riedbahn RWS', projektbeschreibung: 'RWS Erneuerung', projektleiter: 'Paul Prellhagen', kommentar: 'Dank richtiger EIGV-Einstufung durch Rosa Jarnkamp ist die Maßnahme von Anzeigeflichtig auf Anzeigrfrei eingestuft.' },
+    { projektnummer: 'G993982916', bahnhofsmanagement: 'Gießen', station: 'Niederwalgern', bahnhofsnummer: '4535', projektbeschreibung: 'provisorische PÜ / Blitzschutz mit Erneuerung der Stromverteilung', projektleiter: 'Zoe Hovbrink', eigvAnzeige: '2025-08-22', kommentar: 'Freigabe am 04.11.2025', freigabeNummer: 'I.IP-MI-IW1-AA-001' },
+    { projektnummer: 'G.993849647', bahnhofsmanagement: 'Mainz', station: 'Bad Münster am Stein', projektbeschreibung: 'barrierefreier Umbau VST Bad Münster', projektleiter: 'Yannik Helmrath', kommentar: 'Im zugestimmten Planprüfbericht sind Mängel aufgeführt. Diese sind so schnell wie möglich zu beheben und dem PSV und BVB vorzulegen Eine Freigabe durch den BVB erfolgte am 16.02.2026.', freigabeNummer: 'I.IP-MI-IW1-AA-002' },
+    { projektnummer: null, bahnhofsmanagement: 'Gießen', station: 'Anzefahr', streckennummer: '3900', projektbeschreibung: '3900 werden beide Außenbahnsteige von 38er auf 55er SOK mittels provisorischem Metallbahnsteig erhöht, sowie Errichtung einer Zuwegung (Treppe und Rampe) inkl. Beleuchtung.', projektleiter: 'Dora Ravwald', freigabeNummer: 'I.IP-MI-IW1-AA-003' },
+    { projektnummer: null, bahnhofsmanagement: 'Gießen', station: 'Anzefahr', streckennummer: '3900', projektbeschreibung: 'Bauzwischenzustand, da die neuen Verteiler nicht rechtzeitig geliefert werden können.', projektleiter: 'Dora Ravwald', freigabeNummer: 'I.IP-MI-IW1-AA-004' },
+    { projektnummer: null, bahnhofsmanagement: 'Frankfurt', station: 'ZIM Mainz-Bischofsheim', projektbeschreibung: 'Erneuerung einer UV', projektleiter: 'Mara Lindhaus', freigabeNummer: 'I.IP-MI-IW1-AA-005' },
   ];
 
   for (const item of bvbEeaData) {

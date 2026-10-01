@@ -11,6 +11,14 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 
+// Operator tool that writes outside the domain pipeline (no audit, no events, no versioning, no read models).
+// Never against a production database unless explicitly acknowledged.
+if (process.env.NODE_ENV === "production" && process.env.I_UNDERSTAND_THIS_BYPASSES_THE_DOMAIN_PIPELINE !== "1") {
+  console.error("refusing to run in production: this script bypasses audit/events/versioning (see docs/data-plane.md)");
+  process.exit(2);
+}
+
+
 const DATA_JSON_PATH = path.resolve("public/data.json");
 
 async function syncJsonDb(dryRun = false, force = false) {

@@ -18,7 +18,7 @@ export const EVENT_SCHEMA_VERSION = 1 as const;
  * envelope and transport: presence is ephemeral (published directly, never stored in SQL);
  * notifications are delivered from the same outbox as the change that caused them.
  */
-export const AGGREGATE_TYPES = ["project", "presence", "notification"] as const;
+export const AGGREGATE_TYPES = ["project", "presence", "notification", "checklist", "booking"] as const;
 export type AggregateType = (typeof AGGREGATE_TYPES)[number];
 
 export const EVENT_TYPES = [
@@ -34,6 +34,12 @@ export const EVENT_TYPES = [
   "presence.changed",
   /** a user notification; `context.recipient` is the only principal that may receive it */
   "notification.created",
+  /** Projektanmeldung checklist aggregate */
+  "checklist.created",
+  "checklist.updated",
+  "checklist.submitted",
+  /** Fachspezialistenprüfung calendar slot aggregate (held, booked, released, edited) */
+  "booking.updated",
 ] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
 
@@ -96,13 +102,30 @@ export const scope = {
   project: (id: string | number): ScopeKey => `project:${id}`,
   workspace: (name: string): ScopeKey => `workspace:${slugify(name)}`,
   department: (code: string): ScopeKey => `department:${code.toUpperCase()}`,
+  /**
+   * Membership feed: ONLY events that change which rows a list contains (create, delete, move in/out).
+   * `collection:all` for principals who may see every workspace, `collection:<ws>` otherwise.
+   * Plain field edits are NOT published here — they reach only `project:<id>` (rows a client holds).
+   */
+  collection: (workspaceOrAll: string): ScopeKey => (workspaceOrAll === "all" ? "collection:all" : `collection:${slugify(workspaceOrAll)}`),
+  /** one aggregate row of a non-project domain, e.g. agg:booking.12 */
+  agg: (type: "checklist" | "booking", id: string | number): ScopeKey => `agg:${type}.${id}`,
+  /** membership/overview feed of a non-project domain: collection:booking.all, collection:checklist.<workspace> */
+  aggCollection: (type: "checklist" | "booking", key = "all"): ScopeKey => `collection:${type}.${key === "all" ? "all" : slugify(key)}`,
   user: (id: string | number): ScopeKey => `user:${id}`,
   notifications: (id: string | number): ScopeKey => `notifications:${id}`,
 } as const;
 
-const SCOPE_RE = /^(workspace|department|project|user|notifications):[A-Za-z0-9_.-]{1,64}$/;
+const SCOPE_RE = /^(workspace|collection|agg|department|project|user|notifications):[A-Za-z0-9_.-]{1,64}$/;
 export const isValidScope = (s: string): boolean => SCOPE_RE.test(s);
 export const scopeKind = (s: ScopeKey): string => s.slice(0, s.indexOf(":"));
+
+/** Does this event change which rows a list contains? (creation, deletion, a workspace move) */
+export function isMembershipEvent(event: Pick<DomainEvent, "eventType" | "aggregateType" | "changes">): boolean {
+  if (event.aggregateType !== "project") return false;
+  if (event.eventType === "project.created" || event.eventType === "project.deleted" || event.eventType === "project.removed") return true;
+  return event.eventType === "project.updated" && "bahnhofsmanagement" in event.changes;
+}
 
 /**
  * Channels an event is delivered on. A project moving between workspaces is
@@ -112,12 +135,24 @@ export function scopesForEvent(event: DomainEvent): ScopeKey[] {
   const out = new Set<ScopeKey>();
   if (event.aggregateType === "presence") return isValidScope(event.aggregateId) ? [event.aggregateId] : [];
   if (event.aggregateType === "notification") return event.context?.recipient ? [scope.notifications(event.context.recipient)] : [];
+  if (event.aggregateType === "booking" || event.aggregateType === "checklist") {
+    const t = event.aggregateType;
+    out.add(scope.agg(t, event.aggregateId));
+    out.add(scope.aggCollection(t, "all"));
+    if (t === "checklist" && event.context?.workspace) out.add(scope.aggCollection(t, event.context.workspace));
+    return [...out];
+  }
   if (event.aggregateType === "project") {
     out.add(scope.project(event.aggregateId));
     const ws = event.context?.workspace;
     const before = event.context?.workspaceBefore;
     if (ws) out.add(scope.workspace(ws));
     if (before) out.add(scope.workspace(before));
+    if (isMembershipEvent(event)) {
+      out.add(scope.collection("all"));
+      if (ws) out.add(scope.collection(ws));
+      if (before) out.add(scope.collection(before));
+    }
   }
   return [...out];
 }

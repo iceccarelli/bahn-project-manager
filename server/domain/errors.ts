@@ -25,3 +25,21 @@ export class ConflictError extends DomainError {
     super("VERSION_CONFLICT", `Version ${info.expectedVersion} veraltet, aktuell ${info.currentVersion}`);
   }
 }
+
+/** Optimistic-concurrency conflict of a non-project aggregate (booking, checklist): same HTTP/tRPC semantics as ConflictError. */
+export interface AggregateConflictInfo {
+  code: "VERSION_CONFLICT";
+  aggregate: "booking" | "checklist";
+  id: number;
+  expectedVersion: number;
+  currentVersion: number;
+  /** the full current row (as the caller may see it) so the client can reconcile without another round trip */
+  current: unknown;
+  /** why: stale version, or the state transition is no longer possible (slot already taken) */
+  reason: "stale" | "slot-taken" | "not-draft";
+}
+export class AggregateConflictError extends DomainError {
+  constructor(readonly info: AggregateConflictInfo) {
+    super("VERSION_CONFLICT", `Version ${info.expectedVersion} veraltet, aktuell ${info.currentVersion}`);
+  }
+}

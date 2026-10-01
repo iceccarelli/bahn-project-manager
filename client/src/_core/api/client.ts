@@ -482,6 +482,7 @@ export const apiClient = {
     },
 
     async remove(id: number): Promise<void> {
+      assertLocalPlane("checklists.remove");
       const all = (await this.list()).filter((c) => c.id !== id);
       writeStore(STORAGE_KEY_CHECKLISTS, JSON.stringify(all));
     },

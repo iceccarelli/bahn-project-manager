@@ -14,7 +14,7 @@ const lst = (mail: string): RecipientOverride => ({
   department: "LST",
   name: "A. Person",
   mail,
-  addedBy: "Vincenzo Grimaldi",
+  addedBy: "Anna Hovdorf",
   addedAt: NOW,
 });
 
@@ -34,7 +34,7 @@ describe("the address the workbook does not have", () => {
     expect(who[0]?.source).toBe("ergaenzt");
     // Provenance travels with it: an address nobody can trace is an address
     // nobody can check.
-    expect(who[0]?.addedBy).toBe("Vincenzo Grimaldi");
+    expect(who[0]?.addedBy).toBe("Anna Hovdorf");
     expect(who[0]?.addedAt).toBe(NOW);
   });
 

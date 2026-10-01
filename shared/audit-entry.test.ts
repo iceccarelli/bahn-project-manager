@@ -12,7 +12,7 @@ import {
 
 const meta = (over: Partial<AuditMeta> = {}): AuditMeta => ({
   projectId: 7,
-  projektnummer: "G.011540063",
+  projektnummer: "G.992322386",
   station: "Langenselbold",
   department: "ITK",
   field: "status",
@@ -29,7 +29,7 @@ describe("an entry says which record it changed", () => {
     // which does not identify one of 1,298 projects.
     const text = describeChange(meta());
     for (const part of [
-      "G.011540063",
+      "G.992322386",
       "Langenselbold",
       "ITK",
       "status",

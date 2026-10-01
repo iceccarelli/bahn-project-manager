@@ -72,24 +72,40 @@ function vitePluginDataValidationAndCache(): Plugin {
 }
 
 /**
- * Server-mode builds must not publish the legacy snapshot as static files: anything under `public/`
- * is served to ANYONE, which would hand the whole dataset to unauthenticated and workspace-restricted
- * users and make the server's authorization decorative. The files are moved to `<outDir>/../legacy/`
- * and served by an authenticated route (server/_core/legacySnapshot.ts).
+ * The legacy snapshot (browser-local dataset) belongs to the DEMO artifact only. A server-mode build does not publish it
+ * at all: anything under `public/` is served to anyone, and the server has no route for it. The files are removed from
+ * the bundle, so a production image can never carry (or leak) a copy of the dataset, whatever was staged in client/public.
  */
 export const LEGACY_SNAPSHOT_FILES = ["data.json", "schedule.json"];
-function vitePluginLegacySnapshotOffPublic(): Plugin {
+function vitePluginNoSnapshotInServerBuild(): Plugin {
   return {
-    name: "legacy-snapshot-off-public",
+    name: "no-snapshot-in-server-build",
     apply: "build",
     writeBundle(options) {
       if (process.env.VITE_SERVER_MODE !== "1" || !options.dir) return;
-      const legacy = path.resolve(options.dir, "..", "legacy");
-      fs.mkdirSync(legacy, { recursive: true });
-      for (const f of LEGACY_SNAPSHOT_FILES) {
-        const from = path.join(options.dir, f);
-        if (fs.existsSync(from)) fs.renameSync(from, path.join(legacy, f));
-      }
+      for (const f of LEGACY_SNAPSHOT_FILES) fs.rmSync(path.join(options.dir, f), { force: true });
+    },
+  };
+}
+
+/**
+ * Production / demo separation. `BUILD_TARGET` is set only by `build:production` and `build:demo`.
+ * A production artifact built without the server data plane (or a demo built with it) is refused
+ * here, at build time, and the result is stamped into `build-info.json` so CI and the container
+ * gate can verify the artifact that is actually shipped (scripts/assert-build-target.mjs).
+ */
+function vitePluginBuildTarget(): Plugin {
+  const target = process.env.BUILD_TARGET;
+  const serverMode = process.env.VITE_SERVER_MODE === "1";
+  return {
+    name: "build-target",
+    apply: "build",
+    buildStart() {
+      if (target === "production" && !serverMode) this.error("BUILD_TARGET=production requires VITE_SERVER_MODE=1 (refusing to build the browser-local demo as a production artifact)");
+      if (target === "demo" && serverMode) this.error("BUILD_TARGET=demo requires VITE_SERVER_MODE=0");
+    },
+    generateBundle() {
+      this.emitFile({ type: "asset", fileName: "build-info.json", source: JSON.stringify({ target: target ?? "unspecified", serverMode, version: pkg.version }) });
     },
   };
 }
@@ -106,7 +122,8 @@ const plugins = [
     ? [jsxLocPlugin(), vitePluginManusRuntime()]
     : []),
   vitePluginDataValidationAndCache(),
-  vitePluginLegacySnapshotOffPublic(),
+  vitePluginNoSnapshotInServerBuild(),
+  vitePluginBuildTarget(),
 ];
 
 export default defineConfig({

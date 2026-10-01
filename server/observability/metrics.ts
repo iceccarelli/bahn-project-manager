@@ -69,6 +69,7 @@ export const m = {
   rtReconnects: counter("bahn_realtime_connects_total", "Realtime connections accepted (reconnects included)"),
   rtErrors: counter("bahn_realtime_gateway_errors_total", "Gateway handler failures answered with 503"),
   unhandled: counter("bahn_unhandled_rejections_total", "Unhandled promise rejections caught by the process-level handler"),
+  rtNotificationsThrottled: counter("bahn_realtime_notifications_throttled_total", "Notification frames collapsed into a hint by per-stream delivery throttling"),
   rtDelivered: counter("bahn_realtime_events_delivered_total", "Events written to subscribers"),
   rtDropped: counter("bahn_realtime_events_dropped_total", "Events dropped for slow consumers (client is told to resync)"),
   rtEventAgeMs: histogram("bahn_realtime_event_age_ms", "Event age (now - envelope.timestamp) when delivered to a subscriber"),

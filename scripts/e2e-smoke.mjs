@@ -176,11 +176,22 @@ async function check(name, fn) {
     console.log(`  FAIL ${name}\n         ${err instanceof Error ? err.message : err}`);
   }
 }
+/**
+ * Size of the table's row SET. The Projekte table is virtualized, so the DOM holds only the rows near the
+ * viewport; the set size is published as data-row-count (and aria-rowcount) on the table itself.
+ * Tables that are not virtualized fall back to counting rows.
+ */
+const rowCount = (page) =>
+  page.evaluate(() => {
+    const t = document.querySelector("table[data-row-count]");
+    return t ? Number(t.dataset.rowCount) : document.querySelectorAll("table tbody tr").length;
+  });
+
 const assert = (cond, msg) => { if (!cond) throw new Error(msg); };
 
 await page.goto(U("/login"));
 await page.evaluate(() => localStorage.setItem("bahn-demo-user",
-  JSON.stringify({ id: 1, openId: "e2e", name: "Vincenzo Grimaldi", email: "v@db.de", role: "admin" })));
+  JSON.stringify({ id: 1, openId: "e2e", name: "Anna Hovdorf", email: "v@db.de", role: "admin" })));
 
 console.log("\n== navigation ==");
 for (const [label, route, marker] of [
@@ -248,7 +259,7 @@ console.log("\n== filtering and sorting ==");
 await check("search narrows the table", async () => {
   await go("/projects");
   await page.waitForSelector("table tbody tr", { timeout: 30000 });
-  const before = await page.locator("tbody tr").count();
+  const before = await rowCount(page);
   await page.locator('input[aria-label^="Projekte durchsuchen"]').fill("Frankfurt");
   /*
    * Waits for the table to be narrower, not for 900 ms.
@@ -261,12 +272,12 @@ await check("search narrows the table", async () => {
    */
   await page
     .waitForFunction(
-      (n) => document.querySelectorAll("tbody tr").length < n,
+      (n) => { const t = document.querySelector("table[data-row-count]"); return (t ? Number(t.dataset.rowCount) : document.querySelectorAll("tbody tr").length) < n; },
       before,
       { timeout: 20000 },
     )
     .catch(() => {});
-  const after = await page.locator("tbody tr").count();
+  const after = await rowCount(page);
   assert(after > 0 && after < before, `rows ${before} -> ${after}`);
 });
 
@@ -330,9 +341,9 @@ await check("step 5 names who each Fachprüfung reaches", async () => {
   const body = await page.locator("body").innerText();
   // The off-by-two used to route ITK to a Brandschutz specialist and skip the
   // department's two busiest reviewers.
-  assert(body.includes("Emin Er"), "Emin Er not listed as an ITK recipient");
-  assert(body.includes("Daniel Goldhausen"), "Daniel Goldhausen not listed");
-  assert(!body.includes("Gorißen"), "a Brandschutz specialist is still on the ITK list");
+  assert(body.includes("Simon Lindborn"), "Simon Lindborn not listed as an ITK recipient");
+  assert(body.includes("Ralf Thornmann"), "Ralf Thornmann not listed");
+  assert(!body.includes("Froborn"), "a Brandschutz specialist is still on the ITK list");
 });
 
 
@@ -433,7 +444,7 @@ await check("the created project reaches the projects table", async () => {
     landed.searchParams.get("q") === createdNumber,
     `landed unfiltered: q=${landed.searchParams.get("q")}`,
   );
-  const rows = await page.locator("tbody tr").count();
+  const rows = await rowCount(page);
   assert(rows >= 1, "created project not in the table");
   assert(rows < 100, `landing did not filter — ${rows} rows`);
 });
@@ -624,7 +635,7 @@ await check("contact links are real addresses, never constructed ones", async ()
 
   // Every address must exist in Hilfsdatei. Anything else is constructed.
   const known = new Set(
-    JSON.parse(fs.readFileSync("data/contacts.source.json", "utf8"))
+    JSON.parse(fs.readFileSync(`${process.env.PRIVATE_DATA_DIR ?? "fixtures/synthetic"}/contacts.source.json`, "utf8"))
       .map((c) => (c.mail || "").toLowerCase())
       .filter(Boolean),
   );
@@ -860,7 +871,7 @@ await check("both table row actions are separate 44px targets on touch", async (
   await touch.addInitScript(() =>
     localStorage.setItem(
       "bahn-demo-user",
-      JSON.stringify({ id: 1, openId: "e2e", name: "Vincenzo Grimaldi", email: "v@db.de", role: "admin" }),
+      JSON.stringify({ id: 1, openId: "e2e", name: "Anna Hovdorf", email: "v@db.de", role: "admin" }),
     ),
   );
   const tp = await touch.newPage();
@@ -924,7 +935,7 @@ await check("the detail dialog prints a Projektblatt stamped with date AND time"
     /^Projektblatt_.+_\d{4}-\d{2}-\d{2}_\d{4}\.pdf$/.test(name),
     `filename carries no date+time stamp: ${name}`,
   );
-  assert(name.includes("G.011540063"), `filename does not identify the project: ${name}`);
+  assert(name.includes("G.992322386"), `filename does not identify the project: ${name}`);
 
   const file = await download.path();
   const head = fs.readFileSync(file);
@@ -958,8 +969,8 @@ await check("mail and Teams carry a written message, not just an address", async
     const q = new URLSearchParams(href.slice(href.indexOf("?") + 1));
     const subject = q.get("subject") ?? "";
     const body = q.get("body") ?? "";
-    assert(subject.includes("G.011540063"), `subject does not name the project: ${subject}`);
-    assert(body.includes("Projektnummer: G.011540063"), "body does not carry the Projektnummer");
+    assert(subject.includes("G.992322386"), `subject does not name the project: ${subject}`);
+    assert(body.includes("Projektnummer: G.992322386"), "body does not carry the Projektnummer");
     assert(body.includes("Station: Langenselbold"), "body does not carry the Station");
     assert(
       body.includes("Erstellt aus dem Bahn Project Manager"),
@@ -971,7 +982,7 @@ await check("mail and Teams carry a written message, not just an address", async
   // A Teams chat has no subject field, so the message has to open with it.
   for (const href of links.teams) {
     const msg = new URLSearchParams(href.slice(href.indexOf("?") + 1)).get("message") ?? "";
-    assert(msg.startsWith("Projekt G.011540063"), "Teams message does not open with the subject");
+    assert(msg.startsWith("Projekt G.992322386"), "Teams message does not open with the subject");
     assert(msg.includes("Bahnhofsmanagement: Kassel"), "Teams message carries no context");
   }
   await page.keyboard.press("Escape");
@@ -1011,7 +1022,7 @@ for (const [route, dept, label] of [
       `${label}: ${open}+${done}+${blocked} exceeds the total ${total}`,
     );
 
-    const rows = await page.$$eval("table tbody tr", (r) => r.length);
+    const rows = await rowCount(page);
     assert(rows === total, `${label}: KPI says ${total}, the table renders ${rows}`);
 
     // And the same number the page derives, derived independently here.
@@ -1032,13 +1043,13 @@ for (const [route, dept, label] of [
   await check(`${label}: search, filter panel and chips actually narrow the set`, async () => {
     await go(route);
     await page.waitForSelector("table tbody tr", { timeout: 20000 });
-    const before = await page.$$eval("table tbody tr", (r) => r.length);
+    const before = await rowCount(page);
 
     const box = page.getByLabel(`${label} Prüfungen durchsuchen`);
     await box.fill("Frankfurt");
     await page.getByRole("button", { name: "Suchen" }).click();
     await page.waitForTimeout(600);
-    const after = await page.$$eval("table tbody tr", (r) => r.length);
+    const after = await rowCount(page);
     assert(after > 0 && after < before, `${label}: search gave ${after} of ${before} rows`);
 
     // The active filter is visible and removable — not an invisible state the
@@ -1047,7 +1058,7 @@ for (const [route, dept, label] of [
     assert(await chip.count() > 0, `${label}: the search is not shown as a removable chip`);
     await chip.first().click();
     await page.waitForTimeout(600);
-    const restored = await page.$$eval("table tbody tr", (r) => r.length);
+    const restored = await rowCount(page);
     assert(restored === before, `${label}: clearing the chip left ${restored} of ${before} rows`);
 
     // exact: the chips' accessible names begin with "Filter" too, and
@@ -1167,7 +1178,7 @@ await check("the three tabs are independent surfaces, not one shared state", asy
   // narrow another — and the KPI row would keep reporting the unfiltered set.
   await go("/bvb-eea");
   await page.waitForSelector("table tbody tr", { timeout: 20000 });
-  const eeaRows = await page.$$eval("table tbody tr", (r) => r.length);
+  const eeaRows = await rowCount(page);
   const box = page.getByLabel("BVB-EEA Prüfungen durchsuchen");
   await box.fill("Frankfurt");
   await page.getByRole("button", { name: "Suchen" }).click();
@@ -1185,13 +1196,13 @@ await check("the three tabs are independent surfaces, not one shared state", asy
 
   await go("/bvb-eea");
   await page.waitForSelector("table tbody tr", { timeout: 20000 });
-  const back = await page.$$eval("table tbody tr", (r) => r.length);
+  const back = await rowCount(page);
   assert(back === eeaRows, `BVB-EEA came back filtered: ${back} of ${eeaRows} rows`);
 
   // And the two tabs really do scope to different Gewerke.
   await go("/psv-itk");
   await page.waitForSelector("table tbody tr", { timeout: 20000 });
-  const itkRows = await page.$$eval("table tbody tr", (r) => r.length);
+  const itkRows = await rowCount(page);
   assert(itkRows !== eeaRows, `both tabs render ${itkRows} rows — they are not scoped`);
 });
 
@@ -1433,7 +1444,7 @@ await check("the page filter box suggests from the same index and never navigate
   await page.keyboard.press("Enter");
   await page.waitForTimeout(900);
   assert(/\/bvb-eea/.test(page.url()), `choosing a suggestion left the page: ${page.url()}`);
-  const rows = await page.$$eval("table tbody tr", (r) => r.length);
+  const rows = await rowCount(page);
   assert(rows > 0, "the suggestion filtered the table down to nothing");
 });
 
@@ -1535,7 +1546,7 @@ await check("setting a status to \"nicht erforderlich\" removes the row from tha
   // table disagree.
   await go("/psv-itk");
   await page.waitForSelector("table tbody tr", { timeout: 30000 });
-  const rowsBefore = await page.$$eval("table tbody tr", (r) => r.length);
+  const rowsBefore = await rowCount(page);
   const kpiBefore = await page.$$eval(".grid .text-4xl", (els) =>
     Number(els[0].textContent.replace(/\./g, "")),
   );
@@ -1549,7 +1560,7 @@ await check("setting a status to \"nicht erforderlich\" removes the row from tha
   await page.locator(`${cell} select`).first().selectOption("nicht erforderlich");
   await page.waitForTimeout(1200);
 
-  const rowsAfter = await page.$$eval("table tbody tr", (r) => r.length);
+  const rowsAfter = await rowCount(page);
   const kpiAfter = await page.$$eval(".grid .text-4xl", (els) =>
     Number(els[0].textContent.replace(/\./g, "")),
   );
@@ -1567,7 +1578,7 @@ await check("setting a status to \"nicht erforderlich\" removes the row from tha
   await page.waitForTimeout(900);
   await go("/psv-itk");
   await page.waitForSelector("table tbody tr", { timeout: 30000 });
-  const restored = await page.$$eval("table tbody tr", (r) => r.length);
+  const restored = await rowCount(page);
   assert(restored === rowsBefore, `after restoring, rows are ${restored}, expected ${rowsBefore}`);
 });
 
@@ -2904,7 +2915,7 @@ await check("the mobile drawer is opaque, not a window onto the page", async () 
     await phone.evaluate(() =>
       localStorage.setItem(
         "bahn-demo-user",
-        JSON.stringify({ id: 1, openId: "e2e", name: "Vincenzo Grimaldi", email: "v@db.de", role: "admin" }),
+        JSON.stringify({ id: 1, openId: "e2e", name: "Anna Hovdorf", email: "v@db.de", role: "admin" }),
       ),
     );
     await phone.goto(U("/projects"), { waitUntil: "domcontentloaded" });
@@ -3371,7 +3382,7 @@ await check("reduced motion is served a page that was never hidden", async () =>
     await quiet.evaluate(() =>
       localStorage.setItem(
         "bahn-demo-user",
-        JSON.stringify({ id: 1, openId: "e2e", name: "Vincenzo Grimaldi", email: "v@db.de", role: "admin" }),
+        JSON.stringify({ id: 1, openId: "e2e", name: "Anna Hovdorf", email: "v@db.de", role: "admin" }),
       ),
     );
     await quiet.goto(U("/"), { waitUntil: "networkidle" });
@@ -3410,12 +3421,15 @@ await check("the table streams without ever holding a row back", async () => {
    * appears, never whether it exists — so the count taken mid-animation has to
    * equal the count taken after it settles.
    */
-  const during = await page.$$eval("table tbody tr", (r) => r.length);
+  const during = await rowCount(page);
   const streaming = await page.$eval("table tbody", (b) => b.getAttribute("data-stream"));
   await page.waitForTimeout(1400);
-  const after = await page.$$eval("table tbody tr", (r) => r.length);
+  const after = await rowCount(page);
   assert(during === after, `${during} rows mid-stream, ${after} after — rows are being withheld`);
-  assert(during > 100, `only ${during} rows in the table`);
+  assert(during > 100, `only ${during} rows in the table set`);
+  // virtualization: the set is complete, the DOM holds only the window — never every row
+  const inDom = await page.$$eval("table tbody tr:not([data-spacer])", (r) => r.length);
+  assert(inDom > 0 && inDom < 80, `${inDom} rows in the DOM for a set of ${during} — the table is not virtualized`);
   assert(streaming === "on", "the table did not stream at all");
 
   // And every row is opaque once the wave has passed.
