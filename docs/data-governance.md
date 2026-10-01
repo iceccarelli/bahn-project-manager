@@ -31,8 +31,8 @@ disclosure of internal data and personal data, to be handled by the data owner /
   (`@example.invalid`). **Residual risk:** a deployment that wants the real contacts compiles them into the client
   bundle (static, unauthenticated asset). Until they are served by an authenticated API, serve the bundle only behind
   an authenticating proxy, or keep the synthetic directory.
-* Server-mode builds already refuse to publish the snapshot (`/data.json`, `/schedule.json`) to anyone but
-  all-workspace principals.
+* Server-mode builds do not contain the snapshot at all (`/data.json`, `/schedule.json` are removed at build time and
+  answer 404; asserted by `scripts/assert-build-target.mjs`, the container gate and the e2e suites).
 
 ## What this change could NOT do — needs the repository owner
 
@@ -65,3 +65,22 @@ there — rotate nothing is needed (no secrets were in the data) but the **data 
 1. No real project, schedule, contact or user data in the repository — fixtures are synthetic or generated.
 2. Real data enters only through `PRIVATE_DATA_DIR` / a secret store / the database import, and never through `COPY` in a Dockerfile.
 3. A PR that adds a file under `client/public/` or `data/` matching the ignored patterns fails CI (`scripts/data/check-no-private-data.mjs`).
+
+## Exact inventory for the controlled rewrite (as of this branch)
+
+Sensitive paths entered history in **`097788e`** (2026-08-22, "Ask Bahn: an assistant that computes its answers instead of
+composing them") and were removed from the tree in **`20314ee`**:
+
+| Path | Commits that touch it |
+|---|---|
+| `client/public/data.json`, `client/public/schedule.json` | `097788e`, `20314ee` |
+| `data/contacts.source.json`, `data/contacts.report.json`, `data/normalize-report.json`, `data/schedule.report.json` | `097788e`, `20314ee` |
+| `ChecklisteBeispiel.pdf` | `097788e`, `20314ee` |
+| `dist-oidc/` (build output holding a copy of the snapshot) | `20cef46`, `0fca08d`, `9a6a4cd`, `20314ee` |
+
+Also check for names/e-mails quoted in code, tests and docs of older commits (step 2 of the runbook above).
+
+`scripts/data/verify-history-clean.sh <clone>` fails while any of these paths is reachable from any ref (it currently fails
+on this branch — by design — and must pass on a fresh clone of the public remote after the rewrite). The rewrite itself is
+**not performed here**: it needs the repository owner (force-push under an explicit branch-protection exception) and the
+data-protection officer's decision on notification.
