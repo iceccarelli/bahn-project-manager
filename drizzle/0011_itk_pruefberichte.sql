@@ -1,0 +1,41 @@
+CREATE TABLE `itk_pruefberichte` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`year` int NOT NULL,
+	`laufendeNummer` varchar(32) NOT NULL,
+	`layout` varchar(16) NOT NULL,
+	`datum` date,
+	`taetigkeitsbereich` varchar(128),
+	`artDerBaumassnahme` varchar(128),
+	`ebaAktenzeichen` varchar(128),
+	`bahnhofStrecke` varchar(512),
+	`zustaendigeEbaAussenstelle` varchar(128),
+	`artDerTechnik` varchar(256),
+	`bauformBezeichnung` varchar(256),
+	`technik` varchar(64),
+	`abgeschlossen` varchar(64),
+	`projektnummer` varchar(64),
+	`zustaendigerPl` varchar(128),
+	`zustaendigerFs` varchar(128),
+	`termin` date,
+	`beschriftung` varchar(600),
+	`link` varchar(1024),
+	`projektname` varchar(512),
+	`fabrikat` varchar(128),
+	`faa` varchar(64),
+	`phase` varchar(64),
+	`pbVorhanden` varchar(16),
+	`erneutePruefungErforderlich` varchar(16),
+	`agPl` varchar(128),
+	`anPl` varchar(128),
+	`gesamtbewertung` varchar(16),
+	`version` int NOT NULL DEFAULT 1,
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+	CONSTRAINT `itk_pruefberichte_id` PRIMARY KEY(`id`),
+	CONSTRAINT `itk_pb_year_nr_uq` UNIQUE(`year`,`laufendeNummer`)
+);
+--> statement-breakpoint
+CREATE INDEX `itk_pb_technik_idx` ON `itk_pruefberichte` (`technik`);--> statement-breakpoint
+CREATE INDEX `itk_pb_pl_idx` ON `itk_pruefberichte` (`zustaendigerPl`);--> statement-breakpoint
+CREATE INDEX `itk_pb_fs_idx` ON `itk_pruefberichte` (`zustaendigerFs`);--> statement-breakpoint
+CREATE INDEX `itk_pb_projektnummer_idx` ON `itk_pruefberichte` (`projektnummer`);

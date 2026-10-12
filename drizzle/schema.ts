@@ -1,5 +1,5 @@
 import {
-  int, bigint, double, mysqlEnum, mysqlTable, text, timestamp, varchar, datetime, json,
+  int, bigint, double, mysqlEnum, mysqlTable, text, timestamp, varchar, datetime, json, date,
   index, uniqueIndex, primaryKey
 } from "drizzle-orm/mysql-core";
 import { relations } from "drizzle-orm";
@@ -120,6 +120,63 @@ export const psvItk = mysqlTable("psv_itk", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (table) => ({
   projektnummerIdx: index("psv_projektnummer_idx").on(table.projektnummer),
+}));
+
+/**
+ * ITK Prüfbericht — one row of the Prüfstelle's yearly workbook (Projektübersicht ITK), as the
+ * Projektübersicht ITK platform kept it. docs/itk-platform.md has the mapping and the reasoning.
+ *
+ * Deliberately NOT a column on `projects`/`department_reviews`: a Prüfbericht is its own record (laufende
+ * Nummer, Tätigkeitsbereich, Technik, PDF-Code) that only sometimes corresponds to a project, and it has no
+ * Bahnhofsmanagement, so it carries no workspace. Visibility is therefore default-deny for workspace-limited
+ * principals (server/domain/permissions.ts `canViewPruefberichte`); import is admin-only.
+ *
+ * Values are stored as the workbook has them. `beschriftung` is the workbook's own PDF-Code, kept only so the
+ * formula in shared/itk/pdf-code.ts can be checked against it; the code shown in the app is derived.
+ * Dates are DATE columns: a Prüfdatum has no time and no time zone.
+ */
+export const itkPruefberichte = mysqlTable("itk_pruefberichte", {
+  id: int("id").autoincrement().primaryKey(),
+  year: int("year").notNull(),
+  /** "25.001" (2020+), "901" (2018–2019), the Projektnr (2017). */
+  laufendeNummer: varchar("laufendeNummer", { length: 32 }).notNull(),
+  layout: varchar("layout", { length: 16 }).notNull(),
+  datum: date("datum", { mode: "string" }),
+  taetigkeitsbereich: varchar("taetigkeitsbereich", { length: 128 }),
+  artDerBaumassnahme: varchar("artDerBaumassnahme", { length: 128 }),
+  ebaAktenzeichen: varchar("ebaAktenzeichen", { length: 128 }),
+  bahnhofStrecke: varchar("bahnhofStrecke", { length: 512 }),
+  zustaendigeEbaAussenstelle: varchar("zustaendigeEbaAussenstelle", { length: 128 }),
+  artDerTechnik: varchar("artDerTechnik", { length: 256 }),
+  bauformBezeichnung: varchar("bauformBezeichnung", { length: 256 }),
+  technik: varchar("technik", { length: 64 }),
+  abgeschlossen: varchar("abgeschlossen", { length: 64 }),
+  projektnummer: varchar("projektnummer", { length: 64 }),
+  zustaendigerPl: varchar("zustaendigerPl", { length: 128 }),
+  zustaendigerFs: varchar("zustaendigerFs", { length: 128 }),
+  termin: date("termin", { mode: "string" }),
+  beschriftung: varchar("beschriftung", { length: 600 }),
+  link: varchar("link", { length: 1024 }),
+  // legacy columns of the 2017–2019 sheets
+  projektname: varchar("projektname", { length: 512 }),
+  fabrikat: varchar("fabrikat", { length: 128 }),
+  faa: varchar("faa", { length: 64 }),
+  phase: varchar("phase", { length: 64 }),
+  pbVorhanden: varchar("pbVorhanden", { length: 16 }),
+  erneutePruefungErforderlich: varchar("erneutePruefungErforderlich", { length: 16 }),
+  agPl: varchar("agPl", { length: 128 }),
+  anPl: varchar("anPl", { length: 128 }),
+  gesamtbewertung: varchar("gesamtbewertung", { length: 16 }),
+  /** Bumped on every import that changes the row. */
+  version: int("version").default(1).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  yearNrUq: uniqueIndex("itk_pb_year_nr_uq").on(table.year, table.laufendeNummer),
+  technikIdx: index("itk_pb_technik_idx").on(table.technik),
+  plIdx: index("itk_pb_pl_idx").on(table.zustaendigerPl),
+  fsIdx: index("itk_pb_fs_idx").on(table.zustaendigerFs),
+  projektnummerIdx: index("itk_pb_projektnummer_idx").on(table.projektnummer),
 }));
 
 /**

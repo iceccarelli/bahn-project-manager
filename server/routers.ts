@@ -1,7 +1,7 @@
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
+import { publicProcedure, protectedProcedure, router, adminProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { sdk } from "./_core/sdk";
@@ -29,6 +29,9 @@ import { pageAudit } from "./infra/auditQuery";
 import { searchGlobal } from "./infra/searchQuery";
 import { buildPortfolio, buildReelView } from "@shared/portfolio-view";
 import { buildItkYears } from "@shared/itk/jahresansicht";
+import { ImportBatchInputSchema, ListInputSchema } from "@shared/itk/pruefbericht-contract";
+import { buildPruefberichtView, type PruefberichtView } from "@shared/itk/pruefbericht-view";
+import { importPruefberichte, listPruefberichte, loadAllPruefberichte } from "./infra/pruefberichtStore";
 import { drillProjectIds, isEmptyDrill, startOfDayUtc, type Drill } from "@shared/drilldown";
 import { AUDIT_DOCUMENT_KINDS } from "@shared/audit-contract";
 import type { PortfolioProject } from "@shared/portfolio-metrics";
@@ -36,7 +39,7 @@ import { MapQuerySchema, MapStationQuerySchema } from "@shared/map-contract";
 import { BookSlotInputSchema, ListSlotsInputSchema, ReleaseSlotInputSchema } from "@shared/booking-contract";
 import { SaveChecklistInputSchema, SubmitChecklistInputSchema } from "@shared/checklist-contract";
 import type { MysqlProjectStore } from "./infra/mysqlProjectStore";
-import { canViewAudit, workspaceRestriction } from "./domain/permissions";
+import { canImportPruefberichte, canViewAudit, canViewPruefberichte, workspaceRestriction } from "./domain/permissions";
 import { m } from "./observability/metrics";
 import { ConflictError } from "./domain/errors";
 
@@ -51,6 +54,8 @@ const departmentScoped = new KeyedCache<Awaited<ReturnType<typeof readDepartment
 const portfolioRows = new KeyedCache<PortfolioProject[]>("portfolio-rows", 30_000, 100);
 const portfolioView = new KeyedCache<ReturnType<typeof buildPortfolio>>("portfolio", 30_000, 100);
 const itkYearsView = new KeyedCache<ReturnType<typeof buildItkYears>>("itk-years", 30_000, 100);
+/** One global entry: Prüfberichte have no workspace, so there is no per-scope variant (see canViewPruefberichte). */
+const pruefberichtView = new KeyedCache<PruefberichtView>("pruefbericht-view", 30_000, 2);
 // 5 s burst absorber per (scope, user, term): typing the same prefix from many tabs costs one set of queries.
 const auditRecordWindow = new Map<string, { n: number; reset: number }>();
 const searchCache = new KeyedCache<{ q: string; entries: Awaited<ReturnType<typeof searchGlobal>> }>("search", 5_000, 2000);
@@ -415,7 +420,7 @@ export const appRouter = router({
       .input(z.object({
         cursor: z.number().int().positive().optional(),
         limit: z.number().int().min(1).max(100).default(50),
-        entityType: z.enum(["project", "checklist", "booking", "user", "document"]).optional(),
+        entityType: z.enum(["project", "checklist", "booking", "user", "document", "pruefbericht"]).optional(),
         entityId: z.number().int().positive().optional(),
         action: z.enum(["create", "update", "delete", "document"]).optional(),
         user: z.string().trim().min(1).max(100).optional(),
@@ -445,6 +450,30 @@ export const appRouter = router({
         return { ok: true as const };
       }),
     // There is no unscoped `audit.list`: `audit.page` is the only audit read (workspace-scoped, keyset-paginated).
+  }),
+
+  // ============= ITK PRÜFBERICHTE (Projektübersicht ITK) =============
+  pruefberichte: router({
+    /** Technik / Tätigkeitsbereich / PDF-Code figures over the stored Prüfberichte (shared/itk/pruefbericht-view.ts). */
+    view: protectedProcedure.query(async ({ ctx }) => {
+      if (!canViewPruefberichte(ctx.principal)) throw new TRPCError({ code: "FORBIDDEN" });
+      const { pool } = await requireServices();
+      return pruefberichtView.get("all", async () => buildPruefberichtView(await loadAllPruefberichte(pool)));
+    }),
+    /** Keyset-paginated rows for the PDF-Code table. */
+    list: protectedProcedure.input(ListInputSchema).query(async ({ input, ctx }) => {
+      if (!canViewPruefberichte(ctx.principal)) throw new TRPCError({ code: "FORBIDDEN" });
+      const { pool } = await requireServices();
+      return listPruefberichte(pool, input);
+    }),
+    /** One batch of the workbook import (the browser parses the file and sends it in parts). Admin only; idempotent by (year, laufende Nummer). */
+    import: adminProcedure.input(ImportBatchInputSchema).mutation(async ({ input, ctx }) => {
+      if (!ctx.principal || !canImportPruefberichte(ctx.principal)) throw new TRPCError({ code: "FORBIDDEN" });
+      const { pool } = await requireServices();
+      const result = await importPruefberichte(pool, input, { name: ctx.principal.name ?? ctx.principal.email });
+      pruefberichtView.invalidateAll();
+      return result;
+    }),
   }),
 
   // ============= GLOBAL SEARCH =============
