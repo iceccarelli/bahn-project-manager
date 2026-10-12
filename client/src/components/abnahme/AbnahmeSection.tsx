@@ -37,15 +37,18 @@ export function AbnahmeSection({
   return (
     <Card className="overflow-hidden shadow-sm" data-testid={`abnahme-section-${section.number}`}>
       <Collapsible open={open} onOpenChange={onOpenChange}>
-        <CollapsibleTrigger className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&[data-state=open]>svg]:rotate-90">
+        <CollapsibleTrigger className="flex w-full flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&[data-state=open]>svg]:rotate-90">
           <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform" aria-hidden />
           <span className="font-mono text-xs text-muted-foreground tabular-nums">{section.number}</span>
-          <span className="min-w-0 flex-1 text-sm font-semibold">{section.title}</span>
-          {sum.offen > 0 && <Badge className={`text-2xs font-bold ${abnahmeBadgeClass("Offen")}`}>{sum.offen} offen</Badge>}
-          <Badge variant="secondary" className="text-2xs font-bold tabular-nums">
-            {filtered ? `${visibleItems.length} von ${section.items.length} · ` : ""}
-            {bewertet}/{sum.total} bewertet
-          </Badge>
+          {/* basis keeps the title readable on a phone; the counts drop to their own line instead of squeezing it */}
+          <span className="min-w-[10rem] flex-1 basis-[10rem] text-sm font-semibold">{section.title}</span>
+          <span className="flex shrink-0 items-center gap-2 pl-7 sm:pl-0">
+            {sum.offen > 0 && <Badge className={`text-2xs font-bold ${abnahmeBadgeClass("Offen")}`}>{sum.offen} offen</Badge>}
+            <Badge variant="secondary" className="text-2xs font-bold tabular-nums">
+              {filtered ? `${visibleItems.length} von ${section.items.length} · ` : ""}
+              {bewertet}/{sum.total} bewertet
+            </Badge>
+          </span>
         </CollapsibleTrigger>
         <Progress value={sum.fortschritt} aria-label={`Fortschritt ${section.number}`} className="h-1 rounded-none" />
         <CollapsibleContent>

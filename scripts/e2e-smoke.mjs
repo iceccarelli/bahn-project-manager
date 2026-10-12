@@ -3792,6 +3792,37 @@ await check("Abnahme: rate, preview the PDF, buttons aligned, download is a real
   await page.keyboard.press("Escape");
 });
 
+await check("Abnahme on a phone: controls stay inside their card, filter chips never overlap", async () => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  try {
+    await go("/psv-itk?tab=abnahme&technik=ZIM");
+    await page.locator("#abnahme-search").waitFor({ timeout: 20000 });
+    const problems = await page.evaluate(() => {
+      const card = document.querySelector("#abnahme-search")?.closest('[data-slot="card"]');
+      if (!card) return ["no toolbar card"];
+      const box = card.getBoundingClientRect();
+      const out = [];
+      const controls = [...card.querySelectorAll("button,input,[role=radio]")].filter((e) => e.offsetParent);
+      for (const c of controls) {
+        const r = c.getBoundingClientRect();
+        if (r.right > box.right + 0.5 || r.left < box.left - 0.5) out.push(`outside card: ${(c.textContent || c.placeholder || "").trim().slice(0, 20)}`);
+      }
+      const chips = [...card.querySelectorAll("[role=radio]")].map((e) => e.getBoundingClientRect());
+      for (let i = 0; i < chips.length; i++)
+        for (let j = i + 1; j < chips.length; j++) {
+          const a = chips[i], b = chips[j];
+          const overlap = Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1;
+          if (overlap) out.push(`chips ${i} and ${j} overlap`);
+        }
+      if (document.documentElement.scrollWidth > document.documentElement.clientWidth + 1) out.push("page scrolls horizontally");
+      return out;
+    });
+    assert(problems.length === 0, problems.join("; "));
+  } finally {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+  }
+});
+
 await check("Projektblatt: Vorschau opens the same preview dialog", async () => {
   await go("/psv-itk");
   await page.locator('button[aria-label^="Details zu Projekt"]').first().click();

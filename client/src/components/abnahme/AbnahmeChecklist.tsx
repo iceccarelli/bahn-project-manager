@@ -158,7 +158,7 @@ export function AbnahmeChecklist({
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               aria-label={`${template.technik}-Checkliste durchsuchen`}
-              placeholder="Punkt, Nummer oder Mangel suchen …"
+              placeholder="Punkt oder Mangel suchen …"
               autoComplete="off"
               className="h-10 w-full rounded-md border border-input bg-background pl-9 pr-3 text-sm outline-none transition-colors focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
             />
@@ -170,15 +170,20 @@ export function AbnahmeChecklist({
             value={filter}
             onValueChange={(next) => setFilter(isAbnahmeFilter(next) ? next : "alle")}
             aria-label="Nach Status filtern"
-            className="flex-wrap"
+            className="flex-wrap gap-1 sm:gap-0"
           >
+            {/* Phone: separate chips that wrap. From sm: the joined segmented control the rest of the app uses. */}
             {(Object.keys(FILTER_LABEL) as AbnahmeFilter[]).map((f) => (
-              <ToggleGroupItem key={f} value={f} className="px-3 text-xs sm:flex-none">
+              <ToggleGroupItem
+                key={f}
+                value={f}
+                className="flex-none rounded-md px-3 text-xs data-[variant=outline]:border-l sm:rounded-none sm:data-[variant=outline]:border-l-0 sm:data-[variant=outline]:first:border-l"
+              >
                 {FILTER_LABEL[f]}
               </ToggleGroupItem>
             ))}
           </ToggleGroup>
-          <div className="ml-auto flex items-center gap-1">
+          <div className="flex w-full flex-wrap items-center gap-2 sm:ml-auto sm:w-auto sm:gap-1">
             <Button
               variant="ghost"
               size="sm"

@@ -22,6 +22,8 @@ jobs:
       - run: pnpm lint
       # the repository must not contradict itself (build entry points, Dockerfile/compose/docs, ruleset vs CI jobs)
       - run: pnpm check:consistency
+      # the generated Abnahme checklist templates must match data/abnahme-source.json
+      - run: pnpm abnahme:check
       # Data integrity: canonical Bahnhofsmanagement, station master invariants,
       # derived blocks in sync, and no regression in map coverage.
       - run: pnpm verify:data
