@@ -1,5 +1,5 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
-import { ChevronsDownUp, ChevronsUpDown, RotateCcw, Search, SearchX } from "lucide-react";
+import { ChevronsDownUp, ChevronsUpDown, FileText, RotateCcw, Search, SearchX } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,7 +22,10 @@ import { AbnahmeSection } from "@/components/abnahme/AbnahmeSection";
 import { AbnahmeSummary } from "@/components/abnahme/AbnahmeSummary";
 import { MaengelListe } from "@/components/abnahme/MaengelListe";
 import { useAbnahmeSession } from "@/components/abnahme/useAbnahmeSession";
+import { PdfPreviewDialog, usePdfPreview } from "@/components/PdfPreviewDialog";
+import { useAuth } from "@/_core/hooks/useAuth";
 import type { Project } from "@/hooks/useDataQuery";
+import { formatGerman } from "@shared/date";
 import { filterTemplate, isAbnahmeFilter, type AbnahmeFilter } from "@shared/abnahme/filter";
 import { deriveMaengel, summarizeTemplate } from "@shared/abnahme/summary";
 import type { ChecklistTemplate } from "@shared/abnahme/types";
@@ -54,6 +57,8 @@ export function AbnahmeChecklist({
   project: Project | null;
 }) {
   const session = useAbnahmeSession(template, projectId);
+  const { user } = useAuth();
+  const pdf = usePdfPreview();
   const { answers } = session;
 
   const [searchInput, setSearchInput] = useState("");
@@ -68,6 +73,7 @@ export function AbnahmeChecklist({
   const maengel = useMemo(() => deriveMaengel(template, answers), [template, answers]);
   const visible = useMemo(() => filterTemplate(template, answers, query, filter), [template, answers, query, filter]);
   const narrowed = query.trim() !== "" || filter !== "alle";
+  const allOpen = openSections.size === template.sections.length;
   const visibleCount = useMemo(() => visible.reduce((n, v) => n + v.items.length, 0), [visible]);
 
   const setSectionOpen = useCallback((number: string, open: boolean) => {
@@ -102,6 +108,25 @@ export function AbnahmeChecklist({
       setJumpTo(null);
     }
   }, [jumpTo, openSections, visible]);
+
+  const showPdf = () =>
+    pdf.show(async () => {
+      const { renderAbnahmePdf } = await import("@/pdf/renderAbnahmePdf");
+      const itk = project?.reviews?.find((r) => r.department === "ITK");
+      return renderAbnahmePdf({
+        template,
+        answers,
+        header: session.header,
+        projektnummer: project?.projektnummer ?? "",
+        station: project?.station ?? "",
+        projektleiter: project?.projektleiter ?? "",
+        pruefer: itk?.prueferName ?? "",
+        pruefDatum: formatGerman(itk?.pruefDatum) || "",
+        // Taken when the button is pressed, not when the page loaded: the stamp says when this sheet was made.
+        generatedAt: new Date().toISOString(),
+        generatedBy: user?.name || user?.email || "",
+      });
+    });
 
   const resetNarrowing = () => {
     setSearchInput("");
@@ -141,7 +166,7 @@ export function AbnahmeChecklist({
           <ToggleGroup
             type="single"
             variant="outline"
-            size="sm"
+            size="lg"
             value={filter}
             onValueChange={(next) => setFilter(isAbnahmeFilter(next) ? next : "alle")}
             aria-label="Nach Status filtern"
@@ -157,18 +182,19 @@ export function AbnahmeChecklist({
             <Button
               variant="ghost"
               size="sm"
-              className="h-8 gap-1.5"
+              className="h-10 gap-1.5"
               disabled={narrowed}
-              onClick={() => setOpenSections(new Set(template.sections.map((s) => s.number)))}
+              onClick={() => setOpenSections(allOpen ? new Set() : new Set(template.sections.map((s) => s.number)))}
             >
-              <ChevronsUpDown className="h-4 w-4" aria-hidden /> Alle öffnen
+              {allOpen ? <ChevronsDownUp className="h-4 w-4" aria-hidden /> : <ChevronsUpDown className="h-4 w-4" aria-hidden />}
+              {allOpen ? "Alle schließen" : "Alle öffnen"}
             </Button>
-            <Button variant="ghost" size="sm" className="h-8 gap-1.5" disabled={narrowed} onClick={() => setOpenSections(new Set())}>
-              <ChevronsDownUp className="h-4 w-4" aria-hidden /> Alle schließen
+            <Button size="sm" className="h-10 gap-1.5 bg-primary text-white hover:bg-primary/90" onClick={showPdf}>
+              <FileText className="h-4 w-4" aria-hidden /> PDF
             </Button>
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button variant="outline" size="sm" className="h-8 gap-1.5" disabled={summary.total === summary.nichtBewertet}>
+                <Button variant="outline" size="sm" className="h-10 gap-1.5" disabled={summary.total === summary.nichtBewertet}>
                   <RotateCcw className="h-4 w-4" aria-hidden /> Zurücksetzen
                 </Button>
               </AlertDialogTrigger>
@@ -232,6 +258,12 @@ export function AbnahmeChecklist({
       )}
 
       <MaengelListe maengel={maengel} onJump={jump} />
+
+      <PdfPreviewDialog
+        title={`Abnahmeprotokoll ${template.technik}`}
+        description={project?.projektnummer ? `${project.projektnummer} · ${project.station ?? ""}` : "Freie Abnahme ohne Projektbezug"}
+        state={pdf}
+      />
     </div>
   );
 }

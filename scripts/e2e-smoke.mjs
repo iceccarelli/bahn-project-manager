@@ -3729,6 +3729,83 @@ await check("a tile is a place you can go, and an empty tile is not", async () =
   assert(url.searchParams.get("q") === "abgelehnt", `it did not carry the state: ${url.search}`);
 });
 
+console.log("\n== ITK-Abnahme and the PDF preview ==");
+
+await check("PSV-ITK has Übersicht and Abnahme tabs; the Abnahme opens from the URL", async () => {
+  await go("/psv-itk");
+  assert(
+    (await page.getByRole("tab", { name: "Übersicht" }).getAttribute("data-state")) === "active",
+    "Übersicht is not the default tab",
+  );
+  assert(await page.locator("table").first().isVisible(), "the Übersicht lost its table");
+  await go("/psv-itk?tab=abnahme&technik=Video");
+  await page.getByRole("heading", { name: "ITK-Abnahme" }).waitFor({ timeout: 20000 });
+  const kpi = await page.getByTestId("abnahme-summary").innerText();
+  assert(kpi.includes("74"), `Video checklist should have 74 points: ${kpi.replace(/\n/g, " ")}`);
+});
+
+await check("every page title sits at the same left edge (one page frame)", async () => {
+  const xs = {};
+  for (const route of ["/", "/anmeldung", "/projects", "/bvb-eea", "/audit"]) {
+    await go(route);
+    xs[route] = await page.evaluate(() => {
+      const h = document.querySelector("main h1");
+      return h ? Math.round(h.getBoundingClientRect().x) : null;
+    });
+  }
+  const values = Object.values(xs);
+  assert(values.every((v) => v !== null), `a page has no <h1>: ${JSON.stringify(xs)}`);
+  assert(new Set(values).size === 1, `page titles are not aligned: ${JSON.stringify(xs)}`);
+});
+
+await check("Abnahme: rate, preview the PDF, buttons aligned, download is a real PDF", async () => {
+  await go("/psv-itk?tab=abnahme&technik=ZIM");
+  const row = page.locator("#abnahme-item-1\\.1\\.2");
+  await row.waitFor({ timeout: 20000 });
+  await row.getByRole("radio", { name: "Offen" }).click();
+  await row.getByRole("textbox").fill("Nachweis fehlt");
+  const heights = await page.evaluate(() => {
+    const bar = document.querySelector("#abnahme-search")?.closest("div.flex");
+    return [...(bar?.querySelectorAll("input,button,[role=radio]") ?? [])]
+      .filter((e) => e.offsetParent)
+      .map((e) => Math.round(e.getBoundingClientRect().height));
+  });
+  assert(heights.length > 5 && new Set(heights).size === 1, `toolbar controls differ in height: ${[...new Set(heights)]}`);
+  await page.getByRole("button", { name: "PDF", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await page.waitForFunction(
+    () =>
+      [...document.querySelectorAll("[role=dialog] button")].find((b) => /Herunterladen/.test(b.textContent ?? ""))
+        ?.disabled === false,
+    null,
+    { timeout: 90000 },
+  );
+  assert(/^blob:/.test((await dialog.locator("iframe").getAttribute("src")) ?? ""), "the preview frame holds no PDF");
+  const [download] = await Promise.all([
+    page.waitForEvent("download", { timeout: 60000 }),
+    dialog.getByRole("button", { name: "Herunterladen" }).click(),
+  ]);
+  assert(/^Abnahme_ZIM_.*\.pdf$/.test(download.suggestedFilename()), download.suggestedFilename());
+  const file = path.join("/tmp", `e2e-abnahme-${Date.now()}.pdf`);
+  await download.saveAs(file);
+  assert(fs.readFileSync(file).subarray(0, 5).toString() === "%PDF-", "the download is not a PDF");
+  await page.keyboard.press("Escape");
+});
+
+await check("Projektblatt: Vorschau opens the same preview dialog", async () => {
+  await go("/psv-itk");
+  await page.locator('button[aria-label^="Details zu Projekt"]').first().click();
+  await page.getByRole("button", { name: "Vorschau" }).click();
+  await page.waitForFunction(
+    () =>
+      [...document.querySelectorAll("[role=dialog] button")].find((b) => /Herunterladen/.test(b.textContent ?? ""))
+        ?.disabled === false,
+    null,
+    { timeout: 90000 },
+  );
+  await page.keyboard.press("Escape");
+});
+
 console.log("\n== summary ==");
 console.log(`${passed} passed, ${failures.length} failed`);
 await browser.close();

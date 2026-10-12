@@ -13,7 +13,6 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocation, useSearch as useRouteSearch } from "wouter";
 import { toneFor } from "@shared/handlungsbedarf";
 import { TONE_APPEARANCE } from "@shared/status-appearance";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { InlineEditCell, RowActions, StatusSelect } from "@/components/workspace/table-parts";
@@ -22,6 +21,7 @@ import ServerMap from "@/components/ServerMap";
 import { useVirtualRows } from "@/hooks/useVirtualRows";
 import { serverApi } from "@/realtime/serverApi";
 import { useRowScopes, useServerFilters, useServerProjectDetail, useServerProjects } from "@/realtime/serverProjects";
+import { KpiCard } from "@/components/workspace/KpiCard";
 import { ServerPager } from "@/realtime/ServerPager";
 import { REVIEW_STATUSES } from "@shared/types";
 import { APPROVED_STATUSES, BLOCKING_STATUSES, OPEN_STATUSES, normalizeReviewStatus } from "@shared/review-status";
@@ -29,18 +29,6 @@ import type { Department } from "@shared/types";
 import type { Project, Review } from "@/hooks/useDataQuery";
 
 const ALL = "__all__";
-
-function Kpi({ label, value, caption, tone }: { label: string; value: number | null; caption: string; tone?: string }) {
-  return (
-    <Card className="shadow-sm">
-      <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle></CardHeader>
-      <CardContent>
-        <div className={`text-4xl font-bold ${tone ?? ""}`}>{value === null ? "–" : value.toLocaleString("de-DE")}</div>
-        <p className="mt-1 text-xs text-muted-foreground">{caption}</p>
-      </CardContent>
-    </Card>
-  );
-}
 
 export function ServerDepartmentView({ department, title, subtitle, prueferLabel }: { department: Department; title: string; subtitle: string; prueferLabel: string }) {
   const [searchInput, setSearchInput] = useState("");
@@ -80,17 +68,17 @@ export function ServerDepartmentView({ department, title, subtitle, prueferLabel
   const reviewOf = (p: Project): Review | undefined => (p.reviews ?? []).find((r: Review) => r.department === department);
 
   return (
-    <div className="space-y-6 p-6" data-testid="server-department-view">
+    <div className="min-h-screen space-y-8 bg-background p-6" data-testid="server-department-view">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">{title}</h1>
-        <p className="text-muted-foreground">{subtitle}</p>
+        <h1 className="page-title">{title}</h1>
+        <p className="mt-2 text-muted-foreground">{subtitle}</p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Kpi label={`${department}-Prüfungen`} value={kpi.data?.total ?? null} caption="in Ihren Regionen" />
-        <Kpi label="Offen" value={kpi.data ? counts.open : null} caption="warten auf eine Entscheidung" />
-        <Kpi label="Freigegeben" value={kpi.data ? counts.approved : null} caption="Zustimmung / Niederschrift" tone="text-green-700" />
-        <Kpi label="Blockiert" value={kpi.data ? counts.blocked : null} caption="abgelehnt oder gestoppt" tone="text-red-700" />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-4">
+        <KpiCard accent label={`${department}-Prüfungen`} value={kpi.data?.total ?? null} caption="in Ihren Regionen" />
+        <KpiCard label="Offen" value={kpi.data ? counts.open : null} caption="warten auf eine Entscheidung" />
+        <KpiCard label="Freigegeben" value={kpi.data ? counts.approved : null} caption="Zustimmung / Niederschrift" valueTone="text-emerald-700 dark:text-emerald-400" captionTone="text-emerald-700 dark:text-emerald-400" />
+        <KpiCard label="Blockiert" value={kpi.data ? counts.blocked : null} caption="abgelehnt oder gestoppt" valueTone="text-red-600 dark:text-red-400" captionTone="text-red-600 dark:text-red-400" />
       </div>
 
       {tone && (
