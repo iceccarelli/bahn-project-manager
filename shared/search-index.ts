@@ -77,6 +77,10 @@ export function staticEntries(): SearchEntry[] {
       sublabel: "Alle ITK-Prüfungen mit Karte, Filter und Details",
       terms: ["psv itk telekommunikation informationstechnik"],
     }),
+    entry("seite", "ITK-Abnahme", "/psv-itk?tab=abnahme", {
+      sublabel: "Abnahme-Checklisten je Technik: ZIM, Video, DSA+, dBOS",
+      terms: ["abnahme checkliste abnahmeprüfung mangel mängel itk zim video dsa dbos fachtechnische"],
+    }),
     entry("seite", "Projektanmeldung", "/anmeldung", {
       sublabel: "Neues Projekt anmelden — Checkliste und Termin",
       terms: ["neues projekt anlegen anmeldung checkliste formular termin erfassen"],

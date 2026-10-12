@@ -54,6 +54,8 @@
 ## Frontend - PSV-ITK View
 - [x] Separate page for ITK-Projektvorstellungen
 - [x] Fields: Projektstand, Termin, ITK-Prüfer
+- [x] Tab "Abnahme": Checklisten ZIM / Video / DSA+ / dBOS, client-side (docs/abnahme.md)
+- [ ] Abnahme persistence (`abnahme_records`), ELA/WLAN/SAA templates, PDF-Code, Jahresansicht — see docs/abnahme.md
 
 ## Frontend - Import/Export
 - [x] Excel upload for data import
