@@ -3780,7 +3780,15 @@ await check("Abnahme: rate, preview the PDF, buttons aligned, download is a real
     null,
     { timeout: 90000 },
   );
-  assert(/^blob:/.test((await dialog.locator("iframe").getAttribute("src")) ?? ""), "the preview frame holds no PDF");
+  // CI's Chromium ships without a PDF viewer (navigator.pdfViewerEnabled === false); there the dialog must say so
+  // and keep its buttons working, rather than show an empty frame. Both paths are the feature.
+  const embeds = await page.evaluate(() => navigator.pdfViewerEnabled !== false);
+  if (embeds) {
+    assert(/^blob:/.test((await dialog.locator("iframe").getAttribute("src")) ?? ""), "the preview frame holds no PDF");
+  } else {
+    assert(await dialog.getByText("Dieser Browser zeigt PDFs nicht eingebettet an").isVisible(), "no fallback message without a PDF viewer");
+    assert((await dialog.locator("iframe").count()) === 0, "an empty frame is shown without a PDF viewer");
+  }
   const [download] = await Promise.all([
     page.waitForEvent("download", { timeout: 60000 }),
     dialog.getByRole("button", { name: "Herunterladen" }).click(),
