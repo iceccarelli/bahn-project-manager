@@ -64,7 +64,9 @@ import {
   ArrowRight,
   Printer,
   Loader2,
+  ClipboardCheck,
 } from "lucide-react";
+import { Link } from "wouter";
 import type { Project } from "@/hooks/useDataQuery";
 import { useProjectHistory } from "@/hooks/useAuditFeed";
 import { DEPARTMENTS, type Department } from "@shared/types";
@@ -317,6 +319,14 @@ export function ProjectDetailDialog({
     return m;
   }, [project]);
 
+  // Deep link into the /psv-itk Abnahme for this project — only where an ITK Prüfung actually applies,
+  // the same rule that decides which projects /psv-itk lists.
+  const itkReview = reviewByDept.get("ITK");
+  const itkAbnahmeHref =
+    project && itkReview && normalizeReviewStatus(itkReview.status) !== "nicht erforderlich"
+      ? `/psv-itk?tab=abnahme&project=${project.id}`
+      : null;
+
   const openCount = useMemo(
     () => (project?.reviews ?? []).filter((r) => isOpen(r.status)).length,
     [project],
@@ -502,6 +512,14 @@ export function ProjectDetailDialog({
                   <Mail className="h-3.5 w-3.5" aria-hidden="true" />
                   Bahnhofsmanagement
                 </a>
+              </Button>
+            )}
+            {itkAbnahmeHref && (
+              <Button asChild variant="outline" size="sm" className="h-9 gap-1.5">
+                <Link href={itkAbnahmeHref} onClick={() => onOpenChange(false)}>
+                  <ClipboardCheck className="h-3.5 w-3.5" aria-hidden="true" />
+                  ITK-Abnahme
+                </Link>
               </Button>
             )}
             {/*

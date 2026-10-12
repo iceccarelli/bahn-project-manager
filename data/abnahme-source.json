@@ -1,0 +1,2091 @@
+{
+  "ZIM": [
+    {
+      "title": "1.1 Grundlagen zur fachtechnischen Prüfung und übergreifende Dokumentation",
+      "items": [
+        {
+          "id": "1.1.1",
+          "label": "Hdf Erklärung (Herstellung der Funktionsfähigkeit) liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.2",
+          "label": "Nachweise des Errichters zur Funktionsfähigkeit (Checklisten, Testplan und Systemtests) der Anlage liegen vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.3",
+          "label": "Bauausführender benannt (ggf. Nachunternehmer)",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.4",
+          "label": "Ausführungsplanung, freigegeben durch den zuständigen Fachspezialisten, liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.5",
+          "label": "Leistungsnachweise/ Bautagesberichte liegen vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.6",
+          "label": "Erforderliche Freigaben bei Abweichungen von der Ausführungsplanung liegen vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.7",
+          "label": "Herstellerdokumentation (technische Datenblätter, Service- und Wartungsanleitungen)",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.8",
+          "label": "Die (hand-)revidierte Ausführungsplanung (gebauter Zustand) liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.9",
+          "label": "Fotodokumentation von verdeckten Anlagenteilen liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.10",
+          "label": "Fachunternehmererklärung/Errichterbescheinigung liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.11",
+          "label": "Nachweis der Einhaltung der gültigen DGUV Vorschriften liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.12",
+          "label": "Konformitätserklärung(en) liegen vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.13",
+          "label": "Die Konfigurationsbestätigung liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.14",
+          "label": "Schulungsnachweise vorhanden",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.15",
+          "label": "Ersteinweisung für Anwender und Dienstleister inkl. Nachweis liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.16",
+          "label": "Entsorgungsnachweise vorhanden",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.17",
+          "label": "Anlagenbuch liegt aus",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.18",
+          "label": "Errichter hat sich im Anlagenbuch eingetragen",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.19",
+          "label": "Nachweise zur verbauten Hard- und Software (Komponenten-/Anlagenliste) liegen vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.20",
+          "label": "Kabelliste liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.21",
+          "label": "IP-Adressliste liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.22",
+          "label": "Alle technischen Komponenten haben eine fachliche bzw. Typfreigabe",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.23",
+          "label": "Die Wartung und Instandhaltung wurden beauftragt",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.24",
+          "label": "Zuständige 3-S-Zentrale ist über Betriebsaufnahme der Anlage informiert",
+          "selected": null,
+          "mangel": ""
+        }
+      ]
+    },
+    {
+      "title": "1.2 Prüfkriterien Stahlbaukonstruktion und Masten",
+      "items": [
+        {
+          "id": "1.2.1",
+          "label": "Halterung/Konstruktion/Mast gemäß Ausführungsplanung gefertigt und montiert",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.2.2",
+          "label": "Stahlbaukonstruktion ist in Waage/Lot (max. Abweichung < 1%)",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.2.3",
+          "label": "Korrosionsschutz ist gegeben",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.2.4",
+          "label": "Bauliche Umgebung ist wieder hergestellt und angepasst",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.2.5",
+          "label": "Teilerdungsplan liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.2.6",
+          "label": "Taubenvergrämung wurde montiert",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.2.7",
+          "label": "Statische Nachweise liegen vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.2.8",
+          "label": "Schalthäuser/Outdoorschränke aufgestellt und ausgerüstet",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.2.9",
+          "label": "Prüfung TBQ liegt vor",
+          "selected": null,
+          "mangel": ""
+        }
+      ]
+    },
+    {
+      "title": "1.3 Prüfkriterien Verkabelung und Montage",
+      "items": [
+        {
+          "id": "1.3.1",
+          "label": "Cu-Kabelverlegung fachgerecht ausgeführt",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.2",
+          "label": "LWL-Kabelverlegung fachgerecht ausgeführt",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.3",
+          "label": "Fachgerechte Montage der Verteilungen",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.4",
+          "label": "Kabel fachgerecht auf den Verteilungen aufgelegt",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.5",
+          "label": "Kabel- und Leitungskennzeichnung entsprechend der Planung",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.6",
+          "label": "Messprotokolle für alle Verbindungen liegen vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.7",
+          "label": "Brandschutztechnische Maßnahmen fachgerecht ausgeführt",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.8",
+          "label": "Örtlich ausliegende Unterlagen wurden angepasst",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.9",
+          "label": "Keine Kabelverlegung im Verbund (Funktionserhalt)",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.10",
+          "label": "Erdungsmaßnahmen wurden entsprechend ausgeführt",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.11",
+          "label": "Abnahmeprotokoll 50 Hz inkl. Erdung liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.12",
+          "label": "Kabelendgestelle sind isoliert aufgestellt",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.13",
+          "label": "Abschirmungen der Kabel sind ordnungsgemäß angeschlossen",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.14",
+          "label": "Erdsammelschiene TK Kabel ist ordnungsgemäß geerdet",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.15",
+          "label": "Messprotokolle sind zu jedem Kabel vorhanden",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.16",
+          "label": "Durchgangshöhe wurde eingehalten",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.17",
+          "label": "Komponenten sind vandalismussicher installiert",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.18",
+          "label": "Komponenten sind außerhalb des Gefahrenbereiches montiert",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.19",
+          "label": "Komponenten außerhalb des Lichtraumprofiles montiert",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.20",
+          "label": "Montageöffnungen wurden fachgerecht wiederhergestellt",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.21",
+          "label": "ITK-Verteilungen sind fachgerecht beschriftet",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.22",
+          "label": "Brandschottung wurde fachgerecht ausgeführt und beschriftet",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.23",
+          "label": "Übereinstimmungsbestätigung über Brandschottung(en) liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.24",
+          "label": "Typenschild vorhanden",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.25",
+          "label": "Dichtungen in Ordnung; Gehäuse innen trocken und mangelfrei",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.26",
+          "label": "Alle Systemkomponenten sind fachgerecht eingebaut",
+          "selected": null,
+          "mangel": ""
+        }
+      ]
+    },
+    {
+      "title": "1.4 Prüfkriterien zentrale Technik",
+      "items": [
+        {
+          "id": "1.4.1",
+          "label": "Technikraum entspricht den Vorgaben der Ril 813.0450",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.4.2",
+          "label": "19\" Systemschrank fachgerecht aufgebaut und montiert inkl. Erdung",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.4.3",
+          "label": "Widerstandsklasse der Outdoorschränke gemäß Planung",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.4.4",
+          "label": "Schließung entspricht den Vorgaben der Ril 813.0450",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.4.5",
+          "label": "Technikschränke besitzen Überwachung mittels Türkontakten",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.4.6",
+          "label": "Alle technischen Einrichtungen wurden fachgerecht montiert und eingebaut",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.4.7",
+          "label": "Beschriftungen wurden fachgerecht und dauerhaft angebracht",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.4.8",
+          "label": "Interne Schrankkabelführungen wurden fachgerecht ausgeführt",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.4.9",
+          "label": "Thermostatgesteuerte Lüftungsregulierungen wurden eingestellt",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.4.10",
+          "label": "Klimatisierungen sind funktionsfähig",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.4.11",
+          "label": "Überwachung der Raumtemperatur ist funktionsfähig",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.4.12",
+          "label": "Geräuschentwicklung liegt im Toleranzbereich",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.4.13",
+          "label": "Übergeordnete Schutzeinrichtungen wurden fachgerecht eingebaut",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.4.14",
+          "label": "Ausgeführte Leistungen entsprechen der Planung",
+          "selected": null,
+          "mangel": ""
+        }
+      ]
+    },
+    {
+      "title": "1.5 Prüfkriterien Elektrotechnik (Stromversorgung, Erdung)",
+      "items": [
+        {
+          "id": "1.5.1",
+          "label": "Abnahme der Elektrotechnik erfolgreich durchgeführt",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.5.2",
+          "label": "Erstprüfung nach DGUV-Vorschrift 4 erfolgt",
+          "selected": null,
+          "mangel": ""
+        }
+      ]
+    },
+    {
+      "title": "1.6 Prüfkriterien Spannungsversorgung (USV)",
+      "items": [
+        {
+          "id": "1.6.1",
+          "label": "USV ist gesondert abgesichert und beschriftet",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.6.2",
+          "label": "Spannungs- und Stromwerte beim Ladevorgang entsprechen den Leistungsdaten",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.6.3",
+          "label": "Batterien sind ordnungsgemäß untergebracht",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.6.4",
+          "label": "Ausreichende Be- und Entlüftung des ITK-Raumes ist sichergestellt",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.6.5",
+          "label": "Räume sind mit Warn- und Verbotsschildern gekennzeichnet",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.6.6",
+          "label": "Dimensionierung der Kapazität ist erfolgt",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.6.7",
+          "label": "Überbrückungszeit wird gemäß Vorgabe eingehalten",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.6.8",
+          "label": "Netzabsicherung des Gleichrichters ist beschriftet",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.6.9",
+          "label": "Zustands- und Störmeldeübertragung wurde erfolgreich geprüft",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.6.10",
+          "label": "Anlagenkomponenten der USV sind ordnungsgemäß angeschlossen",
+          "selected": null,
+          "mangel": ""
+        }
+      ]
+    },
+    {
+      "title": "2. Optische Kundeninformationssysteme (FIA-ZIM)",
+      "items": [
+        {
+          "id": "2.1.1",
+          "label": "Datenanbindung und Funktion in Ordnung",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.1.2",
+          "label": "Funktionsbezogenes Layout in Ordnung",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.1.3",
+          "label": "Dach/Bodenbelag wiederhergestellt",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.1.4",
+          "label": "Anzeiger waagerecht montiert",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.1.5",
+          "label": "Neigungswinkel des Anzeigers ist ordnungsgemäß",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.1.6",
+          "label": "Helligkeitsregelung funktionsfähig",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.1.7",
+          "label": "Zughaltsensor montiert und funktionsfähig",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.1.8",
+          "label": "Endgeräte-ID ist vorhanden und sichtbar",
+          "selected": null,
+          "mangel": ""
+        }
+      ]
+    }
+  ],
+  "Video": [
+    {
+      "title": "1.1 Grundlagen zur fachtechnischen Prüfung und übergreifende Dokumentation",
+      "items": [
+        {
+          "id": "1.1.1",
+          "label": "Hdf Erklärung (Herstellung der Funktionsfähigkeit) liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.2",
+          "label": "Nachweise des Errichters zur Funktionsfähigkeit (Checklisten, Testplan und Systemtests) der Anlage liegen vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.3",
+          "label": "Bauausführender benannt (ggf. Nachunternehmer)",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.4",
+          "label": "Ausführungsplanung, freigegeben durch den zuständigen Fachspezialisten, liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.5",
+          "label": "Leistungsnachweise/ Bautagesberichte liegen vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.6",
+          "label": "Erforderliche Freigaben bei Abweichungen von der Ausführungsplanung liegen vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.7",
+          "label": "Herstellerdokumentation (technische Datenblätter, Service- und Wartungsanleitungen)",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.8",
+          "label": "Die (hand-)revidierte Ausführungsplanung (gebauter Zustand) liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.9",
+          "label": "Fotodokumentation von verdeckten Anlagenteilen liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.10",
+          "label": "Fachunternehmererklärung/Errichterbescheinigung liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.11",
+          "label": "Nachweis der Einhaltung der gültigen DGUV Vorschriften liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.12",
+          "label": "Konformitätserklärung(en) liegen vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.13",
+          "label": "Die Konfigurationsbestätigung liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.14",
+          "label": "Schulungsnachweise vorhanden",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.15",
+          "label": "Ersteinweisung für Anwender und Dienstleister inkl. Nachweis liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.16",
+          "label": "Entsorgungsnachweise vorhanden",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.17",
+          "label": "Anlagenbuch liegt aus",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.18",
+          "label": "Errichter hat sich im Anlagenbuch eingetragen",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.19",
+          "label": "Nachweise zur verbauten Hard- und Software (Komponenten-/Anlagenliste) liegen vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.20",
+          "label": "Kabelliste liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.21",
+          "label": "IP-Adressliste liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.22",
+          "label": "Alle technischen Komponenten haben eine fachliche bzw. Typfreigabe",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.23",
+          "label": "Die Wartung und Instandhaltung wurden beauftragt",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.24",
+          "label": "Zuständige 3-S-Zentrale ist über Betriebsaufnahme der Anlage informiert",
+          "selected": null,
+          "mangel": ""
+        }
+      ]
+    },
+    {
+      "title": "2.1 Prüfkriterien Videoüberwachungsanlage",
+      "items": [
+        {
+          "id": "2.1.1",
+          "label": "Kamerastandorte entsprechen der Planung",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.1.2",
+          "label": "Kameratypen entsprechen der Planung",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.1.3",
+          "label": "Kameraausrichtung entspricht der Planung",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.1.4",
+          "label": "Bildqualität ist ausreichend (Tag/Nacht)",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.1.5",
+          "label": "Kameragehäuse sind ordnungsgemäß montiert",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.1.6",
+          "label": "Kameragehäuse sind vandalismussicher",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.1.7",
+          "label": "Kameragehäuse sind wetterfest",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.1.8",
+          "label": "Kameragehäuse sind mit Heizung/Lüftung ausgestattet",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.1.9",
+          "label": "Kameragehäuse sind mit Sonnenschutz ausgestattet",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.1.10",
+          "label": "Kameragehäuse sind mit Scheibenwischer ausgestattet",
+          "selected": null,
+          "mangel": ""
+        }
+      ]
+    },
+    {
+      "title": "2.2 Prüfkriterien Aufzeichnungssystem",
+      "items": [
+        {
+          "id": "2.2.1",
+          "label": "Aufzeichnungssystem entspricht der Planung",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.2.2",
+          "label": "Aufzeichnungskapazität entspricht den Anforderungen",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.2.3",
+          "label": "Bildwiederholrate entspricht den Anforderungen",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.2.4",
+          "label": "Bildauflösung entspricht den Anforderungen",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.2.5",
+          "label": "Aufzeichnungsdauer entspricht den Anforderungen",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.2.6",
+          "label": "Datensicherung ist gewährleistet",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.2.7",
+          "label": "Zugriffsberechtigung ist eingerichtet",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.2.8",
+          "label": "Systemuhr ist synchronisiert",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.2.9",
+          "label": "Ereignisprotokollierung ist aktiviert",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.2.10",
+          "label": "Exportfunktion ist funktionsfähig",
+          "selected": null,
+          "mangel": ""
+        }
+      ]
+    },
+    {
+      "title": "2.3 Prüfkriterien Bedienplatz",
+      "items": [
+        {
+          "id": "2.3.1",
+          "label": "Bedienplatz entspricht der Planung",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.3.2",
+          "label": "Monitore sind ordnungsgemäß montiert",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.3.3",
+          "label": "Bildqualität der Monitore ist ausreichend",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.3.4",
+          "label": "Bedienelemente sind funktionsfähig",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.3.5",
+          "label": "Bediensoftware ist installiert und konfiguriert",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.3.6",
+          "label": "Benutzerberechtigungen sind eingerichtet",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.3.7",
+          "label": "Alarmmanagement ist konfiguriert",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.3.8",
+          "label": "Kamerasteuerung ist funktionsfähig",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.3.9",
+          "label": "Bildwiedergabe ist funktionsfähig",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.3.10",
+          "label": "Bildexport ist funktionsfähig",
+          "selected": null,
+          "mangel": ""
+        }
+      ]
+    },
+    {
+      "title": "2.4 Prüfkriterien Netzwerk",
+      "items": [
+        {
+          "id": "2.4.1",
+          "label": "Netzwerkkomponenten entsprechen der Planung",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.4.2",
+          "label": "Netzwerkverbindungen sind stabil",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.4.3",
+          "label": "Bandbreite ist ausreichend",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.4.4",
+          "label": "Netzwerksicherheit ist gewährleistet",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.4.5",
+          "label": "Firewall ist konfiguriert",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.4.6",
+          "label": "VPN-Verbindung ist eingerichtet",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.4.7",
+          "label": "Fernzugriff ist konfiguriert",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.4.8",
+          "label": "Netzwerküberwachung ist eingerichtet",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.4.9",
+          "label": "Redundanz ist gewährleistet",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.4.10",
+          "label": "Notfallkonzept ist vorhanden",
+          "selected": null,
+          "mangel": ""
+        }
+      ]
+    },
+    {
+      "title": "2.5 Prüfkriterien Datenschutz",
+      "items": [
+        {
+          "id": "2.5.1",
+          "label": "Datenschutzkonzept liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.5.2",
+          "label": "Hinweisschilder sind angebracht",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.5.3",
+          "label": "Berechtigungskonzept liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.5.4",
+          "label": "Löschkonzept ist implementiert",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.5.5",
+          "label": "Datenschutzbeauftragter ist benannt",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.5.6",
+          "label": "Verfahrensverzeichnis ist erstellt",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.5.7",
+          "label": "Datenschutz-Folgenabschätzung liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.5.8",
+          "label": "Betriebsvereinbarung liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.5.9",
+          "label": "Schulung der Mitarbeiter ist erfolgt",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "2.5.10",
+          "label": "Dokumentation ist vollständig",
+          "selected": null,
+          "mangel": ""
+        }
+      ]
+    }
+  ],
+  "DSA+": [
+    {
+      "title": "1.1 Grundlagen zur fachtechnischen Prüfung und übergreifende Dokumentation",
+      "items": [
+        {
+          "id": "1.1.1",
+          "label": "Hdf Erklärung (Herstellung der Funktionsfähigkeit) liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.2",
+          "label": "Nachweise des Errichters zur Funktionsfähigkeit (Checklisten, Testplan und Systemtests) der Anlage liegen vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.3",
+          "label": "Bauausführender benannt (ggf. Nachunternehmer)",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.4",
+          "label": "Ausführungsplanung, freigegeben durch den zuständigen Fachspezialisten, liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.5",
+          "label": "Leistungsnachweise/ Bautagesberichte liegen vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.6",
+          "label": "Erforderliche Freigaben bei Abweichungen von der Ausführungsplanung liegen vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.7",
+          "label": "Herstellerdokumentation (technische Datenblätter, Service- und Wartungsanleitungen)",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.8",
+          "label": "Die (hand-)revidierte Ausführungsplanung (gebauter Zustand) liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.9",
+          "label": "Fotodokumentation von verdeckten Anlagenteilen liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.10",
+          "label": "Fachunternehmererklärung/Errichterbescheinigung liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.11",
+          "label": "Nachweis der Einhaltung der gültigen DGUV Vorschriften liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.12",
+          "label": "Konformitätserklärung(en) liegen vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.13",
+          "label": "Die Konfigurationsbestätigung liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.14",
+          "label": "Schulungsnachweise vorhanden",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.15",
+          "label": "Ersteinweisung für Anwender und Dienstleister inkl. Nachweis liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.16",
+          "label": "Entsorgungsnachweise vorhanden",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.17",
+          "label": "Anlagenbuch liegt aus",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.18",
+          "label": "Errichter hat sich im Anlagenbuch eingetragen",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.19",
+          "label": "Nachweise zur verbauten Hard- und Software (Komponenten-/Anlagenliste) liegen vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.20",
+          "label": "Kabelliste liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.21",
+          "label": "IP-Adressliste liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.22",
+          "label": "Alle technischen Komponenten haben eine fachliche bzw. Typfreigabe",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.23",
+          "label": "Die Wartung und Instandhaltung wurden beauftragt",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.24",
+          "label": "Zuständige 3-S-Zentrale ist über Betriebsaufnahme der Anlage informiert",
+          "selected": null,
+          "mangel": ""
+        }
+      ]
+    },
+    {
+      "title": "3.1 Prüfkriterien DSA+ System",
+      "items": [
+        {
+          "id": "3.1.1",
+          "label": "DSA+ Server ist ordnungsgemäß installiert",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.1.2",
+          "label": "DSA+ Software ist korrekt konfiguriert",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.1.3",
+          "label": "Datenbank ist eingerichtet und funktionsfähig",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.1.4",
+          "label": "Backup-System ist konfiguriert",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.1.5",
+          "label": "Systemmonitoring ist eingerichtet",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.1.6",
+          "label": "Benutzerkonten sind angelegt",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.1.7",
+          "label": "Berechtigungskonzept ist umgesetzt",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.1.8",
+          "label": "Systemuhr ist synchronisiert",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.1.9",
+          "label": "Systemprotokollierung ist aktiviert",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.1.10",
+          "label": "Systemleistung ist ausreichend",
+          "selected": null,
+          "mangel": ""
+        }
+      ]
+    },
+    {
+      "title": "3.2 Prüfkriterien DSA+ Clients",
+      "items": [
+        {
+          "id": "3.2.1",
+          "label": "Client-Software ist installiert",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.2.2",
+          "label": "Client-Konfiguration ist korrekt",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.2.3",
+          "label": "Verbindung zum Server ist stabil",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.2.4",
+          "label": "Anmeldung am System funktioniert",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.2.5",
+          "label": "Benutzeroberfläche ist vollständig",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.2.6",
+          "label": "Druckfunktionen sind eingerichtet",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.2.7",
+          "label": "Exportfunktionen sind funktionsfähig",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.2.8",
+          "label": "Clientseitige Berechtigungen sind korrekt",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.2.9",
+          "label": "Clientleistung ist ausreichend",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.2.10",
+          "label": "Updates können installiert werden",
+          "selected": null,
+          "mangel": ""
+        }
+      ]
+    },
+    {
+      "title": "3.3 Prüfkriterien DSA+ Schnittstellen",
+      "items": [
+        {
+          "id": "3.3.1",
+          "label": "Schnittstellen zu anderen Systemen sind konfiguriert",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.3.2",
+          "label": "Datenaustausch funktioniert fehlerfrei",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.3.3",
+          "label": "Schnittstellendokumentation liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.3.4",
+          "label": "Fehlerbehandlung ist implementiert",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.3.5",
+          "label": "Protokollierung der Schnittstellenkommunikation ist aktiviert",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.3.6",
+          "label": "Authentifizierung an Schnittstellen ist sicher",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.3.7",
+          "label": "Verschlüsselung der Kommunikation ist aktiviert",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.3.8",
+          "label": "Schnittstellenperformance ist ausreichend",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.3.9",
+          "label": "Notfallkonzept für Schnittstellenausfall liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.3.10",
+          "label": "Testprotokolle für Schnittstellen liegen vor",
+          "selected": null,
+          "mangel": ""
+        }
+      ]
+    },
+    {
+      "title": "3.4 Prüfkriterien DSA+ Funktionen",
+      "items": [
+        {
+          "id": "3.4.1",
+          "label": "Datenerfassung funktioniert korrekt",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.4.2",
+          "label": "Datenauswertung liefert korrekte Ergebnisse",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.4.3",
+          "label": "Berichtsfunktionen sind vollständig",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.4.4",
+          "label": "Alarmierungsfunktionen sind konfiguriert",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.4.5",
+          "label": "Visualisierungen sind korrekt",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.4.6",
+          "label": "Workflow-Funktionen arbeiten korrekt",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.4.7",
+          "label": "Suchfunktionen liefern korrekte Ergebnisse",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.4.8",
+          "label": "Archivierungsfunktionen sind eingerichtet",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.4.9",
+          "label": "Datensicherungsfunktionen sind getestet",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.4.10",
+          "label": "Systemfunktionen entsprechen den Anforderungen",
+          "selected": null,
+          "mangel": ""
+        }
+      ]
+    },
+    {
+      "title": "3.5 Prüfkriterien DSA+ Sicherheit",
+      "items": [
+        {
+          "id": "3.5.1",
+          "label": "Sicherheitskonzept liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.5.2",
+          "label": "Zugriffsschutz ist implementiert",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.5.3",
+          "label": "Passwortrichtlinien sind konfiguriert",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.5.4",
+          "label": "Verschlüsselung ist aktiviert",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.5.5",
+          "label": "Sicherheitsupdates sind installiert",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.5.6",
+          "label": "Virenschutz ist aktiv",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.5.7",
+          "label": "Firewall ist konfiguriert",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.5.8",
+          "label": "Sicherheitsprotokollierung ist aktiviert",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.5.9",
+          "label": "Notfallkonzept liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "3.5.10",
+          "label": "Datenschutzanforderungen sind erfüllt",
+          "selected": null,
+          "mangel": ""
+        }
+      ]
+    }
+  ],
+  "dBOS": [
+    {
+      "title": "1.1 Grundlagen zur fachtechnischen Prüfung und übergreifende Dokumentation",
+      "items": [
+        {
+          "id": "1.1.1",
+          "label": "Hdf Erklärung (Herstellung der Funktionsfähigkeit) liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.2",
+          "label": "Nachweise des Errichters zur Funktionsfähigkeit (Checklisten, Testplan und Systemtests) der Anlage liegen vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.3",
+          "label": "Bauausführender benannt (ggf. Nachunternehmer)",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.4",
+          "label": "Ausführungsplanung, freigegeben durch den zuständigen Fachspezialisten, liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.5",
+          "label": "Leistungsnachweise/ Bautagesberichte liegen vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.6",
+          "label": "Erforderliche Freigaben bei Abweichungen von der Ausführungsplanung liegen vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.7",
+          "label": "Herstellerdokumentation (technische Datenblätter, Service- und Wartungsanleitungen)",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.8",
+          "label": "Die (hand-)revidierte Ausführungsplanung (gebauter Zustand) liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.9",
+          "label": "Fotodokumentation von verdeckten Anlagenteilen liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.10",
+          "label": "Fachunternehmererklärung/Errichterbescheinigung liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.11",
+          "label": "Nachweis der Einhaltung der gültigen DGUV Vorschriften liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.12",
+          "label": "Konformitätserklärung(en) liegen vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.13",
+          "label": "Die Konfigurationsbestätigung liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.14",
+          "label": "Schulungsnachweise vorhanden",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.15",
+          "label": "Ersteinweisung für Anwender und Dienstleister inkl. Nachweis liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.16",
+          "label": "Entsorgungsnachweise vorhanden",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.17",
+          "label": "Anlagenbuch liegt aus",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.18",
+          "label": "Errichter hat sich im Anlagenbuch eingetragen",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.19",
+          "label": "Nachweise zur verbauten Hard- und Software (Komponenten-/Anlagenliste) liegen vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.20",
+          "label": "Kabelliste liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.21",
+          "label": "IP-Adressliste liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.22",
+          "label": "Alle technischen Komponenten haben eine fachliche bzw. Typfreigabe",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.23",
+          "label": "Die Wartung und Instandhaltung wurden beauftragt",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.1.24",
+          "label": "Zuständige 3-S-Zentrale ist über Betriebsaufnahme der Anlage informiert",
+          "selected": null,
+          "mangel": ""
+        }
+      ]
+    },
+    {
+      "title": "1.2 Prüfkriterien Stahlbaukonstruktion und Masten",
+      "items": [
+        {
+          "id": "1.2.1",
+          "label": "Halterung/Konstruktion/Mast gemäß Ausführungsplanung gefertigt und montiert",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.2.2",
+          "label": "Stahlbaukonstruktion ist in Waage/Lot (max. Abweichung < 1%)",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.2.3",
+          "label": "Korrosionsschutz ist gegeben",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.2.4",
+          "label": "Bauliche Umgebung ist wieder hergestellt und angepasst",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.2.5",
+          "label": "Teilerdungsplan liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.2.6",
+          "label": "Taubenvergrämung wurde montiert",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.2.7",
+          "label": "Statische Nachweise liegen vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.2.8",
+          "label": "Schalthäuser/Outdoorschränke aufgestellt und ausgerüstet",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.2.9",
+          "label": "Prüfung TBQ liegt vor",
+          "selected": null,
+          "mangel": ""
+        }
+      ]
+    },
+    {
+      "title": "1.3 Prüfkriterien Verkabelung und Montage",
+      "items": [
+        {
+          "id": "1.3.1",
+          "label": "Cu-Kabelverlegung fachgerecht ausgeführt",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.2",
+          "label": "LWL-Kabelverlegung fachgerecht ausgeführt",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.3",
+          "label": "Fachgerechte Montage der Verteilungen",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.4",
+          "label": "Kabel fachgerecht auf den Verteilungen aufgelegt",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.5",
+          "label": "Kabel- und Leitungskennzeichnung entsprechend der Planung",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.6",
+          "label": "Messprotokolle für alle Verbindungen liegen vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.7",
+          "label": "Brandschutztechnische Maßnahmen fachgerecht ausgeführt",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.8",
+          "label": "Örtlich ausliegende Unterlagen wurden angepasst",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.9",
+          "label": "Keine Kabelverlegung im Verbund (Funktionserhalt)",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.10",
+          "label": "Erdungsmaßnahmen wurden entsprechend ausgeführt",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.11",
+          "label": "Abnahmeprotokoll 50 Hz inkl. Erdung liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.12",
+          "label": "Kabelendgestelle sind isoliert aufgestellt",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.13",
+          "label": "Abschirmungen der Kabel sind ordnungsgemäß angeschlossen",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.14",
+          "label": "Erdsammelschiene TK Kabel ist ordnungsgemäß geerdet",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.15",
+          "label": "Messprotokolle sind zu jedem Kabel vorhanden",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.16",
+          "label": "Durchgangshöhe wurde eingehalten",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.17",
+          "label": "Komponenten sind vandalismussicher installiert",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.18",
+          "label": "Komponenten sind außerhalb des Gefahrenbereiches montiert",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.19",
+          "label": "Komponenten außerhalb des Lichtraumprofiles montiert",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.20",
+          "label": "Montageöffnungen wurden fachgerecht wiederhergestellt",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.21",
+          "label": "ITK-Verteilungen sind fachgerecht beschriftet",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.22",
+          "label": "Brandschottung wurde fachgerecht ausgeführt und beschriftet",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.23",
+          "label": "Übereinstimmungsbestätigung über Brandschottung(en) liegt vor",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.24",
+          "label": "Typenschild vorhanden",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.25",
+          "label": "Dichtungen in Ordnung; Gehäuse innen trocken und mangelfrei",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.3.26",
+          "label": "Alle Systemkomponenten sind fachgerecht eingebaut",
+          "selected": null,
+          "mangel": ""
+        }
+      ]
+    },
+    {
+      "title": "1.4 Prüfkriterien zentrale Technik",
+      "items": [
+        {
+          "id": "1.4.1",
+          "label": "Technikraum entspricht den Vorgaben der Ril 813.0450",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.4.2",
+          "label": "19\" Systemschrank fachgerecht aufgebaut und montiert inkl. Erdung",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.4.3",
+          "label": "Widerstandsklasse der Outdoorschränke gemäß Planung",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.4.4",
+          "label": "Schließung entspricht den Vorgaben der Ril 813.0450",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.4.5",
+          "label": "Technikschränke besitzen Überwachung mittels Türkontakten",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.4.6",
+          "label": "Alle technischen Einrichtungen wurden fachgerecht montiert und eingebaut",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.4.7",
+          "label": "Beschriftungen wurden fachgerecht und dauerhaft angebracht",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.4.8",
+          "label": "Interne Schrankkabelführungen wurden fachgerecht ausgeführt",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.4.9",
+          "label": "Thermostatgesteuerte Lüftungsregulierungen wurden eingestellt",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.4.10",
+          "label": "Klimatisierungen sind funktionsfähig",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.4.11",
+          "label": "Überwachung der Raumtemperatur ist funktionsfähig",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.4.12",
+          "label": "Geräuschentwicklung liegt im Toleranzbereich",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.4.13",
+          "label": "Übergeordnete Schutzeinrichtungen wurden fachgerecht eingebaut",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.4.14",
+          "label": "Ausgeführte Leistungen entsprechen der Planung",
+          "selected": null,
+          "mangel": ""
+        }
+      ]
+    },
+    {
+      "title": "1.5 Prüfkriterien Elektrotechnik (Stromversorgung, Erdung)",
+      "items": [
+        {
+          "id": "1.5.1",
+          "label": "Abnahme der Elektrotechnik erfolgreich durchgeführt",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.5.2",
+          "label": "Erstprüfung nach DGUV-Vorschrift 4 erfolgt",
+          "selected": null,
+          "mangel": ""
+        }
+      ]
+    },
+    {
+      "title": "1.6 Prüfkriterien Spannungsversorgung (USV)",
+      "items": [
+        {
+          "id": "1.6.1",
+          "label": "USV ist gesondert abgesichert und beschriftet",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.6.2",
+          "label": "Spannungs- und Stromwerte beim Ladevorgang entsprechen den Leistungsdaten",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.6.3",
+          "label": "Batterien sind ordnungsgemäß untergebracht",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.6.4",
+          "label": "Ausreichende Be- und Entlüftung des ITK-Raumes ist sichergestellt",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.6.5",
+          "label": "Räume sind mit Warn- und Verbotsschildern gekennzeichnet",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.6.6",
+          "label": "Dimensionierung der Kapazität ist erfolgt",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.6.7",
+          "label": "Überbrückungszeit wird gemäß Vorgabe eingehalten",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.6.8",
+          "label": "Netzabsicherung des Gleichrichters ist beschriftet",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.6.9",
+          "label": "Zustands- und Störmeldeübertragung wurde erfolgreich geprüft",
+          "selected": null,
+          "mangel": ""
+        },
+        {
+          "id": "1.6.10",
+          "label": "Anlagenkomponenten der USV sind ordnungsgemäß angeschlossen",
+          "selected": null,
+          "mangel": ""
+        }
+      ]
+    }
+  ]
+}

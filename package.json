@@ -41,6 +41,8 @@
     "contacts:extract": "tsx scripts/extract-contacts.ts",
     "stations:generate": "tsx scripts/generate-stations-master.ts",
     "stations:check": "tsx scripts/generate-stations-master.ts --check",
+    "abnahme:extract": "tsx scripts/extract-abnahme-templates.ts",
+    "abnahme:check": "tsx scripts/extract-abnahme-templates.ts --check",
     "data:normalize": "tsx scripts/normalize-existing-data.ts",
     "verify:data": "node scripts/data/stage-public-data.mjs && tsx scripts/verify-data.ts",
     "sync:json-db": "tsx scripts/sync-json-db.ts --checksum",

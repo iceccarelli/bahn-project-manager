@@ -55,6 +55,7 @@ import { MapView, type StationSelection } from "@/components/Map";
 import { ProjectDetailDialog } from "@/components/ProjectDetailDialog";
 import { useAuditTrail } from "@/hooks/useAuditTrail";
 import { FilterSearch } from "@/components/workspace/FilterSearch";
+import { KpiCard } from "@/components/workspace/KpiCard";
 import {
   InlineEditCell,
   RowActions,
@@ -84,44 +85,6 @@ interface Entry {
   status: string | null;
 }
 
-
-/**
- * The Projekte KPI card, verbatim.
- *
- * Same wrapper, same header, same 4xl figure, same 12px caption, same accent
- * on the first card. Copying the markup rather than approximating it is the
- * point: a reader moving between the three tabs must not be able to tell which
- * one they are on from the chrome, only from the numbers.
- */
-function KpiCard({
-  label,
-  value,
-  caption,
-  accent,
-  valueTone,
-  captionTone,
-}: {
-  label: string;
-  value: number;
-  caption: string;
-  accent?: boolean;
-  valueTone?: string;
-  captionTone?: string;
-}) {
-  return (
-    <Card className={accent ? "border-l-4 border-l-primary shadow-sm" : "shadow-sm"}>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className={`text-4xl font-bold ${valueTone ?? ""}`}>
-          {value.toLocaleString("de-DE")}
-        </div>
-        <p className={`mt-1 text-xs ${captionTone ?? "text-muted-foreground"}`}>{caption}</p>
-      </CardContent>
-    </Card>
-  );
-}
 
 function FilterChip({ label, onClear }: { label: string; onClear: () => void }) {
   return (
