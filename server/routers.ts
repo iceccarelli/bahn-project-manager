@@ -28,6 +28,7 @@ import { loadPortfolioProjects } from "./infra/portfolioModel";
 import { pageAudit } from "./infra/auditQuery";
 import { searchGlobal } from "./infra/searchQuery";
 import { buildPortfolio, buildReelView } from "@shared/portfolio-view";
+import { buildItkYears } from "@shared/itk/jahresansicht";
 import { drillProjectIds, isEmptyDrill, startOfDayUtc, type Drill } from "@shared/drilldown";
 import { AUDIT_DOCUMENT_KINDS } from "@shared/audit-contract";
 import type { PortfolioProject } from "@shared/portfolio-metrics";
@@ -49,6 +50,7 @@ const departmentScoped = new KeyedCache<Awaited<ReturnType<typeof readDepartment
 // finished figures are derived from them once per scope per TTL as well.
 const portfolioRows = new KeyedCache<PortfolioProject[]>("portfolio-rows", 30_000, 100);
 const portfolioView = new KeyedCache<ReturnType<typeof buildPortfolio>>("portfolio", 30_000, 100);
+const itkYearsView = new KeyedCache<ReturnType<typeof buildItkYears>>("itk-years", 30_000, 100);
 // 5 s burst absorber per (scope, user, term): typing the same prefix from many tabs costs one set of queries.
 const auditRecordWindow = new Map<string, { n: number; reset: number }>();
 const searchCache = new KeyedCache<{ q: string; entries: Awaited<ReturnType<typeof searchGlobal>> }>("search", 5_000, 2000);
@@ -335,6 +337,13 @@ export const appRouter = router({
       const { pool } = await requireServices();
       const key = scopeKey(restriction);
       return buildReelView(await portfolioRows.get(key, () => loadPortfolioProjects(pool, restriction)), input.department, []);
+    }),
+    /** PSV-ITK Jahresansicht: the ITK Prüfungen by year, derived over the caller's authorized rows (shared/itk/jahresansicht.ts). */
+    itkYears: protectedProcedure.query(async ({ ctx }) => {
+      const restriction = workspaceRestriction(ctx.principal);
+      const { pool } = await requireServices();
+      const key = scopeKey(restriction);
+      return itkYearsView.get(key, async () => buildItkYears(await portfolioRows.get(key, () => loadPortfolioProjects(pool, restriction))));
     }),
     /** KPI cards: shared/project-metrics.ts run server-side over (project, status) rows. */
     metrics: protectedProcedure.query(({ ctx }) => {

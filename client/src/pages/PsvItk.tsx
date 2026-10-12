@@ -28,9 +28,11 @@ function Uebersicht() {
 
 /** Own chunk: the checklists and their UI are not paid for by anyone who only reads the Übersicht. */
 const AbnahmeView = lazy(() => import("@/components/abnahme/AbnahmeView"));
+/** Own chunk as well: Recharts and the year derivation load only for readers who open the Jahresansicht. */
+const JahresansichtView = lazy(() => import("@/components/itk/JahresansichtView"));
 
-function TabFallback() {
-  return <div className="m-6 min-h-[60vh] animate-pulse rounded-xl bg-muted/40" role="status" aria-live="polite" aria-label="Abnahme wird geladen" />;
+function TabFallback({ label }: { label: string }) {
+  return <div className="m-6 min-h-[60vh] animate-pulse rounded-xl bg-muted/40" role="status" aria-live="polite" aria-label={`${label} wird geladen`} />;
 }
 
 /**
@@ -38,13 +40,16 @@ function TabFallback() {
  * linked, reloaded and navigated back to; the Übersicht is the default and keeps
  * its own query parameters (`q`, `tone`, `view`).
  *
- * Extension point: Technik-Übersicht, PDF-Codes and Jahresansicht (the
- * Projektübersicht ITK platform's views) are further entries here — one `value`,
- * one label, one panel. They are not listed until they exist; a tab that opens
- * a placeholder is a worse promise than no tab.
+ * Where the Projektübersicht ITK platform lands (docs/itk-platform.md): its
+ * yearly tabs and dashboard are the Jahresansicht; its Technik view and PDF-Code
+ * need the Prüfbericht record (Technik, Tätigkeitsbereich, laufende Nummer), which
+ * this app does not hold yet. They become further entries here — one `value`, one
+ * label, one panel — when that data exists. A tab that opens a placeholder is a
+ * worse promise than no tab.
  */
 const TABS = [
   { value: "uebersicht", label: "Übersicht" },
+  { value: "jahresansicht", label: "Jahresansicht" },
   { value: "abnahme", label: "Abnahme" },
 ] as const;
 type PsvItkTab = (typeof TABS)[number]["value"];
@@ -81,8 +86,13 @@ export default function PsvItk() {
       <TabsContent value="uebersicht" forceMount className="mt-0 data-[state=inactive]:hidden">
         <Uebersicht />
       </TabsContent>
+      <TabsContent value="jahresansicht" className="mt-0">
+        <Suspense fallback={<TabFallback label="Jahresansicht" />}>
+          <JahresansichtView />
+        </Suspense>
+      </TabsContent>
       <TabsContent value="abnahme" className="mt-0">
-        <Suspense fallback={<TabFallback />}>
+        <Suspense fallback={<TabFallback label="Abnahme" />}>
           <AbnahmeView />
         </Suspense>
       </TabsContent>
