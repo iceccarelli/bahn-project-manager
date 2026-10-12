@@ -1,5 +1,5 @@
 {
-  "_doc": "Regression budgets for the Projekte page (scripts/perf/browser-perf.ts). Measured baseline (docs/measurements/browser-perf-after.json): DOM 1469, rows in DOM 21, INP 72 ms, heap 10.2 MB, scroll p95 50 ms, LCP 364 ms, first marker 439 ms. Budgets leave headroom for CI-runner variance but fail on structural regressions (an unvirtualized table renders >1000 rows and >20k DOM nodes).",
+  "_doc": "Regression budgets for the Projekte page (scripts/perf/browser-perf.ts). Measured baseline (docs/measurements/browser-perf-after.json): DOM 1469, rows in DOM 21, INP 72 ms, heap 10.2 MB, scroll p95 50 ms, LCP 364 ms, first marker 439 ms. webVitals.cls is the worst session window (web.dev definition); the baseline below was taken as a whole-visit sum, which is always >= the window figure. Budgets leave headroom for CI-runner variance but fail on structural regressions (an unvirtualized table renders >1000 rows and >20k DOM nodes).",
   "initial.domNodes": { "max": 2500, "baseline": 1469 },
   "initial.tableRowsInDom": { "max": 40, "baseline": 21 },
   "initial.jsHeapMB": { "max": 30, "baseline": 10.2 },
