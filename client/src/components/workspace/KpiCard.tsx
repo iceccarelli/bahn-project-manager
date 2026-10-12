@@ -21,7 +21,8 @@ export function KpiCard({
   captionTone,
 }: {
   label: string;
-  value: number;
+  /** null while a server read model has not arrived: shown as an en dash, never as 0. */
+  value: number | null;
   caption: string;
   accent?: boolean;
   valueTone?: string;
@@ -34,7 +35,7 @@ export function KpiCard({
       </CardHeader>
       <CardContent>
         <div className={`text-4xl font-bold ${valueTone ?? ""}`}>
-          {value.toLocaleString("de-DE")}
+          {value === null ? "–" : value.toLocaleString("de-DE")}
         </div>
         <p className={`mt-1 text-xs ${captionTone ?? "text-muted-foreground"}`}>{caption}</p>
       </CardContent>

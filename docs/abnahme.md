@@ -18,15 +18,25 @@ The fachtechnische Abnahme checklists of an ITK installation, worked through on 
 | Session state machine | `shared/abnahme/state.ts` | `state.test.ts` |
 | Status → tone mapping (shared with the review statuses) | `shared/abnahme/appearance.ts` | `appearance.test.ts` pins it to `TONE_APPEARANCE` |
 | Persistence contract (zod) | `shared/abnahme/persistence.ts` | used to validate sessionStorage today |
-| UI | `client/src/components/abnahme/*`, tab shell in `client/src/pages/PsvItk.tsx` | browser run, see below |
+| UI | `client/src/components/abnahme/*`, tab shell in `client/src/pages/PsvItk.tsx` | `scripts/e2e-smoke.mjs` section "ITK-Abnahme and the PDF preview" (desktop and phone width) |
+| PDF | `client/src/pdf/AbnahmeDocument.tsx`, `renderAbnahmePdf.ts`; shared `pdfFile.ts`; `client/src/components/PdfPreviewDialog.tsx` | e2e: preview, real `%PDF-` download, filename pattern |
 | Entry points | tab, search palette ("ITK-Abnahme"), "ITK-Abnahme" button in the project dialog | |
+
+## PDF
+
+The Abnahmeprotokoll is built from the same `(template, answers)` pair and the same `summarizeTemplate` /
+`deriveMaengel` as the screen, so printed counts cannot differ from what the Prüfer saw. It is stamped ENTWURF while
+any point is unrated, exactly like the Anmeldung Checkliste. `PdfPreviewDialog` shows any generated PDF in the page with
+Herunterladen / In neuem Tab / Drucken; the Projektblatt uses the same dialog ("Vorschau"). Every PDF goes through
+`renderPdf` / `savePdf` in `client/src/pdf/pdfFile.ts` — a new document type is a `*Document.tsx`, a `render*Pdf.ts`
+and one `show(...)` call.
 
 ## Regenerating the templates
 
 ```
 node --import tsx scripts/extract-abnahme-templates.ts --from <abnahme-verlauf-itk dir>   # prototype → data/abnahme-source.json
 pnpm abnahme:extract                                                                       # data/abnahme-source.json → shared/abnahme/templates/*.ts
-pnpm abnahme:check                                                                         # fails if a template is stale
+pnpm abnahme:check                                                                         # fails if a template is stale (also runs in CI: job lint-typecheck)
 ```
 
 A section that is identical in several Techniken (1.1 in all four; 1.2–1.6 in ZIM and dBOS) is emitted once in
@@ -79,5 +89,3 @@ To persist it on the server:
   `Technik` and a running number; belongs in `shared/abnahme/` with a test. The year comes from the ITK `pruefDatum`.
 * **ELA, WLAN, SAA checklists** — one template module each plus one line in `templates/index.ts`; the selector
   already lists them (disabled).
-* **Abnahmeprotokoll as PDF** — `client/src/pdf/` already ships `@react-pdf/renderer` and Inter; a `AbnahmeDocument`
-  next to `ChecklistDocument` renders `AbnahmeRecord` + template, watermarked ENTWURF while items are unrated.

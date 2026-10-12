@@ -17,6 +17,8 @@ export default defineConfig({
     // that exceeded the 10 s default (hook timeout, not an assertion). Hooks get headroom; test timeouts are unchanged.
     hookTimeout: 60_000,
     globalSetup: ["./scripts/data/vitest-global-setup.ts"],
+    // Per-file: gives *.db.test.ts (real MySQL, schema provisioned inside the test) a 60 s test timeout; all others keep 5 s.
+    setupFiles: ["./server/testing/dbTestTimeout.ts"],
     environment: "node",
     include: [
       "server/**/*.test.ts", 

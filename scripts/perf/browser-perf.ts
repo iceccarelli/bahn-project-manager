@@ -60,9 +60,21 @@ const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } })
 await ctx.addInitScript(`
   window.__name = (f) => f; // tsx/esbuild instruments named functions inside evaluate() callbacks
   try { sessionStorage.setItem("bahn.access_token", ${JSON.stringify(token)}); } catch (e) {}
-  window.__perf = { lcp: 0, cls: 0, firstRowAt: null, events: [], longTasks: 0 };
+  window.__perf = { lcp: 0, cls: 0, clsTotal: 0, firstRowAt: null, events: [], longTasks: 0 };
   new PerformanceObserver(l => { for (const e of l.getEntries()) window.__perf.lcp = e.startTime; }).observe({ type: "largest-contentful-paint", buffered: true });
-  new PerformanceObserver(l => { for (const e of l.getEntries()) if (!e.hadRecentInput) window.__perf.cls += e.value; }).observe({ type: "layout-shift", buffered: true });
+  // CLS as web.dev defines it: the worst *session window* (shifts less than 1 s apart, a window capped at 5 s) —
+  // not the sum over the whole visit. The scripted session below scrolls, searches, opens a dialog and toggles the
+  // map; summing every shift across all of that is a different, noisier number than the metric the budget names.
+  // clsTotal keeps the old cumulative figure for comparison with earlier artifacts.
+  let winValue = 0, winFirst = 0, winLast = 0;
+  new PerformanceObserver(l => { for (const e of l.getEntries()) {
+    if (e.hadRecentInput) continue;
+    window.__perf.clsTotal += e.value;
+    if (winValue > 0 && e.startTime - winLast < 1000 && e.startTime - winFirst < 5000) winValue += e.value;
+    else { winValue = e.value; winFirst = e.startTime; }
+    winLast = e.startTime;
+    window.__perf.cls = Math.max(window.__perf.cls, winValue);
+  } }).observe({ type: "layout-shift", buffered: true });
   new PerformanceObserver(l => { for (const e of l.getEntries()) window.__perf.events.push({ name: e.name, duration: e.duration, interactionId: e.interactionId || 0 }); }).observe({ type: "event", durationThreshold: 16, buffered: true });
   new PerformanceObserver(l => { window.__perf.longTasks += l.getEntries().length; }).observe({ type: "longtask", buffered: true });
   new MutationObserver(() => { if (window.__perf.firstRowAt === null && document.querySelector("table tbody tr td")) window.__perf.firstRowAt = performance.now(); }).observe(document, { childList: true, subtree: true });
@@ -123,12 +135,12 @@ let mapMs: number | null = null, mapMarkers = 0;
   await page.waitForSelector(".leaflet-marker-icon, path.leaflet-interactive", { timeout: 15000 }).then(() => { mapMs = Date.now() - t; }).catch(() => {});
   mapMarkers = await page.locator(".leaflet-marker-icon, path.leaflet-interactive").count();
 }
-const perf = await page.evaluate(() => (window as any).__perf as { lcp: number; cls: number; firstRowAt: number | null; longTasks: number });
+const perf = await page.evaluate(() => (window as any).__perf as { lcp: number; cls: number; clsTotal: number; firstRowAt: number | null; longTasks: number });
 
 const out = {
   label: LABEL, at: new Date().toISOString(), environment: "single host (browser + server + DB share CPU), Chromium headless, 1440x900, real 1,298-row dataset, MySQL 8.4",
   initial, afterScroll, scroll: scrollStats,
-  webVitals: { lcpMs: Math.round(perf.lcp), cls: +perf.cls.toFixed(4), inpMs: Math.round(inp), firstRowRenderedAtMs: perf.firstRowAt === null ? null : Math.round(perf.firstRowAt), timeToRowsMs, longTasks: perf.longTasks },
+  webVitals: { lcpMs: Math.round(perf.lcp), cls: +perf.cls.toFixed(4), clsTotal: +perf.clsTotal.toFixed(4), inpMs: Math.round(inp), firstRowRenderedAtMs: perf.firstRowAt === null ? null : Math.round(perf.firstRowAt), timeToRowsMs, longTasks: perf.longTasks },
   slowestInteractionsMs: [...interactionDurations].reverse().slice(0, 5),
   map: { timeToFirstMarkerMs: mapMs, markers: mapMarkers },
   largestTransfers: sizes.sort((a, b) => b.kb - a.kb).slice(0, 8),

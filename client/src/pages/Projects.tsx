@@ -553,6 +553,11 @@ export default function Projects() {
           <ConnectionBadge />
         </div>
       )}
+      <div>
+        <h1 className="page-title">Projekte</h1>
+        <p className="mt-2 text-muted-foreground">Alle Projekte mit allen 14 Fachprüfungen</p>
+      </div>
+
       {/* KPI cards — every figure derived in shared/project-metrics.ts */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         <Card className="border-l-4 border-l-primary shadow-sm">

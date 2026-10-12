@@ -65,8 +65,10 @@ import {
   Printer,
   Loader2,
   ClipboardCheck,
+  FileText,
 } from "lucide-react";
 import { Link } from "wouter";
+import { PdfPreviewDialog, usePdfPreview } from "@/components/PdfPreviewDialog";
 import type { Project } from "@/hooks/useDataQuery";
 import { useProjectHistory } from "@/hooks/useAuditFeed";
 import { DEPARTMENTS, type Department } from "@shared/types";
@@ -89,7 +91,8 @@ import {
 } from "@shared/message";
 import { useAuditTrail } from "@/hooks/useAuditTrail";
 import { generatedLabel } from "@shared/generated-stamp";
-import { downloadProjectPdf } from "@/pdf/downloadProjectPdf";
+import { downloadProjectPdf, renderProjectPdf } from "@/pdf/downloadProjectPdf";
+import type { ProjectPdfData } from "@/pdf/ProjectDocument";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { toast } from "sonner";
 
@@ -308,6 +311,7 @@ export function ProjectDetailDialog({
   const { user, session } = useAuth() as ReturnType<typeof useAuth> & { session?: { id: string } | null };
   const { recordDocument, recordMessage } = useAuditTrail(project?.id);
   const [printing, setPrinting] = useState(false);
+  const pdfPreview = usePdfPreview();
   const currentUser = user?.name || user?.email || "";
 
   // Every department, not only the ones with a row: a Fachprüfung that is
@@ -339,6 +343,42 @@ export function ProjectDetailDialog({
   /** The latest audit entries of this project (server: by entity id, authorized; demo: matched in the local trail). */
   const history = useProjectHistory(project);
 
+  /** The Projektblatt's data, from the record the dialog renders. Stamped at the moment of the call. */
+  const buildPdfData = useCallback((): ProjectPdfData | null => {
+    if (!project) return null;
+    const generatedAt = new Date().toISOString();
+    return {
+      projektnummer: project.projektnummer ?? "",
+      station: project.station ?? "",
+      projektbeschreibung: project.projektbeschreibung ?? "",
+      bahnhofsmanagement: project.bahnhofsmanagement ?? "",
+      bahnhofsnummer: project.bahnhofsnummer ?? "",
+      streckennummer: project.streckennummer ?? "",
+      projektstand: project.projektstand ?? "",
+      projektleiter: project.projektleiter ?? "",
+      terminProjektvorstellung: formatGerman(project.terminProjektvorstellung) || "",
+      kommentar: project.kommentar ?? "",
+      projektLink: project.projektLink ?? "",
+      openCount: (project.reviews ?? []).filter((r) => isOpen(r.status)).length,
+      blockedCount: (project.reviews ?? []).filter((r) => isBlocking(r.status)).length,
+      reviews: DEPARTMENTS.map((dept) => {
+        const review = (project.reviews ?? []).find((r) => r.department === dept);
+        const resolution = resolveContact(review?.prueferName);
+        const contact = contactOf(resolution);
+        const fallback = recipientsFor(dept as Department)[0];
+        return {
+          department: dept,
+          status: normalizeReviewStatus(review?.status) ?? review?.status ?? "",
+          prueferName: displayNameOf(resolution, review?.prueferName),
+          pruefDatum: formatGerman(review?.pruefDatum) || "",
+          kontakt: contact?.mail ?? fallback?.mail ?? "",
+        };
+      }),
+      generatedAt,
+      generatedBy: currentUser,
+    };
+  }, [project, currentUser]);
+
   /**
    * The Projektblatt.
    *
@@ -347,40 +387,11 @@ export function ProjectDetailDialog({
    * pressed rather than any date in the data.
    */
   const handlePrint = useCallback(async () => {
-    if (!project) return;
+    const data = buildPdfData();
+    if (!project || !data) return;
     setPrinting(true);
     try {
-      const generatedAt = new Date().toISOString();
-      const filename = await downloadProjectPdf({
-        projektnummer: project.projektnummer ?? "",
-        station: project.station ?? "",
-        projektbeschreibung: project.projektbeschreibung ?? "",
-        bahnhofsmanagement: project.bahnhofsmanagement ?? "",
-        bahnhofsnummer: project.bahnhofsnummer ?? "",
-        streckennummer: project.streckennummer ?? "",
-        projektstand: project.projektstand ?? "",
-        projektleiter: project.projektleiter ?? "",
-        terminProjektvorstellung: formatGerman(project.terminProjektvorstellung) || "",
-        kommentar: project.kommentar ?? "",
-        projektLink: project.projektLink ?? "",
-        openCount: (project.reviews ?? []).filter((r) => isOpen(r.status)).length,
-        blockedCount: (project.reviews ?? []).filter((r) => isBlocking(r.status)).length,
-        reviews: DEPARTMENTS.map((dept) => {
-          const review = (project.reviews ?? []).find((r) => r.department === dept);
-          const resolution = resolveContact(review?.prueferName);
-          const contact = contactOf(resolution);
-          const fallback = recipientsFor(dept as Department)[0];
-          return {
-            department: dept,
-            status: normalizeReviewStatus(review?.status) ?? review?.status ?? "",
-            prueferName: displayNameOf(resolution, review?.prueferName),
-            pruefDatum: formatGerman(review?.pruefDatum) || "",
-            kontakt: contact?.mail ?? fallback?.mail ?? "",
-          };
-        }),
-        generatedAt,
-        generatedBy: currentUser,
-      });
+      const filename = await downloadProjectPdf(data);
       recordDocument(
         "Projektblatt",
         filename,
@@ -396,7 +407,16 @@ export function ProjectDetailDialog({
     } finally {
       setPrinting(false);
     }
-  }, [project, currentUser, recordDocument]);
+  }, [project, buildPdfData, recordDocument]);
+
+  /** Show the Projektblatt in the page; saving it from there goes through the same renderer. */
+  const handlePreview = useCallback(() => {
+    pdfPreview.show(async () => {
+      const data = buildPdfData();
+      if (!data) throw new Error("Kein Projekt ausgewählt");
+      return renderProjectPdf(data);
+    });
+  }, [pdfPreview, buildPdfData]);
 
   if (!project) return null;
 
@@ -431,6 +451,7 @@ export function ProjectDetailDialog({
   const bmContact = bahnhofsmanagementContact(project.bahnhofsmanagement);
 
   return (
+    <>
     <DetailShell variant={variant} open={open} onOpenChange={onOpenChange}>
         {/* pr-14: the primitive parks its close button at top-4 right-4, and on a
             375px phone the badge row wrapped straight under it — "6 offen" and
@@ -531,6 +552,10 @@ export function ProjectDetailDialog({
               every page, and appended to the filename, so a sheet in a meeting
               can always be dated.
             */}
+            <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={handlePreview}>
+              <FileText className="h-3.5 w-3.5" aria-hidden="true" />
+              Vorschau
+            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -850,6 +875,12 @@ export function ProjectDetailDialog({
           </p>
         </div>
     </DetailShell>
+    <PdfPreviewDialog
+      title={`Projektblatt ${project?.projektnummer ?? ""}`.trim()}
+      description={project?.station ?? "Projektblatt"}
+      state={pdfPreview}
+    />
+    </>
   );
 }
 

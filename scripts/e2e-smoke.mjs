@@ -3729,6 +3729,114 @@ await check("a tile is a place you can go, and an empty tile is not", async () =
   assert(url.searchParams.get("q") === "abgelehnt", `it did not carry the state: ${url.search}`);
 });
 
+console.log("\n== ITK-Abnahme and the PDF preview ==");
+
+await check("PSV-ITK has Übersicht and Abnahme tabs; the Abnahme opens from the URL", async () => {
+  await go("/psv-itk");
+  assert(
+    (await page.getByRole("tab", { name: "Übersicht" }).getAttribute("data-state")) === "active",
+    "Übersicht is not the default tab",
+  );
+  assert(await page.locator("table").first().isVisible(), "the Übersicht lost its table");
+  await go("/psv-itk?tab=abnahme&technik=Video");
+  await page.getByRole("heading", { name: "ITK-Abnahme" }).waitFor({ timeout: 20000 });
+  const kpi = await page.getByTestId("abnahme-summary").innerText();
+  assert(kpi.includes("74"), `Video checklist should have 74 points: ${kpi.replace(/\n/g, " ")}`);
+});
+
+await check("every page title sits at the same left edge (one page frame)", async () => {
+  const xs = {};
+  for (const route of ["/", "/anmeldung", "/projects", "/bvb-eea", "/audit"]) {
+    await go(route);
+    xs[route] = await page.evaluate(() => {
+      const h = document.querySelector("main h1");
+      return h ? Math.round(h.getBoundingClientRect().x) : null;
+    });
+  }
+  const values = Object.values(xs);
+  assert(values.every((v) => v !== null), `a page has no <h1>: ${JSON.stringify(xs)}`);
+  assert(new Set(values).size === 1, `page titles are not aligned: ${JSON.stringify(xs)}`);
+});
+
+await check("Abnahme: rate, preview the PDF, buttons aligned, download is a real PDF", async () => {
+  await go("/psv-itk?tab=abnahme&technik=ZIM");
+  const row = page.locator("#abnahme-item-1\\.1\\.2");
+  await row.waitFor({ timeout: 20000 });
+  await row.getByRole("radio", { name: "Offen" }).click();
+  await row.getByRole("textbox").fill("Nachweis fehlt");
+  const heights = await page.evaluate(() => {
+    const bar = document.querySelector("#abnahme-search")?.closest("div.flex");
+    return [...(bar?.querySelectorAll("input,button,[role=radio]") ?? [])]
+      .filter((e) => e.offsetParent)
+      .map((e) => Math.round(e.getBoundingClientRect().height));
+  });
+  assert(heights.length > 5 && new Set(heights).size === 1, `toolbar controls differ in height: ${[...new Set(heights)]}`);
+  await page.getByRole("button", { name: "PDF", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await page.waitForFunction(
+    () =>
+      [...document.querySelectorAll("[role=dialog] button")].find((b) => /Herunterladen/.test(b.textContent ?? ""))
+        ?.disabled === false,
+    null,
+    { timeout: 90000 },
+  );
+  assert(/^blob:/.test((await dialog.locator("iframe").getAttribute("src")) ?? ""), "the preview frame holds no PDF");
+  const [download] = await Promise.all([
+    page.waitForEvent("download", { timeout: 60000 }),
+    dialog.getByRole("button", { name: "Herunterladen" }).click(),
+  ]);
+  assert(/^Abnahme_ZIM_.*\.pdf$/.test(download.suggestedFilename()), download.suggestedFilename());
+  const file = path.join("/tmp", `e2e-abnahme-${Date.now()}.pdf`);
+  await download.saveAs(file);
+  assert(fs.readFileSync(file).subarray(0, 5).toString() === "%PDF-", "the download is not a PDF");
+  await page.keyboard.press("Escape");
+});
+
+await check("Abnahme on a phone: controls stay inside their card, filter chips never overlap", async () => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  try {
+    await go("/psv-itk?tab=abnahme&technik=ZIM");
+    await page.locator("#abnahme-search").waitFor({ timeout: 20000 });
+    const problems = await page.evaluate(() => {
+      const card = document.querySelector("#abnahme-search")?.closest('[data-slot="card"]');
+      if (!card) return ["no toolbar card"];
+      const box = card.getBoundingClientRect();
+      const out = [];
+      const controls = [...card.querySelectorAll("button,input,[role=radio]")].filter((e) => e.offsetParent);
+      for (const c of controls) {
+        const r = c.getBoundingClientRect();
+        if (r.right > box.right + 0.5 || r.left < box.left - 0.5) out.push(`outside card: ${(c.textContent || c.placeholder || "").trim().slice(0, 20)}`);
+      }
+      const chips = [...card.querySelectorAll("[role=radio]")].map((e) => e.getBoundingClientRect());
+      for (let i = 0; i < chips.length; i++)
+        for (let j = i + 1; j < chips.length; j++) {
+          const a = chips[i], b = chips[j];
+          const overlap = Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1;
+          if (overlap) out.push(`chips ${i} and ${j} overlap`);
+        }
+      if (document.documentElement.scrollWidth > document.documentElement.clientWidth + 1) out.push("page scrolls horizontally");
+      return out;
+    });
+    assert(problems.length === 0, problems.join("; "));
+  } finally {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+  }
+});
+
+await check("Projektblatt: Vorschau opens the same preview dialog", async () => {
+  await go("/psv-itk");
+  await page.locator('button[aria-label^="Details zu Projekt"]').first().click();
+  await page.getByRole("button", { name: "Vorschau" }).click();
+  await page.waitForFunction(
+    () =>
+      [...document.querySelectorAll("[role=dialog] button")].find((b) => /Herunterladen/.test(b.textContent ?? ""))
+        ?.disabled === false,
+    null,
+    { timeout: 90000 },
+  );
+  await page.keyboard.press("Escape");
+});
+
 console.log("\n== summary ==");
 console.log(`${passed} passed, ${failures.length} failed`);
 await browser.close();

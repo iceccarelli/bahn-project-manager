@@ -203,7 +203,7 @@ export default function Anmeldung() {
 
   if (submitted) {
     return (
-      <div className="space-y-6 p-6">
+      <div className="min-h-screen space-y-8 bg-background p-6">
         <Card className="mx-auto max-w-xl">
           <CardContent className="space-y-4 p-8 text-center">
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary">
@@ -302,7 +302,7 @@ export default function Anmeldung() {
   }
 
   return (
-    <div ref={revealRef} className="space-y-6 p-6">
+    <div ref={revealRef} className="min-h-screen space-y-8 bg-background p-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="page-title">Projektanmeldung</h1>
