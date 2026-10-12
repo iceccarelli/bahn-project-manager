@@ -3,7 +3,7 @@
  * Pure — the server derives it over its cached rows (`pruefberichte.view`), exactly like the Jahresansicht.
  * Counts are of Prüfberichte (rows of the workbook), not of Projects.
  */
-import { generateLegacyPdfCode, generatePdfCode, pdfPrefix, samePdfCode, type PdfPrefix } from "./pdf-code";
+import { derivePdfCode, pdfPrefix, samePdfCode, type PdfPrefix } from "./pdf-code";
 import type { Pruefbericht } from "./pruefbericht-import";
 
 export interface TechnikRow {
@@ -51,10 +51,7 @@ export function buildPruefberichtView(rows: readonly Pruefbericht[], asOf: numbe
     bump(taetigkeit, r.taetigkeitsbereich);
 
     if (r.layout !== "2017") {
-      const generated =
-        r.layout === "2020+"
-          ? generatePdfCode(r.taetigkeitsbereich, r.laufendeNummer, r.bahnhofStrecke)
-          : generateLegacyPdfCode(r.laufendeNummer, r.bahnhofStrecke, r.technik, r.phase);
+      const generated = derivePdfCode(r);
       if (generated !== null) pdf.derivable += 1;
       if (r.beschriftung !== null) {
         pdf.stored += 1;

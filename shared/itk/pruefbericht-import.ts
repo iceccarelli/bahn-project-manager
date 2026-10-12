@@ -29,7 +29,7 @@
  * so the same code runs in the browser, in the CLI and in tests.
  */
 import { parseStoredDate } from "../date";
-import { generateLegacyPdfCode, generatePdfCode, samePdfCode } from "./pdf-code";
+import { derivePdfCode, samePdfCode } from "./pdf-code";
 import { isAbgeschlossen, isItkTechnik } from "./vocab";
 
 export type PruefberichtLayout = "2020+" | "2018-2019" | "2017";
@@ -425,10 +425,7 @@ export function importWorkbookSheets(sheets: readonly SheetInput[]): ImportResul
       else if (!isAbgeschlossen(rec.abgeschlossen)) abgeschlossenUnknown[rec.abgeschlossen] = (abgeschlossenUnknown[rec.abgeschlossen] ?? 0) + 1;
 
       if (rec.layout !== "2017") {
-        const generated =
-          rec.layout === "2020+"
-            ? generatePdfCode(rec.taetigkeitsbereich, rec.laufendeNummer, rec.bahnhofStrecke)
-            : generateLegacyPdfCode(rec.laufendeNummer, rec.bahnhofStrecke, rec.technik, rec.phase);
+        const generated = derivePdfCode(rec);
         if (rec.beschriftung === null) pdf.noStoredCode += 1;
         else {
           pdf.checked += 1;

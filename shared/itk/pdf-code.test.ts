@@ -33,3 +33,13 @@ describe("generatePdfCode (the workbook formula)", () => {
     expect(samePdfCode("P25.001 - Frankfurt", "P25.002 - Frankfurt")).toBe(false);
   });
 });
+
+describe("derivePdfCode chooses the formula by layout", () => {
+  const base = { laufendeNummer: "25.001", taetigkeitsbereich: "Gutachten", bahnhofStrecke: "Kassel", technik: "Video", phase: "EP" } as const;
+  it("2020+, 2018–2019 and 2017", async () => {
+    const { derivePdfCode } = await import("./pdf-code");
+    expect(derivePdfCode({ ...base, layout: "2020+" })).toBe("G25.001 - Kassel");
+    expect(derivePdfCode({ ...base, layout: "2018-2019", laufendeNummer: "901" })).toBe("901 - Kassel - Video - EP");
+    expect(derivePdfCode({ ...base, layout: "2017" })).toBeNull();
+  });
+});

@@ -54,3 +54,20 @@ export function generateLegacyPdfCode(
 /** Whitespace-insensitive comparison, because the workbook's cells carry stray and doubled spaces. */
 export const samePdfCode = (a: string | null | undefined, b: string | null | undefined): boolean =>
   (a ?? "").replace(/\s+/g, " ").trim() === (b ?? "").replace(/\s+/g, " ").trim();
+
+/** The fields the PDF-Code is derived from (structural, so the importer's, the stored and the displayed record all fit). */
+export interface PdfCodeSource {
+  layout: "2020+" | "2018-2019" | "2017";
+  laufendeNummer: string;
+  taetigkeitsbereich: string | null;
+  bahnhofStrecke: string | null;
+  technik: string | null;
+  phase: string | null;
+}
+
+/** The code of a Prüfbericht by its layout. 2017 sheets carry none. This is the only place that chooses between the two formulas. */
+export function derivePdfCode(r: PdfCodeSource): string | null {
+  if (r.layout === "2020+") return generatePdfCode(r.taetigkeitsbereich, r.laufendeNummer, r.bahnhofStrecke);
+  if (r.layout === "2018-2019") return generateLegacyPdfCode(r.laufendeNummer, r.bahnhofStrecke, r.technik, r.phase);
+  return null;
+}

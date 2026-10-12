@@ -18,6 +18,7 @@
  * because a claim was absent.
  */
 import { slugify } from "@shared/domain-events";
+import { mayImportPruefberichte, mayViewPruefberichte } from "@shared/itk/access";
 
 export type Role = "admin" | "editor" | "viewer";
 
@@ -88,12 +89,12 @@ export function canViewAudit(p: Principal): boolean {
  * (admin or an explicit ALL grant) — default-deny, relaxed deliberately when a rule for it exists.
  */
 export function canViewPruefberichte(p: Principal): boolean {
-  return workspaceRestriction(p) === null;
+  return mayViewPruefberichte(p);
 }
 
 /** Importing the workbook replaces records by key; admin only. */
 export function canImportPruefberichte(p: Principal): boolean {
-  return isAdmin(p);
+  return mayImportPruefberichte(p);
 }
 
 export function canExport(p: Principal): boolean {
