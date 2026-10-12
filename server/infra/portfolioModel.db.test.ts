@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { hasTestDb, createTestDatabase } from "../testing/testDb";
 import { loadPortfolioProjects } from "./portfolioModel";
 import { buildPortfolio } from "@shared/portfolio-view";
+import { buildItkYears } from "@shared/itk/jahresansicht";
 import { drillProjectIds, startOfDayUtc } from "@shared/drilldown";
 import { MysqlProjectStore } from "./mysqlProjectStore";
 
@@ -12,12 +13,12 @@ describe.skipIf(!hasTestDb)("portfolio read model (real DB)", () => {
 
   beforeAll(async () => {
     t = await createTestDatabase(10);
-    const mk = async (nr: string, bm: string | null, termin: string | null) =>
-      ((await t.pool.query("INSERT INTO projects (projektnummer, station, bahnhofsmanagement, terminProjektvorstellung) VALUES (?,?,?,?)", [nr, `St-${nr}`, bm, termin])) as any)[0].insertId as number;
-    const a = await mk("A", "Kassel", "2026-01-01");   // delayed: past Termin + open review
+    const mk = async (nr: string, bm: string | null, termin: string | null, pl: string | null = null) =>
+      ((await t.pool.query("INSERT INTO projects (projektnummer, station, bahnhofsmanagement, terminProjektvorstellung, projektleiter) VALUES (?,?,?,?,?)", [nr, `St-${nr}`, bm, termin, pl])) as any)[0].insertId as number;
+    const a = await mk("A", "Kassel", "2026-01-01", "Gero Dornhaus");   // delayed: past Termin + open review
     const b = await mk("B", "Kassel", "2027-01-01");
     const c = await mk("C", "Frankfurt", "2026-01-01");
-    const d = await mk("D", null, null);
+    const d = await mk("D", null, null, "Eva Beck");
     const rev = (p: number, dep: string, st: string | null, who: string | null, datum: string | null) =>
       t.pool.query("INSERT INTO department_reviews (projectId, department, status, prueferName, datum) VALUES (?,?,?,?,?)", [p, dep, st, who, datum]);
     await rev(a, "EEA", "offen", "Paula", "2026-05-01");      // overdue open
@@ -51,6 +52,16 @@ describe.skipIf(!hasTestDb)("portfolio read model (real DB)", () => {
     expect(v.workload.map(w => w.name)).toEqual(["Paula"]); // Anna only works in other workspaces
     expect(JSON.stringify(v)).not.toContain("St-C");
     expect(JSON.stringify(v)).not.toContain("Anna");
+  });
+
+  it("the ITK Jahresansicht derives from the same authorized rows: year of the Prüfdatum, Projektleitung from the project, scoped", async () => {
+    const v = buildItkYears(await loadPortfolioProjects(t.pool, null), NOW);
+    expect(v.years.map(y => [y.year, y.metrics.total])).toEqual([[2026, 1], [null, 1]]);
+    expect(v.all.projektleitung).toEqual([{ name: "Eva Beck", count: 1, approved: 0 }, { name: "Gero Dornhaus", count: 1, approved: 1 }]);
+    expect(v.all.pruefer.map(r => r.name)).toEqual(["Anna", "Paula"]);
+    const kassel = buildItkYears(await loadPortfolioProjects(t.pool, ["Kassel"]), NOW);
+    expect(kassel.all.metrics.total).toBe(1);
+    expect(JSON.stringify(kassel)).not.toContain("Eva Beck");
   });
 
   it("an empty workspace list yields an empty portfolio", async () => {

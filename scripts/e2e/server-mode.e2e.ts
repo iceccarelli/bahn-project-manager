@@ -577,6 +577,24 @@ async function main() {
     const pb = await api(URLS[1]!, tokenB, "dashboard.portfolio", undefined, "GET");
     if (pa.data.metrics.total !== dbTotal || pb.data.metrics.total !== dbFrankfurt) throw new Error(`portfolio totals ${pa.data.metrics.total}/${pb.data.metrics.total}`);
     if (pb.data.regions.some((r: any) => r.region !== "Frankfurt")) throw new Error("B's portfolio leaks other regions");
+    // PSV-ITK Jahresansicht: the same authority — derived by the server over the caller's authorized rows only
+    {
+      const itkRows = async (extra: string) => Number((await q(`SELECT COUNT(*) n FROM department_reviews r JOIN projects p ON p.id=r.projectId WHERE r.department='ITK' ${extra}`))[0].n);
+      const [itkAll, itkFra] = [await itkRows(""), await itkRows("AND p.bahnhofsmanagement='Frankfurt'")];
+      const ya = await api(URLS[0]!, tokenA, "dashboard.itkYears", undefined, "GET");
+      const yb = await api(URLS[1]!, tokenB, "dashboard.itkYears", undefined, "GET");
+      if (ya.status !== 200 || yb.status !== 200) throw new Error(`itkYears ${ya.status}/${yb.status}: ${JSON.stringify(ya.error ?? yb.error)}`);
+      if (!(ya.data.all.metrics.total > 0 && ya.data.all.metrics.total <= itkAll)) throw new Error(`A's Jahresansicht total ${ya.data.all.metrics.total} vs ${itkAll} ITK rows`);
+      if (!(yb.data.all.metrics.total <= itkFra && yb.data.all.metrics.total < ya.data.all.metrics.total)) throw new Error(`B's Jahresansicht total ${yb.data.all.metrics.total} is not its own Frankfurt share (${itkFra} of ${itkAll})`);
+      for (const [who, y] of [["A", ya], ["B", yb]] as const) {
+        const sum = y.data.years.reduce((n: number, b: any) => n + b.metrics.total, 0);
+        if (sum !== y.data.all.metrics.total) throw new Error(`${who}: years add up to ${sum}, not ${y.data.all.metrics.total}`);
+      }
+      const foreignPl = (await q("SELECT DISTINCT p.projektleiter pl FROM projects p JOIN department_reviews r ON r.projectId=p.id WHERE r.department='ITK' AND p.bahnhofsmanagement<>'Frankfurt' AND p.projektleiter IS NOT NULL AND p.projektleiter NOT IN (SELECT projektleiter FROM projects WHERE bahnhofsmanagement='Frankfurt' AND projektleiter IS NOT NULL)")).map((r: any) => String(r.pl));
+      if (!foreignPl.length) throw new Error("fixture: no Projektleiter outside Frankfurt to check leakage against");
+      const leaked = foreignPl.find((n: string) => JSON.stringify(yb.data).includes(n));
+      if (leaked) throw new Error(`B's Jahresansicht leaks the Projektleiter "${leaked}" of another workspace`);
+    }
     if (a.seen.length || b.seen.length) throw new Error(`legacy snapshot requested: ${[...a.seen, ...b.seen]}`);
     for (const { page } of [a, b]) if ((await page.evaluate(() => Object.keys(localStorage).filter(k => /bahn_(projects|audit)/.test(k)))).length) throw new Error("browser-local project/audit state present");
 
