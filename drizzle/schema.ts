@@ -166,14 +166,19 @@ export const itkPruefberichte = mysqlTable("itk_pruefberichte", {
   erneutePruefungErforderlich: varchar("erneutePruefungErforderlich", { length: 16 }),
   agPl: varchar("agPl", { length: 128 }),
   anPl: varchar("anPl", { length: 128 }),
+  abschlusstermin: varchar("abschlusstermin", { length: 16 }),
+  planungsbuero: varchar("planungsbuero", { length: 256 }),
+  planer: varchar("planer", { length: 256 }),
   gesamtbewertung: varchar("gesamtbewertung", { length: 16 }),
+  /** The Technik of the installation, derived on import by shared/itk/vocab.ts `technikArtOf`; `technik` above is the sheet's free-text product column. */
+  technikArt: varchar("technikArt", { length: 64 }),
   /** Bumped on every import that changes the row. */
   version: int("version").default(1).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (table) => ({
   yearNrUq: uniqueIndex("itk_pb_year_nr_uq").on(table.year, table.laufendeNummer),
-  technikIdx: index("itk_pb_technik_idx").on(table.technik),
+  technikArtIdx: index("itk_pb_technik_art_idx").on(table.technikArt),
   plIdx: index("itk_pb_pl_idx").on(table.zustaendigerPl),
   fsIdx: index("itk_pb_fs_idx").on(table.zustaendigerFs),
   projektnummerIdx: index("itk_pb_projektnummer_idx").on(table.projektnummer),

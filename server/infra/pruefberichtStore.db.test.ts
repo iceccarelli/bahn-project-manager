@@ -4,25 +4,23 @@ import { createTestDatabase, hasTestDb, TEST_DB_URL } from "../testing/testDb";
 import { importPruefberichte, listPruefberichte, loadAllPruefberichte } from "./pruefberichtStore";
 import { buildPruefberichtView } from "@shared/itk/pruefbericht-view";
 import { importWorkbookSheets } from "@shared/itk/pruefbericht-import";
+import { C, H2020, row2020 } from "@shared/itk/testing";
 import type { ImportBatchInput } from "@shared/itk/pruefbericht-contract";
 import type { TrpcContext } from "../_core/context";
 import type { Principal } from "../domain/permissions";
 
-const H = ["Laufende Nummer", "Datum", "Tätigkeitsbereich", "Art der Baumaßnahme", "EBA-Aktenzeichen", "Bf / Streckenbezeichnung", "Zuständige EBA Außenstelle", "Art der Technik", "Bauform/Bezeichnung", "Technik", "abgeschlossen", "Projektnummer", "zuständiger PL", "zuständiger FS", "Termin", "Beschriftung / PDF Code", "Link"];
-const sheet = (year: number, rows: unknown[][]) => ({ name: String(year), rows: [H, ...rows] });
-const row = (nr: string, over: Record<number, unknown> = {}) => {
-  const r: unknown[] = [nr, 45_000, "Planprüfung", null, null, `Bahnhof ${nr}`, null, null, null, "Video", "Ja", `G.${nr}`, "Uwe Kessmann", "Ravdorf", 45_100, `P${nr} - Bahnhof ${nr}`, null];
-  for (const [i, v] of Object.entries(over)) r[Number(i)] = v;
-  return r;
-};
+const sheet = (year: number, rows: unknown[][]) => ({ name: String(year), rows: [[...H2020], ...rows] });
+/** `technik` is the installation's Technik (the Bauform column); `ab` is "abgeschlossen". */
+const row = (nr: string, over: { technik?: string; ab?: string; taetigkeit?: string } = {}) =>
+  row2020(nr, { bauform: over.technik ?? "Video", ...(over.ab ? { ab: over.ab } : {}), ...(over.taetigkeit ? { taetigkeit: over.taetigkeit } : {}) });
 const batchOf = (records: ImportBatchInput["records"], index = 1, total = 1): ImportBatchInput => ({ source: "test.xlsx", part: { index, total }, records });
 
 describe.skipIf(!hasTestDb)("ITK Prüfberichte store (real DB)", () => {
   let t: Awaited<ReturnType<typeof createTestDatabase>>;
   const actor = { name: "Admin" };
   const recs = importWorkbookSheets([
-    sheet(2025, [row("25.001"), row("25.002", { 9: "WLAN", 10: "Nein" }), row("25.003", { 2: "Gutachten", 9: "Laser" })]),
-    sheet(2024, [row("24.001", { 10: "in Bearbeitung" })]),
+    sheet(2025, [row("25.001"), row("25.002", { technik: "WLAN", ab: "Nein" }), row("25.003", { taetigkeit: "Gutachten", technik: "Laser" })]),
+    sheet(2024, [Object.assign(row("24.001", { ab: "in Bearbeitung" }), { [C.beschriftung]: "P24.001 - anderswo" })]),
   ]).records;
 
   beforeAll(async () => { t = await createTestDatabase(10); });

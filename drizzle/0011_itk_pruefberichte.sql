@@ -27,7 +27,11 @@ CREATE TABLE `itk_pruefberichte` (
 	`erneutePruefungErforderlich` varchar(16),
 	`agPl` varchar(128),
 	`anPl` varchar(128),
+	`abschlusstermin` varchar(16),
+	`planungsbuero` varchar(256),
+	`planer` varchar(256),
 	`gesamtbewertung` varchar(16),
+	`technikArt` varchar(64),
 	`version` int NOT NULL DEFAULT 1,
 	`createdAt` timestamp NOT NULL DEFAULT (now()),
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
@@ -35,7 +39,7 @@ CREATE TABLE `itk_pruefberichte` (
 	CONSTRAINT `itk_pb_year_nr_uq` UNIQUE(`year`,`laufendeNummer`)
 );
 --> statement-breakpoint
-CREATE INDEX `itk_pb_technik_idx` ON `itk_pruefberichte` (`technik`);--> statement-breakpoint
+CREATE INDEX `itk_pb_technik_art_idx` ON `itk_pruefberichte` (`technikArt`);--> statement-breakpoint
 CREATE INDEX `itk_pb_pl_idx` ON `itk_pruefberichte` (`zustaendigerPl`);--> statement-breakpoint
 CREATE INDEX `itk_pb_fs_idx` ON `itk_pruefberichte` (`zustaendigerFs`);--> statement-breakpoint
 CREATE INDEX `itk_pb_projektnummer_idx` ON `itk_pruefberichte` (`projektnummer`);

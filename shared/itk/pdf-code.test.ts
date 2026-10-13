@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { generateLegacyPdfCode, generatePdfCode, pdfPrefix, samePdfCode } from "./pdf-code";
+import { derivePdfCode, generatePdfCode, generatePdfCode2018, generatePdfCode2019, pdfPrefix, samePdfCode } from "./pdf-code";
 
 describe("generatePdfCode (the workbook formula)", () => {
   it("prefixes by Tätigkeitsbereich: G, S, A, otherwise P", () => {
@@ -22,10 +22,16 @@ describe("generatePdfCode (the workbook formula)", () => {
     expect(generatePdfCode("Gutachten", null, null)).toBe("G - ");
   });
 
-  it("legacy 2018–2019: Prüfnr - Bahnhof - Technik - Phase, skipping empty parts", () => {
-    expect(generateLegacyPdfCode(901, "Frankfurt Niederrad", "Video", "Fertigstellung")).toBe("901 - Frankfurt Niederrad - Video - Fertigstellung");
-    expect(generateLegacyPdfCode(902, "Köln", null, "EP")).toBe("902 - Köln - EP");
-    expect(generateLegacyPdfCode(null, "Köln", "Video", "EP")).toBeNull();
+  it("2019: Prüfnr - Bahnhof - Technik - Phase, plain concatenation, separators stay", () => {
+    expect(generatePdfCode2019(901, "Frankfurt Niederrad", "Video", "Fertigstellung")).toBe("901 - Frankfurt Niederrad - Video - Fertigstellung");
+    expect(generatePdfCode2019(902, "Köln", null, "EP")).toBe("902 - Köln - - EP");
+    expect(generatePdfCode2019(null, "Köln", "Video", "EP")).toBeNull();
+  });
+
+  it("2018: Abgabedatum-Prüfnr Bahnhof Technik Phase — the formula the platform documents and then does not implement", () => {
+    expect(generatePdfCode2018("2018-01-15", 801, "Fulda", "ELA", "EP")).toBe("20180115-801 Fulda ELA EP");
+    expect(generatePdfCode2018("2018-10-04", 805, "Mainz Röm. Theater", "ELA", "EP")).toBe("20181004-805 Mainz Röm. Theater ELA EP");
+    expect(generatePdfCode2018(null, 864, "Alzey", "ZIM", null)).toBe("-864 Alzey ZIM"); // an empty date cell concatenates to nothing
   });
 
   it("compares ignoring the workbook's stray whitespace", () => {
@@ -34,12 +40,12 @@ describe("generatePdfCode (the workbook formula)", () => {
   });
 });
 
-describe("derivePdfCode chooses the formula by layout", () => {
-  const base = { laufendeNummer: "25.001", taetigkeitsbereich: "Gutachten", bahnhofStrecke: "Kassel", technik: "Video", phase: "EP" } as const;
-  it("2020+, 2018–2019 and 2017", async () => {
-    const { derivePdfCode } = await import("./pdf-code");
-    expect(derivePdfCode({ ...base, layout: "2020+" })).toBe("G25.001 - Kassel");
-    expect(derivePdfCode({ ...base, layout: "2018-2019", laufendeNummer: "901" })).toBe("901 - Kassel - Video - EP");
-    expect(derivePdfCode({ ...base, layout: "2017" })).toBeNull();
+describe("derivePdfCode chooses the formula by layout and year", () => {
+  const base = { laufendeNummer: "25.001", datum: "2018-01-15", taetigkeitsbereich: "Gutachten", bahnhofStrecke: "Kassel", technik: "Video", phase: "EP" } as const;
+  it("2020+, 2019, 2018 and 2017", () => {
+    expect(derivePdfCode({ ...base, year: 2025, layout: "2020+" })).toBe("G25.001 - Kassel");
+    expect(derivePdfCode({ ...base, year: 2019, layout: "2018-2019", laufendeNummer: "901" })).toBe("901 - Kassel - Video - EP");
+    expect(derivePdfCode({ ...base, year: 2018, layout: "2018-2019", laufendeNummer: "801" })).toBe("20180115-801 Kassel Video EP");
+    expect(derivePdfCode({ ...base, year: 2017, layout: "2017" })).toBeNull();
   });
 });

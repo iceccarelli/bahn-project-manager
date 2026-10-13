@@ -24,44 +24,28 @@ Prüfer; **0 of 510** project descriptions name a Technik, so Technik cannot be 
 | Abnahme checklists (from the Abnahme prototype) | `/psv-itk` → **Abnahme** | **DONE** — `docs/abnahme.md` |
 | RBAC admin / PL / FS / viewer | existing OIDC roles + workspaces (`server/domain/permissions.ts`); no second user store | **DONE** (not ported) |
 | Audit log, version history, optimistic locking, WebSocket sync | existing Änderungshistorie, `version` + conflict dialog, SSE | **DONE** (not ported) |
-| Technik filter / Technik-Verteilung | needs the Prüfbericht record | **NOT DONE** |
-| PDF-Code (Beschriftung) | needs the Prüfbericht record | **NOT DONE** |
-| Excel import "100 % Datentreue", 2017–2019 legacy formats | extends the existing Excel import with the Prüfbericht columns | **NOT DONE** |
+| Technik filter / Technik-Verteilung | needs the Prüfbericht record | see below |
+| PDF-Code (Beschriftung) | derived from the Prüfbericht record | done |
+| Excel import "100 % Datentreue", 2017–2019 legacy formats | extends the existing Excel import with the Prüfbericht columns | see below |
 | Expo mobile app, offline-first | out of scope | — |
 
-## Decision needed before the Prüfbericht work: which PDF-Code?
+## Prüfberichte — DONE, verified against the real workbook
 
-The platform's README documents `PB_[Technik]_[Bahnhof]_[Nummer]_[Jahr]`, but its code (`services/pdf_code.py`, "replicates
-the Excel formula") implements something else:
+`Projekt_bersicht_ITK_2.xlsx` (10 year sheets 2017–2026) is the reference. `pnpm itk:inspect "<xlsx>"` is a dry run that
+changes nothing; importing it (admin only, Technik-Übersicht / PDF-Codes tabs) yields **1226 Prüfberichte**, idempotent on
+re-import, dates intact. What the real file taught us (all handled in `shared/itk/pruefbericht-import.ts`):
 
-```
-prefix  = G  if Tätigkeitsbereich == "Gutachten"
-          S  if "Stellungnahme"
-          A  if "Abnahmeprüfung" or "fachtechnische Prüfung vor Ibn"
-          P  otherwise (EP / AP / VEP, Planprüfung)
-code    = prefix + laufendeNummer + " - " + Bahnhof/Strecke        e.g. "P25.001 - Frankfurt Hbf"
-legacy 2018–19:  Prüfnr - Bahnhof - Technik - Phase
-```
+- **Headers** are multi-line and differ per era → prefix-based aliases for 2020+, 2018–2019 and 2017.
+- **Placeholders**: 751 pre-numbered rows with no content are counted and excluded, not imported as reports.
+- **Duplicate numbers** are kept as `NNN/2` and reported (`770/2`, `25.010/2`), never dropped; "907a"-style numbers are valid.
+- **Technik**: in 2020+ sheets the installation's Technik is the *Bauform / Bezeichnung der Anlage* column; the column headed
+  "Technik" is the product. We store both and derive `technikArt` (filters, Technik-Übersicht). Vocabulary comes from the
+  workbook's own Tabelle3; values outside it are reported ("ZIM ELA", "ZIM/ElA", "Rückbau"), not rewritten.
+- **PDF-Code** is the workbook's formula, and it differs per sheet (2020+: `P25.001 - Bahnhof`; 2019: plain concatenation of
+  Prüfnr, Bahnhof, Technik, Phase; 2018: `yyyymmdd-NNN …`; 2017: none). It is derived, never stored as truth; the stored
+  workbook text is kept only to flag "weicht ab". On the real file 1149 of 1210 stored codes match; the remaining 61 are
+  genuine edits or drift in the workbook (e.g. 2022 A/P prefixes), shown to the user rather than silently normalised.
+- The platform's README form `PB_…` is never produced by its own code; the workbook formula is the truth.
 
-The existing workbooks contain the second form, so it is the one that matches the data; the README form appears to be a
-design intention that was never implemented. Confirm which one the Prüfstelle wants on the PDFs; the function is a pure,
-test-first piece either way (`shared/itk/pdf-code.ts`).
-
-## The Prüfbericht increment (NOT DONE) — what it needs
-
-1. **Storage**: table `itk_pruefberichte` — `id`, `year`, `laufende_nummer` (`UNIQUE(year, laufende_nummer)`),
-   `datum`, `taetigkeitsbereich`, `art_der_baumassnahme`, `eba_aktenzeichen`, `bahnhof_strecke`,
-   `zustaendige_eba_aussenstelle`, `art_der_technik`, `bauform_bezeichnung`, `technik`, `abgeschlossen`,
-   `projektnummer`, `zustaendiger_pl`, `zustaendiger_fs`, `termin`, `link`, `version`, plus a nullable `project_id` FK
-   resolved through `projektnummer`. The PDF-Code is **derived, not stored** (the platform stores it; a stored copy is a
-   second truth). Drizzle schema + migration, tRPC read/write behind `permissions.ts`, audit entries, conflict handling via
-   the existing sync engine.
-2. **Vocabularies** in `shared/itk/`: Technik (ELA, Video, WLAN, ZIM, DSA+, SAA, dBOS — the Abnahme's `Technik` is a subset;
-   FQM, 3SZ, BÜ appear in the platform's manual), Tätigkeitsbereich, Abgeschlossen (Ja / Ja (m.A.) / Nein / in Bearbeitung)
-   with tones from `status-appearance.ts`. The manual's long names for the Kürzel are not adopted: it expands ZIM as
-   "Zuginternes Monitoring" while the Abnahme checklists call the same Technik "Optische Kundeninformationssysteme (FIA-ZIM)".
-3. **Import**: the workbook's 17 columns (`excel_service.COLUMNS_2020_PLUS`) and the 2017–2019 mappings, into the above.
-4. **UI**: Technik-Übersicht and PDF-Codes become entries in `TABS` (`client/src/pages/PsvItk.tsx`); the Jahresansicht gains
-   Technik in its chart and a Technik ranking, from the same `buildItkYears` (a `technik` field on the entry, nothing else).
-5. **Link to the Abnahme**: an Abnahme *is* an "Abnahmeprüfung" (prefix `A`), so a bound Prüfbericht gives the
-   Abnahmeprotokoll its laufende Nummer and PDF-Code in the header and filename.
+Still open: linking a Prüfbericht to a Project through `projektnummer` (and giving the Abnahme its laufende Nummer /
+PDF-Code), and the migration of platform-only data (its seed script reads the wrong columns, so nothing is taken from it).

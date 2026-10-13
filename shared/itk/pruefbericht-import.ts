@@ -30,7 +30,7 @@
  */
 import { parseStoredDate } from "../date";
 import { derivePdfCode, samePdfCode } from "./pdf-code";
-import { isAbgeschlossen, isItkTechnik } from "./vocab";
+import { NO_VALUE, isTechnikArt, normalizeAbgeschlossen, technikArtOf } from "./vocab";
 
 export type PruefberichtLayout = "2020+" | "2018-2019" | "2017";
 
@@ -65,6 +65,10 @@ export interface Pruefbericht {
   erneutePruefungErforderlich: string | null;
   agPl: string | null;
   anPl: string | null;
+  /** "1" where the sheet marks that a Abschlusstermin exists (2018–2019). */
+  abschlusstermin: string | null;
+  planungsbuero: string | null;
+  planer: string | null;
   gesamtbewertung: string | null;
 }
 
@@ -139,50 +143,58 @@ interface Alias {
   prefix?: readonly string[];
 }
 
+/**
+ * Headers in the real workbook are long, multi-line labels with annotations ("Ausgeübter Tätigkeitsbereich (ggf. mit
+ * Hinweis auf Tutorium)", "Bf / Streckenbezeichnung / Nr. / Projektbezeichnung mit Ort [Ril100]"), so most fields are
+ * recognised by the start of the folded label; short, ambiguous labels ("Technik", "Termin") must match whole.
+ */
 const ALIASES_2020: readonly Alias[] = [
   { field: "laufendeNummer", exact: ["laufendenummer", "lfdnr", "lfdnummer", "laufendenr"] },
-  { field: "datum", exact: ["datum"] },
-  { field: "taetigkeitsbereich", exact: ["taetigkeitsbereich"] },
-  { field: "artDerBaumassnahme", exact: ["artderbaumassnahme"] },
-  { field: "ebaAktenzeichen", exact: ["ebaaktenzeichen"] },
-  { field: "bahnhofStrecke", exact: ["bfstreckenbezeichnung", "bahnhofstrecke", "bfstrecke", "bahnhofstreckenbezeichnung"] },
-  { field: "zustaendigeEbaAussenstelle", exact: ["zustaendigeebaaussenstelle"] },
-  { field: "artDerTechnik", exact: ["artdertechnik"] },
-  { field: "bauformBezeichnung", exact: ["bauformbezeichnung", "bauform"] },
+  { field: "datum", prefix: ["datum"] },
+  { field: "taetigkeitsbereich", prefix: ["ausgeuebtertaetigkeitsbereich", "taetigkeitsbereich"] },
+  { field: "artDerBaumassnahme", prefix: ["artderbaumassnahme"] },
+  { field: "ebaAktenzeichen", prefix: ["ebaaktenzeichen"] },
+  { field: "bahnhofStrecke", prefix: ["bfstreckenbezeichnung", "bahnhofstrecke", "bfstrecke"] },
+  { field: "zustaendigeEbaAussenstelle", prefix: ["zustaendigeebaaussenstelle"] },
+  { field: "artDerTechnik", prefix: ["artdertechnik"] },
+  { field: "bauformBezeichnung", prefix: ["bauform"] },
   { field: "technik", exact: ["technik"] },
   { field: "abgeschlossen", exact: ["abgeschlossen"] },
   { field: "projektnummer", exact: ["projektnummer"] },
-  { field: "zustaendigerPl", exact: ["zustaendigerpl", "zustaendigepl", "pl"] },
-  { field: "zustaendigerFs", exact: ["zustaendigerfs", "zustaendigefs", "fs"] },
+  { field: "zustaendigerPl", exact: ["zustaendigerpl", "zustaendigepl"] },
+  { field: "zustaendigerFs", exact: ["zustaendigerfs", "zustaendigefs"] },
   { field: "termin", exact: ["termin"] },
-  { field: "beschriftung", exact: ["beschriftungpdfcode", "beschriftung", "pdfcode"] },
+  { field: "beschriftung", prefix: ["beschriftung", "pdfcode"] },
   { field: "link", exact: ["link"] },
 ];
 
 const ALIASES_2018: readonly Alias[] = [
   { field: "laufendeNummer", exact: ["pruefnr", "pruefnummer"] },
-  { field: "bahnhofStrecke", exact: ["bahnhofsname", "bahnhofname"] },
+  { field: "bahnhofStrecke", prefix: ["bahnhofsname", "bahnhofname"] },
   { field: "projektname", exact: ["projektname"] },
   { field: "technik", exact: ["technik"] },
   { field: "fabrikat", exact: ["fabrikat"] },
   { field: "faa", exact: ["faa"] },
-  { field: "phase", exact: ["vepepapfertigstellung", "phase"] },
+  { field: "phase", prefix: ["vepepapfertigstellung"] },
   { field: "datum", prefix: ["abgabedat"] },
   { field: "pbVorhanden", exact: ["pbvorhanden"] },
   { field: "erneutePruefungErforderlich", exact: ["erneutepruefungerforderlich"] },
   { field: "abgeschlossen", exact: ["abgeschlossen"] },
   { field: "agPl", exact: ["agpl"] },
   { field: "anPl", exact: ["anpl"] },
-  { field: "beschriftung", exact: ["pdfcode", "beschriftung"] },
+  { field: "beschriftung", prefix: ["pdfcode", "beschriftung"] },
+  { field: "abschlusstermin", exact: ["abschlusstermin"] },
+  { field: "planungsbuero", exact: ["planungsbuero"] },
+  { field: "planer", exact: ["planer"] },
   { field: "gesamtbewertung", exact: ["gesamtbewertung"] },
 ];
 
 const ALIASES_2017: readonly Alias[] = [
   { field: "laufendeNummer", exact: ["projektnr", "projektnummer"] },
   { field: "projektname", exact: ["projektname"] },
-  { field: "bahnhofStrecke", exact: ["bahnhofname", "bahnhofsname"] },
+  { field: "bahnhofStrecke", prefix: ["bahnhofname", "bahnhofsname"] },
   { field: "faa", exact: ["faa"] },
-  { field: "phase", exact: ["vepepapabnahme", "phase"] },
+  { field: "phase", prefix: ["vepepapabnahme"] },
   { field: "pbVorhanden", exact: ["pbvorhanden"] },
   { field: "datum", exact: ["abgabe"] },
   { field: "erneutePruefungErforderlich", exact: ["pruefungerforderlich"] },
@@ -264,7 +276,10 @@ export interface SheetReport {
   unmappedHeaders: string[];
   rows: number;
   imported: number;
+  /** Rows with nothing in them. */
   blank: number;
+  /** Pre-numbered rows ("22.206") with no other content — the sheets are numbered ahead of the work. Not reports, not imported. */
+  placeholders: number;
   skipped: SkippedRow[];
   warnings: string[];
 }
@@ -277,8 +292,9 @@ export interface ImportReport {
   sheets: SheetReport[];
   /** Sheets that are not year sheets (reference data such as stations, master list, lookups). */
   ignoredSheets: string[];
-  totals: { imported: number; skipped: number; blank: number; duplicates: number };
-  duplicates: { year: number; laufendeNummer: string; rows: number[] }[];
+  totals: { imported: number; skipped: number; blank: number; placeholders: number; duplicates: number };
+  /** Numbers that occur more than once in a sheet: every row is imported, the later ones under `keptAs` ("770/2"). */
+  duplicates: { year: number; laufendeNummer: string; rows: number[]; keptAs: string[] }[];
   /** Values the vocabularies do not know, with how often they occur. They are stored as found. */
   vocabulary: { technikUnknown: CountMap; abgeschlossenUnknown: CountMap; technikEmpty: number; abgeschlossenEmpty: number };
   /** The formula in pdf-code.ts against the codes stored in the workbook. */
@@ -287,6 +303,8 @@ export interface ImportReport {
     match: number;
     mismatch: number;
     noStoredCode: number;
+    /** Per sheet: the formula changed with the layout, so the verdict is only meaningful per sheet. */
+    bySheet: Record<string, { checked: number; match: number }>;
     samples: { year: number; laufendeNummer: string; stored: string; generated: string | null }[];
   };
 }
@@ -304,7 +322,7 @@ const EMPTY_RECORD: Omit<Pruefbericht, "year" | "layout" | "laufendeNummer"> = {
   zustaendigeEbaAussenstelle: null, artDerTechnik: null, bauformBezeichnung: null, technik: null, abgeschlossen: null,
   projektnummer: null, zustaendigerPl: null, zustaendigerFs: null, termin: null, beschriftung: null, link: null,
   projektname: null, fabrikat: null, faa: null, phase: null, pbVorhanden: null, erneutePruefungErforderlich: null,
-  agPl: null, anPl: null, gesamtbewertung: null,
+  agPl: null, anPl: null, abschlusstermin: null, planungsbuero: null, planer: null, gesamtbewertung: null,
 };
 
 const DATE_FIELDS: ReadonlySet<Field> = new Set(["datum", "termin"]);
@@ -320,9 +338,13 @@ function readRecord(hit: HeaderHit, row: readonly Cell[], year: number): { recor
   const rawNr = get("laufendeNummer");
   switch (hit.spec.layout) {
     case "2018-2019": {
-      // Prüfnr is a number; a text cell here is a heading or a note, not a report.
-      if (typeof rawNr !== "number" || !Number.isFinite(rawNr)) return { skip: "Prüfnr. ist keine Zahl", value: text(rawNr) ?? undefined };
-      nr = String(Math.trunc(rawNr));
+      // A Prüfnr is a number, optionally with a letter for a sub-report ("907a", "936b"); any other text is a heading or a note.
+      if (typeof rawNr === "number" && Number.isFinite(rawNr)) nr = String(Math.trunc(rawNr));
+      else {
+        const t = text(rawNr);
+        if (t === null || !/^\d+\s?[A-Za-z]$/.test(t)) return { skip: "Prüfnr. ist keine Nummer (erwartet z. B. 907 oder 907a)", value: t ?? undefined };
+        nr = t.replace(/\s+/g, "");
+      }
       break;
     }
     case "2020+": {
@@ -353,12 +375,12 @@ export function importWorkbookSheets(sheets: readonly SheetInput[]): ImportResul
   const ignoredSheets: string[] = [];
   const seen = new Map<string, number[]>();
   const numericNumbers = new Map<string, number[]>();
-  const duplicates = new Map<string, { year: number; laufendeNummer: string; rows: number[] }>();
+  const duplicates = new Map<string, { year: number; laufendeNummer: string; rows: number[]; keptAs: string[] }>();
   const technikUnknown: CountMap = {};
   const abgeschlossenUnknown: CountMap = {};
   let technikEmpty = 0;
   let abgeschlossenEmpty = 0;
-  const pdf = { checked: 0, match: 0, mismatch: 0, noStoredCode: 0, samples: [] as ImportReport["pdfCode"]["samples"] };
+  const pdf = { checked: 0, match: 0, mismatch: 0, noStoredCode: 0, bySheet: {} as ImportReport["pdfCode"]["bySheet"], samples: [] as ImportReport["pdfCode"]["samples"] };
 
   for (const sheet of sheets) {
     const name = sheet.name.trim();
@@ -369,7 +391,7 @@ export function importWorkbookSheets(sheets: readonly SheetInput[]): ImportResul
     const year = Number(name);
     const report: SheetReport = {
       sheet: name, year, layout: null, headerRow: null, mapped: {}, unmappedHeaders: [],
-      rows: 0, imported: 0, blank: 0, skipped: [], warnings: [],
+      rows: 0, imported: 0, blank: 0, placeholders: 0, skipped: [], warnings: [],
     };
     reports.push(report);
 
@@ -385,11 +407,17 @@ export function importWorkbookSheets(sheets: readonly SheetInput[]): ImportResul
     const missingOptional = hit.spec.aliases.map((a) => a.field).filter((f) => !hit.columns.has(f));
     if (missingOptional.length) report.warnings.push(`Spalten nicht gefunden (Wert bleibt leer): ${[...new Set(missingOptional)].join(", ")}`);
 
+    const keyCol = hit.columns.get("laufendeNummer");
+    const dataCols = [...hit.columns].filter(([f]) => f !== "laufendeNummer" && f !== "abschlusstermin").map(([, c]) => c);
     for (let r = hit.row + 1; r < sheet.rows.length; r++) {
       const row = sheet.rows[r] ?? [];
       report.rows += 1;
-      if (row.every((c) => text(c) === null)) {
-        report.blank += 1;
+      // A report has content in at least one data column. A row without is not one: either nothing at all (or only a
+      // pre-filled flag such as the 2018 sheet's "Abschlusstermin = 1" down to row 144), or a number the sheet was
+      // numbered ahead with ("22.206" … "22.209"). Counting those as reports would invent hundreds of them.
+      if (dataCols.every((c) => text(row[c]) === null)) {
+        if (keyCol !== undefined && text(row[keyCol]) !== null) report.placeholders += 1;
+        else report.blank += 1;
         continue;
       }
       const out = readRecord(hit, row, year);
@@ -398,41 +426,50 @@ export function importWorkbookSheets(sheets: readonly SheetInput[]): ImportResul
         continue;
       }
       const rec = out.record;
+      const original = rec.laufendeNummer;
       if (out.numericNumber) {
         const list = numericNumbers.get(name) ?? [];
         list.push(r + 1);
         numericNumbers.set(name, list);
       }
-      const key = `${year}|${rec.laufendeNummer}`;
+      const key = `${year}|${original}`;
       const prior = seen.get(key);
       if (prior) {
+        // The same number twice in a sheet is a real thing in this workbook (2017: 770). Both rows are reports; neither
+        // is dropped and neither overwrites the other — the later ones are stored as "770/2" and the report says so.
         prior.push(r + 1);
-        report.skipped.push({ row: r + 1, reason: `Duplikat von Zeile ${prior[0]} (erste Zeile bleibt, diese wird nicht übernommen)`, value: rec.laufendeNummer });
-        const d = duplicates.get(key) ?? { year, laufendeNummer: rec.laufendeNummer, rows: prior.slice(0, 1) };
+        rec.laufendeNummer = `${original}/${prior.length}`;
+        const d = duplicates.get(key) ?? { year, laufendeNummer: original, rows: prior.slice(0, 1), keptAs: [] };
         d.rows.push(r + 1);
+        d.keptAs.push(rec.laufendeNummer);
         duplicates.set(key, d);
-        continue;
-      }
-      seen.set(key, [r + 1]);
+        report.warnings.push(`Zeile ${r + 1}: Nummer ${original} kommt schon in Zeile ${prior[0]} vor — als ${rec.laufendeNummer} übernommen`);
+      } else seen.set(key, [r + 1]);
 
-      if (rec.layout === "2020+" && !rec.laufendeNummer.startsWith(`${String(year).slice(2)}.`)) {
-        report.warnings.push(`Zeile ${r + 1}: laufende Nummer ${rec.laufendeNummer} passt nicht zum Blatt ${year}`);
+      if (rec.layout === "2020+" && !original.startsWith(`${String(year).slice(2)}.`)) {
+        report.warnings.push(`Zeile ${r + 1}: laufende Nummer ${original} passt nicht zum Blatt ${year}`);
       }
 
-      if (rec.technik === null) technikEmpty += 1;
-      else if (!isItkTechnik(rec.technik)) technikUnknown[rec.technik] = (technikUnknown[rec.technik] ?? 0) + 1;
-      if (rec.abgeschlossen === null) abgeschlossenEmpty += 1;
-      else if (!isAbgeschlossen(rec.abgeschlossen)) abgeschlossenUnknown[rec.abgeschlossen] = (abgeschlossenUnknown[rec.abgeschlossen] ?? 0) + 1;
+      const art = technikArtOf(rec);
+      if (art === null) technikEmpty += 1;
+      else if (!isTechnikArt(art)) technikUnknown[art] = (technikUnknown[art] ?? 0) + 1;
+      if (rec.abgeschlossen === null || rec.abgeschlossen === NO_VALUE) abgeschlossenEmpty += 1;
+      else if (normalizeAbgeschlossen(rec.abgeschlossen) === null) abgeschlossenUnknown[rec.abgeschlossen] = (abgeschlossenUnknown[rec.abgeschlossen] ?? 0) + 1;
 
       if (rec.layout !== "2017") {
-        const generated = derivePdfCode(rec);
+        const generated = derivePdfCode({ ...rec, laufendeNummer: original });
         if (rec.beschriftung === null) pdf.noStoredCode += 1;
         else {
           pdf.checked += 1;
-          if (samePdfCode(rec.beschriftung, generated)) pdf.match += 1;
+          const per = (pdf.bySheet[name] ??= { checked: 0, match: 0 });
+          per.checked += 1;
+          if (samePdfCode(rec.beschriftung, generated)) {
+            pdf.match += 1;
+            per.match += 1;
+          }
           else {
             pdf.mismatch += 1;
-            if (pdf.samples.length < SAMPLE_LIMIT) pdf.samples.push({ year, laufendeNummer: rec.laufendeNummer, stored: rec.beschriftung, generated });
+            if (pdf.samples.length < SAMPLE_LIMIT) pdf.samples.push({ year, laufendeNummer: original, stored: rec.beschriftung, generated });
           }
         }
       }
@@ -458,6 +495,7 @@ export function importWorkbookSheets(sheets: readonly SheetInput[]): ImportResul
         imported: records.length,
         skipped,
         blank: reports.reduce((n, s) => n + s.blank, 0),
+        placeholders: reports.reduce((n, s) => n + s.placeholders, 0),
         duplicates: duplicates.size,
       },
       duplicates: [...duplicates.values()],

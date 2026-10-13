@@ -183,7 +183,7 @@ export default function PdfCodesView() {
                           <TableCell className="font-mono text-xs">{r.laufendeNummer}</TableCell>
                           <TableCell className="whitespace-nowrap tabular-nums">{formatGerman(r.datum) || "—"}</TableCell>
                           <TableCell className="max-w-[18rem] truncate" title={r.bahnhofStrecke ?? undefined}>{r.bahnhofStrecke ?? "—"}</TableCell>
-                          <TableCell>{r.technik ?? "—"}</TableCell>
+                          <TableCell title={r.technik ?? undefined}>{r.technikArt ?? "—"}</TableCell>
                           <TableCell className="whitespace-nowrap">{r.taetigkeitsbereich ?? "—"}</TableCell>
                           <TableCell>{r.abgeschlossen ? <Badge className={`text-2xs font-bold ${badgeFor(r.abgeschlossen)}`}>{r.abgeschlossen}</Badge> : "—"}</TableCell>
                           <TableCell className="whitespace-nowrap">{r.zustaendigerPl ?? "—"}</TableCell>

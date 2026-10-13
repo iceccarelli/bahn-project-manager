@@ -9,8 +9,7 @@
  * vocabularies, and — the point of running it first — how the PDF-Code formula in
  * shared/itk/pdf-code.ts compares with the codes stored in the workbook.
  *
- * Exit code: 0 when every year sheet was recognised and nothing was skipped or
- * duplicated; 1 otherwise (the report says why); 2 for a usage error.
+ * Exit code: 0 when every year sheet was recognised and no row was skipped; 1 otherwise (the report says why); 2 for a usage error.
  */
 import fs from "node:fs";
 import * as XLSX from "xlsx";
@@ -34,12 +33,13 @@ if (asJson) {
   const pad = (s: string | number, n: number) => String(s).padEnd(n);
   console.log(`\nWorkbook: ${file}`);
   console.log(`Sheets: ${workbook.SheetNames.length}  (year sheets read: ${report.sheets.length}; ignored: ${report.ignoredSheets.join(", ") || "none"})\n`);
-  console.log(`${pad("Blatt", 7)}${pad("Layout", 11)}${pad("Kopf", 6)}${pad("Zeilen", 8)}${pad("importiert", 12)}${pad("leer", 6)}übersprungen`);
+  console.log(`${pad("Blatt", 7)}${pad("Layout", 11)}${pad("Kopf", 6)}${pad("Zeilen", 8)}${pad("importiert", 12)}${pad("leer", 6)}${pad("Platzhalter", 13)}${pad("übersprungen", 14)}PDF-Code (gleich/geprüft)`);
   for (const s of report.sheets) {
-    console.log(`${pad(s.sheet, 7)}${pad(s.layout ?? "—", 11)}${pad(s.headerRow ?? "—", 6)}${pad(s.rows, 8)}${pad(s.imported, 12)}${pad(s.blank, 6)}${s.skipped.length}`);
+    const pc = report.pdfCode.bySheet[s.sheet];
+    console.log(`${pad(s.sheet, 7)}${pad(s.layout ?? "—", 11)}${pad(s.headerRow ?? "—", 6)}${pad(s.rows, 8)}${pad(s.imported, 12)}${pad(s.blank, 6)}${pad(s.placeholders, 13)}${pad(s.skipped.length, 14)}${pc ? `${pc.match}/${pc.checked}` : "—"}`);
   }
   const t = report.totals;
-  console.log(`\nSumme: ${t.imported} importiert, ${t.skipped} übersprungen (${t.duplicates} Duplikate), ${t.blank} leere Zeilen`);
+  console.log(`\nSumme: ${t.imported} importiert, ${t.skipped} übersprungen, ${t.duplicates} doppelte Nummern (alle übernommen), ${t.placeholders} vornummerierte Platzhalterzeilen (nicht importiert), ${t.blank} leere Zeilen`);
 
   for (const s of report.sheets) {
     const notes = [...s.warnings, ...s.unmappedHeaders.map((h) => `Kopfzelle ohne Feld: "${h}"`)];
@@ -52,7 +52,7 @@ if (asJson) {
 
   const v = report.vocabulary;
   const list = (m: Record<string, number>) => Object.entries(m).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} (${n})`).join(", ") || "keine";
-  console.log(`\nTechnik außerhalb der Liste: ${list(v.technikUnknown)}; ohne Technik: ${v.technikEmpty}`);
+  console.log(`\nTechnik (Bauform / Bezeichnung der Anlage) außerhalb der Liste: ${list(v.technikUnknown)}; ohne Technik: ${v.technikEmpty}`);
   console.log(`abgeschlossen außerhalb der Liste: ${list(v.abgeschlossenUnknown)}; leer: ${v.abgeschlossenEmpty}`);
 
   const p = report.pdfCode;
@@ -64,5 +64,6 @@ if (asJson) {
   for (const m of p.samples) console.log(`  gespeichert "${m.stored}"  ≠  berechnet "${m.generated ?? "—"}"  (${m.year}, ${m.laufendeNummer})`);
 }
 
-const clean = report.sheets.every((s) => s.layout !== null && s.skipped.length === 0) && report.totals.duplicates === 0;
+// Duplicated numbers are imported (and listed), placeholders are expected; what makes a run unclean is a sheet that was not understood or a row that was skipped.
+const clean = report.sheets.every((s) => s.layout !== null && s.skipped.length === 0);
 process.exit(clean ? 0 : 1);

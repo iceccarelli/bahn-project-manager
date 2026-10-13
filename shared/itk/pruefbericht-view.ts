@@ -5,9 +5,10 @@
  */
 import { derivePdfCode, pdfPrefix, samePdfCode, type PdfPrefix } from "./pdf-code";
 import type { Pruefbericht } from "./pruefbericht-import";
+import { technikArtOf } from "./vocab";
 
 export interface TechnikRow {
-  /** null = the workbook cell was empty */
+  /** The Technik of the installation (technikArtOf); null = none stated or "-" */
   technik: string | null;
   count: number;
   perYear: Record<string, number>;
@@ -41,12 +42,13 @@ export function buildPruefberichtView(rows: readonly Pruefbericht[], asOf: numbe
 
   for (const r of rows) {
     years.add(r.year);
-    const t = technik.get(r.technik) ?? { technik: r.technik, count: 0, perYear: {}, abgeschlossen: {} };
+    const art = technikArtOf(r);
+    const t = technik.get(art) ?? { technik: art, count: 0, perYear: {}, abgeschlossen: {} };
     t.count += 1;
     t.perYear[String(r.year)] = (t.perYear[String(r.year)] ?? 0) + 1;
     const ab = r.abgeschlossen ?? "";
     t.abgeschlossen[ab] = (t.abgeschlossen[ab] ?? 0) + 1;
-    technik.set(r.technik, t);
+    technik.set(art, t);
     bump(abgeschlossen, r.abgeschlossen);
     bump(taetigkeit, r.taetigkeitsbereich);
 

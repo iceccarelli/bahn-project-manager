@@ -174,7 +174,7 @@ function Report({ name, result, onUpload, onOther }: { name: string; result: Imp
         <div className="min-w-0">
           <p className="truncate font-medium">{name}</p>
           <p className="text-sm text-muted-foreground">
-            {t.imported.toLocaleString("de-DE")} Prüfberichte erkannt • {t.skipped.toLocaleString("de-DE")} Zeilen übersprungen ({t.duplicates} Duplikate) • {t.blank.toLocaleString("de-DE")} leere Zeilen
+            {t.imported.toLocaleString("de-DE")} Prüfberichte erkannt • {t.placeholders.toLocaleString("de-DE")} vornummerierte Leerzeilen nicht übernommen • {t.skipped.toLocaleString("de-DE")} Zeilen übersprungen • {t.duplicates} doppelte Nummern (alle übernommen)
           </p>
         </div>
       </div>
@@ -195,7 +195,9 @@ function Report({ name, result, onUpload, onOther }: { name: string; result: Imp
               <TableHead>Layout</TableHead>
               <TableHead className="text-right">Zeilen</TableHead>
               <TableHead className="text-right">importiert</TableHead>
+              <TableHead className="text-right">Platzhalter</TableHead>
               <TableHead className="text-right">übersprungen</TableHead>
+              <TableHead className="text-right">PDF-Code gleich</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -205,7 +207,9 @@ function Report({ name, result, onUpload, onOther }: { name: string; result: Imp
                 <TableCell>{s.layout ?? "—"}</TableCell>
                 <TableCell className="text-right tabular-nums">{s.rows}</TableCell>
                 <TableCell className="text-right tabular-nums">{s.imported}</TableCell>
+                <TableCell className="text-right tabular-nums">{s.placeholders}</TableCell>
                 <TableCell className="text-right tabular-nums">{s.skipped.length}</TableCell>
+                <TableCell className="text-right tabular-nums">{report.pdfCode.bySheet[s.sheet] ? `${report.pdfCode.bySheet[s.sheet]?.match}/${report.pdfCode.bySheet[s.sheet]?.checked}` : "—"}</TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -234,7 +238,7 @@ function Report({ name, result, onUpload, onOther }: { name: string; result: Imp
       )}
 
       <div className="space-y-1 text-sm">
-        <p><span className="font-medium">Technik außerhalb der Liste:</span> {Object.keys(v.technikUnknown).length ? countText(v.technikUnknown) : "keine"}{v.technikEmpty ? ` • ohne Technik: ${v.technikEmpty}` : ""}</p>
+        <p><span className="font-medium">Technik (Anlage) außerhalb der Liste:</span> {Object.keys(v.technikUnknown).length ? countText(v.technikUnknown) : "keine"}{v.technikEmpty ? ` • ohne Technik: ${v.technikEmpty}` : ""}</p>
         <p><span className="font-medium">abgeschlossen außerhalb der Liste:</span> {Object.keys(v.abgeschlossenUnknown).length ? countText(v.abgeschlossenUnknown) : "keine"}{v.abgeschlossenEmpty ? ` • leer: ${v.abgeschlossenEmpty}` : ""}</p>
         <p className="text-muted-foreground">Diese Werte werden unverändert übernommen.</p>
       </div>

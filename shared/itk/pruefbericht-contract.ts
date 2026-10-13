@@ -7,7 +7,7 @@ export const PRUEFBERICHT_FIELDS = [
   "laufendeNummer", "datum", "taetigkeitsbereich", "artDerBaumassnahme", "ebaAktenzeichen", "bahnhofStrecke",
   "zustaendigeEbaAussenstelle", "artDerTechnik", "bauformBezeichnung", "technik", "abgeschlossen", "projektnummer",
   "zustaendigerPl", "zustaendigerFs", "termin", "beschriftung", "link", "projektname", "fabrikat", "faa", "phase",
-  "pbVorhanden", "erneutePruefungErforderlich", "agPl", "anPl", "gesamtbewertung",
+  "pbVorhanden", "erneutePruefungErforderlich", "agPl", "anPl", "abschlusstermin", "planungsbuero", "planer", "gesamtbewertung",
 ] as const satisfies readonly (keyof Pruefbericht)[];
 
 /** Column widths, equal to drizzle/schema.ts `itk_pruefberichte`. */
@@ -42,6 +42,9 @@ export const PruefberichtSchema = z.object({
   erneutePruefungErforderlich: text(16),
   agPl: text(128),
   anPl: text(128),
+  abschlusstermin: text(16),
+  planungsbuero: text(256),
+  planer: text(256),
   gesamtbewertung: text(16),
 }) satisfies z.ZodType<Pruefbericht>;
 
@@ -67,6 +70,7 @@ export const ListInputSchema = z.object({
   cursor: z.string().regex(/^\d{4}:\d+$/).optional(),
   limit: z.number().int().min(1).max(200).default(100),
   year: z.number().int().min(1990).max(2100).optional(),
+  /** The Technik of the installation (`technikArt`, see shared/itk/vocab.ts) — not the free-text product column. */
   technik: z.string().trim().min(1).max(64).optional(),
   abgeschlossen: z.string().trim().min(1).max(64).optional(),
   q: z.string().trim().min(1).max(100).optional(),
@@ -76,6 +80,8 @@ export type ListInput = z.infer<typeof ListInputSchema>;
 export interface PruefberichtRow extends Pruefbericht {
   id: number;
   version: number;
+  /** Derived on import from the layout's Technik column (technikArtOf); what the filters and the Technik-Übersicht use. */
+  technikArt: string | null;
 }
 
 export interface PruefberichtPage {

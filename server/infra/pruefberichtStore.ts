@@ -16,17 +16,20 @@ import {
   type PruefberichtRow,
 } from "@shared/itk/pruefbericht-contract";
 import type { Pruefbericht } from "@shared/itk/pruefbericht-import";
+import { technikArtOf } from "@shared/itk/vocab";
 
 type Db = Record<string, unknown>;
 
 const DATE_FIELDS = new Set<string>(["datum", "termin"]);
-const COLUMNS = ["year", "layout", ...PRUEFBERICHT_FIELDS] as const;
+const COLUMNS = ["year", "layout", ...PRUEFBERICHT_FIELDS, "technikArt"] as const;
 /** SELECT list that hands DATE columns back as 'YYYY-MM-DD' strings — never as a JS Date, which would drag a time zone in. */
 const SELECT = ["id", "version", ...COLUMNS].map((c) => (DATE_FIELDS.has(c) ? `DATE_FORMAT(\`${c}\`, '%Y-%m-%d') AS \`${c}\`` : `\`${c}\``)).join(", ");
 
 const toRow = (r: Db): PruefberichtRow => ({ ...(r as unknown as PruefberichtRow) });
 
-const same = (stored: Db, rec: Pruefbericht): boolean => COLUMNS.every((c) => (stored[c] ?? null) === ((rec as unknown as Db)[c] ?? null));
+/** The record as stored: what the workbook said, plus the one derived column (recomputed here, never trusted from the caller). */
+const withDerived = (rec: Pruefbericht): Db => ({ ...(rec as unknown as Db), technikArt: technikArtOf(rec) });
+const same = (stored: Db, rec: Db): boolean => COLUMNS.every((c) => (stored[c] ?? null) === (rec[c] ?? null));
 
 export interface Actor {
   name: string | null;
@@ -49,17 +52,18 @@ export async function importPruefberichte(pool: Pool, batch: ImportBatchInput, a
     const [found] = (await conn.query(`SELECT ${SELECT} FROM itk_pruefberichte WHERE ${where} FOR UPDATE`, batch.records.flatMap((r) => [r.year, r.laufendeNummer]))) as unknown as [Db[]];
     for (const row of found) existing.set(`${row.year}|${row.laufendeNummer}`, row);
 
-    const inserts: Pruefbericht[] = [];
-    const updates: { id: number; rec: Pruefbericht }[] = [];
+    const inserts: Db[] = [];
+    const updates: { id: number; rec: Db }[] = [];
     let unchanged = 0;
-    for (const rec of batch.records) {
+    for (const input of batch.records) {
+      const rec = withDerived(input);
       const prior = existing.get(`${rec.year}|${rec.laufendeNummer}`);
       if (!prior) inserts.push(rec);
       else if (same(prior, rec)) unchanged += 1;
       else updates.push({ id: prior.id as number, rec });
     }
 
-    const values = (rec: Pruefbericht) => COLUMNS.map((c) => (rec as unknown as Db)[c] ?? null);
+    const values = (rec: Db) => COLUMNS.map((c) => rec[c] ?? null);
     if (inserts.length) {
       await conn.query(`INSERT INTO itk_pruefberichte (${COLUMNS.map((c) => `\`${c}\``).join(", ")}) VALUES ?`, [inserts.map(values)]);
     }
@@ -92,7 +96,7 @@ export async function loadAllPruefberichte(pool: Pool): Promise<PruefberichtRow[
   return rows.map(toRow);
 }
 
-const LIKE_COLUMNS = ["laufendeNummer", "bahnhofStrecke", "projektnummer", "zustaendigerPl", "zustaendigerFs", "technik", "taetigkeitsbereich", "beschriftung", "projektname"] as const;
+const LIKE_COLUMNS = ["laufendeNummer", "bahnhofStrecke", "projektnummer", "zustaendigerPl", "zustaendigerFs", "technikArt", "technik", "taetigkeitsbereich", "beschriftung", "projektname", "agPl"] as const;
 const escapeLike = (s: string) => s.replace(/[\\%_]/g, (m) => `\\${m}`);
 
 /** Keyset-paginated list, newest year first (then newest row). Search terms are ANDed; each must match at least one searchable column. */
@@ -105,7 +109,7 @@ export async function listPruefberichte(pool: Pool, input: ListInput): Promise<P
     args.push(y, y, id);
   }
   if (input.year) { where.push("year = ?"); args.push(input.year); }
-  if (input.technik) { where.push("technik = ?"); args.push(input.technik); }
+  if (input.technik) { where.push("technikArt = ?"); args.push(input.technik); }
   if (input.abgeschlossen) { where.push("abgeschlossen = ?"); args.push(input.abgeschlossen); }
   for (const term of (input.q ?? "").split(/\s+/).filter(Boolean)) {
     where.push(`(${LIKE_COLUMNS.map((c) => `\`${c}\` LIKE ?`).join(" OR ")})`);

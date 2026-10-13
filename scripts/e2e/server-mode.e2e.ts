@@ -17,6 +17,7 @@ import { chromium, type Browser, type BrowserContext, type Page } from "playwrig
 import { SignJWT, exportJWK, generateKeyPair } from "jose";
 import mysql from "mysql2/promise";
 import * as XLSX from "xlsx";
+import { H2020, row2020 } from "../../shared/itk/testing";
 
 const DB_BASE = process.env.E2E_DB_BASE ?? "mysql://bahn:bahn@127.0.0.1:3306";
 const DB_NAME = "bahn_e2e";
@@ -671,12 +672,19 @@ async function main() {
 
   await step("ITK PRÜFBERICHTE: an admin imports the workbook through the UI (report first, then batches, idempotent); tabs, table, Technik view; everyone else is refused by the server and never offered the tabs", async () => {
     const tokenAdmin = await mint("admin-pb", "Admin (Prüfberichte)", ["admin"]);
-    const H = ["Laufende Nummer", "Datum", "Tätigkeitsbereich", "Art der Baumaßnahme", "EBA-Aktenzeichen", "Bf / Streckenbezeichnung", "Zuständige EBA Außenstelle", "Art der Technik", "Bauform/Bezeichnung", "Technik", "abgeschlossen", "Projektnummer", "zuständiger PL", "zuständiger FS", "Termin", "Beschriftung / PDF Code", "Link"];
-    const tk = ["ELA", "Video", "WLAN", "ZIM", "DSA+"], ab = ["Ja", "Ja (m.A.)", "Nein", "in Bearbeitung"];
-    const code = (g: boolean, nr: string, bf: string) => `${g ? "G" : "P"}${nr} - ${bf}`;
-    // 520 rows force three import batches (250 + 250 + 23 with the 2025 sheet); one stored code deviates from the formula
-    const rows24 = Array.from({ length: 520 }, (_, i) => { const nr = `24.${String(i + 1).padStart(3, "0")}`; return [nr, 45_000 + i, i % 7 === 0 ? "Gutachten" : "Planprüfung", null, null, `Bahnhof ${i + 1}`, null, null, null, tk[i % 5], ab[i % 4], null, "PL Eins", "FS Zwei", null, code(i % 7 === 0, nr, `Bahnhof ${i + 1}`), null]; });
-    const rows25 = [["25.001", 45_700, "Stellungnahme", null, null, "Kassel Hbf", null, null, null, "ELA", "Ja", null, "PL Drei", null, null, "P25.001 - Kassel Hbf", null], ["25.002", null, "Abnahmeprüfung", null, null, "Fulda", null, null, null, "SAA", "Nein", null, "PL Drei", "FS Zwei", null, code(false, "25.002", "Fulda").replace("P", "A"), null], ["25.003", null, "Planprüfung", null, null, "Köln", null, null, null, "Laser", "vielleicht", null, null, null, null, null, null]];
+    const tk = ["ELA AN1", "Video", "WLAN", "ZIM", "DSA+"], ab = ["Ja", "Ja (m.A.)", "Nein", "in Bearbeitung"];
+    // 520 rows force three import batches (250 + 250 + 23 with the 2025 sheet); one stored code deviates from the formula.
+    // Real headers and column semantics (shared/itk/testing.ts): the Technik of the installation sits in the Bauform column.
+    const H = [...H2020];
+    const rows24 = Array.from({ length: 520 }, (_, i) => {
+      const nr = `24.${String(i + 1).padStart(3, "0")}`;
+      return row2020(nr, { datum: 45_000 + i, taetigkeit: i % 7 === 0 ? "Gutachten" : "Planprüfung", art: null, bahnhof: `Bahnhof ${i + 1}`, bauform: tk[i % 5], technik: null, ab: ab[i % 4], projektnummer: null, pl: "PL Eins", fs: "FS Zwei", termin: null });
+    });
+    const rows25 = [
+      row2020("25.001", { datum: 45_700, taetigkeit: "Stellungnahme", art: null, bahnhof: "Kassel Hbf", bauform: "ELA AN1", technik: null, ab: "Ja", projektnummer: null, pl: "PL Drei", fs: null, termin: null, beschriftung: "P25.001 - Kassel Hbf" }),
+      row2020("25.002", { datum: null, taetigkeit: "Abnahmeprüfung", art: null, bahnhof: "Fulda", bauform: "SAA", technik: null, ab: "Nein", projektnummer: null, pl: "PL Drei", fs: "FS Zwei", termin: null }),
+      row2020("25.003", { datum: null, taetigkeit: "Planprüfung", art: null, bahnhof: "Köln", bauform: "Laser", technik: null, ab: "vielleicht", projektnummer: null, pl: null, fs: null, termin: null, beschriftung: null }),
+    ];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Projektübersicht 2024"], H, ...rows24]), "2024");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([H, ...rows25]), "2025");

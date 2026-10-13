@@ -1,7 +1,7 @@
 {
   "version": "5",
   "dialect": "mysql",
-  "id": "f39e1407-05aa-485e-9de8-8696e53e7f60",
+  "id": "043168c4-c44e-4fa4-96a4-56b04b4d595b",
   "prevId": "db005c54-1e66-46a1-b5a9-908d5800ba44",
   "tables": {
     "audit_log": {
@@ -805,9 +805,37 @@
           "notNull": false,
           "autoincrement": false
         },
+        "abschlusstermin": {
+          "name": "abschlusstermin",
+          "type": "varchar(16)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "planungsbuero": {
+          "name": "planungsbuero",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "planer": {
+          "name": "planer",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "gesamtbewertung": {
           "name": "gesamtbewertung",
           "type": "varchar(16)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "technikArt": {
+          "name": "technikArt",
+          "type": "varchar(64)",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
@@ -847,10 +875,10 @@
           ],
           "isUnique": true
         },
-        "itk_pb_technik_idx": {
-          "name": "itk_pb_technik_idx",
+        "itk_pb_technik_art_idx": {
+          "name": "itk_pb_technik_art_idx",
           "columns": [
-            "technik"
+            "technikArt"
           ],
           "isUnique": false
         },
