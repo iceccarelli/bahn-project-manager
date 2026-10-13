@@ -3780,7 +3780,15 @@ await check("Abnahme: rate, preview the PDF, buttons aligned, download is a real
     null,
     { timeout: 90000 },
   );
-  assert(/^blob:/.test((await dialog.locator("iframe").getAttribute("src")) ?? ""), "the preview frame holds no PDF");
+  // CI's Chromium ships without a PDF viewer (navigator.pdfViewerEnabled === false); there the dialog must say so
+  // and keep its buttons working, rather than show an empty frame. Both paths are the feature.
+  const embeds = await page.evaluate(() => navigator.pdfViewerEnabled !== false);
+  if (embeds) {
+    assert(/^blob:/.test((await dialog.locator("iframe").getAttribute("src")) ?? ""), "the preview frame holds no PDF");
+  } else {
+    assert(await dialog.getByText("Dieser Browser zeigt PDFs nicht eingebettet an").isVisible(), "no fallback message without a PDF viewer");
+    assert((await dialog.locator("iframe").count()) === 0, "an empty frame is shown without a PDF viewer");
+  }
   const [download] = await Promise.all([
     page.waitForEvent("download", { timeout: 60000 }),
     dialog.getByRole("button", { name: "Herunterladen" }).click(),
@@ -3835,6 +3843,46 @@ await check("Projektblatt: Vorschau opens the same preview dialog", async () => 
     { timeout: 90000 },
   );
   await page.keyboard.press("Escape");
+});
+
+console.log("\n== ITK-Jahresansicht ==");
+
+await check("Jahresansicht: 'alle Jahre' equals the Übersicht's ITK total; years add up; year selection is in the URL", async () => {
+  await go("/psv-itk");
+  const card = page.getByText(/Projekte mit ITK-Prüfung/).first().locator("xpath=ancestor::*[@data-slot='card'][1]");
+  const uebersicht = Number((await card.innerText()).match(/(\d[\d.]*)/)[1].replace(/\./g, ""));
+  assert(uebersicht > 400, `Übersicht ITK total looks wrong: ${uebersicht}`);
+
+  await page.getByRole("tab", { name: "Jahresansicht" }).click();
+  await page.getByRole("heading", { name: "ITK-Jahresansicht" }).waitFor({ timeout: 20000 });
+  const kpi = await page.getByTestId("jahres-kpis").innerText();
+  assert(Number(kpi.match(/(\d[\d.]*)/)[1].replace(/\./g, "")) === uebersicht, `Jahresansicht ${kpi.replace(/\n/g, " ")} vs Übersicht ${uebersicht}`);
+
+  const rows = await page
+    .getByTestId("jahres-table")
+    .locator("tbody tr")
+    .evaluateAll((trs) => trs.map((tr) => [...tr.querySelectorAll("td")].map((td) => td.innerText.trim())));
+  const num = (t) => Number(t.replace(/\./g, ""));
+  const all = rows.find((r) => r[0] === "Alle Jahre");
+  const sum = rows.filter((r) => r[0] !== "Alle Jahre").reduce((n, r) => n + num(r[1]), 0);
+  assert(sum === num(all[1]), `years add up to ${sum}, not ${all[1]}`);
+
+  const year = rows.find((r) => /^\d{4}$/.test(r[0]));
+  await page.getByRole("group", { name: "Jahr wählen" }).getByRole("radio", { name: year[0] }).click();
+  await page.waitForTimeout(300);
+  assert(page.url().includes(`year=${year[0]}`), `year not in the URL: ${page.url()}`);
+  assert((await page.getByTestId("jahres-kpis").innerText()).includes(year[1]), "KPI did not follow the selected year");
+});
+
+await check("Jahresansicht: a ranked name opens the Übersicht search for that person", async () => {
+  await go("/psv-itk?tab=jahresansicht");
+  const link = page.locator("ol a").first();
+  await link.waitFor({ timeout: 20000 });
+  const name = (await link.innerText()).trim();
+  await link.click();
+  await page.waitForTimeout(800);
+  assert(new URL(page.url()).searchParams.get("q") === name, `q is not the name: ${page.url()}`);
+  assert(await page.getByRole("heading", { name: "PSV-ITK Prüfungen" }).isVisible(), "not on the Übersicht");
 });
 
 console.log("\n== summary ==");

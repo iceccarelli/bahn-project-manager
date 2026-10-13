@@ -1,6 +1,6 @@
 /** Wire contract of the server audit feed (`audit.page`): cursor-paginated, authorization-scoped, never the whole trail. */
-/** What an audit row is about. `document` = an export/mail/PDF that is not tied to one project; `user` = an authorization grant. */
-export type AuditEntityType = "project" | "checklist" | "booking" | "user" | "document";
+/** What an audit row is about. `document` = an export/mail/PDF that is not tied to one project; `user` = an authorization grant; `pruefbericht` = an import batch of ITK Prüfberichte. */
+export type AuditEntityType = "project" | "checklist" | "booking" | "user" | "document" | "pruefbericht";
 /** `document` = a durable document/message action (PDF, export, mail, Teams) recorded by `audit.record`. */
 export type AuditAction = "create" | "update" | "delete" | "document";
 export const AUDIT_DOCUMENT_KINDS = ["pdf", "export", "mail", "teams"] as const;

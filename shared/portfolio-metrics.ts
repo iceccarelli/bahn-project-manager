@@ -48,6 +48,7 @@ export interface PortfolioProject {
   projektnummer?: string | null;
   station?: string | null;
   bahnhofsmanagement?: string | null;
+  projektleiter?: string | null;
   terminProjektvorstellung?: string | null;
   reviews?: PortfolioReview[] | null;
 }

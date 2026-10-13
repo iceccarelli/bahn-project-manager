@@ -18,6 +18,7 @@
  * because a claim was absent.
  */
 import { slugify } from "@shared/domain-events";
+import { mayImportPruefberichte, mayViewPruefberichte } from "@shared/itk/access";
 
 export type Role = "admin" | "editor" | "viewer";
 
@@ -80,6 +81,20 @@ export function canDeleteProject(p: Principal, _project: ProjectContext): boolea
 
 export function canViewAudit(p: Principal): boolean {
   return canWriteRole(p);
+}
+
+/**
+ * ITK Prüfberichte carry no Bahnhofsmanagement, so there is no workspace to scope them by. Rather than show a
+ * workspace-limited principal the whole Prüfstelle's record, they are visible only to an unrestricted principal
+ * (admin or an explicit ALL grant) — default-deny, relaxed deliberately when a rule for it exists.
+ */
+export function canViewPruefberichte(p: Principal): boolean {
+  return mayViewPruefberichte(p);
+}
+
+/** Importing the workbook replaces records by key; admin only. */
+export function canImportPruefberichte(p: Principal): boolean {
+  return mayImportPruefberichte(p);
 }
 
 export function canExport(p: Principal): boolean {

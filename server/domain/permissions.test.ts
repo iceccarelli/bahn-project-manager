@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   canApproveReview, canCreateProject, canDeleteProject, canEditDepartment, canEditProject, canExport, canManageUsers,
-  canSubscribe, canViewAudit, canViewProject, roleFromLegacy,
+  canImportPruefberichte, canSubscribe, canViewAudit, canViewProject, canViewPruefberichte, roleFromLegacy,
 } from "./permissions";
 import { admin, markus, viewer, mitteOnly } from "./testFixtures";
 import { workspaceRestriction, type Principal } from "./permissions";
@@ -117,5 +117,19 @@ describe("workspace access is explicit and default-deny", () => {
     process.env.LEGACY_USER_WORKSPACES = "ALL";
     try { expect(principalFromUser(u).workspaces).toBe("ALL"); } finally { delete process.env.LEGACY_USER_WORKSPACES; }
     expect(principalFromUser(u, { workspaces: ["Kassel"] }).workspaces).toEqual(["Kassel"]);
+  });
+});
+
+describe("ITK Prüfberichte (no workspace, so default-deny for restricted principals)", () => {
+  it("are visible to an unrestricted principal only", () => {
+    expect(canViewPruefberichte(admin)).toBe(true);
+    expect(canViewPruefberichte(mitteOnly)).toBe(false);
+    expect(canViewPruefberichte({ ...markus, workspaces: "ALL" })).toBe(true);
+    expect(canViewPruefberichte({ ...markus, workspaces: [] })).toBe(false); // a missing claim never widens access
+  });
+  it("are imported by an admin only — an ALL grant on an editor is not enough", () => {
+    expect(canImportPruefberichte(admin)).toBe(true);
+    expect(canImportPruefberichte({ ...markus, workspaces: "ALL" })).toBe(false);
+    expect(canImportPruefberichte(viewer)).toBe(false);
   });
 });

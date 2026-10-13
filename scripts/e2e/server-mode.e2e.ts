@@ -17,6 +17,7 @@ import { chromium, type Browser, type BrowserContext, type Page } from "playwrig
 import { SignJWT, exportJWK, generateKeyPair } from "jose";
 import mysql from "mysql2/promise";
 import * as XLSX from "xlsx";
+import { H2020, row2020 } from "../../shared/itk/testing";
 
 const DB_BASE = process.env.E2E_DB_BASE ?? "mysql://bahn:bahn@127.0.0.1:3306";
 const DB_NAME = "bahn_e2e";
@@ -577,6 +578,24 @@ async function main() {
     const pb = await api(URLS[1]!, tokenB, "dashboard.portfolio", undefined, "GET");
     if (pa.data.metrics.total !== dbTotal || pb.data.metrics.total !== dbFrankfurt) throw new Error(`portfolio totals ${pa.data.metrics.total}/${pb.data.metrics.total}`);
     if (pb.data.regions.some((r: any) => r.region !== "Frankfurt")) throw new Error("B's portfolio leaks other regions");
+    // PSV-ITK Jahresansicht: the same authority — derived by the server over the caller's authorized rows only
+    {
+      const itkRows = async (extra: string) => Number((await q(`SELECT COUNT(*) n FROM department_reviews r JOIN projects p ON p.id=r.projectId WHERE r.department='ITK' ${extra}`))[0].n);
+      const [itkAll, itkFra] = [await itkRows(""), await itkRows("AND p.bahnhofsmanagement='Frankfurt'")];
+      const ya = await api(URLS[0]!, tokenA, "dashboard.itkYears", undefined, "GET");
+      const yb = await api(URLS[1]!, tokenB, "dashboard.itkYears", undefined, "GET");
+      if (ya.status !== 200 || yb.status !== 200) throw new Error(`itkYears ${ya.status}/${yb.status}: ${JSON.stringify(ya.error ?? yb.error)}`);
+      if (!(ya.data.all.metrics.total > 0 && ya.data.all.metrics.total <= itkAll)) throw new Error(`A's Jahresansicht total ${ya.data.all.metrics.total} vs ${itkAll} ITK rows`);
+      if (!(yb.data.all.metrics.total <= itkFra && yb.data.all.metrics.total < ya.data.all.metrics.total)) throw new Error(`B's Jahresansicht total ${yb.data.all.metrics.total} is not its own Frankfurt share (${itkFra} of ${itkAll})`);
+      for (const [who, y] of [["A", ya], ["B", yb]] as const) {
+        const sum = y.data.years.reduce((n: number, b: any) => n + b.metrics.total, 0);
+        if (sum !== y.data.all.metrics.total) throw new Error(`${who}: years add up to ${sum}, not ${y.data.all.metrics.total}`);
+      }
+      const foreignPl = (await q("SELECT DISTINCT p.projektleiter pl FROM projects p JOIN department_reviews r ON r.projectId=p.id WHERE r.department='ITK' AND p.bahnhofsmanagement<>'Frankfurt' AND p.projektleiter IS NOT NULL AND p.projektleiter NOT IN (SELECT projektleiter FROM projects WHERE bahnhofsmanagement='Frankfurt' AND projektleiter IS NOT NULL)")).map((r: any) => String(r.pl));
+      if (!foreignPl.length) throw new Error("fixture: no Projektleiter outside Frankfurt to check leakage against");
+      const leaked = foreignPl.find((n: string) => JSON.stringify(yb.data).includes(n));
+      if (leaked) throw new Error(`B's Jahresansicht leaks the Projektleiter "${leaked}" of another workspace`);
+    }
     if (a.seen.length || b.seen.length) throw new Error(`legacy snapshot requested: ${[...a.seen, ...b.seen]}`);
     for (const { page } of [a, b]) if ((await page.evaluate(() => Object.keys(localStorage).filter(k => /bahn_(projects|audit)/.test(k)))).length) throw new Error("browser-local project/audit state present");
 
@@ -649,6 +668,104 @@ async function main() {
     if (anon.status !== 401) throw new Error(`anonymous export -> ${anon.status}`);
     const imp = await fetch(`${URLS[0]}/api/import/excel`, { method: "POST", headers: { authorization: `Bearer ${tokenA}` } });
     if (imp.status !== 404) throw new Error(`import route exists: ${imp.status}`);
+  });
+
+  await step("ITK PRÜFBERICHTE: an admin imports the workbook through the UI (report first, then batches, idempotent); tabs, table, Technik view; everyone else is refused by the server and never offered the tabs", async () => {
+    const tokenAdmin = await mint("admin-pb", "Admin (Prüfberichte)", ["admin"]);
+    const tk = ["ELA AN1", "Video", "WLAN", "ZIM", "DSA+"], ab = ["Ja", "Ja (m.A.)", "Nein", "in Bearbeitung"];
+    // 520 rows force three import batches (250 + 250 + 23 with the 2025 sheet); one stored code deviates from the formula.
+    // Real headers and column semantics (shared/itk/testing.ts): the Technik of the installation sits in the Bauform column.
+    const H = [...H2020];
+    const rows24 = Array.from({ length: 520 }, (_, i) => {
+      const nr = `24.${String(i + 1).padStart(3, "0")}`;
+      return row2020(nr, { datum: 45_000 + i, taetigkeit: i % 7 === 0 ? "Gutachten" : "Planprüfung", art: null, bahnhof: `Bahnhof ${i + 1}`, bauform: tk[i % 5], technik: null, ab: ab[i % 4], projektnummer: null, pl: "PL Eins", fs: "FS Zwei", termin: null });
+    });
+    const rows25 = [
+      row2020("25.001", { datum: 45_700, taetigkeit: "Stellungnahme", art: null, bahnhof: "Kassel Hbf", bauform: "ELA AN1", technik: null, ab: "Ja", projektnummer: null, pl: "PL Drei", fs: null, termin: null, beschriftung: "P25.001 - Kassel Hbf" }),
+      row2020("25.002", { datum: null, taetigkeit: "Abnahmeprüfung", art: null, bahnhof: "Fulda", bauform: "SAA", technik: null, ab: "Nein", projektnummer: null, pl: "PL Drei", fs: "FS Zwei", termin: null }),
+      row2020("25.003", { datum: null, taetigkeit: "Planprüfung", art: null, bahnhof: "Köln", bauform: "Laser", technik: null, ab: "vielleicht", projektnummer: null, pl: null, fs: null, termin: null, beschriftung: null }),
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Projektübersicht 2024"], H, ...rows24]), "2024");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([H, ...rows25]), "2025");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Bf", "Cluster"]]), "Tabelle2");
+    const file = path.join("/tmp", `e2e-pruefberichte-${Date.now()}.xlsx`);
+    XLSX.writeFile(wb, file);
+
+    const admin = await openBrowser(URLS[0]!, tokenAdmin, "admin-pb");
+    try {
+      const { page } = admin;
+      await page.goto(`${URLS[0]}/psv-itk?tab=pdf-codes`);
+      await page.getByText("Noch keine Prüfberichte importiert").first().waitFor({ timeout: 15000 });
+      await page.getByRole("button", { name: "Arbeitsmappe importieren" }).click();
+      await page.getByTestId("import-file").setInputFiles(file);
+      await page.getByTestId("import-report").waitFor({ timeout: 30000 });
+      const report = await page.getByTestId("import-report").innerText();
+      if (!/523 Prüfberichte erkannt/.test(report)) throw new Error(`report: ${report.replace(/\s+/g, " ").slice(0, 300)}`);
+      if (!/Laser/.test(report) || !/vielleicht/.test(report)) throw new Error("report does not name the values outside the vocabularies");
+      if (!/521 von 522/.test(await page.getByTestId("import-pdfcode").innerText())) throw new Error("PDF-Code verdict is not 521 of 522");
+      if (Number((await q("SELECT COUNT(*) n FROM itk_pruefberichte"))[0].n) !== 0) throw new Error("the report step already wrote rows");
+
+      await page.getByRole("button", { name: /Prüfberichte importieren/ }).click();
+      await page.getByTestId("import-done").waitFor({ timeout: 60000 });
+      if (!/523 neu, 0 geändert, 0 unverändert/.test(await page.getByTestId("import-done").innerText())) throw new Error("first import totals wrong");
+      const stored = Number((await q("SELECT COUNT(*) n FROM itk_pruefberichte"))[0].n);
+      const audits = await q("SELECT field, entityLabel, workspace FROM audit_log WHERE entityType='pruefbericht' ORDER BY id");
+      if (stored !== 523 || audits.length !== 3 || audits.some((a: any) => a.field !== "import" || a.workspace !== null)) throw new Error(`stored ${stored}, audit rows ${JSON.stringify(audits)}`);
+
+      // idempotent: the same file again changes nothing
+      await page.keyboard.press("Escape"); // close the dialog (done state) and reopen it for the second run
+      await page.getByRole("button", { name: "Arbeitsmappe importieren" }).click();
+      await page.getByTestId("import-file").setInputFiles(file);
+      await page.getByTestId("import-report").waitFor({ timeout: 30000 });
+      await page.getByRole("button", { name: /Prüfberichte importieren/ }).click();
+      await page.getByTestId("import-done").waitFor({ timeout: 60000 });
+      if (!/0 neu, 0 geändert, 523 unverändert/.test(await page.getByTestId("import-done").innerText())) throw new Error("re-import was not a no-op");
+      if (Number((await q("SELECT COUNT(*) n FROM itk_pruefberichte WHERE version > 1"))[0].n) !== 0) throw new Error("re-import bumped versions");
+      await page.keyboard.press("Escape");
+
+      // the table: keyset pages, derived PDF-Code, the deviating stored code is flagged
+      await page.getByTestId("pdfcode-table").waitFor({ timeout: 15000 });
+      await until(async () => (await page.locator('[data-testid="pdfcode-table"] tbody tr').count()) === 100, 10000, "first page of 100 rows");
+      await page.getByRole("button", { name: "Weitere laden" }).click();
+      await until(async () => (await page.locator('[data-testid="pdfcode-table"] tbody tr').count()) === 200, 10000, "second page of 100 rows");
+      await page.locator("#pdfcode-search").fill("24.001");
+      await until(async () => (await page.locator('[data-testid="pdfcode-table"] tbody tr').count()) === 1, 10000, "search narrows to one row");
+      if (!/G24\.001 - Bahnhof 1/.test(await page.getByTestId("pdfcode-table").innerText())) throw new Error("derived PDF-Code missing");
+      await page.locator("#pdfcode-search").fill("25.001");
+      await until(async () => /weicht ab/.test(await page.getByTestId("pdfcode-table").innerText().catch(() => "")), 10000, "the deviating stored code is flagged");
+
+      // Technik-Übersicht
+      await page.getByRole("tab", { name: "Technik-Übersicht" }).click();
+      await page.getByTestId("technik-kpis").waitFor({ timeout: 15000 });
+      if (!/523/.test(await page.getByTestId("technik-kpis").innerText())) throw new Error("Technik KPIs lack the total");
+      const tbl = await page.getByTestId("technik-table").innerText();
+      if (!/ELA/.test(tbl) || !/Laser/.test(tbl)) throw new Error("Technik table misses a Technik");
+      await page.getByTestId("technik-table").getByRole("link", { name: "anzeigen" }).first().click();
+      await page.waitForURL(/tab=pdf-codes.*technik=|technik=.*tab=pdf-codes/, { timeout: 10000 });
+    } finally { await admin.ctx.close(); }
+
+    // an editor with an ALL grant reads but cannot import; a Frankfurt-only editor is offered nothing and refused by the server
+    const readerCtx = await openBrowser(URLS[0]!, tokenA, "A-pb");
+    try {
+      await readerCtx.page.goto(`${URLS[0]}/psv-itk?tab=pdf-codes`);
+      await readerCtx.page.getByTestId("pdfcode-table").waitFor({ timeout: 15000 });
+      if ((await readerCtx.page.getByRole("button", { name: "Arbeitsmappe importieren" }).count()) !== 0) throw new Error("an editor is offered the import");
+    } finally { await readerCtx.ctx.close(); }
+    const limited = await openBrowser(URLS[1]!, tokenB, "B-pb");
+    try {
+      await limited.page.goto(`${URLS[1]}/psv-itk?tab=pdf-codes`);
+      await limited.page.getByRole("tab", { name: "Jahresansicht" }).waitFor({ timeout: 15000 });
+      for (const name of ["Technik-Übersicht", "PDF-Codes"]) if ((await limited.page.getByRole("tab", { name }).count()) !== 0) throw new Error(`a workspace-limited principal is offered "${name}"`);
+      if ((await limited.page.getByRole("tab", { name: "Übersicht" }).getAttribute("data-state")) !== "active") throw new Error("a deep link to a tab it may not see did not fall back to the Übersicht");
+    } finally { await limited.ctx.close(); }
+    const hdr = (r: { status: number }) => r.status;
+    if (hdr(await api(URLS[1]!, tokenB, "pruefberichte.view", undefined, "GET")) !== 403) throw new Error("B may read the Prüfberichte");
+    if (hdr(await api(URLS[1]!, tokenB, "pruefberichte.list", { limit: 10 }, "GET")) !== 403) throw new Error("B may list the Prüfberichte");
+    if (hdr(await api(URLS[0]!, tokenA, "pruefberichte.import", { source: "x.xlsx", part: { index: 1, total: 1 }, records: [] })) === 200) throw new Error("an editor imported");
+    if (hdr(await api(URLS[1]!, tokenB, "pruefberichte.import", { source: "x.xlsx", part: { index: 1, total: 1 }, records: [] })) === 200) throw new Error("B imported");
+    const seen = await api(URLS[1]!, tokenB, "audit.page", { entityType: "pruefbericht", limit: 10, days: 30 }, "GET");
+    if (seen.data?.items?.length) throw new Error("B sees the import in the audit trail");
   });
 
   await step("AUTH (production): no demo login, no cookie sessions; document actions are server-recorded, authorized and scoped", async () => {

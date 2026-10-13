@@ -77,6 +77,10 @@ export function staticEntries(): SearchEntry[] {
       sublabel: "Alle ITK-Prüfungen mit Karte, Filter und Details",
       terms: ["psv itk telekommunikation informationstechnik"],
     }),
+    entry("seite", "ITK-Jahresansicht", "/psv-itk?tab=jahresansicht", {
+      sublabel: "ITK-Prüfungen nach Jahr, Projektleitung und Prüfer",
+      terms: ["jahresansicht jahr jahre jahresübersicht statistik trend projektleitung pl fachspezialist fs prüfer itk"],
+    }),
     entry("seite", "ITK-Abnahme", "/psv-itk?tab=abnahme", {
       sublabel: "Abnahme-Checklisten je Technik: ZIM, Video, DSA+, dBOS",
       terms: ["abnahme checkliste abnahmeprüfung mangel mängel itk zim video dsa dbos fachtechnische"],
