@@ -1,4 +1,5 @@
 import { Link } from "wouter";
+import { projektnummerRoot } from "@shared/itk/projektnummer";
 import { AlertTriangle, Copy, FileSpreadsheet, Loader2, PackageOpen, Search } from "lucide-react";
 import { useDeferredValue, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -189,7 +190,7 @@ export default function PdfCodesView() {
                           <TableCell className="whitespace-nowrap">{r.taetigkeitsbereich ?? "—"}</TableCell>
                           <TableCell>{r.abgeschlossen ? <Badge className={`text-2xs font-bold ${badgeFor(r.abgeschlossen)}`}>{r.abgeschlossen}</Badge> : "—"}</TableCell>
                           <TableCell className="whitespace-nowrap font-mono text-xs">
-                            {r.projektnummer ? <Link href={`/projects?q=${encodeURIComponent(r.projektnummer)}`} className="text-primary underline-offset-2 hover:underline" aria-label={`Projekt ${r.projektnummer} in Projekte suchen`}>{r.projektnummer}</Link> : "—"}
+                            {r.projektnummer ? <Link href={`/projects?q=${encodeURIComponent(projektnummerRoot(r.projektnummer) ?? r.projektnummer)}`} className="text-primary underline-offset-2 hover:underline" aria-label={`Projekt ${r.projektnummer} in Projekte suchen`}>{r.projektnummer}</Link> : "—"}
                           </TableCell>
                           <TableCell className="whitespace-nowrap">{r.zustaendigerPl ?? "—"}</TableCell>
                           <TableCell className="whitespace-nowrap">{r.zustaendigerFs ?? "—"}</TableCell>
