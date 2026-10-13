@@ -53,11 +53,13 @@ someone sorts. So identity is built only from fields whose meaning is known (`sh
 
 (normalised: case, accents, punctuation, bracketed qualifiers like "(Main)", Hbf/Hauptbahnhof are not identity).
 
-### Inside the file (`analyzeSource`)
+### Inside the file (`analyzeSource`, then the planner) — **DONE**
 
 Rows with the same `fullKey` are either *cell-for-cell identical* (kept once, reported) or *different content under one
-identity* — then the file cannot say which is right, and **none is imported**; the report names the rows. Measured on the
-supplied file: 1408 rows → 1340 distinct identities, 24 groups (68 rows) held. Nothing is merged, no row wins silently.
+identity*. Then the file cannot say which is right: **no row is imported**, nothing is merged, no row wins silently. Each such
+row goes to the planner as an explicit question (`ambiguous`, with `sourceRows` and `sourceDiff` — the cells that differ, per
+row), and the import dialog shows the group as one card with the differing cells side by side and **Diese Zeile gilt**.
+Measured on the supplied file: 1408 rows → 1340 distinct identities and **24 groups (68 rows)** that need that decision.
 
 ### Against the database (`planRegister`, pure, shared by preview / apply / inspector)
 
@@ -67,7 +69,8 @@ supplied file: 1408 rows → 1340 distinct identities, 24 groups (68 rows) held.
 | **unchanged** | exactly one existing project, equal | nothing written (the source key is remembered) |
 | **update** | exactly one existing project; the file only **fills empty fields** | by default |
 | **conflict** | exactly one existing project; the file would **replace a non-empty value** | held until the administrator ticks it, per row |
-| **ambiguous** | several candidates, or an existing project at the same Projektnummer + Station with another description (an *edited* project, or a *new* registration?) | held until a project is chosen — or "new project" is said — per row |
+| **ambiguous** | several candidates, or an existing project at the same Projektnummer + Station with another description (an *edited* project, or a *new* registration?), or a group of rows of the file that disagree | held until a project is chosen, "new project" is said, the winning row is picked, or the row is excluded — per row |
+| **skipped** | an administrator excluded exactly this row content earlier | never sent again; can be taken back |
 
 Evidence for "exactly one": a stored **source key** (below) → the project's own fields spell out the same `fullKey` → same
 `coreKey` with one record on each side (Projektstand/Termin moved on; their differences are overwrites, hence `conflict`).
@@ -77,14 +80,22 @@ Evidence for "exactly one": a stored **source key** (below) → the project's ow
 A blank cell **never clears** a stored value; there is no "clear" rule. An identity field is compared as identity compares
 it (a stored "Musterstadt (Main) Marktplatz" is not overwritten by "Musterstadt Marktplatz").
 
-### Durable mapping: `project_source_keys`
+### Durable mapping and remembered decisions: `project_source_keys` — **DONE** (migrations 0012, 0013)
 
-`(source, sha256(fullKey)) → projectId`, UNIQUE per key. It is written in the import transaction when a record is created or
+`(source, kind, sha256(key)) → projectId`, UNIQUE per key. `kind = match`: `sha256(fullKey)` → the project. It is written in the import transaction when a record is created or
 matched, and removed with the project. It lets a later import find a project after the *project's* fields were edited in the
 app. It stores no readable data and **never a row number**. Limits (UNVERIFIED on production data): if the *workbook's*
 Projektnummer / Station / Beschreibung / Stand / Termin of a registration change together, the old key no longer matches and
 the row shows up as `ambiguous` (candidate: the old project) — it needs one explicit click, after which the new key is stored
 for the same project. A source that cannot supply a durable id cannot do better than that.
+
+`kind = skip` (migration 0013, `projectId` NULL): the administrator's **"do not import this row"**, keyed by
+`sha256("skip:" + contentKey)` where `contentKey` = identity + the exact content of the row. Consequences, all tested
+(`registerImport.db.test.ts` "decisions are remembered", `registerEdgeCases.db.test.ts`): the same file asks nothing twice; change
+one cell of an excluded row in the workbook and it is a new question; "Entscheidung zurücknehmen" deletes the key; every
+exclusion and take-back is an audit row (`import.skip` / `import.unskip`, entity label = Station · Projektnummer · Stand).
+A chosen candidate / "new project" / "this row wins" is remembered the same way as any import: through the `match` key written
+in the same transaction.
 
 ## Preview and apply (`projects.registerPreview` / `projects.registerApply`, admin only)
 
@@ -98,6 +109,8 @@ for the same project. A source that cannot supply a durable id cannot do better 
    `updateWithin` (project row lock, version check, audit rows per field and `review.<Gewerk>.<field>`, one outbox event per
    project, read models, watcher notifications — the rows a single edit writes) → source key → one audit row for the batch →
    stored response → COMMIT; the relay is nudged afterwards.
+   Requests also carry the *context* of the chunk (identity-only stand-ins of the records the request does not act on), so that
+   a row is judged exactly as in the preview even when only some rows of its chunk are sent.
 4. The server refuses on the client's word: *create* when the evidence says a project exists (`exists`), *update* of a project
    that is not the planned match unless the administrator chose it from the listed candidates (`refused`), an update when the
    project changed since the preview (`stale`), replacing values without `overwrite` (`held`).
@@ -157,23 +170,65 @@ pnpm register:inspect "private-data/Übersichtsliste.xlsm" [--itk "private-data/
 
 Dry run: recognised sheet / header row / columns / 14 department groups, row counts, rows that would be skipped and why,
 unparseable dates, unknown headers and statuses, repeated and missing Projektnummern, identities the file cannot decide, the
-change summary against an empty database, a plan digest (identical on every run over an unchanged file), the ignored sheets with
+change summary against an empty database, the statuses outside the vocabulary, a plan digest (identical on every run over an unchanged file), the ignored sheets with
 their visibility, and with `--itk` the link projection above. Exit 0 only when the sheet and all required columns and all 14
 department groups were found.
 
-## Not decided here (business decisions)
+## Open business decisions — where the UI puts them — **DONE** (surfaced) / **NOT DECIDED** (the decision itself)
 
-* Status values in the file outside the review vocabulary (`Protokoll erstellt`, `planungsbegleitend` on TBQ) are withheld and
-  reported; whether they join the vocabulary is the data owner's call.
-* The 24 groups of rows with one identity but different content: someone has to decide which rows are real.
-* Whether a *Projektstand* change (AP → EP) is the same project moving on (what `core` matching assumes, as a held conflict)
-  or a new registration.
-* Prüfberichte without a Projektnummer (the majority) cannot be linked by any rule that does not guess; they need a person, or a
-  Projektnummer in the Prüfstelle's workbook.
+Each of these is shown in the import dialog or the link UI with the recommended policy as a tooltip / empty state
+(`shared/register/policy.ts`, `LINK_POLICY` in `shared/itk/project-link.ts` — the same words as below). None is decided silently.
+
+| Question | Where it appears | Recommended policy | Remembered as |
+|---|---|---|---|
+| **Rows of the file with one identity, different content** (24 groups / 68 rows measured) | import dialog: one card per group, differing cells side by side | Pick the row the responsible person confirms ("Diese Zeile gilt"); the others are excluded for good. Changing a cell of an excluded row makes it a question again. | `skip` keys for the losers, `match` key for the winner |
+| **Status outside the vocabulary** (measured: `planungsbegleitend` 9×, `Protokoll erstellt` 7×, both TBQ) | import dialog: table *Status außerhalb des Vokabulars* with value × Gewerk × rows | Keep withheld (Prüfer and Datum are imported). Extending `REVIEW_STATUSES` is a decision of the data owners, made in code with a test — not in the dialog. | not remembered: a code change |
+| **Projektstand moved on (AP → EP), same Projektnummer/Station/Beschreibung** | import dialog: conflict card "Projektstand weitergeschrieben?" with the exact cells | *Fortschreiben* if it is the same undertaking that progressed; *Neue Anmeldung* if the phase is registered on its own; *ausschließen* if the file is wrong. | `match` key (either way) / `skip` key |
+| **Conflict: the file would replace a stored value** | import dialog: conflict card with `old → new` per cell | Replace only if the file is the better-kept source; otherwise exclude. *Offen lassen* writes nothing and asks again next time. | `skip` key if excluded |
+| **Ambiguous: edited project or second measure?** | import dialog: card with one selectable candidate per project and, for the chosen one, its exact cell changes | Map to the project if only the description was reworded; create a new project if it is a second measure. | `match` key / `skip` key |
+| **Prüfberichte without a Projektnummer** (704 of 1226 measured, plus 108 naming an unknown number and 212 at another station) | *Projektübersicht ITK*: banner with the counts per reason, filter "ohne Projektnummer"; the link dialog repeats the policy | Add the Projektnummer in the Prüfstelle's workbook and re-import (the link survives); until then link by hand. No rule that guesses is offered. | the link itself (audited) |
+| **Several projects at one station for one report** (96 measured) | link dialog / banner | Choose the project whose phase the report concerns. | the link; a re-import of the workbook keeps it |
+
+## Domain separation — **DONE**
+
+The Übersichtsliste (projects + department reviews) and the Prüfbericht register (`itk_pruefberichte`) are separate domains with
+separate modules, UI entry points and fixtures: `shared/register/**`, `RegisterImportDialog` and `RegisterImportService` import
+nothing of the Prüfbericht domain; `shared/itk/**`, `pruefberichtStore` and the yearly views (`PdfCodesView`, `TechnikView`,
+`JahresansichtView`, `PruefberichtImportDialog`) import nothing of the register. The generic cell helpers moved to
+`shared/workbook-cells.ts` / `shared/workbook.ts` (neither domain). The only bridges are the link rule
+(`shared/itk/project-link.ts`, which knows only `shared/project-identity.ts`), `PruefberichtLinkService`, and the screens that
+*show* a link (project detail, the Projektübersicht ITK tab, the Abnahme). `server/domainSeparation.test.ts` fails when that
+changes. The new tab adds the project column and linking to the report register; it carries no register-import concept (only the
+shared tooltip component `PolicyHint`).
+
+## Fixtures — **DONE**
+
+Synthetic, invented content, reproducing the *shapes* measured on the real files — one set per domain, and one pair for the link:
+
+* `shared/register/fixtures.ts` — one framework number on many stations and phases, rows without a number, undecidable groups, an
+  identical duplicate, two dates in a cell, `30.12.20025`, statuses outside and variants of the vocabulary, Bahnhofsmanagement lots
+  and placeholders (`fixtures.test.ts` asserts the fixture still has those properties).
+* `shared/itk/edge-fixtures.ts` — Technik values outside the list, the 2018 / 2019 / 2022 PDF-Code formulas and a deviating stored
+  code, a duplicated running number (`edge-fixtures.test.ts`).
+* `shared/link-fixtures.ts` — the only place the two meet: reports that name the register's projects (unique through spelling,
+  ambiguous across phases, no number, unknown number, other station). Used by `link-fixtures.test.ts` and
+  `registerEdgeCases.db.test.ts` (the whole path on a real database, including what the Abnahme gets after linking) and the browser proof.
 
 ## Verified / not verified
 
-Verified here: unit tests (`shared/register/*.test.ts`, `shared/itk/project-link.test.ts`, `shared/abnahme/pruefbericht.test.ts`),
-real-database tests on MariaDB 10.11 (`server/domain/registerImport.db.test.ts`, `server/routers.register.db.test.ts`),
-`server/mutationPlane.test.ts`, the inspector on the two supplied workbooks. Not verified: MySQL 8.4 (CI's engine; only MariaDB
-was available), a production-sized import, real Entra sign-in. See the pull request for the exact commands and results.
+**VERIFIED** (MariaDB 10.11 + Redis, local): unit tests (`shared/register/*.test.ts`, `shared/itk/project-link.test.ts`,
+`shared/abnahme/pruefbericht.test.ts`, `client/src/pdf/AbnahmeDocument.test.ts` — what the Abnahmeprotokoll prints, walked from the
+document tree), real-database tests (`server/domain/registerImport.db.test.ts`, `registerEdgeCases.db.test.ts`,
+`server/routers.register.db.test.ts`), `server/mutationPlane.test.ts`, `server/domainSeparation.test.ts`, the server-mode browser
+proof, the inspector and a decision-by-decision import of the two real workbooks into a disposable database (nothing committed):
+1340 projects created, the same file again changes nothing (no events, no audit rows but the batch row), 24 groups resolved
+(24 winners created, 44 rows excluded) and then the file asks nothing; 106 of 1226 reports link automatically before the groups
+are decided, 105 after (the 24 winners add candidates; the numbers depend on which row wins).
+
+**UNVERIFIED**: MySQL 8.4 (CI's engine — only MariaDB was available; the `mysql-version` gate says so); a production-sized
+import; the PDF *as rendered bytes* (the printed text is asserted on the document tree); the Redis-outage chaos step of the
+browser proof (needs a Docker container).
+
+**Known failure, not caused by this change**: `server/infra/readModels.db.test.ts` › "map: authorization and filters are the
+list's …" fails identically on untouched `main` in this environment (a station key shared across workspaces in the synthetic
+data). It is the only red test in `pnpm test`; it also turns the deployment gate's `db-integration` red.

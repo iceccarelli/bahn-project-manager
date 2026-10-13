@@ -84,3 +84,14 @@ Also check for names/e-mails quoted in code, tests and docs of older commits (st
 on this branch — by design — and must pass on a fresh clone of the public remote after the rewrite). The rewrite itself is
 **not performed here**: it needs the repository owner (force-push under an explicit branch-protection exception) and the
 data-protection officer's decision on notification.
+
+
+## Source workbooks for the project register and the Prüfberichte (`private-data/`)
+
+The two operator workbooks (*Übersichtsliste*, *Projektübersicht ITK*) are real internal data. They live only in the **ignored**
+`private-data/` directory (`.gitignore`; `scripts/data/check-no-private-data.mjs` fails CI (proven by staging the real workbook with `git add -f`; the guard now reads `git ls-files -z`, because git quotes non-ASCII paths such as `Übersichtsliste` and the patterns missed them) when a tracked path starts with
+`private-data/` or ends in `.xlsm`). Dry-run them with `pnpm register:inspect` / `pnpm itk:inspect` (read-only; macros are never
+parsed); import them only through the admin dialogs of a deployed server-mode instance. Fixtures in the repository are synthetic
+(`shared/register/fixtures.ts`). Aggregate counts in `docs/project-register-import.md` are measurements, not data. See
+[project-register-import.md](project-register-import.md). **DONE** (guard, ignore, synthetic fixtures); a controlled history
+rewrite remains **NOT DONE** as described above.

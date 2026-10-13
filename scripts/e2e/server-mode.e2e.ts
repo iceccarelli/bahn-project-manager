@@ -928,6 +928,7 @@ async function main() {
       R({ projektnummer: "G.E2E.2", station: "Gamma", bm: "Mainz", beschreibung: "E2E Gamma", stand: "EP", termin: 45_100 }),
       R({ projektnummer: "G.E2E.3", station: "Delta", bm: "Mainz", beschreibung: "E2E Duplikat", kommentar: "erste Fassung" }),
       R({ projektnummer: "G.E2E.3", station: "Delta", bm: "Mainz", beschreibung: "E2E Duplikat", kommentar: "zweite Fassung" }),
+      R({ projektnummer: "G.E2E.4", station: "Epsilon", bm: "Mainz", beschreibung: "E2E Statusfall", reviews: { TBQ: ["Protokoll erstellt", "Tom Prüfer", 45_000] } as never }),
       // the seeded project, unchanged except for the Projektleiter → a conflict that must be HELD
       R({ projektnummer: seed.projektnummer, station: seed.station, bm: seed.bahnhofsmanagement, beschreibung: seed.projektbeschreibung, stand: seed.projektstand, termin: day(seed.terminProjektvorstellung) ?? "-", pl: "Neue Leitung E2E" }),
     ];
@@ -952,28 +953,38 @@ async function main() {
       await page.getByTestId("register-file").setInputFiles(regFile);
       await page.getByTestId("register-review").waitFor({ timeout: 30000 });
       const summary = (await page.getByTestId("register-summary").innerText()).replace(/\s+/g, " ");
-      if (!/Neu 4 /.test(summary) || !/Konflikte 1 /.test(summary)) throw new Error(`preview summary: ${summary}`);
-      if (!/2 Zeilen der Datei sind nicht eindeutig/.test(await page.getByTestId("register-source-duplicates").innerText())) throw new Error("the two rows with one identity and different content are not named");
+      if (!/Neu 5 /.test(summary) || !/Konflikte 1 /.test(summary) || !/Mehrdeutig 2 /.test(summary)) throw new Error(`preview summary: ${summary}`);
+      // the open decisions are first-class: the differing cells of the two undecidable rows, side by side, with the policy at hand
+      const group = (await page.getByTestId("register-source-group").innerText()).replace(/\s+/g, " ");
+      if (!/Kommentar/.test(group) || !/erste Fassung/.test(group) || !/zweite Fassung/.test(group) || !/Diese Zeile gilt/.test(group)) throw new Error(`source group card: ${group}`);
+      if (!/Protokoll erstellt/.test(await page.getByTestId("register-unknown-status").innerText())) throw new Error("the status outside the vocabulary is not surfaced");
       const conflict = (await page.getByTestId("register-row-conflict").innerText()).replace(/\s+/g, " ");
       if (!/Projektleiter/.test(conflict) || !/Neue Leitung E2E/.test(conflict) || !conflict.includes(seed.projektleiter)) throw new Error(`conflict row lacks the old → new values: ${conflict}`);
       if ((await q("SELECT COUNT(*) n FROM projects WHERE projektnummer LIKE 'G.E2E.%'"))[0].n !== 0) throw new Error("the preview wrote");
+      // the administrator decides the group: the second row of the file wins; the first is excluded for good
+      await page.getByTestId("register-source-group").locator('input[type="radio"]').nth(1).check();
       await page.getByTestId("register-apply").click();
       await page.getByTestId("register-done").waitFor({ timeout: 60000 });
       const done = (await page.getByTestId("register-done").innerText()).replace(/\s+/g, " ");
-      if (!/4 Projekte neu, 0 geändert, 0 unverändert/.test(done) || !/1 ohne Entscheidung/.test(done)) throw new Error(`import result: ${done}`);
+      if (!/6 Projekte neu, 0 geändert, 0 unverändert/.test(done) || !/1 Zeilen dauerhaft ausgeschlossen/.test(done) || !/Nicht übernommen: 1 offene Fragen/.test(done)) throw new Error(`import result: ${done}`);
 
       const created = await q("SELECT id, station, projektstand, syncVersion FROM projects WHERE projektnummer LIKE 'G.E2E.%' ORDER BY id");
-      if (created.length !== 4) throw new Error(`created ${created.length}, expected Alpha, Beta, Gamma AP, Gamma EP (the duplicated identity is not imported)`);
-      if (Number((await q("SELECT COUNT(*) n FROM projects WHERE projektnummer='G.E2E.3'"))[0].n) !== 0) throw new Error("rows with an undecidable identity were imported");
+      if (created.length !== 6) throw new Error(`created ${created.length}, expected Alpha, Beta, Gamma AP, Gamma EP, Epsilon and the winner of the undecidable group`);
+      const [winner] = await q("SELECT kommentar FROM projects WHERE projektnummer='G.E2E.3'");
+      if (winner?.kommentar !== "zweite Fassung") throw new Error(`the chosen row did not win: ${JSON.stringify(winner)}`);
+      if (Number((await q("SELECT COUNT(*) n FROM project_source_keys WHERE kind='skip' AND projectId IS NULL"))[0].n) !== 1) throw new Error("the exclusion is not remembered");
+      if (Number((await q("SELECT COUNT(*) n FROM audit_log WHERE field='import.skip'"))[0].n) !== 1) throw new Error("the exclusion is not audited");
+      const [tbq] = await q("SELECT r.status, r.prueferName FROM department_reviews r JOIN projects p ON p.id=r.projectId WHERE p.station='Epsilon' AND r.department='TBQ'");
+      if (tbq?.status !== null || tbq?.prueferName !== "Tom Prüfer") throw new Error(`withheld status: ${JSON.stringify(tbq)}`);
       const [kept] = await q("SELECT projektleiter FROM projects WHERE id=?", [seed.id]);
       if (kept.projektleiter !== seed.projektleiter) throw new Error("the held conflict overwrote the Projektleiter");
       const alpha = created.find(p => p.station === "Alpha")!;
       const [itk] = await q("SELECT status, prueferName FROM department_reviews WHERE projectId=? AND department='ITK'", [alpha.id]);
       if (itk?.status !== "offen" || itk?.prueferName !== "Pia Prüfer") throw new Error(`ITK review: ${JSON.stringify(itk)}`);
       const sets = await q("SELECT COUNT(DISTINCT eventId) n FROM audit_log WHERE entityType='project' AND action='create' AND entityId IN (?)", [created.map(p => p.id)]);
-      if (Number(sets[0].n) !== 4) throw new Error("each created project must have exactly one audit set / event");
+      if (Number(sets[0].n) !== created.length) throw new Error("each created project must have exactly one audit set / event");
       const afterFirst = await baseline();
-      if (afterFirst.projects !== before.projects + 4 || afterFirst.keys !== before.keys + 4) throw new Error(`counts after import: ${JSON.stringify({ before, afterFirst })}`);
+      if (afterFirst.projects !== before.projects + 6 || afterFirst.keys !== before.keys + 7) throw new Error(`counts after import: ${JSON.stringify({ before, afterFirst })}`);
       // the history shows the import (one batch row)
       if (Number((await q("SELECT COUNT(*) n FROM audit_log WHERE entityType='project' AND field='import'"))[0].n) < 1) throw new Error("no audit row for the import batch");
 
@@ -984,10 +995,11 @@ async function main() {
       await page.getByTestId("register-file").setInputFiles(regFile);
       await page.getByTestId("register-review").waitFor({ timeout: 30000 });
       const again = (await page.getByTestId("register-summary").innerText()).replace(/\s+/g, " ");
-      if (!/Neu 0 /.test(again) || !/Unverändert 4 /.test(again) || !/Konflikte 1 /.test(again)) throw new Error(`re-import preview: ${again}`);
+      if (!/Neu 0 /.test(again) || !/Unverändert 6 /.test(again) || !/Konflikte 1 /.test(again) || !/Mehrdeutig 0 /.test(again) || !/Ausgeschlossen 1 /.test(again)) throw new Error(`re-import preview: ${again}`);
+      if ((await page.getByTestId("register-source-group").count()) !== 0) throw new Error("the decided group asks again");
       await page.getByTestId("register-apply").click();
       await page.getByTestId("register-done").waitFor({ timeout: 60000 });
-      if (!/0 Projekte neu, 0 geändert, 4 unverändert/.test((await page.getByTestId("register-done").innerText()).replace(/\s+/g, " "))) throw new Error("re-import was not a no-op");
+      if (!/0 Projekte neu, 0 geändert, 6 unverändert/.test((await page.getByTestId("register-done").innerText()).replace(/\s+/g, " "))) throw new Error("re-import was not a no-op");
       const afterSecond = await baseline();
       if (afterSecond.projects !== afterFirst.projects || afterSecond.events !== afterFirst.events || afterSecond.audits !== afterFirst.audits || afterSecond.keys !== afterFirst.keys) throw new Error(`re-import wrote: ${JSON.stringify({ afterFirst, afterSecond })}`);
     } finally { await adm.ctx.close(); }
@@ -1046,8 +1058,9 @@ async function main() {
       // the project detail lists exactly its reports, with the canonical PDF-Code
       await page.goto(`${URLS[0]}/projects?detail=${alphaId}`);
       await page.getByTestId("project-pruefberichte").waitFor({ timeout: 20000 });
+      await until(async () => /30\.001/.test(await page.getByTestId("project-pruefberichte").innerText().catch(() => "")), 15000, "Alpha's report in the project detail");
       const detail = (await page.getByTestId("project-pruefberichte").innerText()).replace(/\s+/g, " ");
-      if (!/30\.001/.test(detail) || !/P30\.001 - Alpha/.test(detail) || /30\.003/.test(detail)) throw new Error(`project detail reports: ${detail}`);
+      if (!/P30\.001 - Alpha/.test(detail) || /30\.003/.test(detail)) throw new Error(`project detail reports: ${detail}`);
       await page.goto(`${URLS[0]}/projects?detail=${betaId}`);
       await until(async () => /30\.002/.test(await page.getByTestId("project-pruefberichte").innerText().catch(() => "")), 15000, "Beta's report");
 

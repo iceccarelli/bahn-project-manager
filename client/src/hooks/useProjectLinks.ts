@@ -9,7 +9,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { PRUEFBERICHTE_KEY, usePruefberichteAccess } from "@/hooks/usePruefberichte";
 import { SERVER_MODE, serverApi } from "@/realtime/serverApi";
 import { mayLinkPruefberichte, type Grant } from "@shared/itk/access";
-import type { AutoLinkResult, LinkCandidates, PruefberichtListRow, SetLinkResult } from "@shared/itk/pruefbericht-contract";
+import type { AutoLinkResult, LinkCandidates, LinkSummary, PruefberichtListRow, SetLinkResult } from "@shared/itk/pruefbericht-contract";
 
 const newKey = () => `link-${crypto.randomUUID()}`;
 
@@ -65,5 +65,15 @@ export function useAutoLink() {
   return useMutation({
     mutationFn: (v: { dryRun: boolean }) => serverApi.pruefberichte.autoLink.mutate({ ...v, idempotencyKey: newKey() }) as Promise<AutoLinkResult>,
     onSettled: (_d, _e, v) => (v.dryRun ? undefined : qc.invalidateQueries({ queryKey: PRUEFBERICHTE_KEY })),
+  });
+}
+
+export function useLinkSummary() {
+  const access = usePruefberichteAccess();
+  return useQuery({
+    queryKey: [...PRUEFBERICHTE_KEY, "link-summary"],
+    queryFn: () => serverApi.pruefberichte.linkSummary.query() as Promise<LinkSummary>,
+    enabled: SERVER_MODE && access.view,
+    staleTime: 10_000,
   });
 }

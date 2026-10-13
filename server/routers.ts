@@ -32,7 +32,7 @@ import { buildItkYears } from "@shared/itk/jahresansicht";
 import { AutoLinkInputSchema, ImportBatchInputSchema, ListInputSchema, SetLinkInputSchema } from "@shared/itk/pruefbericht-contract";
 import { RegisterApplyInputSchema, RegisterPreviewInputSchema } from "@shared/register/register-contract";
 import { buildPruefberichtView, type PruefberichtView } from "@shared/itk/pruefbericht-view";
-import { importPruefberichte, linkCandidatesOf, listPruefberichte, loadAllPruefberichte, pruefberichteOfProject } from "./infra/pruefberichtStore";
+import { importPruefberichte, linkCandidatesOf, linkSummary, listPruefberichte, loadAllPruefberichte, pruefberichteOfProject } from "./infra/pruefberichtStore";
 import { drillProjectIds, isEmptyDrill, startOfDayUtc, type Drill } from "@shared/drilldown";
 import { AUDIT_DOCUMENT_KINDS } from "@shared/audit-contract";
 import type { PortfolioProject } from "@shared/portfolio-metrics";
@@ -494,6 +494,12 @@ export const appRouter = router({
       const { pool, projects } = await requireServices();
       await projects.get(ctx.principal, input.projectId);
       return { rows: await pruefberichteOfProject(pool, input.projectId) };
+    }),
+    /** Where the reports stand: linked, and why the rest is not (ambiguous / no Projektnummer / unknown number / other station). */
+    linkSummary: protectedProcedure.query(async ({ ctx }) => {
+      if (!canViewPruefberichte(ctx.principal)) throw new TRPCError({ code: "FORBIDDEN" });
+      const { pool } = await requireServices();
+      return linkSummary(pool);
     }),
     /** Projects a report could belong to, with the evidence rule's verdict. Suggestions only — linking is a separate, explicit call. */
     linkCandidates: protectedProcedure.input(z.object({ id: z.number().int().positive() })).query(async ({ input, ctx }) => {

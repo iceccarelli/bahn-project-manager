@@ -4,7 +4,7 @@
  * in BA, the workbook's own spelling "Baubetriebstechnnologie"). Every name, number and link is invented.
  */
 import { DEPARTMENTS, type Department } from "../validation";
-import type { SheetInput } from "../itk/pruefbericht-import";
+import type { SheetInput } from "../workbook-cells";
 
 export const REGISTER_HEADER: string[] = (() => {
   const h = ["Projektnummer", "Bahnhofsmanagement", "Station", "Bahnhofsnummer", "Streckennummer", "Projektbeschreibung", "Projektstand", "Projektleiter", "Termin Projektvorstellung"];

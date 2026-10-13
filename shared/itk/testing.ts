@@ -42,3 +42,12 @@ export function row2020(nr: string, over: Partial<Record<keyof typeof C, unknown
   if (!("beschriftung" in over)) r[C.beschriftung] = `${prefixOf(v.taetigkeit as string | null)}${nr} - ${String(v.bahnhof ?? "")}`;
   return r;
 }
+
+/** A 2018/2019 row (header H2018/H2019). Column order as in the sheet; `abgabe` is the yyyymmdd integer the sheets use. */
+export function row2018(nr: string, over: { bahnhof?: string; projekt?: string; technik?: string; phase?: string; abgabe?: number | null; pdf?: string | null; plAg?: string | null } = {}): unknown[] {
+  const bahnhof = over.bahnhof ?? `Bahnhof ${nr}`;
+  const technik = over.technik ?? "ELA";
+  const phase = over.phase ?? "Fertigstellung";
+  const abgabe = "abgabe" in over ? over.abgabe : 20_180_131;
+  return [Number.isFinite(Number(nr)) ? Number(nr) : nr, bahnhof, over.projekt ?? "Projekt", technik, null, null, phase, abgabe, "Ja", "Ja", "Ja", over.plAg ?? "Uwe Kessmann", null, "pdf" in over ? over.pdf : `${abgabe} - ${nr} ${bahnhof} ${technik} ${phase}`, 1, null, null, "3-"];
+}

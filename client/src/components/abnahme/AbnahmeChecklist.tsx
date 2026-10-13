@@ -30,7 +30,7 @@ import { formatGerman } from "@shared/date";
 import { filterTemplate, isAbnahmeFilter, type AbnahmeFilter } from "@shared/abnahme/filter";
 import { deriveMaengel, summarizeTemplate } from "@shared/abnahme/summary";
 import type { ChecklistTemplate } from "@shared/abnahme/types";
-import { needsChoice, referenceOf } from "@shared/abnahme/pruefbericht";
+import { needsChoice, protocolReference } from "@shared/abnahme/pruefbericht";
 
 const FILTER_LABEL: Record<AbnahmeFilter, string> = {
   alle: "Alle",
@@ -117,7 +117,7 @@ export function AbnahmeChecklist({
   // The protocol carries the report's running number and canonical PDF-Code. While the user still has to pick one of
   // several reports (or the list has not arrived) it is not produced: a protocol without the reference it should carry
   // would be filed as if it were complete.
-  const selected = report.kind === "ready" && (report.selection.status === "single" || report.selection.status === "chosen") ? report.selection.report : null;
+  const reference = protocolReference(report.kind === "ready" ? report.selection : null);
   const pdfBlocked = report.kind === "loading" || report.kind === "error" || (report.kind === "ready" && needsChoice(report.selection));
 
   const showPdf = () =>
@@ -133,7 +133,7 @@ export function AbnahmeChecklist({
         projektleiter: project?.projektleiter ?? "",
         pruefer: itk?.prueferName ?? "",
         pruefDatum: formatGerman(itk?.pruefDatum) || "",
-        pruefbericht: selected ? { nummer: `${selected.laufendeNummer} (${selected.year})`, pdfCode: referenceOf(selected).pdfCode ?? "" } : null,
+        pruefbericht: reference,
         // Taken when the button is pressed, not when the page loaded: the stamp says when this sheet was made.
         generatedAt: new Date().toISOString(),
         generatedBy: user?.name || user?.email || "",

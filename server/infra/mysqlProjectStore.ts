@@ -172,10 +172,15 @@ const dayOf = (d: Date | null | undefined): string | null => (d ? d.toISOString(
  */
 async function loadRegisterCandidates(x: Executor, source: string, lookup: RegisterLookup): Promise<RegisterCandidates> {
   const owners = new Map<string, number[]>();
-  if (lookup.keyHashes.length) {
-    const rows = await x.select({ k: projectSourceKeys.sourceKey, p: projectSourceKeys.projectId }).from(projectSourceKeys)
-      .where(and(eq(projectSourceKeys.source, source), inArray(projectSourceKeys.sourceKey, [...lookup.keyHashes])));
-    for (const r of rows) owners.set(r.k, [...(owners.get(r.k) ?? []), r.p]);
+  const skipped = new Set<string>();
+  const hashes = [...lookup.keyHashes, ...lookup.skipHashes];
+  if (hashes.length) {
+    const rows = await x.select({ k: projectSourceKeys.sourceKey, p: projectSourceKeys.projectId, kind: projectSourceKeys.kind }).from(projectSourceKeys)
+      .where(and(eq(projectSourceKeys.source, source), inArray(projectSourceKeys.sourceKey, hashes)));
+    for (const r of rows) {
+      if (r.kind === "skip") skipped.add(r.k);
+      else if (r.p !== null) owners.set(r.k, [...(owners.get(r.k) ?? []), r.p]);
+    }
   }
   const numbers = [...new Set(lookup.hints.map(h => normProjektnummer(h.projektnummer)).filter(Boolean))];
   const wantsNumberless = lookup.hints.some(h => !normProjektnummer(h.projektnummer));
@@ -184,7 +189,7 @@ async function loadRegisterCandidates(x: Executor, source: string, lookup: Regis
   if (numbers.length) conds.push(sql`UPPER(REPLACE(${projects.projektnummer}, ' ', '')) IN (${sql.join(numbers.map(n => sql`${n}`), sql`, `)})`);
   if (wantsNumberless) conds.push(sql`(${projects.projektnummer} IS NULL OR TRIM(${projects.projektnummer}) = '')`);
   if (ownerIds.length) conds.push(inArray(projects.id, ownerIds));
-  if (!conds.length) return { projects: [], keyOwners: owners };
+  if (!conds.length) return { projects: [], keyOwners: owners, skipped };
   const rows = await x.select().from(projects).where(or(...conds));
   const ids = rows.map(r => r.id);
   const reviewRows = ids.length ? await x.select().from(departmentReviews).where(inArray(departmentReviews.projectId, ids)) : [];
@@ -196,6 +201,7 @@ async function loadRegisterCandidates(x: Executor, source: string, lookup: Regis
   }
   return {
     keyOwners: owners,
+    skipped,
     projects: rows.map((p): ExistingProject => ({
       id: p.id,
       version: p.syncVersion,
@@ -221,7 +227,12 @@ function txAdapter(x: Executor): ProjectTx {
     registerCandidates: (source, lookup) => loadRegisterCandidates(x, source, lookup),
     async recordSourceKeys(source, rows) {
       if (!rows.length) return 0;
-      const [res] = await x.insert(projectSourceKeys).ignore().values(rows.map(r => ({ projectId: r.projectId, source, sourceKey: r.keyHash })));
+      const [res] = await x.insert(projectSourceKeys).ignore().values(rows.map(r => ({ projectId: r.projectId, source, kind: r.kind ?? "match", sourceKey: r.keyHash })));
+      return Number((res as unknown as { affectedRows: number }).affectedRows);
+    },
+    async deleteSkipKeys(source, keyHashes) {
+      if (!keyHashes.length) return 0;
+      const [res] = await x.delete(projectSourceKeys).where(and(eq(projectSourceKeys.source, source), eq(projectSourceKeys.kind, "skip"), inArray(projectSourceKeys.sourceKey, [...keyHashes])));
       return Number((res as unknown as { affectedRows: number }).affectedRows);
     },
     async lockPruefbericht(id) {

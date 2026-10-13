@@ -12,7 +12,9 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { usePruefberichtList, usePruefberichtView, usePruefberichteAccess } from "@/hooks/usePruefberichte";
-import { useLinkAccess } from "@/hooks/useProjectLinks";
+import { useLinkAccess, useLinkSummary } from "@/hooks/useProjectLinks";
+import { PolicyHint } from "@/components/PolicyHint";
+import { LINK_POLICY, UNMATCHED_TEXT, type UnmatchedReason } from "@shared/itk/project-link";
 import { derivePdfCode } from "@shared/itk/pdf-code";
 import type { PruefberichtListRow } from "@shared/itk/pruefbericht-contract";
 import { ABGESCHLOSSEN_TONE, isAbgeschlossen } from "@shared/itk/vocab";
@@ -20,7 +22,7 @@ import { formatGerman } from "@shared/date";
 import { TONE_APPEARANCE } from "@shared/status-appearance";
 
 const ALL = "__all__";
-const PARAMS = ["year", "verknuepfung", "q"] as const;
+const PARAMS = ["year", "verknuepfung", "q", "grund"] as const;
 const badgeFor = (v: string | null) => (v && isAbgeschlossen(v) ? TONE_APPEARANCE[ABGESCHLOSSEN_TONE[v]].badge : TONE_APPEARANCE.neutral.badge);
 
 /**
@@ -42,11 +44,13 @@ export default function ProjektuebersichtView() {
     () => ({
       ...(values.year ? { year: Number(values.year) } : {}),
       ...(values.verknuepfung === "verknuepft" ? { verknuepfung: "verknuepft" as const } : values.verknuepfung === "offen" ? { verknuepfung: "offen" as const } : {}),
+      ...(values.grund === "keine-projektnummer" ? { grund: "keine-projektnummer" as const } : {}),
       ...(deferredQ ? { q: deferredQ } : {}),
     }),
-    [values.year, values.verknuepfung, deferredQ],
+    [values.year, values.verknuepfung, values.grund, deferredQ],
   );
   const view = usePruefberichtView(access.view);
+  const summary = useLinkSummary();
   const list = usePruefberichtList(filters, access.view);
   const rows = useMemo(() => list.data?.pages.flatMap((p) => p.rows) ?? [], [list.data]);
 
@@ -99,6 +103,32 @@ export default function ProjektuebersichtView() {
         </Card>
       ) : (
         <>
+          {summary.data && summary.data.open > 0 && (
+            <Card className="shadow-sm" data-testid="link-summary">
+              <CardContent className="space-y-2 p-4 text-sm">
+                <p>
+                  <strong>{summary.data.linked.toLocaleString("de-DE")}</strong> von {summary.data.total.toLocaleString("de-DE")} Prüfberichten sind einem Projekt zugeordnet; <strong>{summary.data.open.toLocaleString("de-DE")}</strong> sind offen:
+                </p>
+                <ul className="flex flex-wrap gap-2 text-xs">
+                  {summary.data.ambiguous > 0 && <li className="rounded-md border px-2 py-1">{summary.data.ambiguous.toLocaleString("de-DE")} × mehrere Projekte passen — einzeln wählen</li>}
+                  {Object.entries(summary.data.unmatched).sort((a, b) => b[1] - a[1]).map(([reason, count]) => (
+                    <li key={reason} className="flex items-center gap-1.5 rounded-md border px-2 py-1">
+                      {count.toLocaleString("de-DE")} × {reason === "automatisch-zuordenbar" ? "eindeutig zuordenbar — „Automatisch zuordnen“" : (UNMATCHED_TEXT[reason as UnmatchedReason] ?? reason)}
+                      {reason === "keine-projektnummer" && (
+                        <>
+                          <PolicyHint label="ohne Projektnummer" text={LINK_POLICY.noProjektnummer} />
+                          <button type="button" className="text-primary hover:underline" onClick={() => set({ grund: values.grund ? "" : "keine-projektnummer", verknuepfung: "offen" })} data-testid="filter-ohne-projektnummer">
+                            {values.grund ? "Filter aufheben" : "anzeigen"}
+                          </button>
+                        </>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+          )}
+
           <Card className="shadow-sm">
             <CardContent className="flex flex-wrap items-end gap-4 p-4">
               <div className="relative min-w-[16rem] flex-1">

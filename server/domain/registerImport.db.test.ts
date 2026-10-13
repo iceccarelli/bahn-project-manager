@@ -55,6 +55,7 @@ describe.skipIf(!hasTestDb)("Übersichtsliste import (real DB)", () => {
       const rows: RegisterApplyRow[] = [];
       for (const p of preview.rows) {
         const record = chunk.find((r) => r.ref === p.ref)!;
+        if (p.status === "skipped") { totals.skipped += 1; continue; } // an earlier exclusion stands: nothing to send
         const base = rowOf(p, record);
         const d = decide(base);
         if (d === null) { totals.skipped += 1; continue; }
@@ -218,6 +219,91 @@ describe.skipIf(!hasTestDb)("Übersichtsliste import (real DB)", () => {
     expect(await count("projects")).toBe(before + 1);
     // from now on both registrations are known exactly
     expect((await imp.preview(admin, { records: incoming })).rows[0]).toMatchObject({ status: "unchanged" });
+  });
+
+  // ------------------------------------------------ decisions that outlive the import ---------------------------------
+
+  describe("decisions are remembered (project_source_keys)", () => {
+    const planning = (rows: RowSpec[]) => analyzeSource(parseRegisterWorkbook([registerSheet(rows.map(registerRow))]).records).forPlanning;
+    const decide = (recs: RegisterRecord[], action: "skip" | "unskip" | "create", confirmed = false) =>
+      imp.apply(admin, { source: "t", part: { index: 1, total: 1 }, idempotencyKey: key(), rows: recs.map((record) => ({ record, action, overwrite: false, confirmed })) }, ctx());
+    const statusOf = async (recs: RegisterRecord[]) => (await imp.preview(admin, { records: recs })).rows.map((r) => r.status);
+
+    it("two rows of the file with one identity and different content: the administrator picks the winner; the loser is excluded for good", async () => {
+      const [first, second] = planning([
+        { projektnummer: "G.6", station: "Lambda", beschreibung: "Quelle uneindeutig", kommentar: "Fassung A" },
+        { projektnummer: "G.6", station: "Lambda", beschreibung: "Quelle uneindeutig", kommentar: "Fassung B" },
+      ]) as [RegisterRecord, RegisterRecord];
+      const plan = (await imp.preview(admin, { records: [first, second] })).rows;
+      expect(plan.map((p) => p.status)).toEqual(["ambiguous", "ambiguous"]);
+      expect(plan[0]?.sourceDiff).toEqual([{ key: "kommentar", values: { [first.ref]: "Fassung A", [second.ref]: "Fassung B" } }]);
+      // the server does not create while the file is undecided (both rows in the request, neither excluded)
+      expect((await decide([first, second], "create")).counts).toMatchObject({ exists: 2, created: 0 });
+      // B wins: A is excluded, B is created — in ONE request
+      const res = await imp.apply(admin, { source: "t", part: { index: 1, total: 1 }, idempotencyKey: key(), rows: [
+        { record: first, action: "skip", overwrite: false, confirmed: false },
+        { record: second, action: "create", overwrite: false, confirmed: false },
+      ] }, ctx());
+      expect(res.counts).toMatchObject({ skipped: 1, created: 1 });
+      expect(await count("projects", "projektnummer='G.6'")).toBe(1);
+      expect((await q<{ kommentar: string }>("SELECT kommentar FROM projects WHERE projektnummer='G.6'"))[0]!.kommentar).toBe("Fassung B");
+      // every later import of the same file: no question, no write
+      expect(await statusOf([first, second])).toEqual(["skipped", "unchanged"]);
+      const e0 = await count("domain_events");
+      expect((await runImport([first, second])).totals).toMatchObject({ created: 0, updated: 0, held: 0 });
+      expect(await count("domain_events")).toBe(e0);
+      // on the record
+      expect(await count("audit_log", "field='import.skip' AND entityLabel LIKE 'Lambda%'")).toBe(1);
+    });
+
+    it("an exclusion applies to exactly that content: edit a cell and the row is a question again; withdrawing it is audited", async () => {
+      await runImport(parse([{ projektnummer: "G.7", station: "Mu", beschreibung: "Alt" }]));
+      const [row] = parse([{ projektnummer: "G.7", station: "Mu", beschreibung: "Neu formuliert" }]) as [RegisterRecord];
+      expect(await statusOf([row])).toEqual(["ambiguous"]);
+      expect((await decide([row], "skip")).counts.skipped).toBe(1);
+      expect(await statusOf([row])).toEqual(["skipped"]);
+      expect((await decide([row], "skip")).counts.skipped).toBe(1); // idempotent: still one key, still one audit row
+      expect(await count("project_source_keys", "kind='skip'")).toBeGreaterThanOrEqual(1);
+      const edited = { ...row, fields: { ...row.fields, kommentar: "inzwischen ergänzt" } };
+      expect(await statusOf([edited])).toEqual(["ambiguous"]);
+      const before = await count("audit_log", "field='import.skip' AND entityLabel LIKE 'Mu%'");
+      expect(before).toBe(1);
+      expect((await decide([row], "unskip")).counts.unskipped).toBe(1);
+      expect(await statusOf([row])).toEqual(["ambiguous"]);
+      expect(await count("audit_log", "field='import.unskip' AND entityLabel LIKE 'Mu%'")).toBe(1);
+    });
+
+    it("a request that acts on only SOME rows of a chunk is judged in the context of the others (an already-accounted-for project stays accounted for)", async () => {
+      const [ap, epA, epB] = planning([
+        { projektnummer: "G.X9", station: "Xi", beschreibung: "Kontext", stand: "AP" },
+        { projektnummer: "G.X9", station: "Xi", beschreibung: "Kontext", stand: "EP", termin: 45_300, kommentar: "A" },
+        { projektnummer: "G.X9", station: "Xi", beschreibung: "Kontext", stand: "EP", termin: 45_300, kommentar: "B" },
+      ]) as [RegisterRecord, RegisterRecord, RegisterRecord];
+      await runImport([ap]); // the AP registration is a project now
+      // EP A wins over EP B. Alone, EP A looks like the AP project moved on (a held conflict); with the AP row as context it is a new registration.
+      const alone = (await imp.preview(admin, { records: [epA] })).rows[0]!;
+      expect(alone.status).toBe("conflict");
+      const ctxRows = [{ ref: ap.ref, projektnummer: ap.fields.projektnummer, station: ap.fields.station, projektbeschreibung: ap.fields.projektbeschreibung, projektstand: ap.fields.projektstand, terminProjektvorstellung: ap.fields.terminProjektvorstellung }];
+      const withContext = (await imp.preview(admin, { records: [epA], context: ctxRows })).rows[0]!;
+      expect(withContext.status).toBe("add");
+      const res = await imp.apply(admin, { source: "t", part: { index: 1, total: 1 }, idempotencyKey: key(), context: ctxRows, rows: [
+        { record: epB, action: "skip", overwrite: false, confirmed: false },
+        { record: epA, action: "create", overwrite: false, confirmed: false },
+      ] }, ctx());
+      expect(res.counts).toMatchObject({ created: 1, skipped: 1 });
+      expect(await count("projects", "projektnummer='G.X9'")).toBe(2);
+    });
+
+    it("a project's moved-on registration (same job, AP → EP) can be taken as a NEW registration; the old project stays", async () => {
+      await runImport(parse([{ projektnummer: "G.8", station: "Nu", beschreibung: "Fortschritt", stand: "AP" }]));
+      const [ep] = parse([{ projektnummer: "G.8", station: "Nu", beschreibung: "Fortschritt", stand: "EP", termin: 45_200 }]) as [RegisterRecord];
+      const plan = (await imp.preview(admin, { records: [ep] })).rows[0]!;
+      expect(plan).toMatchObject({ status: "conflict", basis: "core" });
+      expect((await decide([ep], "create")).counts).toMatchObject({ exists: 1, created: 0 }); // not without the explicit statement
+      expect((await decide([ep], "create", true)).counts).toMatchObject({ created: 1 });
+      expect(await count("projects", "projektnummer='G.8'")).toBe(2);
+      expect(await statusOf([ep])).toEqual(["unchanged"]);
+    });
   });
 
   it("idempotency: the same key with the same chunk replays; with another chunk it is refused", async () => {

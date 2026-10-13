@@ -57,3 +57,19 @@ export const referenceOf = (r: AbnahmeReport): AbnahmeReference => ({ year: r.ye
 
 /** The protocol may only be produced once the reference is settled: never while the user still has to choose. */
 export const needsChoice = (s: ReportSelection<unknown>): boolean => s.status === "choose";
+
+/**
+ * What the Abnahmeprotokoll prints about the report — ONE function for the screen and the PDF, so the two cannot disagree.
+ * `null` when there is no report to refer to (none linked, or not applicable); the protocol then carries no reference.
+ */
+export interface ProtocolReference {
+  /** "25.002 (2025)" */
+  nummer: string;
+  /** the derived PDF-Code; "" where the formula lacks data */
+  pdfCode: string;
+}
+export function protocolReference(selection: ReportSelection<AbnahmeReport> | null): ProtocolReference | null {
+  if (!selection || (selection.status !== "single" && selection.status !== "chosen")) return null;
+  const ref = referenceOf(selection.report);
+  return { nummer: `${ref.laufendeNummer} (${ref.year})`, pdfCode: ref.pdfCode ?? "" };
+}

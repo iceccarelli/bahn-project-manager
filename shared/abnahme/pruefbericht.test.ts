@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { importWorkbookSheets } from "../itk/pruefbericht-import";
 import { H2020, row2020 } from "../itk/testing";
-import { eligibleReports, needsChoice, referenceOf, selectReport, technikMatches, type AbnahmeReport } from "./pruefbericht";
+import { eligibleReports, needsChoice, protocolReference, referenceOf, selectReport, technikMatches, type AbnahmeReport } from "./pruefbericht";
 
 const reports = importWorkbookSheets([{
   name: "2025",
@@ -38,5 +38,17 @@ describe("Abnahme ↔ Prüfbericht", () => {
   it("the reference carries the running number and the canonical derived PDF-Code, not the workbook text", () => {
     const stored = { ...reports[1]!, beschriftung: "irgendein anderer Text" } as AbnahmeReport;
     expect(referenceOf(stored)).toEqual({ year: 2025, laufendeNummer: "25.002", pdfCode: "A25.002 - Alpha" });
+  });
+
+  it("the protocol reference: nothing for none/unchosen, the number and the DERIVED code for one/chosen — year-specific formulas included", () => {
+    expect(protocolReference(null)).toBeNull();
+    expect(protocolReference({ status: "none" })).toBeNull();
+    const several = eligibleReports("ZIM", reports);
+    expect(protocolReference(selectReport(several, null))).toBeNull(); // must choose first: no reference, and the PDF button is disabled
+    expect(protocolReference(selectReport(several, 2))).toEqual({ nummer: "25.002 (2025)", pdfCode: "A25.002 - Alpha" });
+    expect(protocolReference(selectReport([reports[2]!], null))).toEqual({ nummer: "25.003 (2025)", pdfCode: "P25.003 - Alpha" });
+    // the 2018 sheet's formula is a different one (yyyymmdd-NNN …); the reference follows the report's own year
+    const legacy = { id: 90, year: 2018, laufendeNummer: "814", layout: "2018-2019", datum: null, bahnhofStrecke: "Betzdorf(Sieg)", technik: "ELA", projektname: null, phase: "Fertigstellung", abschlusstermin: null, taetigkeitsbereich: null, bauformBezeichnung: null, beschriftung: null, technikArt: "ELA" } as unknown as AbnahmeReport;
+    expect(protocolReference(selectReport([legacy], null))?.nummer).toBe("814 (2018)");
   });
 });

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { DEPARTMENTS } from "../validation";
 import { analyzeSource, columnLetter, parseRegisterWorkbook } from "./register-import";
 import { REGISTER_HEADER, registerRow, registerSheet } from "./testing";
-import { sheetsFromWorkbook } from "../itk/workbook";
+import { sheetsFromWorkbook } from "../workbook";
 
 describe("columnLetter", () => {
   it("matches Excel", () => {

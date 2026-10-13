@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { fullKey } from "../project-identity";
 import { parseRegisterWorkbook, type RegisterRecord } from "./register-import";
-import { chunkRecords, diffRecord, planRegister, summarizePlan, type ExistingProject } from "./register-plan";
+import { chunkRecords, contentKey, diffRecord, planRegister, summarizePlan, type ExistingProject } from "./register-plan";
 import { registerRow, registerSheet, type RowSpec } from "./testing";
 
 const rec = (spec: RowSpec, n = 9): RegisterRecord => ({ ...parseRegisterWorkbook([registerSheet([registerRow(spec)])]).records[0]!, ref: n });
@@ -91,9 +91,40 @@ describe("planRegister — identity", () => {
     expect(p.reason).toMatch(/andere Beschreibung/);
   });
 
-  it("refuses a plan in which two records share an identity (the caller must have deduplicated)", () => {
+  it("rows that share an identity but differ in content are a question for the FILE: both ambiguous, naming the differing cells", () => {
+    const a = rec({ projektnummer: "G.1", kommentar: "erste Fassung", reviews: { ITK: ["offen", "Pia", 45_000] } }, 11);
+    const b = rec({ projektnummer: "G.1", kommentar: "zweite Fassung", reviews: { ITK: ["Zustimmung erteilt", "Pia", 45_000] } }, 12);
+    const plan = planRegister([a, b], []);
+    expect(plan.map((p) => p.status)).toEqual(["ambiguous", "ambiguous"]);
+    expect(plan[0]).toMatchObject({ sourceRows: [11, 12], candidates: [] });
+    expect(plan[0]?.sourceDiff).toEqual([
+      { key: "kommentar", values: { 11: "erste Fassung", 12: "zweite Fassung" } },
+      { key: "review.ITK.status", values: { 11: "offen", 12: "Zustimmung erteilt" } },
+    ]);
+  });
+
+  it("an excluded row takes no part: it is 'skipped', and the sibling it was competing with is an ordinary record again", () => {
+    const a = rec({ projektnummer: "G.1", kommentar: "erste Fassung" }, 11);
+    const b = rec({ projektnummer: "G.1", kommentar: "zweite Fassung" }, 12);
+    const plan = planRegister([a, b], [], new Map(), new Set([contentKey(a)]));
+    expect(plan.map((p) => [p.ref, p.status])).toEqual([[11, "skipped"], [12, "add"]]);
+    // change one cell of the excluded row in the workbook and it is a new question again
+    const edited = { ...a, fields: { ...a.fields, kommentar: "dritte Fassung" } };
+    expect(planRegister([edited, b], [], new Map(), new Set([contentKey(a)])).map((p) => p.status)).toEqual(["ambiguous", "ambiguous"]);
+  });
+
+  it("a skip decision beats an exact match: nothing is planned for that row", () => {
     const a = rec({ projektnummer: "G.1" });
-    expect(() => planRegister([a, { ...a, ref: 12 }], [])).toThrow(/Doppelte Identität/);
+    expect(planRegister([a], [existing(1, a)], new Map(), new Set([contentKey(a)]))[0]).toMatchObject({ status: "skipped", changes: [] });
+  });
+
+  it("ambiguous candidates carry the exact cells that would change if chosen", () => {
+    const stored = rec({ projektnummer: "G.1", station: "Alpha", beschreibung: "Alte Beschreibung", pl: "Alte Leitung" });
+    const incoming = rec({ projektnummer: "G.1", station: "Alpha", beschreibung: "Neue Beschreibung", pl: "Neue Leitung" });
+    const p = planRegister([incoming], [existing(3, stored)])[0]!;
+    expect(p.candidates[0]?.changes.map((c) => [c.key, c.from, c.to])).toEqual([
+      ["projektbeschreibung", "Alte Beschreibung", "Neue Beschreibung"], ["projektleiter", "Alte Leitung", "Neue Leitung"],
+    ]);
   });
 });
 

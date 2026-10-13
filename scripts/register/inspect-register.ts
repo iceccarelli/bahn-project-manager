@@ -41,7 +41,8 @@ if (!file || !fs.existsSync(file) || (itkFile !== undefined && !fs.existsSync(it
 const workbook = XLSX.read(fs.readFileSync(file), { type: "buffer", cellDates: false, bookVBA: false });
 const { records, report } = parseRegisterWorkbook(sheetsFromWorkbook(XLSX, workbook));
 const source = analyzeSource(records);
-const plan = planRegister(source.accepted, []);
+// the planner turns rows of the file that disagree into explicit questions (ambiguous), so they are planned too
+const plan = planRegister(source.forPlanning, []);
 const summary = summarizePlan(plan);
 const digest = createHash("sha256").update(JSON.stringify(plan)).digest("hex").slice(0, 16);
 
@@ -69,7 +70,7 @@ if (itkFile) {
 }
 
 if (asJson) {
-  console.log(JSON.stringify({ report, source: { accepted: source.accepted.length, heldDuplicates: source.heldDuplicates, identicalDropped: source.identicalDropped }, summary, digest, link, ignoredSheets: sheetNotes }, null, 2));
+  console.log(JSON.stringify({ report, source: { accepted: source.accepted.length, forPlanning: source.forPlanning.length, heldDuplicates: source.heldDuplicates, identicalDropped: source.identicalDropped }, summary, digest, link, ignoredSheets: sheetNotes }, null, 2));
 } else {
   const kinds = new Map<string, number>();
   for (const i of [...report.issues, ...source.issues]) kinds.set(i.kind, (kinds.get(i.kind) ?? 0) + 1);
@@ -79,8 +80,12 @@ if (asJson) {
   console.log(`Gewerke (${report.departments.length}/14): ${report.departments.map((d) => `${d.department}=${String.fromCharCode(0)}`.replace(String.fromCharCode(0), `${d.header}`)).join(", ")}`);
   if (report.missingDepartments.length) console.log(`  ! nicht gefunden: ${report.missingDepartments.join(", ")}`);
   console.log(`\nZeilen: ${report.rows}   leer: ${report.blank}   Datensätze: ${report.records}   ohne Projektnummer: ${report.withoutProjektnummer}   mehrfach vorkommende Projektnummern: ${report.repeatedProjektnummern}`);
-  console.log(`Identität: ${source.accepted.length} eindeutig · ${source.identicalDropped.length} inhaltsgleiche Wiederholung(en) · ${source.heldDuplicates.length} Gruppe(n) mit unterschiedlichem Inhalt unter einer Identität (${source.heldDuplicates.reduce((n, g) => n + g.rows.length, 0)} Zeilen, nicht importiert)`);
-  console.log(`\nÄnderungsübersicht gegen eine leere Datenbank: ${summary.add} neu, ${summary.unchanged} unverändert, ${summary.update} Ergänzungen, ${summary.conflict} Konflikte, ${summary.ambiguous} mehrdeutig`);
+  console.log(`Identität: ${source.accepted.length} eindeutig · ${source.identicalDropped.length} inhaltsgleiche Wiederholung(en) · ${source.heldDuplicates.length} Gruppe(n) mit unterschiedlichem Inhalt unter einer Identität (${source.heldDuplicates.reduce((n, g) => n + g.rows.length, 0)} Zeilen, bis zur Entscheidung nicht importiert)`);
+  console.log(`\nÄnderungsübersicht gegen eine leere Datenbank: ${summary.add} neu, ${summary.unchanged} unverändert, ${summary.update} Ergänzungen, ${summary.conflict} Konflikte, ${summary.ambiguous} mehrdeutig (Entscheidung der Administration nötig)`);
+  if (report.unknownStatuses.length) {
+    console.log("Status außerhalb des Vokabulars (nicht übernommen; Entscheidung der Datenverantwortlichen):");
+    for (const u of report.unknownStatuses.sort((a, b) => b.rows - a.rows)) console.log(`  ${u.rows} × „${u.value}“ (${u.department})`);
+  }
   console.log(`Planstand (Digest): ${digest}`);
   console.log("\nHinweise nach Art:");
   for (const [k, n] of [...kinds].sort((a, b) => b[1] - a[1])) console.log(`  ${k}: ${n}`);

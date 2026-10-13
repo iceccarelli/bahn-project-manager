@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useLinkCandidates, useSetLink } from "@/hooks/useProjectLinks";
+import { LINK_POLICY } from "@shared/itk/project-link";
 import type { PruefberichtListRow } from "@shared/itk/pruefbericht-contract";
 
 const errorText = (e: unknown) => {
@@ -61,12 +62,12 @@ export function LinkProjectDialog({ report, open, onOpenChange, defaultProjectId
           )}
           {cands.isError && <Alert variant="destructive"><AlertTriangle aria-hidden /><AlertTitle>Projekte konnten nicht geladen werden</AlertTitle></Alert>}
           {data && data.verdict === "unique" && <p className="text-sm text-muted-foreground">Projektnummer und Bahnhof stimmen mit genau einem Projekt überein.</p>}
-          {data && data.verdict === "ambiguous" && <p className="text-sm text-muted-foreground">Mehrere Projekte tragen Projektnummer und Bahnhof dieses Prüfberichts — bitte eines wählen.</p>}
+          {data && data.verdict === "ambiguous" && <p className="text-sm text-muted-foreground">Mehrere Projekte tragen Projektnummer und Bahnhof dieses Prüfberichts — bitte eines wählen. {LINK_POLICY.ambiguous}</p>}
           {data && data.verdict === "unmatched" && (
             <Alert>
               <AlertTriangle aria-hidden />
               <AlertTitle>Keine sichere Zuordnung</AlertTitle>
-              <AlertDescription>{data.reason}.{data.candidates.length ? " Projekte mit gleicher Projektnummer sind unten nur Vorschläge." : ""}</AlertDescription>
+              <AlertDescription>{data.reason}.{data.candidates.length ? " Projekte mit gleicher Projektnummer sind unten nur Vorschläge." : ""}{!report.projektnummer ? ` ${LINK_POLICY.noProjektnummer}` : ""}</AlertDescription>
             </Alert>
           )}
           {data && data.candidates.length > 0 && (

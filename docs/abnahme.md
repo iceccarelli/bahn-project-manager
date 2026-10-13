@@ -105,5 +105,9 @@ equals the Abnahme's Technik; ELA matches "ELA AN1/AN2"; a report with no Techni
 
 The protocol (`AbnahmeDocument`) then prints *Prüfbericht-Nr.* (`25.002 (2025)`) and *PDF-Code*, the **derived** code
 (`derivePdfCode`), not the free text stored in the workbook. The answers themselves are unchanged: still `sessionStorage`,
-still keyed by (Technik, project) — the report choice is not part of the stored record. Tests: `pruefbericht.test.ts`;
-browser proof in `scripts/e2e/server-mode.e2e.ts` (one → used, several → blocked until chosen, none → empty state).
+still keyed by (Technik, project) — the report choice is not part of the stored record. **DONE**, with:
+`shared/abnahme/pruefbericht.test.ts` (selection rule and `protocolReference`, the single function the screen and the PDF both use),
+`client/src/pdf/AbnahmeDocument.test.ts` (the printed *Prüfbericht-Nr.* / *PDF-Code* cells are present with a selection and absent
+without), `server/domain/registerEdgeCases.db.test.ts` (none → one → must-choose after real links, with the derived code), and the
+browser proof in `scripts/e2e/server-mode.e2e.ts`. **UNVERIFIED**: the PDF as rendered bytes. Cross-links:
+[project-register-import.md](project-register-import.md) · [itk-platform.md](itk-platform.md).

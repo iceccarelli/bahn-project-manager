@@ -12,6 +12,7 @@ import {
   type ImportBatchInput,
   type ImportBatchResult,
   type LinkCandidates,
+  type LinkSummary,
   type ListInput,
   type PruefberichtListRow,
   type PruefberichtPage,
@@ -128,6 +129,7 @@ export async function listPruefberichte(pool: Pool, input: ListInput): Promise<P
   if (input.verknuepfung === "verknuepft") where.push("pb.projectId IS NOT NULL");
   if (input.verknuepfung === "offen") where.push("pb.projectId IS NULL");
   if (input.projectId) { where.push("pb.projectId = ?"); args.push(input.projectId); }
+  if (input.grund === "keine-projektnummer") where.push("(pb.projektnummer IS NULL OR TRIM(pb.projektnummer) = '')");
   for (const term of (input.q ?? "").split(/\s+/).filter(Boolean)) {
     where.push(`(${LIKE_COLUMNS.map((c) => `pb.\`${c}\` LIKE ?`).join(" OR ")} OR p.projektnummer LIKE ? OR p.station LIKE ?)`);
     args.push(...LIKE_COLUMNS.map(() => `%${escapeLike(term)}%`), `%${escapeLike(term)}%`, `%${escapeLike(term)}%`);
@@ -172,4 +174,21 @@ export async function linkCandidatesOf(pool: Pool, id: number): Promise<LinkCand
       evidence: stationOk.has(r.id) ? ("projektnummer+station" as const) : ("projektnummer" as const),
     })),
   };
+}
+
+/** How many reports are linked and why the others are not — the same evidence rule the automatic link uses, read-only. */
+export async function linkSummary(pool: Pool): Promise<LinkSummary> {
+  const [[count]] = (await pool.query("SELECT COUNT(*) total, SUM(projectId IS NOT NULL) linked FROM itk_pruefberichte")) as unknown as [Array<{ total: number; linked: number | null }>];
+  const [open] = (await pool.query("SELECT projektnummer, bahnhofStrecke FROM itk_pruefberichte WHERE projectId IS NULL")) as unknown as [Array<{ projektnummer: string | null; bahnhofStrecke: string | null }>];
+  const [projects] = (await pool.query("SELECT id, projektnummer, station FROM projects WHERE projektnummer IS NOT NULL AND TRIM(projektnummer) <> ''")) as unknown as [Array<{ id: number; projektnummer: string | null; station: string | null }>];
+  const byPn = indexProjects(projects);
+  const out: LinkSummary = { total: Number(count?.total ?? 0), linked: Number(count?.linked ?? 0), open: open.length, ambiguous: 0, unmatched: {} };
+  for (const r of open) {
+    const v = matchPruefbericht(r, byPn);
+    // a "unique" verdict on an UNLINKED report is a report the automatic link has not run for yet
+    if (v.status === "ambiguous") out.ambiguous += 1;
+    else if (v.status === "unmatched") out.unmatched[v.reason] = (out.unmatched[v.reason] ?? 0) + 1;
+    else out.unmatched["automatisch-zuordenbar"] = (out.unmatched["automatisch-zuordenbar"] ?? 0) + 1;
+  }
+  return out;
 }

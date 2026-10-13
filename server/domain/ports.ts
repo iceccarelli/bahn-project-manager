@@ -106,11 +106,15 @@ export interface RegisterLookup {
   hints: ReadonlyArray<{ projektnummer: string | null; station: string | null }>;
   /** hashed full keys of the incoming records (see registerImportService.sourceKeyHash) */
   keyHashes: readonly string[];
+  /** hashed content keys of the incoming records (looked up as earlier "do not import this row" decisions) */
+  skipHashes: readonly string[];
 }
 export interface RegisterCandidates {
   projects: ExistingProject[];
   /** key hash → ids of the projects an earlier import stored it for */
   keyOwners: Map<string, number[]>;
+  /** the `skipHashes` an administrator excluded earlier */
+  skipped: Set<string>;
 }
 
 /** Everything a project mutation may touch, all inside ONE database transaction. */
@@ -118,8 +122,10 @@ export interface ProjectTx {
   // ---- Übersichtsliste import ----
   /** Projects that could be the same registration as the lookup's records, with their reviews (read under the caller's transaction). */
   registerCandidates(source: string, lookup: RegisterLookup): Promise<RegisterCandidates>;
-  /** INSERT IGNORE of (project, source key) pairs; returns how many were new */
-  recordSourceKeys(source: string, rows: ReadonlyArray<{ projectId: number; keyHash: string }>): Promise<number>;
+  /** INSERT IGNORE of (project, source key) pairs — or, with kind "skip", of project-less exclusions; returns how many were new */
+  recordSourceKeys(source: string, rows: ReadonlyArray<{ projectId: number | null; keyHash: string; kind?: "match" | "skip" }>): Promise<number>;
+  /** withdraw earlier "skip" decisions; returns how many were removed */
+  deleteSkipKeys(source: string, keyHashes: readonly string[]): Promise<number>;
   // ---- Prüfbericht ↔ project link ----
   lockPruefbericht(id: number): Promise<PruefberichtLinkRow | null>;
   /** UPDATE … WHERE id=? AND version=? ; false when zero rows matched. `projectId` null clears the link. */

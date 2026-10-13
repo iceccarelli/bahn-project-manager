@@ -5,6 +5,10 @@
 > replacement for the Prüfstelle ITK). Nothing of that stack is imported; this is a domain mapping onto the one runtime,
 > one data plane and one navigation model of this app.
 
+> Related: [project-register-import.md](project-register-import.md) (the Übersichtsliste import, identity, links, decisions) ·
+> [abnahme.md](abnahme.md) (the Prüfbericht reference of the protocol) · [data-governance.md](data-governance.md) (`private-data/`) ·
+> [production-readiness.md](production-readiness.md) (what is verified, known red).
+
 ## The two records
 
 The platform's central record is the **Prüfbericht** (one row of the yearly workbook: laufende Nummer, Tätigkeitsbereich,

@@ -43,7 +43,7 @@ export interface PlannedChange {
   kind: ChangeKind;
 }
 
-export type PlanStatus = "add" | "unchanged" | "update" | "conflict" | "ambiguous";
+export type PlanStatus = "add" | "unchanged" | "update" | "conflict" | "ambiguous" | "skipped";
 export type MatchBasis = "key" | "fingerprint" | "core";
 
 export interface PlanCandidate {
@@ -54,6 +54,8 @@ export interface PlanCandidate {
   projektbeschreibung: string | null;
   projektstand: string | null;
   terminProjektvorstellung: string | null;
+  /** exactly which cells would differ if the record were applied to THIS candidate */
+  changes: PlannedChange[];
 }
 
 export interface PlanRow {
@@ -66,6 +68,12 @@ export interface PlanRow {
   candidates: PlanCandidate[];
   changes: PlannedChange[];
   reason?: string;
+  /**
+   * Set when the FILE itself cannot decide: these rows (Excel rows, this one included) share one identity but differ in
+   * content. `sourceDiff` names the cells that differ, per row, so the choice "this row wins" can be made on facts.
+   */
+  sourceRows?: number[];
+  sourceDiff?: Array<{ key: string; values: Record<number, string | null> }>;
 }
 
 const eq = (a: string | null, b: string | null) => (a ?? "") === (b ?? "");
@@ -110,7 +118,7 @@ export function diffRecord(existing: ExistingProject, rec: RegisterRecord): Plan
   return out;
 }
 
-const candidateOf = (p: ExistingProject): PlanCandidate => ({
+const candidateOf = (p: ExistingProject, rec: RegisterRecord): PlanCandidate => ({
   projectId: p.id,
   version: p.version,
   projektnummer: p.fields.projektnummer,
@@ -118,13 +126,34 @@ const candidateOf = (p: ExistingProject): PlanCandidate => ({
   projektbeschreibung: p.fields.projektbeschreibung,
   projektstand: p.fields.projektstand,
   terminProjektvorstellung: p.fields.terminProjektvorstellung,
+  changes: diffRecord(p, rec),
 });
+
+/**
+ * The exact content of one record, identity included. An administrator's "do not import THIS row" is remembered under this
+ * key: change a cell in the workbook and the row is a new question again; leave it and the answer stands. (The identity key
+ * alone could not carry it — rows that share an identity but differ in content share a fullKey.)
+ */
+export const contentKey = (r: RegisterRecord): string =>
+  `${fullKey({ ...r.fields })}#${JSON.stringify([REGISTER_FIELD_KEYS.map((k) => r.fields[k]), DEPARTMENTS.map((d) => r.reviews[d] ?? null)])}`;
 
 const push = <K, V>(m: Map<K, V[]>, k: K, v: V) => {
   const l = m.get(k);
   if (l) l.push(v);
   else m.set(k, [v]);
 };
+
+/** The cells in which rows of one group differ, by cell: `{ key, values: { <excel row>: value } }`. */
+export function sourceDiffOf(group: readonly RegisterRecord[]): NonNullable<PlanRow["sourceDiff"]> {
+  const out: NonNullable<PlanRow["sourceDiff"]> = [];
+  const add = (key: string, get: (r: RegisterRecord) => string | null) => {
+    const vals = group.map((r) => get(r));
+    if (new Set(vals.map((v) => v ?? "")).size > 1) out.push({ key, values: Object.fromEntries(group.map((r, i) => [r.ref, vals[i] as string | null])) });
+  };
+  for (const k of REGISTER_FIELD_KEYS) add(k, (r) => r.fields[k]);
+  for (const d of DEPARTMENTS) for (const f of ["status", "prueferName", "datum"] as const) add(`review.${d}.${f}`, (r) => r.reviews[d]?.[f] ?? null);
+  return out;
+}
 
 /**
  * @param keyOwners  fullKey → ids of the projects an earlier import stored it for
@@ -133,6 +162,8 @@ export function planRegister(
   records: readonly RegisterRecord[],
   existing: readonly ExistingProject[],
   keyOwners: ReadonlyMap<string, readonly number[]> = new Map(),
+  /** `contentKey`s an administrator excluded earlier */
+  skips: ReadonlySet<string> = new Set(),
 ): PlanRow[] {
   const byId = new Map(existing.map((p) => [p.id, p]));
   const byFull = new Map<string, ExistingProject[]>();
@@ -145,14 +176,21 @@ export function planRegister(
   }
 
   // identity is evaluated per record up front, so "claimed by another record's exact match" is order-independent
-  const seen = new Set<string>();
+  // rows that share an identity but differ in content (and are not excluded) are a question for the FILE, not for the database
+  const groups = new Map<string, RegisterRecord[]>();
+  for (const rec of records) {
+    if (skips.has(contentKey(rec))) continue;
+    push(groups, fullKey({ ...rec.fields }), rec);
+  }
+  const sourceGroup = new Map<RegisterRecord, RegisterRecord[]>();
+  for (const g of groups.values()) if (g.length > 1) for (const r of g) sourceGroup.set(r, g);
   const exact = new Map<RegisterRecord, { ids: number[]; basis: MatchBasis }>();
   const claimed = new Set<number>();
   const incomingCore = new Map<string, number>();
   for (const rec of records) {
     const fk = fullKey({ ...rec.fields });
-    if (seen.has(fk)) throw new Error(`Doppelte Identität im Plan (Zeile ${rec.ref}): ${fk}`);
-    seen.add(fk);
+    if (skips.has(contentKey(rec))) continue; // excluded rows take no part: they claim nothing, count for nothing
+    if (sourceGroup.has(rec)) continue; // decided below
     incomingCore.set(coreKey(rec.fields), (incomingCore.get(coreKey(rec.fields)) ?? 0) + 1);
     const fromKeys = (keyOwners.get(fk) ?? []).filter((id) => byId.has(id));
     const fromFields = (byFull.get(fk) ?? []).map((p) => p.id);
@@ -164,6 +202,15 @@ export function planRegister(
   return records.map((rec): PlanRow => {
     const fk = fullKey({ ...rec.fields });
     const ck = coreKey(rec.fields);
+    const group = sourceGroup.get(rec);
+    if (group && !skips.has(contentKey(rec))) {
+      return {
+        ref: rec.ref, fullKey: fk, status: "ambiguous", candidates: [], changes: [],
+        reason: "Mehrere Zeilen der Datei haben dieselbe Identität, aber unterschiedlichen Inhalt — welche gilt?",
+        sourceRows: group.map((r) => r.ref), sourceDiff: sourceDiffOf(group),
+      };
+    }
+    if (skips.has(contentKey(rec))) return { ref: rec.ref, fullKey: fk, status: "skipped", candidates: [], changes: [], reason: "Früher ausgeschlossen (Entscheidung der Administration)" };
     const ex = exact.get(rec) as { ids: number[]; basis: MatchBasis };
 
     const matched = (p: ExistingProject, basis: MatchBasis): PlanRow => {
@@ -172,7 +219,7 @@ export function planRegister(
       return { ref: rec.ref, fullKey: fk, status, basis, match: { projectId: p.id, version: p.version }, candidates: [], changes };
     };
     const held = (list: ExistingProject[], reason: string): PlanRow => ({
-      ref: rec.ref, fullKey: fk, status: "ambiguous", candidates: list.map(candidateOf), changes: [], reason,
+      ref: rec.ref, fullKey: fk, status: "ambiguous", candidates: list.map((p) => candidateOf(p, rec)), changes: [], reason,
     });
 
     if (ex.ids.length === 1) return matched(byId.get(ex.ids[0] as number) as ExistingProject, ex.basis);
@@ -199,13 +246,15 @@ export interface PlanSummary {
   update: number;
   conflict: number;
   ambiguous: number;
+  /** rows an administrator excluded earlier */
+  skipped: number;
   /** field-level: values that would be written into empty fields / replace existing values */
   fills: number;
   overwrites: number;
 }
 
 export function summarizePlan(rows: readonly PlanRow[]): PlanSummary {
-  const s: PlanSummary = { records: rows.length, add: 0, unchanged: 0, update: 0, conflict: 0, ambiguous: 0, fills: 0, overwrites: 0 };
+  const s: PlanSummary = { records: rows.length, add: 0, unchanged: 0, update: 0, conflict: 0, ambiguous: 0, skipped: 0, fills: 0, overwrites: 0 };
   for (const r of rows) {
     s[r.status] += 1;
     for (const c of r.changes) s[c.kind === "fill" ? "fills" : "overwrites"] += 1;

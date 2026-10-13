@@ -1,27 +1,32 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, FileSpreadsheet, Loader2, Upload } from "lucide-react";
+import { AlertTriangle, CheckCircle2, FileSpreadsheet, Loader2, Undo2, Upload } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
+import { PolicyHint } from "@/components/PolicyHint";
+import { AmbiguousCard, ConflictCard, SourceGroupCard } from "@/components/projects/RegisterDecisionCards";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { serverApi } from "@/realtime/serverApi";
-import { sheetsFromWorkbook } from "@shared/itk/workbook";
+import { sheetsFromWorkbook } from "@shared/workbook";
 import { analyzeSource, parseRegisterWorkbook, type RegisterParse, type RegisterRecord, type SourceAnalysis } from "@shared/register/register-import";
 import { chunkRecords, summarizePlan, type PlanRow } from "@shared/register/register-plan";
-import { emptyCounts, type RegisterApplyResult, type RegisterApplyRow } from "@shared/register/register-contract";
+import { buildApplyRows, contextFor, unskipRows, type Choice, type ReviewRow } from "@shared/register/register-decisions";
+import { REGISTER_POLICY } from "@shared/register/policy";
+import { emptyCounts, type RegisterApplyResult } from "@shared/register/register-contract";
 
 const MAX_BYTES = 25 * 1024 * 1024;
-const PAGE = 40;
+const PAGE = 30;
 const n = (x: number) => x.toLocaleString("de-DE");
+type Filter = "attention" | "conflict" | "ambiguous";
 
-/** What the administrator decided for a row that needs a decision. */
-type Decision = { overwrite?: boolean; choice?: "skip" | "new" | number };
-interface ReviewRow { plan: PlanRow; record: RegisterRecord; chunk: number }
+/** A question still open: undecided, and not settled by a winning row elsewhere in its group. */
+const isOpenQuestion = (r: ReviewRow, rows: readonly ReviewRow[], choices: Readonly<Record<number, Choice>>): boolean => {
+  if (r.plan.status !== "conflict" && r.plan.status !== "ambiguous") return false;
+  if ((choices[r.plan.ref] ?? "open") !== "open") return false;
+  return !(r.plan.sourceRows ?? []).some((ref) => choices[ref] === "wins" && rows.some((x) => x.plan.ref === ref));
+};
 
 type State =
   | { phase: "pick" }
@@ -29,69 +34,44 @@ type State =
   | { phase: "previewing"; name: string; done: number; total: number }
   | { phase: "review"; name: string; parsed: RegisterParse; source: SourceAnalysis; rows: ReviewRow[]; chunks: number }
   | { phase: "applying"; name: string; done: number; total: number }
-  | { phase: "done"; name: string; totals: ReturnType<typeof emptyCounts>; notSent: number }
+  | { phase: "done"; name: string; totals: ReturnType<typeof emptyCounts>; open: number; winnersOpen: number }
   | { phase: "error"; message: string; name?: string };
 
-const FIELD_LABEL: Record<string, string> = {
-  projektnummer: "Projektnummer", bahnhofsmanagement: "Bahnhofsmanagement", station: "Station", bahnhofsnummer: "Bahnhofsnummer", streckennummer: "Streckennummer",
-  projektbeschreibung: "Beschreibung", projektstand: "Projektstand", projektleiter: "Projektleiter", terminProjektvorstellung: "Termin Projektvorstellung", kommentar: "Kommentar", projektLink: "Link",
+const WARNING_TEXT: Record<string, string> = {
+  "date-unparseable": "Datum nicht lesbar (Feld bleibt leer)", "status-unknown": "Status außerhalb des Vokabulars (Status bleibt leer)",
+  "bahnhofsmanagement-unknown": "Bahnhofsmanagement unbekannt (Feld bleibt leer)", "row-no-identity": "Zeile ohne Identität (nicht importiert)",
+  "value-invalid": "Wert ungültig (nicht importiert)", "header-moved": "Spalte verschoben (nach Kopfzeile gelesen)", "department-layout": "Gewerk nicht erkannt",
+  "duplicate-conflict": "Zeilen mit derselben Identität, anderer Inhalt (siehe Entscheidungen)",
 };
-const changeLabel = (key: string) => {
-  const m = /^review\.([^.]+)\.(status|prueferName|datum)$/.exec(key);
-  return m ? `${m[1]} · ${m[2] === "status" ? "Status" : m[2] === "prueferName" ? "Prüfer" : "Datum"}` : (FIELD_LABEL[key] ?? key);
-};
-const short = (v: string | null) => (v === null ? "—" : v.length > 60 ? `${v.slice(0, 60)}…` : v);
-
-/** Request body for one apply chunk, from the plan and the decisions. Rows that need a decision and got none are NOT sent. */
-function applyRows(rows: readonly ReviewRow[], decisions: Readonly<Record<number, Decision>>): RegisterApplyRow[] {
-  const out: RegisterApplyRow[] = [];
-  for (const { plan, record } of rows) {
-    const d = decisions[plan.ref] ?? {};
-    if (plan.status === "add") out.push({ record, action: "create", overwrite: false, confirmed: false });
-    else if (plan.status === "unchanged" || plan.status === "update") {
-      if (plan.match) out.push({ record, action: "update", target: { projectId: plan.match.projectId, expectedVersion: plan.match.version }, overwrite: false, confirmed: false });
-    } else if (plan.status === "conflict") {
-      if (d.overwrite && plan.match) out.push({ record, action: "update", target: { projectId: plan.match.projectId, expectedVersion: plan.match.version }, overwrite: true, confirmed: false });
-    } else if (plan.status === "ambiguous") {
-      if (d.choice === "new") out.push({ record, action: "create", overwrite: false, confirmed: true });
-      else if (typeof d.choice === "number") {
-        const c = plan.candidates.find((x) => x.projectId === d.choice);
-        if (c) out.push({ record, action: "update", target: { projectId: c.projectId, expectedVersion: c.version }, overwrite: true, confirmed: true });
-      }
-    }
-  }
-  return out;
-}
 
 /**
  * Administrator import of the Übersichtsliste (the project register) into the Projekte. The file is read in the browser —
- * cell values only, macros are never run — and nothing is written until the preview has been seen: what is new, what only
- * fills empty fields, what would REPLACE a stored value (held until ticked), what several projects could be (held until a
- * project is chosen), and which source rows the file itself cannot decide. Each chunk is applied in one server transaction
- * through the same write path as an edit (version, audit, history, realtime); running the same file again changes nothing.
+ * cell values only, macros are never run — and nothing is written until the preview has been seen. Every question the file
+ * cannot answer is put to the administrator with the exact differing cells and the recommended policy
+ * (shared/register/policy.ts): replace, take as a new registration, map to a project, pick the winning row of the file, or
+ * exclude for good. Decisions are remembered (project_source_keys), so the same file asks nothing twice. Each chunk is
+ * applied in one server transaction through the same write path as an edit.
  */
 export function RegisterImportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const [state, setState] = useState<State>({ phase: "pick" });
-  const [decisions, setDecisions] = useState<Record<number, Decision>>({});
+  const [choices, setChoices] = useState<Record<number, Choice>>({});
+  const [untaken, setUntaken] = useState<Set<number>>(new Set());
   const [shown, setShown] = useState(PAGE);
-  const [filter, setFilter] = useState<"attention" | "conflict" | "ambiguous">("attention");
+  const [filter, setFilter] = useState<Filter>("attention");
   const input = useRef<HTMLInputElement>(null);
   const cancelled = useRef(false);
   const qc = useQueryClient();
 
+  const reset = () => { setState({ phase: "pick" }); setChoices({}); setUntaken(new Set()); setShown(PAGE); };
   const close = (next: boolean) => {
-    if (!next) {
-      cancelled.current = true;
-      setState({ phase: "pick" });
-      setDecisions({});
-      setShown(PAGE);
-    }
+    if (!next) { cancelled.current = true; reset(); }
     onOpenChange(next);
   };
-  const decide = (ref: number, d: Decision) => setDecisions((prev) => ({ ...prev, [ref]: { ...prev[ref], ...d } }));
+  const choose = (ref: number, c: Choice) => setChoices((prev) => ({ ...prev, [ref]: c }));
 
   const read = async (file: File) => {
     cancelled.current = false;
+    setChoices({}); setUntaken(new Set()); setShown(PAGE);
     if (file.size > MAX_BYTES) return setState({ phase: "error", message: `Die Datei ist größer als ${MAX_BYTES / 1024 / 1024} MB.`, name: file.name });
     setState({ phase: "reading", name: file.name });
     try {
@@ -102,7 +82,8 @@ export function RegisterImportDialog({ open, onOpenChange }: { open: boolean; on
         return setState({ phase: "error", name: file.name, message: parsed.report.issues.filter((i) => i.severity === "error").map((i) => i.message).join(" ") || "Keine Projekte gefunden." });
       }
       const source = analyzeSource(parsed.records);
-      const chunks = chunkRecords(source.accepted);
+      // the planner, not the browser, turns rows of the file that disagree into explicit questions: they go with the rest
+      const chunks = chunkRecords(source.forPlanning);
       const rows: ReviewRow[] = [];
       for (const [i, chunk] of chunks.entries()) {
         if (cancelled.current) return;
@@ -119,21 +100,32 @@ export function RegisterImportDialog({ open, onOpenChange }: { open: boolean; on
   const apply = async (s: Extract<State, { phase: "review" }>) => {
     cancelled.current = false;
     const totals = emptyCounts();
-    let notSent = 0;
+    let openRows = 0;
+    let winnersOpen = 0;
     const runId = crypto.randomUUID();
     try {
+      // the winner of a group of undecidable source rows is judged ALONE (its siblings are being excluded)
+      const winnerPlans = new Map<number, PlanRow>();
+      for (const r of s.rows) if (choices[r.plan.ref] === "wins") {
+        const alone = await serverApi.projects.registerPreview.mutate({ records: [r.record], context: contextFor(s.rows.filter((x) => x.chunk === r.chunk), new Set([r.record.ref])) });
+        const p = alone.rows[0];
+        if (p) winnerPlans.set(r.plan.ref, p as PlanRow);
+      }
       for (let i = 0; i < s.chunks; i++) {
         if (cancelled.current) return;
         setState({ phase: "applying", name: s.name, done: i, total: s.chunks });
         const chunkRows = s.rows.filter((r) => r.chunk === i);
-        const rows = applyRows(chunkRows, decisions);
-        notSent += chunkRows.length - rows.length;
+        const built = buildApplyRows(chunkRows, choices, winnerPlans);
+        const rows = [...built.rows, ...unskipRows(chunkRows, untaken)];
+        winnersOpen += built.winnerNeedsDecision.length;
+        openRows += chunkRows.filter((r) => isOpenQuestion(r, chunkRows, choices)).length;
         if (!rows.length) continue;
-        const res = (await serverApi.projects.registerApply.mutate({ source: s.name, part: { index: i + 1, total: s.chunks }, rows, idempotencyKey: `register-${runId}-${i}` })) as RegisterApplyResult;
+        const context = contextFor(chunkRows, new Set(rows.map((r) => r.record.ref)));
+        const res = (await serverApi.projects.registerApply.mutate({ source: s.name, part: { index: i + 1, total: s.chunks }, rows, context, idempotencyKey: `register-${runId}-${i}` })) as RegisterApplyResult;
         for (const [k, c] of Object.entries(res.counts)) totals[k as keyof typeof totals] += c;
       }
       await qc.invalidateQueries({ queryKey: ["server"] });
-      setState({ phase: "done", name: s.name, totals, notSent });
+      setState({ phase: "done", name: s.name, totals, open: openRows, winnersOpen });
     } catch (e) {
       await qc.invalidateQueries({ queryKey: ["server"] });
       setState({ phase: "error", name: s.name, message: `Import abgebrochen: ${e instanceof Error ? e.message : "unbekannter Fehler"}. Bereits übernommene Teile bleiben bestehen; ein erneuter Import derselben Datei ergänzt den Rest und ändert nichts doppelt.` });
@@ -157,10 +149,9 @@ export function RegisterImportDialog({ open, onOpenChange }: { open: boolean; on
 
           {(state.phase === "pick" || state.phase === "error") && (
             <div className="space-y-4">
-              {state.phase === "error" && (
-                <Alert variant="destructive" role="alert"><AlertTriangle aria-hidden /><AlertTitle>{state.name ?? "Import"}</AlertTitle><AlertDescription>{state.message}</AlertDescription></Alert>
-              )}
+              {state.phase === "error" && <Alert variant="destructive" role="alert"><AlertTriangle aria-hidden /><AlertTitle>{state.name ?? "Import"}</AlertTitle><AlertDescription>{state.message}</AlertDescription></Alert>}
               <Button className="h-10 gap-2" onClick={() => input.current?.click()}><Upload className="h-4 w-4" aria-hidden /> Datei wählen</Button>
+              <p className="text-xs text-muted-foreground">{REGISTER_POLICY.blanks}</p>
             </div>
           )}
 
@@ -177,7 +168,8 @@ export function RegisterImportDialog({ open, onOpenChange }: { open: boolean; on
           )}
 
           {state.phase === "review" && (
-            <Review s={state} decisions={decisions} decide={decide} shown={shown} more={() => setShown((x) => x + PAGE)} filter={filter} setFilter={(f) => { setFilter(f); setShown(PAGE); }}
+            <Review s={state} choices={choices} choose={choose} untaken={untaken} untake={(ref, on) => setUntaken((p) => { const x = new Set(p); if (on) x.add(ref); else x.delete(ref); return x; })}
+              shown={shown} more={() => setShown((x) => x + PAGE)} filter={filter} setFilter={(f) => { setFilter(f); setShown(PAGE); }}
               onApply={() => void apply(state)} onOther={() => input.current?.click()} />
           )}
 
@@ -187,9 +179,10 @@ export function RegisterImportDialog({ open, onOpenChange }: { open: boolean; on
               <AlertTitle>{state.name} übernommen</AlertTitle>
               <AlertDescription className="space-y-1">
                 <span className="block">{n(state.totals.created)} Projekte neu, {n(state.totals.updated)} geändert, {n(state.totals.unchanged)} unverändert.</span>
-                {(state.totals.held + state.totals.stale + state.totals.exists + state.totals.refused + state.notSent) > 0 && (
+                {(state.totals.skipped + state.totals.unskipped) > 0 && <span className="block">{n(state.totals.skipped)} Zeilen dauerhaft ausgeschlossen, {n(state.totals.unskipped)} Ausschlüsse zurückgenommen.</span>}
+                {(state.totals.held + state.totals.stale + state.totals.exists + state.totals.refused + state.open + state.winnersOpen) > 0 && (
                   <span className="block">
-                    Nicht übernommen: {n(state.notSent)} ohne Entscheidung, {n(state.totals.held)} Konflikte nicht bestätigt, {n(state.totals.stale)} zwischenzeitlich geändert, {n(state.totals.exists)} bereits vorhanden, {n(state.totals.refused)} abgelehnt.
+                    Nicht übernommen: {n(state.open)} offene Fragen, {n(state.winnersOpen)} gewählte Zeilen brauchen noch eine Entscheidung, {n(state.totals.held)} nicht bestätigt, {n(state.totals.stale)} zwischenzeitlich geändert, {n(state.totals.exists)} bereits vorhanden, {n(state.totals.refused)} abgelehnt.
                     Ein erneuter Import zeigt sie wieder an.
                   </span>
                 )}
@@ -203,18 +196,35 @@ export function RegisterImportDialog({ open, onOpenChange }: { open: boolean; on
   );
 }
 
-function Review({ s, decisions, decide, shown, more, filter, setFilter, onApply, onOther }: {
-  s: Extract<State, { phase: "review" }>; decisions: Record<number, Decision>; decide: (ref: number, d: Decision) => void;
-  shown: number; more: () => void; filter: "attention" | "conflict" | "ambiguous"; setFilter: (f: "attention" | "conflict" | "ambiguous") => void; onApply: () => void; onOther: () => void;
+function Review({ s, choices, choose, untaken, untake, shown, more, filter, setFilter, onApply, onOther }: {
+  s: Extract<State, { phase: "review" }>; choices: Record<number, Choice>; choose: (ref: number, c: Choice) => void; untaken: Set<number>; untake: (ref: number, on: boolean) => void;
+  shown: number; more: () => void; filter: Filter; setFilter: (f: Filter) => void; onApply: () => void; onOther: () => void;
 }) {
   const plans = useMemo(() => s.rows.map((r) => r.plan), [s.rows]);
   const sum = useMemo(() => summarizePlan(plans), [plans]);
   const rep = s.parsed.report;
-  const attention = useMemo(() => s.rows.filter((r) => (filter === "attention" ? r.plan.status === "conflict" || r.plan.status === "ambiguous" : r.plan.status === filter)), [s.rows, filter]);
-  const sending = useMemo(() => s.rows.reduce((c, r) => c + (applyRows([r], decisions).length), 0), [s.rows, decisions]);
-  const warnings = [...rep.issues, ...s.source.issues].filter((i) => i.severity === "warn");
-  const kinds = new Map<string, number>();
-  for (const w of warnings) kinds.set(w.kind, (kinds.get(w.kind) ?? 0) + 1);
+  const questions = useMemo(() => s.rows.filter((r) => r.plan.status === "conflict" || r.plan.status === "ambiguous"), [s.rows]);
+  // a group of source rows is ONE card; everything else one card per row
+  const cards = useMemo(() => {
+    const seen = new Set<number>();
+    const out: Array<{ kind: "group"; rows: ReviewRow[] } | { kind: "row"; row: ReviewRow }> = [];
+    for (const r of questions) {
+      if (r.plan.sourceRows) {
+        if (seen.has(r.plan.ref)) continue;
+        const g = questions.filter((x) => r.plan.sourceRows?.includes(x.plan.ref));
+        for (const x of g) seen.add(x.plan.ref);
+        if (filter !== "conflict") out.push({ kind: "group", rows: g });
+      } else if (filter === "attention" || filter === r.plan.status) out.push({ kind: "row", row: r });
+    }
+    return out;
+  }, [questions, filter]);
+  const sending = useMemo(() => {
+    const winners = new Map<number, PlanRow>();
+    for (const r of s.rows) if (choices[r.plan.ref] === "wins") winners.set(r.plan.ref, { ...r.plan, status: "add", sourceRows: undefined });
+    return buildApplyRows(s.rows, choices, winners).rows.length + untaken.size;
+  }, [s.rows, choices, untaken]);
+  const excluded = useMemo(() => s.rows.filter((r) => r.plan.status === "skipped"), [s.rows]);
+  const open = questions.filter((r) => isOpenQuestion(r, s.rows, choices)).length;
 
   return (
     <div className="space-y-5" data-testid="register-review">
@@ -228,10 +238,10 @@ function Review({ s, decisions, decide, shown, more, filter, setFilter, onApply,
         </div>
       </div>
 
-      <dl className="grid grid-cols-2 gap-3 sm:grid-cols-5" data-testid="register-summary">
+      <dl className="grid grid-cols-2 gap-3 sm:grid-cols-6" data-testid="register-summary">
         {([
           ["Neu", sum.add, "wird angelegt"], ["Ergänzt", sum.update, "nur leere Felder"], ["Unverändert", sum.unchanged, "nichts zu tun"],
-          ["Konflikte", sum.conflict, "ersetzt Werte — gehalten"], ["Mehrdeutig", sum.ambiguous, "Projekt wählen — gehalten"],
+          ["Konflikte", sum.conflict, "ersetzt Werte"], ["Mehrdeutig", sum.ambiguous, "Entscheidung nötig"], ["Ausgeschlossen", sum.skipped, "früher entschieden"],
         ] as const).map(([k, v, hint]) => (
           <div key={k} className="rounded-lg border p-3">
             <dt className="text-xs text-muted-foreground">{k}</dt>
@@ -244,28 +254,33 @@ function Review({ s, decisions, decide, shown, more, filter, setFilter, onApply,
       {rep.missingDepartments.length > 0 && (
         <Alert variant="destructive" role="alert"><AlertTriangle aria-hidden /><AlertTitle>Gewerke nicht erkannt</AlertTitle><AlertDescription>{rep.missingDepartments.join(", ")} — ihre Spalten passen nicht zum erwarteten Aufbau; diese Gewerke werden nicht übernommen.</AlertDescription></Alert>
       )}
-      {s.source.heldDuplicates.length > 0 && (
-        <Alert role="alert" data-testid="register-source-duplicates">
-          <AlertTriangle aria-hidden />
-          <AlertTitle>{n(s.source.heldDuplicates.reduce((c, g) => c + g.rows.length, 0))} Zeilen der Datei sind nicht eindeutig</AlertTitle>
-          <AlertDescription>
-            {n(s.source.heldDuplicates.length)} Gruppen teilen Projektnummer, Station, Beschreibung, Projektstand und Termin, unterscheiden sich aber im Inhalt. Welche Zeile gilt, lässt sich der Datei nicht entnehmen — sie werden nicht importiert.
-            Zeilen: {s.source.heldDuplicates.slice(0, 6).map((g) => g.rows.join("/")).join("; ")}{s.source.heldDuplicates.length > 6 ? " …" : ""}
-          </AlertDescription>
-        </Alert>
-      )}
-      {kinds.size > 0 && (
-        <p className="text-xs text-muted-foreground" data-testid="register-warnings">
-          Hinweise: {[...kinds].map(([k, c]) => `${n(c)} × ${({ "date-unparseable": "Datum nicht lesbar (Feld bleibt leer)", "status-unknown": "Status außerhalb des Vokabulars (Status bleibt leer)", "bahnhofsmanagement-unknown": "Bahnhofsmanagement unbekannt", "row-no-identity": "Zeile ohne Identität", "value-invalid": "Wert ungültig", "header-moved": "Spalte verschoben", "department-layout": "Gewerk nicht erkannt", "duplicate-conflict": "mehrdeutige Quellzeilen" } as Record<string, string>)[k] ?? k}`).join(" · ")}
-        </p>
+
+      {rep.unknownStatuses.length > 0 && (
+        <section aria-labelledby="reg-status" className="rounded-lg border p-3 text-xs" data-testid="register-unknown-status">
+          <h3 id="reg-status" className="mb-1 flex items-center gap-2 text-sm font-semibold">Status außerhalb des Vokabulars <PolicyHint label="Status" text={REGISTER_POLICY.unknownStatus} /></h3>
+          <p className="mb-2 text-muted-foreground">Nicht übernommen (Prüfer und Datum dieser Zeilen schon). Ob ein Wert ins Vokabular gehört, entscheiden die Datenverantwortlichen.</p>
+          <ul className="space-y-0.5">
+            {rep.unknownStatuses.map((u) => <li key={`${u.department}|${u.value}`}><strong>{u.value}</strong> · {u.department} · {n(u.rows)} Zeile{u.rows === 1 ? "" : "n"}</li>)}
+          </ul>
+        </section>
       )}
 
-      {sum.conflict + sum.ambiguous > 0 && (
+      {(() => {
+        const kinds = new Map<string, number>();
+        for (const w of [...rep.issues, ...s.source.issues].filter((i) => i.severity === "warn")) kinds.set(w.kind, (kinds.get(w.kind) ?? 0) + 1);
+        return kinds.size ? (
+          <p className="text-xs text-muted-foreground" data-testid="register-warnings">
+            Hinweise: {[...kinds].map(([k, c]) => `${n(c)} × ${WARNING_TEXT[k] ?? k}`).join(" · ")}
+          </p>
+        ) : null;
+      })()}
+
+      {questions.length > 0 && (
         <section aria-labelledby="reg-attention" className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 id="reg-attention" className="text-sm font-semibold">Entscheidungen nötig</h3>
-            <Select value={filter} onValueChange={(v) => setFilter(v as typeof filter)}>
-              <SelectTrigger className="h-8 w-48 text-xs" aria-label="Anzeige"><SelectValue /></SelectTrigger>
+            <h3 id="reg-attention" className="flex items-center gap-2 text-sm font-semibold">Entscheidungen nötig ({n(open)} offen)</h3>
+            <Select value={filter} onValueChange={(v) => setFilter(v as Filter)}>
+              <SelectTrigger className="h-8 w-52 text-xs" aria-label="Anzeige"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="attention">Konflikte und mehrdeutige</SelectItem>
                 <SelectItem value="conflict">nur Konflikte</SelectItem>
@@ -273,61 +288,41 @@ function Review({ s, decisions, decide, shown, more, filter, setFilter, onApply,
               </SelectContent>
             </Select>
           </div>
+          <p className="text-xs text-muted-foreground">{REGISTER_POLICY.skip} Was offen bleibt, wird nicht angefasst und beim nächsten Import erneut gefragt.</p>
           <ul className="space-y-2">
-            {attention.slice(0, shown).map(({ plan, record }) => {
-              const d = decisions[plan.ref] ?? {};
-              return (
-                <li key={plan.ref} className="rounded-lg border p-3 text-xs" data-testid={`register-row-${plan.status}`}>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant={plan.status === "conflict" ? "secondary" : "outline"} className="text-2xs">{plan.status === "conflict" ? "Konflikt" : "Mehrdeutig"}</Badge>
-                    <span className="font-medium">{record.fields.station ?? "—"}</span>
-                    <span className="text-muted-foreground">{record.fields.projektnummer ?? "ohne Projektnummer"} · {record.fields.projektstand ?? "—"} · Zeile {record.ref}</span>
-                  </div>
-                  <p className="mt-1 line-clamp-2 text-muted-foreground">{record.fields.projektbeschreibung ?? "ohne Beschreibung"}</p>
-                  {plan.status === "conflict" ? (
-                    <>
-                      <ul className="mt-2 space-y-0.5">
-                        {plan.changes.slice(0, 8).map((c) => (
-                          <li key={c.key}><span className="text-muted-foreground">{changeLabel(c.key)}:</span> {short(c.from)} <span aria-hidden>→</span><span className="sr-only">wird zu</span> <strong>{short(c.to)}</strong>{c.kind === "fill" ? <span className="text-muted-foreground"> (ergänzt)</span> : null}</li>
-                        ))}
-                        {plan.changes.length > 8 && <li className="text-muted-foreground">… und {plan.changes.length - 8} weitere Änderungen</li>}
-                      </ul>
-                      <div className="mt-2 flex items-center gap-2">
-                        <Checkbox id={`ow-${plan.ref}`} checked={!!d.overwrite} onCheckedChange={(c) => decide(plan.ref, { overwrite: c === true })} />
-                        <Label htmlFor={`ow-${plan.ref}`} className="text-xs font-normal">Vorhandene Werte durch die der Datei ersetzen</Label>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="mt-2 space-y-1.5">
-                      <p className="text-muted-foreground">{plan.reason}</p>
-                      <Select value={d.choice === undefined ? "skip" : String(d.choice)} onValueChange={(v) => decide(plan.ref, { choice: v === "skip" || v === "new" ? v : Number(v) })}>
-                        <SelectTrigger className="h-8 w-full text-xs sm:w-[34rem]" aria-label={`Zuordnung für Zeile ${record.ref}`}><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="skip">Überspringen</SelectItem>
-                          <SelectItem value="new">Als neues Projekt anlegen</SelectItem>
-                          {plan.candidates.map((c) => (
-                            <SelectItem key={c.projectId} value={String(c.projectId)}>
-                              Diesem Projekt zuordnen und Werte übernehmen: #{c.projectId} · {c.station ?? "—"} · {c.projektstand ?? "—"} · {short(c.projektbeschreibung)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-                </li>
-              );
-            })}
+            {cards.slice(0, shown).map((c) => c.kind === "group"
+              ? <SourceGroupCard key={`g${c.rows[0]?.plan.ref}`} rows={c.rows} choices={choices} onChoice={choose} />
+              : c.row.plan.status === "conflict"
+                ? <ConflictCard key={c.row.plan.ref} row={c.row} choice={choices[c.row.plan.ref]} onChoice={(v) => choose(c.row.plan.ref, v)} />
+                : <AmbiguousCard key={c.row.plan.ref} row={c.row} choice={choices[c.row.plan.ref]} onChoice={(v) => choose(c.row.plan.ref, v)} />)}
           </ul>
-          {attention.length > shown && <Button variant="outline" size="sm" onClick={more}>Weitere {Math.min(PAGE, attention.length - shown)} anzeigen ({n(attention.length - shown)} übrig)</Button>}
+          {cards.length > shown && <Button variant="outline" size="sm" onClick={more}>Weitere {Math.min(PAGE, cards.length - shown)} anzeigen ({n(cards.length - shown)} übrig)</Button>}
         </section>
+      )}
+
+      {excluded.length > 0 && (
+        <details className="rounded-lg border p-3 text-xs" data-testid="register-excluded">
+          <summary className="cursor-pointer font-medium">Früher ausgeschlossen ({n(excluded.length)})</summary>
+          <ul className="mt-2 space-y-1">
+            {excluded.slice(0, 50).map((r) => (
+              <li key={r.plan.ref} className="flex flex-wrap items-center gap-2">
+                <span className="font-medium">{r.record.fields.station ?? "—"}</span>
+                <span className="text-muted-foreground">{r.record.fields.projektnummer ?? "ohne Projektnummer"} · {r.record.fields.projektstand ?? "—"} · Zeile {r.record.ref}</span>
+                <button type="button" className={`ml-auto inline-flex items-center gap-1 hover:underline ${untaken.has(r.plan.ref) ? "text-primary" : "text-muted-foreground"}`} onClick={() => untake(r.plan.ref, !untaken.has(r.plan.ref))} aria-pressed={untaken.has(r.plan.ref)}>
+                  <Undo2 className="h-3 w-3" aria-hidden /> {untaken.has(r.plan.ref) ? "Wird zurückgenommen" : "Entscheidung zurücknehmen"}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
 
       <div className="flex flex-wrap items-center gap-3 border-t pt-4">
         <Button className="h-10 gap-2" disabled={sending === 0} onClick={onApply} data-testid="register-apply">
-          Übernehmen ({n(sending)} Datensätze)
+          Übernehmen ({n(sending)} Datensätze und Entscheidungen)
         </Button>
         <Button variant="ghost" onClick={onOther}>Andere Datei</Button>
-        <p className="text-xs text-muted-foreground">Konflikte und mehrdeutige Zeilen ohne Entscheidung bleiben unberührt.</p>
+        <p className="text-xs text-muted-foreground">Offene Fragen bleiben unberührt.</p>
       </div>
     </div>
   );

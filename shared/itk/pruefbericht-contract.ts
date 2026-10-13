@@ -68,6 +68,8 @@ export interface ImportBatchResult {
 export const ListInputSchema = z.object({
   /** only reports with / without a project (the PDF-Codes and Projektübersicht ITK tabs) */
   verknuepfung: z.enum(["verknuepft", "offen"]).optional(),
+  /** only the reports that carry no Projektnummer (they can be linked by hand only) */
+  grund: z.enum(["keine-projektnummer"]).optional(),
   /** only the reports linked to this project */
   projectId: z.number().int().positive().optional(),
   /** Opaque keyset cursor `<year>:<id>` from the previous page. */
@@ -148,4 +150,15 @@ export interface LinkCandidates {
   /** why no automatic link (null for `unique`/`ambiguous`) */
   reason: string | null;
   candidates: LinkCandidate[];
+}
+
+/** Where the reports stand: how many are linked, and why the rest is not — the numbers behind the "Projektübersicht ITK" banner. */
+export interface LinkSummary {
+  total: number;
+  linked: number;
+  open: number;
+  /** more than one project fits: a person picks */
+  ambiguous: number;
+  /** reason → count (see UNMATCHED_TEXT in shared/itk/project-link.ts) */
+  unmatched: Record<string, number>;
 }

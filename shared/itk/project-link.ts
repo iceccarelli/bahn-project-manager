@@ -67,3 +67,11 @@ export function matchPruefbericht(subject: LinkSubject, byPn: ReadonlyMap<string
   if (both.length > 1) return { status: "ambiguous", candidateIds: both.map((p) => p.id) };
   return { status: "unmatched", reason: "station-passt-nicht", candidateIds: ids };
 }
+
+/** The recommended policy for what the evidence rule cannot decide — shown in the Projektübersicht ITK and quoted by docs/project-register-import.md. */
+export const LINK_POLICY = {
+  noProjektnummer:
+    "Ohne Projektnummer ist kein Prüfbericht sicher einem Projekt zuzuordnen. Empfehlung: die Projektnummer in der Arbeitsmappe der Prüfstelle ergänzen und neu importieren; bis dahin einzeln von Hand zuordnen.",
+  ambiguous:
+    "Mehrere Projekte tragen dieselbe Projektnummer am selben Bahnhof (z. B. eine Anmeldung je Phase). Empfehlung: das Projekt wählen, dessen Phase der Prüfbericht betrifft; die Wahl bleibt bei einem erneuten Import der Arbeitsmappe erhalten.",
+} as const;

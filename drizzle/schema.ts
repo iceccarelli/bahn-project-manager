@@ -204,12 +204,17 @@ export const itkPruefberichte = mysqlTable("itk_pruefberichte", {
  * hashed. A later import finds the project through this key even after the project's own fields were edited in the app,
  * and after the workbook's rows moved (a row number is never stored). A key belongs to at most one project (UNIQUE): two
  * projects can never both claim one registration. A project may hold several keys (the registration changed over time).
- * Written only inside the domain transaction of the import; deleted with the project.
+ * The same table remembers the administrator's explicit "do not import this row" (kind "skip", keyed by the hash of the
+ * row's exact content, no project). Written only inside the domain transaction of the import; a project's keys are
+ * deleted with the project.
  */
 export const projectSourceKeys = mysqlTable("project_source_keys", {
   id: int("id").autoincrement().primaryKey(),
-  projectId: int("projectId").notNull(),
+  /** the project a "match" key belongs to; NULL for a "skip" decision (no project) */
+  projectId: int("projectId"),
   source: varchar("source", { length: 32 }).notNull(),
+  /** "match": this registration IS that project. "skip": an administrator excluded exactly this row content from the import. */
+  kind: varchar("kind", { length: 8 }).default("match").notNull(),
   sourceKey: varchar("sourceKey", { length: 64 }).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (table) => ({

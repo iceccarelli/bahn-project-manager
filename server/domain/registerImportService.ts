@@ -19,9 +19,9 @@ import { DEPARTMENTS } from "@shared/validation";
 import { ProjectPatchSchema, type EditableProjectField } from "@shared/project-contract";
 import { REGISTER_SOURCE, type RegisterRecord } from "@shared/register/register-import";
 import {
-  emptyCounts, type ApplyOutcome, type RegisterApplyInput, type RegisterApplyResult, type RegisterPreviewInput,
+  emptyCounts, type ApplyOutcome, type RegisterApplyInput, type RegisterApplyResult, type RegisterContext, type RegisterPreviewInput,
 } from "@shared/register/register-contract";
-import { diffRecord, planRegister, summarizePlan, type ExistingProject, type PlanRow, type PlanSummary } from "@shared/register/register-plan";
+import { contentKey, diffRecord, planRegister, summarizePlan, type ExistingProject, type PlanRow, type PlanSummary } from "@shared/register/register-plan";
 import { ForbiddenError, IdempotencyKeyReuseError, ValidationError } from "./errors";
 import { canEditProject, canImportRegister, type Principal } from "./permissions";
 import type { ProjectService, RequestContext } from "./projectService";
@@ -34,10 +34,11 @@ import { normalizeBahnhofsmanagement } from "@shared/bahnhofsmanagement";
 export const sourceKeyHash = (key: string): string => createHash("sha256").update(key).digest("hex");
 
 const keyOf = (r: RegisterRecord) => fullKey({ ...r.fields });
+/** "skip:" keeps the two kinds of key in different hash spaces: a row's identity and a row's exact content can never collide. */
+const skipHashOf = (r: RegisterRecord) => sourceKeyHash(`skip:${contentKey(r)}`);
 
 /** Re-validates what the browser sent against the app's own project schema; a record that would fail on write fails the request now. */
 function assertValid(records: readonly RegisterRecord[]) {
-  const seen = new Set<string>();
   const refs = new Set<number>();
   for (const r of records) {
     if (refs.has(r.ref)) throw new ValidationError(`Zeile ${r.ref} kommt in dieser Anfrage zweimal vor`, "ref");
@@ -47,9 +48,6 @@ function assertValid(records: readonly RegisterRecord[]) {
     const bm = normalizeBahnhofsmanagement(r.fields.bahnhofsmanagement);
     if (r.fields.bahnhofsmanagement !== null && bm.value !== r.fields.bahnhofsmanagement) throw new ValidationError(`Zeile ${r.ref}: Bahnhofsmanagement „${r.fields.bahnhofsmanagement}“ ist nicht kanonisch`, "bahnhofsmanagement");
     for (const d of Object.keys(r.reviews)) if (!(DEPARTMENTS as readonly string[]).includes(d)) throw new ValidationError(`Zeile ${r.ref}: unbekanntes Gewerk ${d}`, d);
-    const k = keyOf(r);
-    if (seen.has(k)) throw new ValidationError(`Zeile ${r.ref}: Identität kommt in dieser Anfrage zweimal vor`, "ref");
-    seen.add(k);
   }
 }
 
@@ -63,24 +61,39 @@ export class RegisterImportService {
     return {
       hints: records.map((r) => ({ projektnummer: r.fields.projektnummer, station: r.fields.station })),
       keyHashes: records.map((r) => sourceKeyHash(keyOf(r))),
+      skipHashes: records.map(skipHashOf),
     };
   }
 
+  /** identity-only stand-ins for the records of the chunk the request does not act on; never acted on, never reported */
+  private withContext(records: RegisterRecord[], context: readonly RegisterContext[] | undefined): RegisterRecord[] {
+    const have = new Set(records.map((r) => r.ref));
+    const extra = (context ?? []).filter((c) => !have.has(c.ref)).map((c): RegisterRecord => ({
+      ref: c.ref, reviews: {},
+      fields: { projektnummer: c.projektnummer, bahnhofsmanagement: null, station: c.station, bahnhofsnummer: null, streckennummer: null, projektbeschreibung: c.projektbeschreibung, projektstand: c.projektstand, projektleiter: null, terminProjektvorstellung: c.terminProjektvorstellung, kommentar: null, projektLink: null },
+    }));
+    return [...records, ...extra];
+  }
+
   /** hashed owners → plain-key owners, as the pure planner wants them */
-  private plan(records: readonly RegisterRecord[], found: { projects: ExistingProject[]; keyOwners: Map<string, number[]> }): PlanRow[] {
+  private plan(records: readonly RegisterRecord[], found: { projects: ExistingProject[]; keyOwners: Map<string, number[]>; skipped: Set<string> }): PlanRow[] {
     const owners = new Map<string, readonly number[]>();
+    const skips = new Set<string>();
     for (const r of records) {
       const ids = found.keyOwners.get(sourceKeyHash(keyOf(r)));
       if (ids?.length) owners.set(keyOf(r), ids);
+      if (found.skipped.has(skipHashOf(r))) skips.add(contentKey(r));
     }
-    return planRegister(records, found.projects, owners);
+    return planRegister(records, found.projects, owners, skips);
   }
 
   async preview(principal: Principal, input: RegisterPreviewInput): Promise<{ rows: PlanRow[]; summary: PlanSummary }> {
     if (!canImportRegister(principal)) throw new ForbiddenError();
     assertValid(input.records);
-    const found = await this.store.registerCandidates(REGISTER_SOURCE, this.lookupOf(input.records));
-    const rows = this.plan(input.records, found);
+    const all = this.withContext(input.records, input.context);
+    const found = await this.store.registerCandidates(REGISTER_SOURCE, this.lookupOf(all));
+    const asked = new Set(input.records.map((r) => r.ref));
+    const rows = this.plan(all, found).filter((p) => asked.has(p.ref));
     return { rows, summary: summarizePlan(rows) };
   }
 
@@ -96,8 +109,12 @@ export class RegisterImportService {
       if (claim.state === "replay") return { ...(claim.response as RegisterApplyResult), replayed: true };
 
       // the plan of THIS transaction, for the whole chunk at once (so "claimed by another record's exact match" holds)
-      const found = await tx.registerCandidates(REGISTER_SOURCE, this.lookupOf(records));
-      const plan = this.plan(records, found);
+      const actingRows = input.rows.filter((r) => r.action !== "skip" && r.action !== "unskip").map((r) => r.record);
+      const planRecords = this.withContext(actingRows, input.context);
+      const found = await tx.registerCandidates(REGISTER_SOURCE, this.lookupOf(planRecords));
+      // rows that are themselves decisions ("do not import this" / "take it back") take no part in the plan: the winner of a
+      // group is judged without the loser the administrator is excluding in the same request
+      const plan = this.plan(planRecords, found);
       const byRef = new Map(plan.map((p) => [p.ref, p]));
       const candidate = new Map(found.projects.map((p) => [p.id, p]));
 
@@ -110,12 +127,35 @@ export class RegisterImportService {
 
       for (const row of input.rows) {
         const rec = row.record;
-        const planned = byRef.get(rec.ref) as PlanRow;
+        const planned = byRef.get(rec.ref) as PlanRow; // undefined for skip/unskip rows, which never read it
         const remember = (projectId: number) => tx.recordSourceKeys(REGISTER_SOURCE, [{ projectId, keyHash: sourceKeyHash(keyOf(rec)) }]);
 
+        if (row.action === "skip" || row.action === "unskip") {
+          const label = `${rec.fields.station ?? "—"} · ${rec.fields.projektnummer ?? "ohne Nr."} · ${rec.fields.projektstand ?? "—"}`;
+          const hash = skipHashOf(rec);
+          const changed = row.action === "skip" ? await tx.recordSourceKeys(REGISTER_SOURCE, [{ projectId: null, keyHash: hash, kind: "skip" }]) : await tx.deleteSkipKeys(REGISTER_SOURCE, [hash]);
+          if (changed > 0) {
+            await tx.appendAudit([{
+              userId: /^\d+$/.test(principal.id) ? Number(principal.id) : null, userName: principal.name || principal.email || principal.id,
+              entityType: "project", entityId: 0, action: "update", field: row.action === "skip" ? "import.skip" : "import.unskip", oldValue: null,
+              newValue: JSON.stringify({ zeile: rec.ref, station: rec.fields.station, projektnummer: rec.fields.projektnummer, projektstand: rec.fields.projektstand }).slice(0, 500),
+              eventId: null, aggregateVersion: null, traceId: ctx.traceId, workspace: null, entityLabel: label.slice(0, 255),
+            }]);
+          }
+          done({ ref: rec.ref, outcome: row.action === "skip" ? "skipped" : "unskipped" });
+          continue;
+        }
+
+        if (planned.status === "skipped") {
+          done({ ref: rec.ref, outcome: "held", reason: planned.reason });
+          continue;
+        }
+
         if (row.action === "create") {
-          // "add" on the evidence, or an explicit "this is a new project" for a row the evidence left ambiguous
-          if (planned.status !== "add" && !(row.confirmed && planned.status === "ambiguous")) {
+          // "add" on the evidence, or an explicit "this is a new registration/project" for a row the evidence left open:
+          // ambiguous, or the same job whose Projektstand/Termin moved on (a core match held as a conflict)
+          const newRegistrationAllowed = row.confirmed && (planned.status === "ambiguous" || (planned.status === "conflict" && planned.basis === "core"));
+          if (planned.status !== "add" && !newRegistrationAllowed) {
             done({ ref: rec.ref, outcome: "exists", reason: planned.reason ?? "Ein Projekt mit dieser Identität existiert inzwischen" });
             continue;
           }

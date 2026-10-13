@@ -2,7 +2,7 @@
  * Reads the Übersichtsliste ("Übersichtsliste.xlsm", sheet "Übersicht") into project records and department reviews —
  * and into a report that says exactly what was and was not understood.
  *
- * Same stance as shared/itk/pruefbericht-import.ts, which this file deliberately mirrors:
+ * Same stance as the Prüfbericht workbook importer (a separate domain: nothing here imports it), mirrored deliberately:
  *  - header-driven, not position-driven: a column is mapped when its header is recognised. The expected column letters
  *    from the workbook's documented layout are only *compared* — a moved column is reported, never silently followed
  *    into the wrong field;
@@ -18,7 +18,7 @@
  */
 import { normalizeBahnhofsmanagement } from "../bahnhofsmanagement";
 import { cleanStr } from "../ingest";
-import { dayFromCell, foldHeader, type SheetInput } from "../itk/pruefbericht-import";
+import { dayFromCell, foldHeader, type SheetInput } from "../workbook-cells";
 import { fullKey, hasIdentity } from "../project-identity";
 import { normalizeReviewStatus } from "../review-status";
 import { ProjectPatchSchema } from "../project-contract";
@@ -99,6 +99,8 @@ export interface RegisterReport {
   repeatedProjektnummern: number;
   issues: RegisterIssue[];
   ignoredSheets: string[];
+  /** statuses outside the review vocabulary, withheld: value × department × rows (a vocabulary decision belongs to the data owner) */
+  unknownStatuses: Array<{ value: string; department: Department; rows: number }>;
 }
 
 export interface RegisterParse {
@@ -168,7 +170,7 @@ const PLACEHOLDER_DATE = /^[-–—?]+$|^(n\/a|offen|tbd|entfällt|keine)$/i;
 export function parseRegisterWorkbook(sheets: readonly SheetInput[]): RegisterParse {
   const report: RegisterReport = {
     sheet: null, headerRow: null, columns: {}, departments: [], missingDepartments: [], unmappedHeaders: [],
-    rows: 0, blank: 0, records: 0, withoutProjektnummer: 0, repeatedProjektnummern: 0, issues: [], ignoredSheets: [],
+    rows: 0, blank: 0, records: 0, withoutProjektnummer: 0, repeatedProjektnummern: 0, issues: [], ignoredSheets: [], unknownStatuses: [],
   };
   const issue = (i: RegisterIssue) => report.issues.push(i);
 
@@ -292,6 +294,9 @@ export function parseRegisterWorkbook(sheets: readonly SheetInput[]): RegisterPa
       let status = statusRaw;
       if (status !== null && normalizeReviewStatus(status) === null) {
         issue({ kind: "status-unknown", severity: "warn", row: rowNo, column: letter, value: status.slice(0, 80), message: `Zeile ${rowNo}, ${dept}: Status „${status.slice(0, 80)}“ gehört nicht zum Vokabular — Status bleibt leer, Name und Datum werden übernommen` });
+        const seen = report.unknownStatuses.find((u) => u.value === statusRaw && u.department === dept);
+        if (seen) seen.rows += 1;
+        else report.unknownStatuses.push({ value: statusRaw as string, department: dept, rows: 1 });
         status = null;
       }
       if (status !== null || prueferName !== null || datum !== null) reviews[dept] = { status, prueferName, datum };
@@ -329,8 +334,10 @@ const sameContent = (a: RegisterRecord, b: RegisterRecord): boolean =>
   JSON.stringify([a.fields, Object.entries(a.reviews).sort()]) === JSON.stringify([b.fields, Object.entries(b.reviews).sort()]);
 
 export interface SourceAnalysis {
-  /** one record per distinct identity — what may be planned and imported */
+  /** one record per distinct identity — what may be planned and imported without a question */
   accepted: RegisterRecord[];
+  /** `accepted` plus every row of the held groups: what goes to the planner, which turns the held rows into explicit questions */
+  forPlanning: RegisterRecord[];
   /** rows that share a full key with a *different* record: which one is the project is not decidable from the file */
   heldDuplicates: Array<{ fullKey: string; rows: number[] }>;
   /** rows dropped because they repeat another row cell for cell */
@@ -349,7 +356,8 @@ export function analyzeSource(records: readonly RegisterRecord[]): SourceAnalysi
     const k = fullKey({ ...r.fields });
     groups.set(k, [...(groups.get(k) ?? []), r]);
   }
-  const out: SourceAnalysis = { accepted: [], heldDuplicates: [], identicalDropped: [], issues: [] };
+  const out: SourceAnalysis = { accepted: [], forPlanning: [], heldDuplicates: [], identicalDropped: [], issues: [] };
+  const heldRows: RegisterRecord[] = [];
   for (const [k, list] of groups) {
     const first = list[0] as RegisterRecord;
     if (list.length === 1) {
@@ -359,11 +367,13 @@ export function analyzeSource(records: readonly RegisterRecord[]): SourceAnalysi
       out.identicalDropped.push(...list.slice(1).map((r) => r.ref));
       out.issues.push({ kind: "duplicate-identical", severity: "info", row: first.ref, message: `Zeilen ${list.map((r) => r.ref).join(", ")} sind inhaltsgleich — einmal übernommen` });
     } else {
+      heldRows.push(...list);
       out.heldDuplicates.push({ fullKey: k, rows: list.map((r) => r.ref) });
       out.issues.push({ kind: "duplicate-conflict", severity: "warn", row: first.ref, message: `Zeilen ${list.map((r) => r.ref).join(", ")} haben dieselbe Identität (Projektnummer, Station, Beschreibung, Projektstand, Termin), aber unterschiedlichen Inhalt — nicht importiert` });
     }
   }
   // keep source order so reports and batches are stable
   out.accepted.sort((a, b) => a.ref - b.ref);
+  out.forPlanning = [...out.accepted, ...heldRows].sort((a, b) => a.ref - b.ref);
   return out;
 }
