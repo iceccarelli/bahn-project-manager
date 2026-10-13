@@ -34,7 +34,9 @@ scripts/e2e/build-server-mode.sh && pnpm exec tsx scripts/e2e/server-mode.e2e.ts
 pnpm gate                      # the integrated deployment gate (docs/runbook.md)
 ```
 
-Real project data never enters the repository (`docs/data-governance.md`); fixtures are synthetic.
+Real project data never enters the repository (`docs/data-governance.md`); fixtures are synthetic. Source workbooks stay in the
+ignored `private-data/`; dry-run them with `pnpm register:inspect "<Übersichtsliste.xlsm>" --itk "<Projektübersicht ITK.xlsx>"` and
+`pnpm itk:inspect "<Projektübersicht ITK.xlsx>"` — import and linking policy: [`docs/project-register-import.md`](docs/project-register-import.md).
 
 ## Quality gates (GitHub Actions, required on `main` via `.github/rulesets/main.json`)
 

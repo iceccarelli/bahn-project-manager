@@ -24,6 +24,7 @@ const writes = (f: string) => { const t = fs.readFileSync(f, "utf8").replace(/\/
 
 /** Every server file that contains a DB write, and why it is allowed to. */
 const WRITERS: Record<string, string> = {
+  "server/infra/pruefberichtStore.ts": "ITK Prüfberichte are their own record (own version column), not the Project aggregate: the admin workbook import upserts them in ONE transaction with ONE audit row per batch. Project links are NOT written here — they go through PruefberichtLinkService/ProjectTx",
   "server/infra/mysqlProjectStore.ts": "the domain transaction adapter (ProjectTx): aggregate writes + audit + outbox + idempotency; personal state (watchers, notification read flips)",
   "server/infra/readModels.ts": "derived rm_* counters, maintained inside the domain transaction; rebuild is the repair/test oracle",
   "server/infra/geoModel.ts": "derived project_geo, maintained inside the domain transaction; rebuild at migration",
@@ -60,6 +61,11 @@ describe("one mutation plane", () => {
       "projects.update": "domain: ProjectService.update",
       "projects.updateReview": "domain: ProjectService.updateReview (project version bump)",
       "projects.createReview": "domain: ProjectService.createReview",
+      "projects.registerApply": "domain: RegisterImportService.apply → ProjectService.createWithin/updateWithin per record (tx, version, idempotency, audit, event, read models)",
+      "projects.registerPreview": "read (a mutation only to carry a large body): plans an Übersichtsliste import, writes nothing",
+      "pruefberichte.import": "ITK Prüfbericht workbook import: admin only, one transaction + one audit row per batch (infra/pruefberichtStore.ts, classified above)",
+      "pruefberichte.setLink": "domain: PruefberichtLinkService.setLink (tx, idempotency, row version, audit)",
+      "pruefberichte.autoLink": "domain: PruefberichtLinkService.autoLink (admin; only evidence-unique matches; audit per report)",
       "projects.delete": "domain: ProjectService.delete (snapshot in audit)",
       "bookings.book": "domain: BookingService.book",
       "bookings.release": "domain: BookingService.release",

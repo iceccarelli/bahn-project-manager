@@ -13,9 +13,13 @@ import {
   type ProjectSummary,
 } from "@shared/project-contract";
 import {
-  auditLog, departmentReviews, projectChecklists, projectChecklistAnswers, scheduleSlots, type ProjectChecklist, type ScheduleSlot, domainEvents, idempotencyKeys, notifications, notificationUnread, projects, projectWatchers, type Project,
+  auditLog, departmentReviews, projectSourceKeys, projectChecklists, projectChecklistAnswers, scheduleSlots, type ProjectChecklist, type ScheduleSlot, domainEvents, idempotencyKeys, notifications, notificationUnread, projects, projectWatchers, type Project,
 } from "../../drizzle/schema";
-import type { AuditRow, IdempotencyClaim, ProjectStore, ProjectTx } from "../domain/ports";
+import type { AuditRow, IdempotencyClaim, ProjectStore, ProjectTx, PruefberichtLinkRow, RegisterCandidates, RegisterLookup } from "../domain/ports";
+import { normProjektnummer } from "@shared/project-identity";
+import type { RegisterReviews } from "@shared/register/register-import";
+import type { ExistingProject } from "@shared/register/register-plan";
+import type { LinkProject } from "@shared/itk/project-link";
 import { syncProjectGeo } from "./geoModel";
 import type { ChecklistDTO } from "@shared/checklist-contract";
 import type { SlotDTO } from "@shared/booking-contract";
@@ -155,8 +159,93 @@ function toChecklistDTO(r: ProjectChecklist, answers: Array<{ questionKey: strin
   };
 }
 
+// ---- Übersichtsliste import: candidate lookup --------------------------------------------------------------------------
+
+const dayOf = (d: Date | null | undefined): string | null => (d ? d.toISOString().slice(0, 10) : null);
+
+/**
+ * Everything the import needs to decide "is this registration already a project?" for a set of records: the projects that
+ * carry one of the records' Projektnummern (compared the way identity compares them: case and spaces are not identity),
+ * the projects without a Projektnummer (a small set; matched on station in JS), and the projects a stored source key
+ * points at — each with its reviews. Reads only. The Projektnummer prefilter is a scan of `projects`, not an index seek:
+ * it runs once per import chunk by an administrator, never on the request path of ordinary users.
+ */
+async function loadRegisterCandidates(x: Executor, source: string, lookup: RegisterLookup): Promise<RegisterCandidates> {
+  const owners = new Map<string, number[]>();
+  if (lookup.keyHashes.length) {
+    const rows = await x.select({ k: projectSourceKeys.sourceKey, p: projectSourceKeys.projectId }).from(projectSourceKeys)
+      .where(and(eq(projectSourceKeys.source, source), inArray(projectSourceKeys.sourceKey, [...lookup.keyHashes])));
+    for (const r of rows) owners.set(r.k, [...(owners.get(r.k) ?? []), r.p]);
+  }
+  const numbers = [...new Set(lookup.hints.map(h => normProjektnummer(h.projektnummer)).filter(Boolean))];
+  const wantsNumberless = lookup.hints.some(h => !normProjektnummer(h.projektnummer));
+  const ownerIds = [...new Set([...owners.values()].flat())];
+  const conds: SQL[] = [];
+  if (numbers.length) conds.push(sql`UPPER(REPLACE(${projects.projektnummer}, ' ', '')) IN (${sql.join(numbers.map(n => sql`${n}`), sql`, `)})`);
+  if (wantsNumberless) conds.push(sql`(${projects.projektnummer} IS NULL OR TRIM(${projects.projektnummer}) = '')`);
+  if (ownerIds.length) conds.push(inArray(projects.id, ownerIds));
+  if (!conds.length) return { projects: [], keyOwners: owners };
+  const rows = await x.select().from(projects).where(or(...conds));
+  const ids = rows.map(r => r.id);
+  const reviewRows = ids.length ? await x.select().from(departmentReviews).where(inArray(departmentReviews.projectId, ids)) : [];
+  const reviewsBy = new Map<number, RegisterReviews>();
+  for (const r of reviewRows) {
+    const m = reviewsBy.get(r.projectId) ?? {};
+    (m as Record<string, unknown>)[r.department] = { status: r.status, prueferName: r.prueferName, datum: dayOf(r.datum) };
+    reviewsBy.set(r.projectId, m);
+  }
+  return {
+    keyOwners: owners,
+    projects: rows.map((p): ExistingProject => ({
+      id: p.id,
+      version: p.syncVersion,
+      fields: {
+        projektnummer: p.projektnummer, bahnhofsmanagement: p.bahnhofsmanagement, station: p.station, bahnhofsnummer: p.bahnhofsnummer,
+        streckennummer: p.streckennummer, projektbeschreibung: p.projektbeschreibung, projektstand: p.projektstand, projektleiter: p.projektleiter,
+        terminProjektvorstellung: dayOf(p.terminProjektvorstellung), kommentar: p.kommentar, projektLink: p.projektLink,
+      },
+      reviews: reviewsBy.get(p.id) ?? {},
+    })),
+  };
+}
+
+type RawRows<T> = [T[], unknown];
+const PB_LINK_COLUMNS = "id, `year`, laufendeNummer, projektnummer, bahnhofStrecke, projectId, version";
+const toLinkRow = (r: Record<string, unknown>): PruefberichtLinkRow => ({
+  id: Number(r.id), year: Number(r.year), laufendeNummer: String(r.laufendeNummer), projektnummer: (r.projektnummer as string | null) ?? null,
+  bahnhofStrecke: (r.bahnhofStrecke as string | null) ?? null, projectId: r.projectId === null || r.projectId === undefined ? null : Number(r.projectId), version: Number(r.version),
+});
+
 function txAdapter(x: Executor): ProjectTx {
   return {
+    registerCandidates: (source, lookup) => loadRegisterCandidates(x, source, lookup),
+    async recordSourceKeys(source, rows) {
+      if (!rows.length) return 0;
+      const [res] = await x.insert(projectSourceKeys).ignore().values(rows.map(r => ({ projectId: r.projectId, source, sourceKey: r.keyHash })));
+      return Number((res as unknown as { affectedRows: number }).affectedRows);
+    },
+    async lockPruefbericht(id) {
+      const [rows] = (await x.execute(sql.raw(`SELECT ${PB_LINK_COLUMNS} FROM itk_pruefberichte WHERE id = ${Number(id)} FOR UPDATE`))) as unknown as RawRows<Record<string, unknown>>;
+      return rows[0] ? toLinkRow(rows[0]) : null;
+    },
+    async setPruefberichtProject(id, expectedVersion, link) {
+      const [res] = await x.execute(
+        sql`UPDATE itk_pruefberichte SET projectId = ${link.projectId}, projectLinkSource = ${link.projectId === null ? null : link.source}, projectLinkedAt = ${link.projectId === null ? null : new Date()}, version = version + 1 WHERE id = ${id} AND version = ${expectedVersion}`,
+      );
+      return (res as unknown as { affectedRows: number }).affectedRows === 1;
+    },
+    async unlinkedPruefberichte() {
+      const [rows] = (await x.execute(sql.raw(`SELECT ${PB_LINK_COLUMNS} FROM itk_pruefberichte WHERE projectId IS NULL ORDER BY \`year\`, id FOR UPDATE`))) as unknown as RawRows<Record<string, unknown>>;
+      return rows.map(toLinkRow);
+    },
+    async projectsForLinking(): Promise<LinkProject[]> {
+      return x.select({ id: projects.id, projektnummer: projects.projektnummer, station: projects.station }).from(projects).where(sql`${projects.projektnummer} IS NOT NULL AND TRIM(${projects.projektnummer}) <> ''`);
+    },
+    async unlinkPruefberichteOf(projectId) {
+      const [rows] = (await x.execute(sql`SELECT id, \`year\`, laufendeNummer, projektnummer, bahnhofStrecke, projectId, version FROM itk_pruefberichte WHERE projectId = ${projectId} FOR UPDATE`)) as unknown as RawRows<Record<string, unknown>>;
+      if (rows.length) await x.execute(sql`UPDATE itk_pruefberichte SET projectId = NULL, projectLinkSource = NULL, projectLinkedAt = NULL, version = version + 1 WHERE projectId = ${projectId}`);
+      return rows.map(toLinkRow);
+    },
     async lockSlot(id) {
       const rows = await x.select().from(scheduleSlots).where(eq(scheduleSlots.id, id)).limit(1).for("update");
       return rows[0] ?? null;
@@ -221,6 +310,7 @@ function txAdapter(x: Executor): ProjectTx {
       await x.execute(sql`DELETE FROM project_geo WHERE projectId = ${id}`);
       await x.delete(departmentReviews).where(eq(departmentReviews.projectId, id));
       await x.delete(projectWatchers).where(eq(projectWatchers.projectId, id));
+      await x.delete(projectSourceKeys).where(eq(projectSourceKeys.projectId, id));
       await x.delete(projects).where(eq(projects.id, id));
     },
     async watchersOf(projectId) {
@@ -354,6 +444,10 @@ export class MysqlProjectStore implements ProjectStore {
 
   detail(id: number) {
     return loadDetail(this.db, id);
+  }
+
+  registerCandidates(source: string, lookup: RegisterLookup) {
+    return loadRegisterCandidates(this.db as unknown as Executor, source, lookup);
   }
 
   eventsSince(aggregateId: number, afterVersion: number, limit: number) {

@@ -9,6 +9,8 @@ import type { ProjectDetail, ProjectListItem, ListProjectsInput } from "@shared/
 import type { Project, ProjectChecklist, ScheduleSlot } from "../../drizzle/schema";
 import type { ChecklistDTO } from "@shared/checklist-contract";
 import type { SlotDTO } from "@shared/booking-contract";
+import type { ExistingProject } from "@shared/register/register-plan";
+import type { LinkProject } from "@shared/itk/project-link";
 
 // ---- Realtime -------------------------------------------------------------
 
@@ -88,8 +90,46 @@ export interface AuditRow {
   entityLabel?: string | null;
 }
 
+/** The slice of a Prüfbericht the link service needs (the report itself is owned by server/infra/pruefberichtStore.ts). */
+export interface PruefberichtLinkRow {
+  id: number;
+  year: number;
+  laufendeNummer: string;
+  projektnummer: string | null;
+  bahnhofStrecke: string | null;
+  projectId: number | null;
+  version: number;
+}
+
+/** What the Übersichtsliste import needs to find "the same registration" in the database. */
+export interface RegisterLookup {
+  hints: ReadonlyArray<{ projektnummer: string | null; station: string | null }>;
+  /** hashed full keys of the incoming records (see registerImportService.sourceKeyHash) */
+  keyHashes: readonly string[];
+}
+export interface RegisterCandidates {
+  projects: ExistingProject[];
+  /** key hash → ids of the projects an earlier import stored it for */
+  keyOwners: Map<string, number[]>;
+}
+
 /** Everything a project mutation may touch, all inside ONE database transaction. */
 export interface ProjectTx {
+  // ---- Übersichtsliste import ----
+  /** Projects that could be the same registration as the lookup's records, with their reviews (read under the caller's transaction). */
+  registerCandidates(source: string, lookup: RegisterLookup): Promise<RegisterCandidates>;
+  /** INSERT IGNORE of (project, source key) pairs; returns how many were new */
+  recordSourceKeys(source: string, rows: ReadonlyArray<{ projectId: number; keyHash: string }>): Promise<number>;
+  // ---- Prüfbericht ↔ project link ----
+  lockPruefbericht(id: number): Promise<PruefberichtLinkRow | null>;
+  /** UPDATE … WHERE id=? AND version=? ; false when zero rows matched. `projectId` null clears the link. */
+  setPruefberichtProject(id: number, expectedVersion: number, link: { projectId: number | null; source: "auto" | "manual" | null }): Promise<boolean>;
+  /** every report with no project yet */
+  unlinkedPruefberichte(): Promise<PruefberichtLinkRow[]>;
+  /** id/Projektnummer/Station of every project that has a Projektnummer */
+  projectsForLinking(): Promise<LinkProject[]>;
+  /** clears the link of every report pointing at the project (the project is about to be deleted); returns the reports changed */
+  unlinkPruefberichteOf(projectId: number): Promise<PruefberichtLinkRow[]>;
   /** SELECT … FOR UPDATE */
   lockProject(id: number): Promise<Project | null>;
   /** UPDATE … WHERE id=? AND syncVersion=? ; false when zero rows matched */
@@ -124,6 +164,8 @@ export interface ProjectTx {
 }
 
 export interface ProjectStore {
+  /** Preview-side lookup (no locks): the same read the import repeats under row locks when it applies. */
+  registerCandidates(source: string, lookup: RegisterLookup): Promise<RegisterCandidates>;
   transaction<T>(fn: (tx: ProjectTx) => Promise<T>): Promise<T>;
   detail(id: number): Promise<ProjectDetail | null>;
   list(

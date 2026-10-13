@@ -32,6 +32,7 @@ const AbnahmeView = lazy(() => import("@/components/abnahme/AbnahmeView"));
 /** Own chunk as well: Recharts and the year derivation load only for readers who open the Jahresansicht. */
 const JahresansichtView = lazy(() => import("@/components/itk/JahresansichtView"));
 /** The Prüfbericht tabs (docs/itk-platform.md): own chunks too, and only offered to who the server would let in. */
+const ProjektuebersichtView = lazy(() => import("@/components/itk/ProjektuebersichtView"));
 const TechnikView = lazy(() => import("@/components/itk/TechnikView"));
 const PdfCodesView = lazy(() => import("@/components/itk/PdfCodesView"));
 
@@ -48,7 +49,7 @@ function TabFallback({ label }: { label: string }) {
  * tabs and dashboard are the Jahresansicht, built on the Projects already here; its
  * Technik view and PDF-Codes need the Prüfbericht record, which is stored in the
  * database and therefore exists only in server mode, and only unrestricted principals
- * may read it. Those two tabs appear exactly there — a tab that opens an apology
+ * may read it. Those tabs appear exactly there — a tab that opens an apology
  * is a worse promise than no tab.
  */
 const BASE_TABS = [
@@ -57,6 +58,7 @@ const BASE_TABS = [
   { value: "abnahme", label: "Abnahme" },
 ] as const;
 const PRUEFBERICHT_TABS = [
+  { value: "projektuebersicht", label: "Projektübersicht ITK" },
   { value: "technik", label: "Technik-Übersicht" },
   { value: "pdf-codes", label: "PDF-Codes" },
 ] as const;
@@ -105,6 +107,11 @@ export default function PsvItk() {
       </TabsContent>
       {access.view && (
         <>
+          <TabsContent value="projektuebersicht" className="mt-0">
+            <Suspense fallback={<TabFallback label="Projektübersicht ITK" />}>
+              <ProjektuebersichtView />
+            </Suspense>
+          </TabsContent>
           <TabsContent value="technik" className="mt-0">
             <Suspense fallback={<TabFallback label="Technik-Übersicht" />}>
               <TechnikView />

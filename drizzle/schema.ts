@@ -172,16 +172,49 @@ export const itkPruefberichte = mysqlTable("itk_pruefberichte", {
   gesamtbewertung: varchar("gesamtbewertung", { length: 16 }),
   /** The Technik of the installation, derived on import by shared/itk/vocab.ts `technikArtOf`; `technik` above is the sheet's free-text product column. */
   technikArt: varchar("technikArt", { length: 64 }),
-  /** Bumped on every import that changes the row. */
+  /**
+   * The canonical project this report belongs to. NULL = not linked (no reliable match yet, or none exists): a report
+   * never has to have a project. Not part of the workbook import (a re-import neither sets nor clears it); written only
+   * by the link service (server/domain/pruefberichtLinkService.ts), which audits every change. No foreign key, like the
+   * rest of this schema: deleting a project clears the link in the same transaction (mysqlProjectStore.deleteProject).
+   * One project can have many reports.
+   */
+  projectId: int("projectId"),
+  /** How the link came about: "auto" (the evidence rule of shared/itk/project-link.ts found exactly one project) or "manual" (a person chose). */
+  projectLinkSource: varchar("projectLinkSource", { length: 16 }),
+  projectLinkedAt: datetime("projectLinkedAt"),
+  /** Bumped on every import or link change that changes the row. */
   version: int("version").default(1).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (table) => ({
   yearNrUq: uniqueIndex("itk_pb_year_nr_uq").on(table.year, table.laufendeNummer),
+  projectIdx: index("itk_pb_project_idx").on(table.projectId),
   technikArtIdx: index("itk_pb_technik_art_idx").on(table.technikArt),
   plIdx: index("itk_pb_pl_idx").on(table.zustaendigerPl),
   fsIdx: index("itk_pb_fs_idx").on(table.zustaendigerFs),
   projektnummerIdx: index("itk_pb_projektnummer_idx").on(table.projektnummer),
+}));
+
+/**
+ * Source keys of imported project registrations (docs/project-register-import.md).
+ *
+ * The Übersichtsliste has no identifier, so an import remembers WHICH registration it saw for WHICH project: the
+ * normalised full key (shared/project-identity.ts `fullKey`: Projektnummer, Station, Beschreibung, Projektstand, Termin),
+ * hashed. A later import finds the project through this key even after the project's own fields were edited in the app,
+ * and after the workbook's rows moved (a row number is never stored). A key belongs to at most one project (UNIQUE): two
+ * projects can never both claim one registration. A project may hold several keys (the registration changed over time).
+ * Written only inside the domain transaction of the import; deleted with the project.
+ */
+export const projectSourceKeys = mysqlTable("project_source_keys", {
+  id: int("id").autoincrement().primaryKey(),
+  projectId: int("projectId").notNull(),
+  source: varchar("source", { length: 32 }).notNull(),
+  sourceKey: varchar("sourceKey", { length: 64 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  sourceKeyUq: uniqueIndex("project_source_key_uq").on(table.source, table.sourceKey),
+  projectIdx: index("project_source_keys_project_idx").on(table.projectId),
 }));
 
 /**

@@ -71,6 +71,8 @@ export interface AbnahmePdfData {
   projektleiter: string;
   pruefer: string;
   pruefDatum: string;
+  /** The linked ITK Prüfbericht (laufende Nummer, canonical PDF-Code); null where none is linked or the Abnahme is free. */
+  pruefbericht?: { nummer: string; pdfCode: string } | null;
   /** ISO instant of the export. Passed in so the document is deterministic. */
   generatedAt: string;
   generatedBy: string;
@@ -130,6 +132,8 @@ export function AbnahmeDocument({ data }: { data: AbnahmePdfData }) {
           <Meta k="Errichter (Firma)" v={data.header.errichter} />
           <Meta k="ITK-Prüfer" v={data.pruefer} />
           <Meta k="Prüfdatum" v={data.pruefDatum} />
+          {data.pruefbericht && <Meta k="Prüfbericht-Nr." v={data.pruefbericht.nummer} />}
+          {data.pruefbericht && <Meta k="PDF-Code" v={data.pruefbericht.pdfCode} />}
         </View>
 
         <Text style={s.h2}>Ergebnis</Text>

@@ -43,3 +43,8 @@ export class AggregateConflictError extends DomainError {
     super("VERSION_CONFLICT", `Version ${info.expectedVersion} veraltet, aktuell ${info.currentVersion}`);
   }
 }
+
+/** Optimistic-concurrency failure of a record that is not a project (an ITK Prüfbericht): same CONFLICT semantics, no project payload. */
+export class StaleVersionError extends DomainError {
+  constructor(what: string, expected: number, current: number) { super("VERSION_CONFLICT", `${what}: Version ${expected} veraltet, aktuell ${current}`); }
+}

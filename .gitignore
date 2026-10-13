@@ -165,3 +165,6 @@ data/contacts.report.json
 data/schedule.report.json
 data/*.xlsm
 ChecklisteBeispiel.pdf
+
+# Real source workbooks (Übersichtsliste, Projektübersicht ITK): never commit (docs/data-governance.md)
+/private-data/

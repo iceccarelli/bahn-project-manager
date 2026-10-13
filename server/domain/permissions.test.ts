@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   canApproveReview, canCreateProject, canDeleteProject, canEditDepartment, canEditProject, canExport, canManageUsers,
-  canImportPruefberichte, canSubscribe, canViewAudit, canViewProject, canViewPruefberichte, roleFromLegacy,
+  canBulkLink, canImportPruefberichte, canImportRegister, canLinkPruefberichte, canSubscribe, canViewAudit, canViewProject, canViewPruefberichte, roleFromLegacy,
 } from "./permissions";
 import { admin, markus, viewer, mitteOnly } from "./testFixtures";
 import { workspaceRestriction, type Principal } from "./permissions";
@@ -131,5 +131,24 @@ describe("ITK Prüfberichte (no workspace, so default-deny for restricted princi
     expect(canImportPruefberichte(admin)).toBe(true);
     expect(canImportPruefberichte({ ...markus, workspaces: "ALL" })).toBe(false);
     expect(canImportPruefberichte(viewer)).toBe(false);
+  });
+});
+
+describe("Prüfbericht links and the Übersichtsliste import", () => {
+  it("one report is linked by an editor with an all-workspaces grant or an admin — never by a viewer or a workspace-limited editor", () => {
+    expect(canLinkPruefberichte(admin)).toBe(true);
+    expect(canLinkPruefberichte({ ...markus, workspaces: "ALL" })).toBe(true);
+    expect(canLinkPruefberichte(viewer)).toBe(false);
+    expect(canLinkPruefberichte({ ...viewer, workspaces: "ALL" })).toBe(false);
+    expect(canLinkPruefberichte(mitteOnly)).toBe(false);
+    expect(canLinkPruefberichte({ ...markus, workspaces: [] })).toBe(false); // a missing claim never widens access
+  });
+  it("bulk linking and the register import write many records at once: admin only", () => {
+    for (const p of [markus, { ...markus, workspaces: "ALL" as const }, viewer, mitteOnly]) {
+      expect(canBulkLink(p)).toBe(false);
+      expect(canImportRegister(p)).toBe(false);
+    }
+    expect(canBulkLink(admin)).toBe(true);
+    expect(canImportRegister(admin)).toBe(true);
   });
 });

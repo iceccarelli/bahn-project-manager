@@ -66,6 +66,10 @@ export interface ImportBatchResult {
 }
 
 export const ListInputSchema = z.object({
+  /** only reports with / without a project (the PDF-Codes and Projektübersicht ITK tabs) */
+  verknuepfung: z.enum(["verknuepft", "offen"]).optional(),
+  /** only the reports linked to this project */
+  projectId: z.number().int().positive().optional(),
   /** Opaque keyset cursor `<year>:<id>` from the previous page. */
   cursor: z.string().regex(/^\d{4}:\d+$/).optional(),
   limit: z.number().int().min(1).max(200).default(100),
@@ -80,11 +84,68 @@ export type ListInput = z.infer<typeof ListInputSchema>;
 export interface PruefberichtRow extends Pruefbericht {
   id: number;
   version: number;
+  /** The canonical project this report is linked to (null = not linked); see drizzle/schema.ts `itk_pruefberichte.projectId`. */
+  projectId: number | null;
+  projectLinkSource: "auto" | "manual" | null;
   /** Derived on import from the layout's Technik column (technikArtOf); what the filters and the Technik-Übersicht use. */
   technikArt: string | null;
 }
 
+/** A list row also names its project, so the table needs no second lookup. */
+export interface PruefberichtListRow extends PruefberichtRow {
+  project: { projektnummer: string | null; station: string | null } | null;
+}
+
 export interface PruefberichtPage {
-  rows: PruefberichtRow[];
+  rows: PruefberichtListRow[];
   nextCursor: string | null;
+}
+
+const idempotencyKey = z.string().min(8).max(128).regex(/^[A-Za-z0-9_.:-]+$/);
+
+/** Set (projectId) or clear (null) the project of ONE report. `expectedVersion` is the report's version the caller saw. */
+export const SetLinkInputSchema = z.object({
+  id: z.number().int().positive(),
+  expectedVersion: z.number().int().min(1),
+  projectId: z.number().int().positive().nullable(),
+  idempotencyKey,
+});
+export type SetLinkInput = z.infer<typeof SetLinkInputSchema>;
+export interface SetLinkResult {
+  id: number;
+  projectId: number | null;
+  version: number;
+  replayed: boolean;
+}
+
+/** Link every unlinked report whose evidence identifies exactly one project (admin). `dryRun` only reports. */
+export const AutoLinkInputSchema = z.object({ dryRun: z.boolean(), idempotencyKey });
+export type AutoLinkInput = z.infer<typeof AutoLinkInputSchema>;
+export interface AutoLinkResult {
+  dryRun: boolean;
+  examined: number;
+  /** linked (or, in a dry run, linkable) */
+  linked: number;
+  /** more than one project fits: a person picks. At most 50 are listed. */
+  ambiguous: { count: number; samples: Array<{ id: number; year: number; laufendeNummer: string; candidates: number }> };
+  /** reason → number of reports left unlinked (no Projektnummer, no such project, station differs, …) */
+  unmatched: Record<string, number>;
+  replayed: boolean;
+}
+
+export interface LinkCandidate {
+  projectId: number;
+  projektnummer: string | null;
+  station: string | null;
+  projektbeschreibung: string | null;
+  projektstand: string | null;
+  bahnhofsmanagement: string | null;
+  /** both Projektnummer and station agree, or only the Projektnummer does */
+  evidence: "projektnummer+station" | "projektnummer";
+}
+export interface LinkCandidates {
+  verdict: "unique" | "ambiguous" | "unmatched";
+  /** why no automatic link (null for `unique`/`ambiguous`) */
+  reason: string | null;
+  candidates: LinkCandidate[];
 }

@@ -10,6 +10,8 @@ import { getDb, getPool, getRelayPool } from "../db";
 import { BookingService } from "../domain/bookingService";
 import { ChecklistService } from "../domain/checklistService";
 import { ProjectService } from "../domain/projectService";
+import { PruefberichtLinkService } from "../domain/pruefberichtLinkService";
+import { RegisterImportService } from "../domain/registerImportService";
 import type { RealtimePublisher, RealtimeSubscriber } from "../domain/ports";
 import { MysqlProjectStore } from "../infra/mysqlProjectStore";
 import { MysqlOutbox } from "../infra/mysqlOutbox";
@@ -24,6 +26,10 @@ export interface Services {
   projects: ProjectService;
   bookings: BookingService;
   checklists: ChecklistService;
+  /** Übersichtsliste import: preview and apply, built from ProjectService's own transitions */
+  registerImport: RegisterImportService;
+  /** ITK Prüfbericht ↔ project link */
+  pruefberichtLinks: PruefberichtLinkService;
   publisher: RealtimePublisher;
   subscriber: RealtimeSubscriber;
   relay: OutboxRelay;
@@ -75,6 +81,8 @@ export async function getServices(log: (msg: string, e?: unknown) => void = cons
   const svc = new ProjectService(store, relay.nudge);
   const bookings = new BookingService(store, relay.nudge);
   const checklists = new ChecklistService(store, svc, bookings, relay.nudge);
+  const registerImport = new RegisterImportService(store, svc);
+  const pruefberichtLinks = new PruefberichtLinkService(store);
 
   // Sampled gauges: cheap, and they make saturation visible before it hurts.
   const sampler = setInterval(async () => {
@@ -107,7 +115,7 @@ export async function getServices(log: (msg: string, e?: unknown) => void = cons
 
   relay.start();
   services = {
-    store, projects: svc, bookings, checklists, publisher: bus, subscriber: bus, relay, presence, pool, redisStatus,
+    store, projects: svc, bookings, checklists, registerImport, pruefberichtLinks, publisher: bus, subscriber: bus, relay, presence, pool, redisStatus,
     async shutdown() {
       clearInterval(sampler);
       clearInterval(sweeper);
