@@ -61,6 +61,16 @@ row goes to the planner as an explicit question (`ambiguous`, with `sourceRows` 
 row), and the import dialog shows the group as one card with the differing cells side by side and **Diese Zeile gilt**.
 Measured on the supplied file: 1408 rows → 1340 distinct identities and **24 groups (68 rows)** that need that decision.
 
+### Phases are registrations — AP is not EP — **DONE**
+
+`Projektstand` is the project's **phase** (AP, EP, VEP, FA, …). Each phase is its own registration with its own Prüfungen,
+Prüfer and Termine. The import therefore **never matches, holds against, or merges across phases**: an EP row next to an AP
+project is simply a new registration — no question, no "moved on" conflict, even when the description was reworded
+(`standsCompatible` in `shared/project-identity.ts`: stands are compatible only when equal, or when one side is blank — a blank
+cannot contradict a phase and is filled, never cleared). In the supplied file 125 of 1204 job cores span more than one phase;
+they are plain separate registrations. Tests: `register-plan.test.ts` ("another PHASE is another registration"),
+`registerImport.db.test.ts` ("AP and EP are separate registrations").
+
 ### Against the database (`planRegister`, pure, shared by preview / apply / inspector)
 
 | Result | Condition | Applied |
@@ -73,7 +83,7 @@ Measured on the supplied file: 1408 rows → 1340 distinct identities and **24 g
 | **skipped** | an administrator excluded exactly this row content earlier | never sent again; can be taken back |
 
 Evidence for "exactly one": a stored **source key** (below) → the project's own fields spell out the same `fullKey` → same
-`coreKey` with one record on each side (Projektstand/Termin moved on; their differences are overwrites, hence `conflict`).
+`coreKey` and the **same phase** with one record on each side (only e.g. the Termin differs; the difference is an overwrite, hence `conflict`).
 `Projektnummer` alone is never evidence. An existing project that *another* record of the same chunk matches exactly is
 "claimed" and does not make a sibling ambiguous; chunks keep a Projektnummer group together (`chunkRecords`) so this holds.
 
@@ -135,6 +145,14 @@ same Projektnummer **and** the same station (normalised) → `unique`; several �
 (no Projektnummer on the report / no such project / no station on the report / station differs). Projects carrying the number
 are offered as *suggestions* in the dialog — never linked on their own. A station alone never links.
 
+**Phase-aware (DONE).** A report that states its phase ("fachtechnische Prüfung EP/AP/VEP", or the legacy sheets' phase column) belongs to
+the project of **that** phase: among several projects at one station it picks the one whose Projektstand equals it
+(`byPhase`), and it is **never** linked to a project of another phase — not even when that is the only project at the station
+(`phase-passt-nicht`, shown with the projects as "andere Phase — kein Treffer"). Reports that state no phase
+("Abnahmeprüfung", "Gutachten", "Stellungnahme", "Planprüfung") are not narrowed: several projects stay `ambiguous`. A project whose
+stand is no single phase ("EP/AP", "FA", "Mieterumbau …", blank) can neither be picked by nor contradict a phase. Tests:
+`project-link.test.ts` ("phases"), `link-fixtures.test.ts`, `registerEdgeCases.db.test.ts`.
+
 * `pruefberichte.setLink` — one report, explicit choice (`manual`); needs an all-workspaces editor/admin and edit rights on the
   target; versioned (`expectedVersion` → CONFLICT), idempotent, one audit row (`projectId old → new`).
 * `pruefberichte.autoLink` — admin; `dryRun` first. Links only `unique` reports that have no link yet.
@@ -144,10 +162,11 @@ are offered as *suggestions* in the dialog — never linked on their own. A stat
 No project event is emitted for a link (reports are not part of the Project aggregate and carry no workspace); the project's
 version does not move. Clients re-read a project's reports when its detail opens or after a link change.
 
-Measured with `pnpm register:inspect … --itk …` on the supplied files (projection against the register as if imported):
-of 1226 Prüfberichte, 704 have no Projektnummer, 108 name a number no project carries, 212 name a number at another
-station; **106 would link automatically, 96 are ambiguous** (one station carries several registrations of the job). The
-rest stays visible as "nicht zugeordnet".
+Measured with `pnpm register:inspect … --itk …` on the supplied files (projection against the register as if imported, the
+24 undecided groups not yet resolved): of 1226 Prüfberichte, 704 have no Projektnummer, 108 name a number no project carries, 212
+name a number at another station, **14 state a phase that contradicts the station's project (not linked)**; **157 would link
+automatically, 31 are ambiguous** (one station carries several registrations and the report states no phase). Before the rule was
+phase-aware the same projection gave 106 / 96. The rest stays visible as "nicht zugeordnet".
 
 ## Where it shows
 
@@ -183,7 +202,6 @@ Each of these is shown in the import dialog or the link UI with the recommended 
 |---|---|---|---|
 | **Rows of the file with one identity, different content** (24 groups / 68 rows measured) | import dialog: one card per group, differing cells side by side | Pick the row the responsible person confirms ("Diese Zeile gilt"); the others are excluded for good. Changing a cell of an excluded row makes it a question again. | `skip` keys for the losers, `match` key for the winner |
 | **Status outside the vocabulary** (measured: `planungsbegleitend` 9×, `Protokoll erstellt` 7×, both TBQ) | import dialog: table *Status außerhalb des Vokabulars* with value × Gewerk × rows | Keep withheld (Prüfer and Datum are imported). Extending `REVIEW_STATUSES` is a decision of the data owners, made in code with a test — not in the dialog. | not remembered: a code change |
-| **Projektstand moved on (AP → EP), same Projektnummer/Station/Beschreibung** | import dialog: conflict card "Projektstand weitergeschrieben?" with the exact cells | *Fortschreiben* if it is the same undertaking that progressed; *Neue Anmeldung* if the phase is registered on its own; *ausschließen* if the file is wrong. | `match` key (either way) / `skip` key |
 | **Conflict: the file would replace a stored value** | import dialog: conflict card with `old → new` per cell | Replace only if the file is the better-kept source; otherwise exclude. *Offen lassen* writes nothing and asks again next time. | `skip` key if excluded |
 | **Ambiguous: edited project or second measure?** | import dialog: card with one selectable candidate per project and, for the chosen one, its exact cell changes | Map to the project if only the description was reworded; create a new project if it is a second measure. | `match` key / `skip` key |
 | **Prüfberichte without a Projektnummer** (704 of 1226 measured, plus 108 naming an unknown number and 212 at another station) | *Projektübersicht ITK*: banner with the counts per reason, filter "ohne Projektnummer"; the link dialog repeats the policy | Add the Projektnummer in the Prüfstelle's workbook and re-import (the link survives); until then link by hand. No rule that guesses is offered. | the link itself (audited) |
@@ -222,8 +240,9 @@ document tree), real-database tests (`server/domain/registerImport.db.test.ts`, 
 `server/routers.register.db.test.ts`), `server/mutationPlane.test.ts`, `server/domainSeparation.test.ts`, the server-mode browser
 proof, the inspector and a decision-by-decision import of the two real workbooks into a disposable database (nothing committed):
 1340 projects created, the same file again changes nothing (no events, no audit rows but the batch row), 24 groups resolved
-(24 winners created, 44 rows excluded) and then the file asks nothing; 106 of 1226 reports link automatically before the groups
-are decided, 105 after (the 24 winners add candidates; the numbers depend on which row wins).
+(24 winners created, 44 rows excluded) and then the file asks nothing; 157 of 1226 reports link automatically before the groups
+are decided, 152 after the (test) resolution (the 24 winners add candidates; the numbers depend on which row wins), and **no
+linked report contradicts its project's phase** (checked in SQL).
 
 **UNVERIFIED**: MySQL 8.4 (CI's engine — only MariaDB was available; the `mysql-version` gate says so); a production-sized
 import; the PDF *as rendered bytes* (the printed text is asserted on the document tree); the Redis-outage chaos step of the

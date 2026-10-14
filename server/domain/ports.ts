@@ -97,6 +97,9 @@ export interface PruefberichtLinkRow {
   laufendeNummer: string;
   projektnummer: string | null;
   bahnhofStrecke: string | null;
+  /** the phase the report states about itself (see shared/itk/project-link.ts reportPhase) */
+  taetigkeitsbereich: string | null;
+  phase: string | null;
   projectId: number | null;
   version: number;
 }

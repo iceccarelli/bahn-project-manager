@@ -38,14 +38,15 @@ const SKIP = <SelectItem value="skip">Dauerhaft ausschließen (wird gemerkt)</Se
 /** One conflict: a stored value would be replaced. */
 export function ConflictCard({ row, choice, onChoice }: { row: ReviewRow; choice: Choice | undefined; onChoice: (c: Choice) => void }) {
   const { plan, record } = row;
-  const progression = plan.basis === "core" && plan.changes.some((c) => c.key === "projektstand" || c.key === "terminProjektvorstellung");
+  const ownRegistration = plan.basis === "core"; // same phase, one record on each side: the only "second registration" case left
   return (
     <li className="rounded-lg border p-3 text-xs" data-testid="register-row-conflict">
       <div className="flex flex-wrap items-center gap-2">
-        <Badge variant="secondary" className="text-2xs">{progression ? "Projektstand weitergeschrieben?" : "Konflikt"}</Badge>
+        <Badge variant="secondary" className="text-2xs">Konflikt</Badge>
         <span className="font-medium">{record.fields.station ?? "—"}</span>
         <span className="text-muted-foreground">{record.fields.projektnummer ?? "ohne Projektnummer"} · Zeile {record.ref}</span>
-        <PolicyHint label="Konflikt" text={progression ? REGISTER_POLICY.progression : REGISTER_POLICY.conflict} />
+        <PolicyHint label="Konflikt" text={REGISTER_POLICY.conflict} />
+        <span className="text-muted-foreground">Phase {record.fields.projektstand ?? "—"}</span>
       </div>
       <p className="mt-1 line-clamp-2 text-muted-foreground">{record.fields.projektbeschreibung ?? "ohne Beschreibung"}</p>
       <div className="mt-2"><ChangeList changes={plan.changes} /></div>
@@ -54,8 +55,8 @@ export function ConflictCard({ row, choice, onChoice }: { row: ReviewRow; choice
           <SelectTrigger className="h-8 w-full text-xs sm:w-[34rem]" aria-label={`Entscheidung für Zeile ${record.ref}`}><SelectValue /></SelectTrigger>
           <SelectContent>
             {OPEN}
-            <SelectItem value="replace">{progression ? "Fortschreiben — Werte der Datei übernehmen" : "Werte der Datei übernehmen (ersetzt)"}</SelectItem>
-            {progression && <SelectItem value="new">Als neue Anmeldung anlegen — das vorhandene Projekt bleibt</SelectItem>}
+            <SelectItem value="replace">Werte der Datei übernehmen (ersetzt)</SelectItem>
+            {ownRegistration && <SelectItem value="new">Als eigene Anmeldung anlegen — das vorhandene Projekt bleibt</SelectItem>}
             {SKIP}
           </SelectContent>
         </Select>
@@ -75,6 +76,7 @@ export function AmbiguousCard({ row, choice, onChoice }: { row: ReviewRow; choic
         <span className="font-medium">{record.fields.station ?? "—"}</span>
         <span className="text-muted-foreground">{record.fields.projektnummer ?? "ohne Projektnummer"} · {record.fields.projektstand ?? "—"} · Zeile {record.ref}</span>
         <PolicyHint label="mehrdeutig" text={REGISTER_POLICY.ambiguous} />
+        <PolicyHint label="Phase" text={REGISTER_POLICY.phase} />
       </div>
       <p className="mt-1 line-clamp-2 text-muted-foreground">{record.fields.projektbeschreibung ?? "ohne Beschreibung"}</p>
       <p className="mt-1 text-muted-foreground">{plan.reason}</p>

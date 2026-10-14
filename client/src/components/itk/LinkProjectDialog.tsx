@@ -8,7 +8,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useLinkCandidates, useSetLink } from "@/hooks/useProjectLinks";
-import { LINK_POLICY } from "@shared/itk/project-link";
+import { PolicyHint } from "@/components/PolicyHint";
+import { LINK_POLICY, reportPhase } from "@shared/itk/project-link";
 import type { PruefberichtListRow } from "@shared/itk/pruefbericht-contract";
 
 const errorText = (e: unknown) => {
@@ -45,7 +46,8 @@ export function LinkProjectDialog({ report, open, onOpenChange, defaultProjectId
         <DialogHeader className="space-y-1 border-b p-5 pr-12 text-left">
           <DialogTitle className="text-lg font-bold">Prüfbericht {report.laufendeNummer} ({report.year}) zuordnen</DialogTitle>
           <DialogDescription>
-            {report.bahnhofStrecke ?? "ohne Bahnhof"} · Projektnummer {report.projektnummer ?? "—"}
+            {report.bahnhofStrecke ?? "ohne Bahnhof"} · Projektnummer {report.projektnummer ?? "—"} · {report.taetigkeitsbereich ?? "Tätigkeit ?"}
+            {reportPhase(report) ? ` → Phase ${reportPhase(report)}` : " (keine Phase genannt)"}
           </DialogDescription>
         </DialogHeader>
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
@@ -62,7 +64,7 @@ export function LinkProjectDialog({ report, open, onOpenChange, defaultProjectId
           )}
           {cands.isError && <Alert variant="destructive"><AlertTriangle aria-hidden /><AlertTitle>Projekte konnten nicht geladen werden</AlertTitle></Alert>}
           {data && data.verdict === "unique" && <p className="text-sm text-muted-foreground">Projektnummer und Bahnhof stimmen mit genau einem Projekt überein.</p>}
-          {data && data.verdict === "ambiguous" && <p className="text-sm text-muted-foreground">Mehrere Projekte tragen Projektnummer und Bahnhof dieses Prüfberichts — bitte eines wählen. {LINK_POLICY.ambiguous}</p>}
+          {data && data.verdict === "ambiguous" && <p className="text-sm text-muted-foreground">Mehrere Projekte tragen Projektnummer und Bahnhof dieses Prüfberichts — bitte eines wählen. {LINK_POLICY.ambiguous} <PolicyHint label="Phase" text={LINK_POLICY.phase} /></p>}
           {data && data.verdict === "unmatched" && (
             <Alert>
               <AlertTriangle aria-hidden />
@@ -78,7 +80,8 @@ export function LinkProjectDialog({ report, open, onOpenChange, defaultProjectId
                   <span className="min-w-0 space-y-0.5">
                     <span className="flex flex-wrap items-center gap-2 text-sm font-medium">
                       {c.station ?? "—"} <span className="text-muted-foreground">{c.projektnummer}</span>
-                      {c.evidence === "projektnummer+station" ? <Badge variant="secondary" className="text-2xs">Nummer + Bahnhof</Badge> : <Badge variant="outline" className="text-2xs">nur Nummer</Badge>}
+                      <Badge variant="outline" className="text-2xs" title="Projektstand = Phase">Phase {c.projektstand ?? "—"}</Badge>
+                      {c.evidence === "projektnummer+station" ? <Badge variant="secondary" className="text-2xs">Nummer + Bahnhof</Badge> : c.evidence === "projektnummer+station-andere-phase" ? <Badge variant="outline" className="text-2xs">andere Phase — kein Treffer</Badge> : <Badge variant="outline" className="text-2xs">nur Nummer</Badge>}
                     </span>
                     <span className="block truncate text-xs text-muted-foreground">{[c.projektstand, c.projektbeschreibung].filter(Boolean).join(" · ") || "ohne Beschreibung"}</span>
                   </span>

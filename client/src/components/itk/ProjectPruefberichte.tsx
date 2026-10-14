@@ -16,7 +16,7 @@ import { formatGerman } from "@shared/date";
  * Projektnummer, or detaching one. Rendered only where the server would answer: server mode, and a principal who may
  * see Prüfberichte (default-deny for workspace-limited principals).
  */
-export function ProjectPruefberichte({ projectId, projektnummer, station }: { projectId: number; projektnummer: string | null; station: string | null }) {
+export function ProjectPruefberichte({ projectId, projektnummer, station, projektstand }: { projectId: number; projektnummer: string | null; station: string | null; projektstand?: string | null }) {
   const access = useLinkAccess();
   const reports = useProjectPruefberichte(access.view ? projectId : null);
   const open = useOpenReportsFor(projektnummer, access.link);
@@ -81,14 +81,14 @@ export function ProjectPruefberichte({ projectId, projektnummer, station }: { pr
       {access.link && offer.length > 0 && (
         <div className="mt-3 rounded-lg border border-dashed p-3" data-testid="project-pruefberichte-offer">
           <p className="mb-2 text-xs text-muted-foreground">
-            Nicht zugeordnete Prüfberichte mit Projektnummer {projektnummer} — Bahnhof {station ?? "?"} prüfen, bevor zugeordnet wird:
+            Nicht zugeordnete Prüfberichte mit Projektnummer {projektnummer} — Bahnhof {station ?? "?"} und Phase {projektstand ?? "?"} prüfen (AP, EP und VEP sind verschiedene Anmeldungen), bevor zugeordnet wird:
           </p>
           <ul className="space-y-1">
             {offer.slice(0, 8).map((r) => (
               <li key={r.id} className="flex flex-wrap items-center gap-2 text-xs">
                 <span className="font-mono font-semibold">{r.laufendeNummer}</span>
                 <span className="text-muted-foreground">{r.year}</span>
-                <span className="min-w-0 truncate">{r.bahnhofStrecke ?? "ohne Bahnhof"}</span>
+                <span className="min-w-0 truncate">{r.bahnhofStrecke ?? "ohne Bahnhof"} · {r.taetigkeitsbereich ?? "Tätigkeit ?"}</span>
                 <Button variant="outline" size="sm" className="ml-auto h-7 gap-1 px-2 text-xs" onClick={() => setPicking(r)}>
                   <Plus className="h-3 w-3" aria-hidden /> Zuordnen …
                 </Button>

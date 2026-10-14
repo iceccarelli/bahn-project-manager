@@ -143,7 +143,7 @@ export interface LinkCandidate {
   projektstand: string | null;
   bahnhofsmanagement: string | null;
   /** both Projektnummer and station agree, or only the Projektnummer does */
-  evidence: "projektnummer+station" | "projektnummer";
+  evidence: "projektnummer+station" | "projektnummer+station-andere-phase" | "projektnummer";
 }
 export interface LinkCandidates {
   verdict: "unique" | "ambiguous" | "unmatched";

@@ -7,36 +7,44 @@ import { registerRow, registerSheet, type RowSpec } from "./testing";
 const recs = (rows: RowSpec[]) => parseRegisterWorkbook([registerSheet(rows.map(registerRow))]).records;
 const review = (records: ReturnType<typeof recs>, existing: ExistingProject[] = [], skips = new Set<string>()): ReviewRow[] =>
   planRegister(records, existing, new Map(), skips).map((plan, i) => ({ plan, record: records[i]!, chunk: 0 }));
-const stored = (id: number, r: ReturnType<typeof recs>[number], version = 4): ExistingProject => ({ id, version, fields: { ...r.fields }, reviews: JSON.parse(JSON.stringify(r.reviews)) });
+const stored2 = (id: number, r: ReturnType<typeof recs>[number], version = 4): ExistingProject => ({ id, version, fields: { ...r.fields }, reviews: JSON.parse(JSON.stringify(r.reviews)) });
 
 describe("buildApplyRows — what the administrator's choices ask the server to do", () => {
   it("defaults: add → create, unchanged/update → update at the planned version; open questions send nothing", () => {
     const [a, b, c] = recs([{ projektnummer: "G.1", station: "A" }, { projektnummer: "G.2", station: "B" }, { projektnummer: "G.3", station: "C", kommentar: "neu" }]);
-    const existing = [stored(1, a!), { ...stored(3, c!), fields: { ...c!.fields, kommentar: "alt" } }];
+    const existing = [stored2(1, a!), { ...stored2(3, c!), fields: { ...c!.fields, kommentar: "alt" } }];
     const { rows } = buildApplyRows(review([a!, b!, c!], existing), {});
     expect(rows.map((r) => [r.record.fields.station, r.action])).toEqual([["A", "update"], ["B", "create"]]); // C is a conflict: open
     expect(rows[0]).toMatchObject({ target: { projectId: 1, expectedVersion: 4 }, overwrite: false });
   });
 
-  it("conflict: replace → overwrite update; skip → recorded exclusion; new registration only when the match was a progression", () => {
+  it("conflict: replace → overwrite update; skip → recorded exclusion; 'new' only for a same-phase core match", () => {
+    const [stored] = recs([{ projektnummer: "G.1", stand: "AP", termin: 45_000 }]);
+    const [inc] = recs([{ projektnummer: "G.1", stand: "AP", termin: 45_100 }]);
+    const rv = review([inc!], [stored2(9, stored!)]);
+    expect(rv[0]!.plan).toMatchObject({ status: "conflict", basis: "core" });
+    expect(buildApplyRows(rv, { [inc!.ref]: "replace" }).rows[0]).toMatchObject({ action: "update", overwrite: true, target: { projectId: 9 } });
+    expect(buildApplyRows(rv, { [inc!.ref]: "skip" }).rows[0]).toMatchObject({ action: "skip" });
+    expect(buildApplyRows(rv, { [inc!.ref]: "new" }).rows[0]).toMatchObject({ action: "create", confirmed: true });
+    expect(buildApplyRows(rv, { [inc!.ref]: "open" }).rows).toEqual([]);
+    // a conflict that is NOT a core match cannot be turned into a new project by the client either
+    const [ex] = recs([{ projektnummer: "G.2", pl: "alt" }]);
+    const [inc2] = recs([{ projektnummer: "G.2", pl: "neu" }]);
+    expect(buildApplyRows(review([inc2!], [stored2(2, ex!)]), { [inc2!.ref]: "new" }).rows).toEqual([]);
+  });
+
+  it("another phase needs no decision at all: the EP row is simply a new registration next to the AP project", () => {
     const [ap] = recs([{ projektnummer: "G.1", stand: "AP" }]);
     const [ep] = recs([{ projektnummer: "G.1", stand: "EP", termin: 45_100 }]);
-    const rv = review([ep!], [stored(9, ap!)]);
-    expect(rv[0]!.plan).toMatchObject({ status: "conflict", basis: "core" });
-    expect(buildApplyRows(rv, { [ep!.ref]: "replace" }).rows[0]).toMatchObject({ action: "update", overwrite: true, target: { projectId: 9 } });
-    expect(buildApplyRows(rv, { [ep!.ref]: "skip" }).rows[0]).toMatchObject({ action: "skip" });
-    expect(buildApplyRows(rv, { [ep!.ref]: "new" }).rows[0]).toMatchObject({ action: "create", confirmed: true });
-    expect(buildApplyRows(rv, { [ep!.ref]: "open" }).rows).toEqual([]);
-    // a conflict that is NOT a progression cannot be turned into a new project by the client either
-    const [ex] = recs([{ projektnummer: "G.2", pl: "alt" }]);
-    const [inc] = recs([{ projektnummer: "G.2", pl: "neu" }]);
-    expect(buildApplyRows(review([inc!], [stored(2, ex!)]), { [inc!.ref]: "new" }).rows).toEqual([]);
+    const rv = review([ep!], [stored2(9, ap!)]);
+    expect(rv[0]!.plan.status).toBe("add");
+    expect(buildApplyRows(rv, {}).rows[0]).toMatchObject({ action: "create", confirmed: false });
   });
 
   it("ambiguous: a chosen candidate → confirmed overwrite update at the candidate's version; new → confirmed create; an unknown id → nothing", () => {
     const [old] = recs([{ projektnummer: "G.1", beschreibung: "Alt" }]);
     const [inc] = recs([{ projektnummer: "G.1", beschreibung: "Neu" }]);
-    const rv = review([inc!], [stored(5, old!, 7)]);
+    const rv = review([inc!], [stored2(5, old!, 7)]);
     expect(buildApplyRows(rv, { [inc!.ref]: 5 }).rows[0]).toMatchObject({ action: "update", confirmed: true, overwrite: true, target: { projectId: 5, expectedVersion: 7 } });
     expect(buildApplyRows(rv, { [inc!.ref]: "new" }).rows[0]).toMatchObject({ action: "create", confirmed: true });
     expect(buildApplyRows(rv, { [inc!.ref]: 99 }).rows).toEqual([]);

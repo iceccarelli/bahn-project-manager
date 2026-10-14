@@ -58,19 +58,38 @@ describe("planRegister — identity", () => {
     expect(plan[0]?.changes).toEqual([{ key: "projektbeschreibung", from: "Umbau Gleis 1 — Umfang erweitert", to: "Umbau Gleis 1", kind: "overwrite" }]);
   });
 
-  it("same number, station and description but another Projektstand: one candidate on each side → 'core' match whose differences are overwrites", () => {
-    const stored = rec({ projektnummer: "G.1", stand: "AP" });
-    const incoming = rec({ projektnummer: "G.1", stand: "EP" });
-    const p = planRegister([incoming], [existing(8, stored)])[0]!;
-    expect(p).toMatchObject({ status: "conflict", basis: "core", match: { projectId: 8 } });
-    expect(p.changes).toContainEqual({ key: "projektstand", from: "AP", to: "EP", kind: "overwrite" });
+  it("another PHASE is another registration: EP and AP of one job are never matched, held against each other, or merged", () => {
+    const ap = rec({ projektnummer: "G.1", stand: "AP" });
+    const ep = rec({ projektnummer: "G.1", stand: "EP", termin: 45_100 }, 10);
+    expect(planRegister([ep], [existing(8, ap)])[0]).toMatchObject({ status: "add", candidates: [] });
+    expect(planRegister([ap], [existing(9, ep)])[0]).toMatchObject({ status: "add", candidates: [] });
+    // …even when the description was reworded: still a phase of its own, not an "edited" project
+    const epReworded = rec({ projektnummer: "G.1", stand: "EP", beschreibung: "Anders formuliert" }, 11);
+    expect(planRegister([epReworded], [existing(8, ap)])[0]?.status).toBe("add");
+    // all phases are distinct, not only AP/EP
+    for (const stand of ["VEP", "FA", "EP/AP", "Mieterumbau"]) expect(planRegister([rec({ projektnummer: "G.1", stand })], [existing(8, ap)])[0]?.status).toBe("add");
   });
 
-  it("…but two registrations (AP and EP) of one job against one stored project are ambiguous, not a pair of updates", () => {
-    const stored = rec({ projektnummer: "G.1", stand: "VEP" });
-    const ap = rec({ projektnummer: "G.1", stand: "AP" });
-    const ep = rec({ projektnummer: "G.1", stand: "EP" }, 10);
-    const plan = planRegister([ap, ep], [existing(8, stored)]);
+  it("same phase, same number/station/description, one record on each side, only the Termin differs → 'core' match whose difference is an overwrite", () => {
+    const stored = rec({ projektnummer: "G.1", stand: "AP", termin: 45_000 });
+    const incoming = rec({ projektnummer: "G.1", stand: "AP", termin: 45_100 });
+    const p = planRegister([incoming], [existing(8, stored)])[0]!;
+    expect(p).toMatchObject({ status: "conflict", basis: "core", match: { projectId: 8 } });
+    expect(p.changes).toEqual([{ key: "terminProjektvorstellung", from: "2023-03-15", to: "2023-06-23", kind: "overwrite" }]);
+  });
+
+  it("a blank Projektstand on either side cannot contradict a phase: still the same registration (the blank is filled, never cleared)", () => {
+    const stored = rec({ projektnummer: "G.1", stand: null });
+    const incoming = rec({ projektnummer: "G.1", stand: "EP" });
+    expect(planRegister([incoming], [existing(8, stored)])[0]).toMatchObject({ status: "update", basis: "core", changes: [{ key: "projektstand", from: null, to: "EP", kind: "fill" }] });
+    expect(planRegister([rec({ projektnummer: "G.1", stand: null })], [existing(9, rec({ projektnummer: "G.1", stand: "AP" }))])[0]).toMatchObject({ status: "unchanged", basis: "core" });
+  });
+
+  it("two registrations of ONE phase (different Termine) against one stored project are ambiguous, not a pair of updates", () => {
+    const stored = rec({ projektnummer: "G.1", stand: "AP", termin: 45_000 });
+    const a = rec({ projektnummer: "G.1", stand: "AP", termin: 45_200 });
+    const b = rec({ projektnummer: "G.1", stand: "AP", termin: 45_300 }, 10);
+    const plan = planRegister([a, b], [existing(8, stored)]);
     expect(plan.map((p) => p.status)).toEqual(["ambiguous", "ambiguous"]);
     expect(plan[0]?.candidates.map((c) => c.projectId)).toEqual([8]);
   });

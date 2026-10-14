@@ -304,7 +304,7 @@ function ProjectLinkedReports({ project }: { project: Project | null }) {
   return (
     <>
       <Separator className="my-5" />
-      <ProjectPruefberichte projectId={project.id} projektnummer={project.projektnummer ?? null} station={project.station ?? null} />
+      <ProjectPruefberichte projectId={project.id} projektnummer={project.projektnummer ?? null} station={project.station ?? null} projektstand={project.projektstand ?? null} />
     </>
   );
 }

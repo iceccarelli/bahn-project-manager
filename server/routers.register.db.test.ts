@@ -100,7 +100,7 @@ describe.skipIf(!hasTestDb)("register import + report links over tRPC (real DB)"
       const list = await as(admin).projects.list({ limit: 50, sort: "id", dir: "asc", expand: [], includeTotal: false } as never);
       kassel = list.items.find((p) => p.station === "Kassel Hbf")!.id;
       mainz = list.items.find((p) => p.station === "Mainz Hbf")!.id;
-      const batch = importWorkbookSheets([{ name: "2026", rows: [[...H2020], row2020("26.001", { projektnummer: "G.1", bahnhof: "Kassel Hbf" })] }]).records;
+      const batch = importWorkbookSheets([{ name: "2026", rows: [[...H2020], row2020("26.001", { projektnummer: "G.1", bahnhof: "Kassel Hbf", taetigkeit: "Abnahmeprüfung" })] }]).records;
       await as(admin).pruefberichte.import({ source: "t.xlsx", part: { index: 1, total: 1 }, records: batch });
       const rows = (await as(admin).pruefberichte.list({ limit: 10 })).rows;
       pbId = rows[0]!.id; pbVersion = rows[0]!.version;

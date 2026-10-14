@@ -153,7 +153,7 @@ export class RegisterImportService {
 
         if (row.action === "create") {
           // "add" on the evidence, or an explicit "this is a new registration/project" for a row the evidence left open:
-          // ambiguous, or the same job whose Projektstand/Termin moved on (a core match held as a conflict)
+          // ambiguous, or a same-phase core match held as a conflict (e.g. a second Termin)
           const newRegistrationAllowed = row.confirmed && (planned.status === "ambiguous" || (planned.status === "conflict" && planned.basis === "core"));
           if (planned.status !== "add" && !newRegistrationAllowed) {
             done({ ref: rec.ref, outcome: "exists", reason: planned.reason ?? "Ein Projekt mit dieser Identität existiert inzwischen" });

@@ -274,35 +274,49 @@ describe.skipIf(!hasTestDb)("Übersichtsliste import (real DB)", () => {
     });
 
     it("a request that acts on only SOME rows of a chunk is judged in the context of the others (an already-accounted-for project stays accounted for)", async () => {
-      const [ap, epA, epB] = planning([
-        { projektnummer: "G.X9", station: "Xi", beschreibung: "Kontext", stand: "AP" },
-        { projektnummer: "G.X9", station: "Xi", beschreibung: "Kontext", stand: "EP", termin: 45_300, kommentar: "A" },
-        { projektnummer: "G.X9", station: "Xi", beschreibung: "Kontext", stand: "EP", termin: 45_300, kommentar: "B" },
+      const [ap, winner, loser] = planning([
+        { projektnummer: "G.X9", station: "Xi", beschreibung: "Kontext", stand: "AP", termin: 45_000 },
+        { projektnummer: "G.X9", station: "Xi", beschreibung: "Kontext", stand: "AP", termin: 45_300, kommentar: "A" },
+        { projektnummer: "G.X9", station: "Xi", beschreibung: "Kontext", stand: "AP", termin: 45_300, kommentar: "B" },
       ]) as [RegisterRecord, RegisterRecord, RegisterRecord];
-      await runImport([ap]); // the AP registration is a project now
-      // EP A wins over EP B. Alone, EP A looks like the AP project moved on (a held conflict); with the AP row as context it is a new registration.
-      const alone = (await imp.preview(admin, { records: [epA] })).rows[0]!;
-      expect(alone.status).toBe("conflict");
+      await runImport([ap]); // the first AP registration is a project now
+      // Alone, the winner (same phase, other Termin) looks like that project's edit (a held conflict); with the first row as
+      // context that project is accounted for, and the winner is a registration of its own.
+      expect((await imp.preview(admin, { records: [winner] })).rows[0]!.status).toBe("conflict");
       const ctxRows = [{ ref: ap.ref, projektnummer: ap.fields.projektnummer, station: ap.fields.station, projektbeschreibung: ap.fields.projektbeschreibung, projektstand: ap.fields.projektstand, terminProjektvorstellung: ap.fields.terminProjektvorstellung }];
-      const withContext = (await imp.preview(admin, { records: [epA], context: ctxRows })).rows[0]!;
-      expect(withContext.status).toBe("add");
+      expect((await imp.preview(admin, { records: [winner], context: ctxRows })).rows[0]!.status).toBe("add");
       const res = await imp.apply(admin, { source: "t", part: { index: 1, total: 1 }, idempotencyKey: key(), context: ctxRows, rows: [
-        { record: epB, action: "skip", overwrite: false, confirmed: false },
-        { record: epA, action: "create", overwrite: false, confirmed: false },
+        { record: loser, action: "skip", overwrite: false, confirmed: false },
+        { record: winner, action: "create", overwrite: false, confirmed: false },
       ] }, ctx());
       expect(res.counts).toMatchObject({ created: 1, skipped: 1 });
       expect(await count("projects", "projektnummer='G.X9'")).toBe(2);
     });
 
-    it("a project's moved-on registration (same job, AP → EP) can be taken as a NEW registration; the old project stays", async () => {
-      await runImport(parse([{ projektnummer: "G.8", station: "Nu", beschreibung: "Fortschritt", stand: "AP" }]));
-      const [ep] = parse([{ projektnummer: "G.8", station: "Nu", beschreibung: "Fortschritt", stand: "EP", termin: 45_200 }]) as [RegisterRecord];
+    it("AP and EP are separate registrations: the EP row is simply new next to the AP project — no question, no merge — and stays so on re-import", async () => {
+      await runImport(parse([{ projektnummer: "G.8", station: "Nu", beschreibung: "Phasen", stand: "AP" }]));
+      const [ep] = parse([{ projektnummer: "G.8", station: "Nu", beschreibung: "Phasen", stand: "EP", termin: 45_200 }]) as [RegisterRecord];
       const plan = (await imp.preview(admin, { records: [ep] })).rows[0]!;
-      expect(plan).toMatchObject({ status: "conflict", basis: "core" });
-      expect((await decide([ep], "create")).counts).toMatchObject({ exists: 1, created: 0 }); // not without the explicit statement
-      expect((await decide([ep], "create", true)).counts).toMatchObject({ created: 1 });
+      expect(plan).toMatchObject({ status: "add", candidates: [] });
+      expect((await runImport([ep])).totals).toMatchObject({ created: 1, updated: 0, held: 0 });
       expect(await count("projects", "projektnummer='G.8'")).toBe(2);
+      expect((await q<{ projektstand: string }>("SELECT projektstand FROM projects WHERE projektnummer='G.8' ORDER BY projektstand")).map((r) => r.projektstand)).toEqual(["AP", "EP"]);
       expect(await statusOf([ep])).toEqual(["unchanged"]);
+      // each phase has its own reviews: the EP review does not touch the AP project
+      const [apRow] = parse([{ projektnummer: "G.8", station: "Nu", beschreibung: "Phasen", stand: "AP", reviews: { ITK: ["offen", "Pia", 45_000] } }]) as [RegisterRecord];
+      const apPlan = (await imp.preview(admin, { records: [apRow] })).rows[0]!;
+      expect(["update", "conflict"]).toContain(apPlan.status); // matched to the AP project (its ITK review would change), never to the EP one
+      expect(apPlan.match?.projectId).toBe((await q<{ id: number }>("SELECT id FROM projects WHERE projektnummer='G.8' AND projektstand='AP'"))[0]!.id);
+    });
+
+    it("a second registration of the SAME phase (another Termin) is a held conflict; 'own registration' creates it and it is remembered", async () => {
+      await runImport(parse([{ projektnummer: "G.8b", station: "Nu", beschreibung: "Zweiter Termin", stand: "AP", termin: 45_000 }]));
+      const [second] = parse([{ projektnummer: "G.8b", station: "Nu", beschreibung: "Zweiter Termin", stand: "AP", termin: 45_300 }]) as [RegisterRecord];
+      expect((await imp.preview(admin, { records: [second] })).rows[0]).toMatchObject({ status: "conflict", basis: "core" });
+      expect((await decide([second], "create")).counts).toMatchObject({ exists: 1, created: 0 }); // not without the explicit statement
+      expect((await decide([second], "create", true)).counts).toMatchObject({ created: 1 });
+      expect(await count("projects", "projektnummer='G.8b'")).toBe(2);
+      expect(await statusOf([second])).toEqual(["unchanged"]);
     });
   });
 
@@ -352,15 +366,19 @@ describe.skipIf(!hasTestDb)("Übersichtsliste import (real DB)", () => {
 
   describe("Prüfbericht links", () => {
     let alphaAP: number, alphaEP: number, beta: number, delta: number;
+    // "Abnahmeprüfung" states no phase; "fachtechnische Prüfung EP" does (shared/itk/project-link.ts reportPhase)
+    const NO_PHASE = "Abnahmeprüfung";
     const reports = importWorkbookSheets([{
       name: "2026",
       rows: [[...H2020],
-        row2020("26.001", { projektnummer: "G.2", bahnhof: "Delta" }),          // unique: one project with number + station
-        row2020("26.002", { projektnummer: "G.1", bahnhof: "Alpha" }),          // ambiguous: Alpha has two registrations
-        row2020("26.003", { projektnummer: "G.1", bahnhof: "Beta" }),           // unique
-        row2020("26.004", { projektnummer: "G.1", bahnhof: "Gamma-Stadt" }),    // number known, station differs → suggestions only
-        row2020("26.005", { projektnummer: null, bahnhof: "Alpha" }),           // no number
-        row2020("26.006", { projektnummer: "G.404", bahnhof: "Alpha" }),        // no such project
+        row2020("26.001", { projektnummer: "G.2", bahnhof: "Delta", taetigkeit: NO_PHASE }),                                  // unique: one project with number + station
+        row2020("26.002", { projektnummer: "G.1", bahnhof: "Alpha", taetigkeit: NO_PHASE }),                                  // ambiguous: Alpha has an AP and an EP registration, no phase stated
+        row2020("26.003", { projektnummer: "G.1", bahnhof: "Beta", taetigkeit: NO_PHASE }),                                   // unique
+        row2020("26.004", { projektnummer: "G.1", bahnhof: "Gamma-Stadt", taetigkeit: NO_PHASE }),                            // number known, station differs → suggestions only
+        row2020("26.005", { projektnummer: null, bahnhof: "Alpha", taetigkeit: NO_PHASE }),                                   // no number
+        row2020("26.006", { projektnummer: "G.404", bahnhof: "Alpha", taetigkeit: NO_PHASE }),                                // no such project
+        row2020("26.007", { projektnummer: "G.1", bahnhof: "Alpha", taetigkeit: "fachtechnische Prüfung EP" }),               // states EP → the EP registration of Alpha, never the AP one
+        row2020("26.008", { projektnummer: "G.2", bahnhof: "Delta", taetigkeit: "fachtechnische Prüfung EP" }),               // states EP, but Delta's only project is AP → not linked
       ],
     }]).records;
 
@@ -385,20 +403,22 @@ describe.skipIf(!hasTestDb)("Übersichtsliste import (real DB)", () => {
 
     it("dry run reports what would be linked and writes nothing", async () => {
       const r = await links.autoLink(admin, { dryRun: true, idempotencyKey: key() }, ctx());
-      expect(r).toMatchObject({ dryRun: true, linked: 2, ambiguous: { count: 1 } });
+      expect(r).toMatchObject({ dryRun: true, linked: 3, ambiguous: { count: 1 } });
       // 26.006 (no such number) and 25.900 (its project was deleted above) both have an unknown Projektnummer
-      expect(r.unmatched).toEqual({ "station-passt-nicht": 1, "keine-projektnummer": 1, "projektnummer-unbekannt": 2 });
+      expect(r.unmatched).toEqual({ "station-passt-nicht": 1, "keine-projektnummer": 1, "projektnummer-unbekannt": 2, "phase-passt-nicht": 1 });
       expect(await count("itk_pruefberichte", "projectId IS NOT NULL")).toBe(0);
     });
 
     it("auto-link links exactly the unique ones, audits each, and leaves ambiguous and unmatched reports alone", async () => {
       const a0 = await count("audit_log", "entityType='pruefbericht' AND field='projectId'");
       const r = await links.autoLink(admin, { dryRun: false, idempotencyKey: key() }, ctx());
-      expect(r).toMatchObject({ linked: 2, examined: 7 });
+      expect(r).toMatchObject({ linked: 3, examined: 9 });
       expect(await pbOf("26.001")).toMatchObject({ projectId: delta, projectLinkSource: "auto", version: 2 });
       expect(await pbOf("26.003")).toMatchObject({ projectId: beta, projectLinkSource: "auto" });
-      for (const nr of ["26.002", "26.004", "26.005", "26.006"]) expect((await pbOf(nr)).projectId).toBeNull();
-      expect(await count("audit_log", "entityType='pruefbericht' AND field='projectId'")).toBe(a0 + 2);
+      // the report that states EP goes to Alpha's EP registration — and only that one
+      expect(await pbOf("26.007")).toMatchObject({ projectId: alphaEP, projectLinkSource: "auto" });
+      for (const nr of ["26.002", "26.004", "26.005", "26.006", "26.008"]) expect((await pbOf(nr)).projectId).toBeNull();
+      expect(await count("audit_log", "entityType='pruefbericht' AND field='projectId'")).toBe(a0 + 3);
     });
 
     it("running auto-link again changes nothing (idempotent), and a replayed key returns the stored answer", async () => {
@@ -413,7 +433,7 @@ describe.skipIf(!hasTestDb)("Übersichtsliste import (real DB)", () => {
       const res = await links.setLink(markus, { id: pb.id, expectedVersion: pb.version, projectId: alphaEP, idempotencyKey: key() }, ctx());
       expect(res).toMatchObject({ projectId: alphaEP, version: pb.version + 1, replayed: false });
       expect(await pbOf("26.002")).toMatchObject({ projectId: alphaEP, projectLinkSource: "manual" });
-      expect((await pruefberichteOfProject(t.pool, alphaEP)).map((r) => r.laufendeNummer)).toEqual(["26.002"]);
+      expect((await pruefberichteOfProject(t.pool, alphaEP)).map((r) => r.laufendeNummer)).toEqual(["26.007", "26.002"]); // 26.007 states EP and was linked automatically
       expect((await pruefberichteOfProject(t.pool, alphaAP))).toEqual([]);
       const listed = (await listPruefberichte(t.pool, { limit: 50, q: "26.002" })).rows[0]!;
       expect(listed).toMatchObject({ projectId: alphaEP, project: { projektnummer: "G.1", station: "Alpha" } });

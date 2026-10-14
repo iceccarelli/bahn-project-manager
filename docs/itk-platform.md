@@ -55,7 +55,8 @@ re-import, dates intact. What the real file taught us (all handled in `shared/it
 
 The relationship the platform's two records lacked is now a column: `itk_pruefberichte.projectId` (nullable; one project, many
 reports; a report may stay unlinked), written only by `PruefberichtLinkService` (versioned, idempotent, one audit row per change),
-never by the workbook import. The evidence rule is *same Projektnummer **and** same station, exactly one project* — anything less
+never by the workbook import. The evidence rule is *same Projektnummer **and** same station, exactly one project* — and, since AP, EP and VEP are different
+registrations, a report that states its phase goes to the project of that phase and never to another phase's — anything less
 is a suggestion a person confirms (`shared/itk/project-link.ts`; measured on the supplied workbooks in the new doc). The links
 show where they belong:
 

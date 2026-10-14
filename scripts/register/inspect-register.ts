@@ -58,7 +58,7 @@ const sheetNotes = report.ignoredSheets.map((n) => {
 let link: { unique: number; ambiguous: number; unmatched: Record<string, number>; reports: number } | null = null;
 if (itkFile) {
   const itk = importWorkbookSheets(sheetsFromWorkbook(XLSX, XLSX.read(fs.readFileSync(itkFile), { type: "buffer" })));
-  const byPn = indexProjects(source.accepted.map((r) => ({ id: r.ref, projektnummer: r.fields.projektnummer, station: r.fields.station })));
+  const byPn = indexProjects(source.accepted.map((r) => ({ id: r.ref, projektnummer: r.fields.projektnummer, station: r.fields.station, projektstand: r.fields.projektstand })));
   const tally = { unique: 0, ambiguous: 0, unmatched: {} as Record<string, number>, reports: itk.records.length };
   for (const pb of itk.records) {
     const v = matchPruefbericht(pb, byPn);

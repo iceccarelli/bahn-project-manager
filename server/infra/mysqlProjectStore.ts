@@ -216,10 +216,10 @@ async function loadRegisterCandidates(x: Executor, source: string, lookup: Regis
 }
 
 type RawRows<T> = [T[], unknown];
-const PB_LINK_COLUMNS = "id, `year`, laufendeNummer, projektnummer, bahnhofStrecke, projectId, version";
+const PB_LINK_COLUMNS = "id, `year`, laufendeNummer, projektnummer, bahnhofStrecke, taetigkeitsbereich, `phase`, projectId, version";
 const toLinkRow = (r: Record<string, unknown>): PruefberichtLinkRow => ({
   id: Number(r.id), year: Number(r.year), laufendeNummer: String(r.laufendeNummer), projektnummer: (r.projektnummer as string | null) ?? null,
-  bahnhofStrecke: (r.bahnhofStrecke as string | null) ?? null, projectId: r.projectId === null || r.projectId === undefined ? null : Number(r.projectId), version: Number(r.version),
+  bahnhofStrecke: (r.bahnhofStrecke as string | null) ?? null, taetigkeitsbereich: (r.taetigkeitsbereich as string | null) ?? null, phase: (r.phase as string | null) ?? null, projectId: r.projectId === null || r.projectId === undefined ? null : Number(r.projectId), version: Number(r.version),
 });
 
 function txAdapter(x: Executor): ProjectTx {
@@ -250,10 +250,10 @@ function txAdapter(x: Executor): ProjectTx {
       return rows.map(toLinkRow);
     },
     async projectsForLinking(): Promise<LinkProject[]> {
-      return x.select({ id: projects.id, projektnummer: projects.projektnummer, station: projects.station }).from(projects).where(sql`${projects.projektnummer} IS NOT NULL AND TRIM(${projects.projektnummer}) <> ''`);
+      return x.select({ id: projects.id, projektnummer: projects.projektnummer, station: projects.station, projektstand: projects.projektstand }).from(projects).where(sql`${projects.projektnummer} IS NOT NULL AND TRIM(${projects.projektnummer}) <> ''`);
     },
     async unlinkPruefberichteOf(projectId) {
-      const [rows] = (await x.execute(sql`SELECT id, \`year\`, laufendeNummer, projektnummer, bahnhofStrecke, projectId, version FROM itk_pruefberichte WHERE projectId = ${projectId} FOR UPDATE`)) as unknown as RawRows<Record<string, unknown>>;
+      const [rows] = (await x.execute(sql`SELECT id, \`year\`, laufendeNummer, projektnummer, bahnhofStrecke, taetigkeitsbereich, \`phase\`, projectId, version FROM itk_pruefberichte WHERE projectId = ${projectId} FOR UPDATE`)) as unknown as RawRows<Record<string, unknown>>;
       if (rows.length) await x.execute(sql`UPDATE itk_pruefberichte SET projectId = NULL, projectLinkSource = NULL, projectLinkedAt = NULL, version = version + 1 WHERE projectId = ${projectId}`);
       return rows.map(toLinkRow);
     },

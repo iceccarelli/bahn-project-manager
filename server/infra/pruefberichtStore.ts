@@ -154,24 +154,25 @@ export async function pruefberichteOfProject(pool: Pool, projectId: number): Pro
  * (shared/itk/project-link.ts). Suggestions for a person to choose from — only `unique` is ever applied automatically.
  */
 export async function linkCandidatesOf(pool: Pool, id: number): Promise<LinkCandidates | null> {
-  const [found] = (await pool.query("SELECT projektnummer, bahnhofStrecke FROM itk_pruefberichte WHERE id = ?", [id])) as unknown as [Array<{ projektnummer: string | null; bahnhofStrecke: string | null }>];
+  const [found] = (await pool.query("SELECT projektnummer, bahnhofStrecke, taetigkeitsbereich, `phase` FROM itk_pruefberichte WHERE id = ?", [id])) as unknown as [Array<{ projektnummer: string | null; bahnhofStrecke: string | null; taetigkeitsbereich: string | null; phase: string | null }>];
   const pb = found[0];
   if (!pb) return null;
   const pn = normProjektnummer(pb.projektnummer);
   if (!pn) return { verdict: "unmatched", reason: UNMATCHED_TEXT["keine-projektnummer"], candidates: [] };
   const [rows] = (await pool.query(
-    "SELECT id, projektnummer, station, projektbeschreibung, projektstand, bahnhofsmanagement FROM projects WHERE UPPER(REPLACE(projektnummer, ' ', '')) = ? ORDER BY station, id LIMIT 100",
+    "SELECT id, projektnummer, station, projektbeschreibung, projektstand, bahnhofsmanagement FROM projects WHERE UPPER(REPLACE(projektnummer, ' ', '')) = ? ORDER BY station, projektstand, id LIMIT 100",
     [pn],
   )) as unknown as [Array<{ id: number; projektnummer: string | null; station: string | null; projektbeschreibung: string | null; projektstand: string | null; bahnhofsmanagement: string | null }>];
-  const verdict = matchPruefbericht(pb, indexProjects(rows.map((r) => ({ id: r.id, projektnummer: r.projektnummer, station: r.station }))));
+  const verdict = matchPruefbericht(pb, indexProjects(rows.map((r) => ({ id: r.id, projektnummer: r.projektnummer, station: r.station, projektstand: r.projektstand }))));
   const stationOk = new Set(verdict.status === "unique" ? [verdict.projectId] : verdict.status === "ambiguous" ? verdict.candidateIds : []);
+  const stationOnly = new Set(verdict.status === "unmatched" && verdict.reason === "phase-passt-nicht" ? verdict.candidateIds : []);
   return {
     verdict: verdict.status,
     reason: verdict.status === "unmatched" ? UNMATCHED_TEXT[verdict.reason] : null,
     candidates: rows.map((r) => ({
       projectId: r.id, projektnummer: r.projektnummer, station: r.station, projektbeschreibung: r.projektbeschreibung?.slice(0, 300) ?? null,
       projektstand: r.projektstand, bahnhofsmanagement: r.bahnhofsmanagement,
-      evidence: stationOk.has(r.id) ? ("projektnummer+station" as const) : ("projektnummer" as const),
+      evidence: stationOk.has(r.id) ? ("projektnummer+station" as const) : stationOnly.has(r.id) ? ("projektnummer+station-andere-phase" as const) : ("projektnummer" as const),
     })),
   };
 }
@@ -179,8 +180,8 @@ export async function linkCandidatesOf(pool: Pool, id: number): Promise<LinkCand
 /** How many reports are linked and why the others are not — the same evidence rule the automatic link uses, read-only. */
 export async function linkSummary(pool: Pool): Promise<LinkSummary> {
   const [[count]] = (await pool.query("SELECT COUNT(*) total, SUM(projectId IS NOT NULL) linked FROM itk_pruefberichte")) as unknown as [Array<{ total: number; linked: number | null }>];
-  const [open] = (await pool.query("SELECT projektnummer, bahnhofStrecke FROM itk_pruefberichte WHERE projectId IS NULL")) as unknown as [Array<{ projektnummer: string | null; bahnhofStrecke: string | null }>];
-  const [projects] = (await pool.query("SELECT id, projektnummer, station FROM projects WHERE projektnummer IS NOT NULL AND TRIM(projektnummer) <> ''")) as unknown as [Array<{ id: number; projektnummer: string | null; station: string | null }>];
+  const [open] = (await pool.query("SELECT projektnummer, bahnhofStrecke, taetigkeitsbereich, `phase` FROM itk_pruefberichte WHERE projectId IS NULL")) as unknown as [Array<{ projektnummer: string | null; bahnhofStrecke: string | null; taetigkeitsbereich: string | null; phase: string | null }>];
+  const [projects] = (await pool.query("SELECT id, projektnummer, station, projektstand FROM projects WHERE projektnummer IS NOT NULL AND TRIM(projektnummer) <> ''")) as unknown as [Array<{ id: number; projektnummer: string | null; station: string | null; projektstand: string | null }>];
   const byPn = indexProjects(projects);
   const out: LinkSummary = { total: Number(count?.total ?? 0), linked: Number(count?.linked ?? 0), open: open.length, ambiguous: 0, unmatched: {} };
   for (const r of open) {

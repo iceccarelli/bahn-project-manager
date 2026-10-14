@@ -102,29 +102,39 @@ describe.skipIf(!hasTestDb)("edge cases through the whole path (real DB)", () =>
 
     beforeAll(async () => { await importPruefberichte(t.pool, { source: "edge.xlsx", part: { index: 1, total: 1 }, records: reports }, { name: "t" }); });
 
-    it("automatic linking links exactly the evidence-unique ones; every other report stays open for a stated reason", async () => {
+    it("automatic linking links exactly the evidence-unique ones — the stated phase picks the project of that phase — every other report stays open for a stated reason", async () => {
       const dry = await links.autoLink(admin, { dryRun: true, idempotencyKey: key() }, ctx());
-      expect(dry.linked).toBe(3); // 25.001 (qualifier), 25.002 (Hbf), 25.008 (odd Technik, still unique)
+      // 25.001 (qualifier), 25.002 (Hbf), 25.008 (odd Technik), 25.009 (states EP), 25.011 (states AP), 22.001 (states EP)
+      expect(dry.linked).toBe(6);
       const res = await links.autoLink(admin, { dryRun: false, idempotencyKey: key() }, ctx());
-      expect(res.linked).toBe(3);
+      expect(res.linked).toBe(6);
+      const projectOf = async (nr: string) => (await q<{ projektstand: string; station: string }>("SELECT p.projektstand, p.station FROM itk_pruefberichte r JOIN projects p ON p.id=r.projectId WHERE r.laufendeNummer=?", [nr]))[0];
+      expect(await projectOf("25.009")).toEqual({ projektstand: "EP", station: "Alpha" });
+      expect(await projectOf("25.011")).toEqual({ projektstand: "AP", station: "Alpha" });
+      expect(await projectOf("22.001")).toEqual({ projektstand: "EP", station: "Beispieldorf" });
+      // the EP report of a station whose only project is AP is NOT linked to it
+      expect((await q<{ projectId: number | null }>("SELECT projectId FROM itk_pruefberichte WHERE laufendeNummer='25.012'"))[0]!.projectId).toBeNull();
       const summary = await linkSummary(t.pool);
-      expect(summary).toMatchObject({ total: reports.length, linked: 3, open: reports.length - 3 });
-      expect(summary.ambiguous).toBe(2); // 25.003 (Alpha AP/EP) and 22.001 (Beispieldorf AP/EP)
-      expect(summary.unmatched).toMatchObject({ "keine-projektnummer": 6, "station-passt-nicht": 1, "projektnummer-unbekannt": 1 }); // 6 = 25.005, 25.006, both 25.010, and the two legacy-sheet reports (those sheets have no Projektnummer column)
-      expect(await count("itk_pruefberichte", "projectId IS NOT NULL")).toBe(3);
+      expect(summary).toMatchObject({ total: reports.length, linked: 6, open: reports.length - 6 });
+      expect(summary.ambiguous).toBe(1); // 25.003: Alpha has an AP and an EP project and the report states no phase
+      // 6 = 25.005, 25.006, both 25.010, and the two legacy-sheet reports (those sheets have no Projektnummer column)
+      expect(summary.unmatched).toMatchObject({ "keine-projektnummer": 6, "station-passt-nicht": 1, "projektnummer-unbekannt": 1, "phase-passt-nicht": 1 });
+      expect(await count("itk_pruefberichte", "projectId IS NOT NULL")).toBe(6);
     });
 
     it("Abnahme population after linking: none → one → must choose, with the right number and the derived code each time", async () => {
       const alphaEP = await projectId("Alpha", "EP");
       const read = async () => (await pruefberichteOfProject(t.pool, alphaEP));
       const ref = async (technik: "ZIM" | "Video") => protocolReference(selectReport(eligibleReports(technik, await read()), null));
-      expect(await read()).toEqual([]);
+      // Alpha's EP project already holds 25.009 (Video, linked by its stated phase): ZIM has nothing yet, Video exactly one
+      expect((await read()).map((r) => r.laufendeNummer)).toEqual(["25.009"]);
       expect(await ref("ZIM")).toBeNull(); // none: no reference, no block
+      expect(await ref("Video")).toEqual({ nummer: "25.009 (2025)", pdfCode: "P25.009 - Alpha" });
 
       const a = await pbId("25.003");
       await links.setLink(admin, { id: a.id, expectedVersion: a.version, projectId: alphaEP, idempotencyKey: key() }, ctx());
-      expect(await ref("ZIM")).toEqual({ nummer: "25.003 (2025)", pdfCode: "P25.003 - Alpha" }); // one: used
-      expect(await ref("Video")).toBeNull(); // another Technik is not offered for this Abnahme
+      expect(await ref("ZIM")).toEqual({ nummer: "25.003 (2025)", pdfCode: "A25.003 - Alpha" }); // one: used (Abnahmeprüfung → prefix A)
+      expect((await ref("Video"))?.nummer).toBe("25.009 (2025)"); // another Technik's report is not offered for this Abnahme
 
       const b = await pbId("25.004");
       await links.setLink(admin, { id: b.id, expectedVersion: b.version, projectId: alphaEP, idempotencyKey: key() }, ctx());

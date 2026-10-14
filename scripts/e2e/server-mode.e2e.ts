@@ -1006,11 +1006,12 @@ async function main() {
 
     // ---- Prüfberichte of the same projects, then links ----------------------------------------------------------------
     const reports = importWorkbookSheets([{ name: "2030", rows: [[...H2020],
-      row2020("30.001", { projektnummer: "G.E2E.1", bahnhof: "Alpha", bauform: "ZIM", taetigkeit: "fachtechnische Prüfung EP" }),   // unique → auto
-      row2020("30.002", { projektnummer: "G.E2E.1", bahnhof: "Beta", bauform: "Video" }),                                          // unique → auto
-      row2020("30.003", { projektnummer: "G.E2E.2", bahnhof: "Gamma", bauform: "ZIM", taetigkeit: "Abnahmeprüfung" }),             // two registrations → ambiguous
-      row2020("30.004", { projektnummer: "G.E2E.2", bahnhof: "Gamma", bauform: "ZIM" }),                                           // ambiguous
-      row2020("30.005", { projektnummer: null, bahnhof: "Alpha", bauform: "ZIM" }),                                                // no number → stays open
+      row2020("30.001", { projektnummer: "G.E2E.1", bahnhof: "Alpha", bauform: "ZIM", taetigkeit: "Abnahmeprüfung" }),           // unique → auto
+      row2020("30.002", { projektnummer: "G.E2E.1", bahnhof: "Beta", bauform: "Video", taetigkeit: "Abnahmeprüfung" }),         // unique → auto
+      row2020("30.003", { projektnummer: "G.E2E.2", bahnhof: "Gamma", bauform: "ZIM", taetigkeit: "Abnahmeprüfung" }),          // Gamma AP + EP, no phase stated → ambiguous
+      row2020("30.004", { projektnummer: "G.E2E.2", bahnhof: "Gamma", bauform: "ZIM", taetigkeit: "fachtechnische Prüfung EP" }), // states EP → Gamma's EP project, automatically
+      row2020("30.005", { projektnummer: null, bahnhof: "Alpha", bauform: "ZIM" }),                                             // no number → stays open
+      row2020("30.006", { projektnummer: "G.E2E.1", bahnhof: "Alpha", bauform: "ZIM", taetigkeit: "fachtechnische Prüfung EP" }), // states EP; Alpha's only project is AP → NOT linked
     ] }]).records;
     const imp = await api(URLS[0]!, tokenAdmin, "pruefberichte.import", { source: "e2e-links.xlsx", part: { index: 1, total: 1 }, records: reports });
     if (imp.status !== 200) throw new Error(`report import: ${imp.status} ${JSON.stringify(imp.error)}`);
@@ -1022,29 +1023,31 @@ async function main() {
       const { page } = adm2;
       await page.goto(`${URLS[0]}/psv-itk?tab=projektuebersicht&year=2030`);
       await page.getByTestId("pu-table").waitFor({ timeout: 15000 });
-      if ((await page.locator('[data-testid="pu-row"]').count()) !== 5) throw new Error("the new tab does not list the 5 reports of 2030");
+      if ((await page.locator('[data-testid="pu-row"]').count()) !== 6) throw new Error("the new tab does not list the 6 reports of 2030");
       // dry run first, then apply
       await page.getByTestId("autolink-open").click();
       await page.getByTestId("autolink-result").waitFor({ timeout: 15000 });
-      if (!/2 von \d+ nicht zugeordneten Prüfberichten würden zugeordnet/.test((await page.getByTestId("autolink-result").innerText()).replace(/\s+/g, " "))) throw new Error("dry run verdict");
+      if (!/3 von \d+ nicht zugeordneten Prüfberichten würden zugeordnet/.test((await page.getByTestId("autolink-result").innerText()).replace(/\s+/g, " "))) throw new Error("dry run verdict");
       if (Number((await q("SELECT COUNT(*) n FROM itk_pruefberichte WHERE projectId IS NOT NULL"))[0].n) !== 0) throw new Error("the dry run linked");
       await page.getByTestId("autolink-apply").click();
-      await until(async () => /2 Prüfberichte zugeordnet/.test(await page.getByTestId("autolink-result").innerText().catch(() => "")), 15000, "auto-link result");
+      await until(async () => /3 Prüfberichte zugeordnet/.test(await page.getByTestId("autolink-result").innerText().catch(() => "")), 15000, "auto-link result");
       const linked = await q("SELECT laufendeNummer, projectId, projectLinkSource FROM itk_pruefberichte WHERE projectId IS NOT NULL ORDER BY laufendeNummer");
-      if (JSON.stringify(linked.map(l => [l.laufendeNummer, l.projectId, l.projectLinkSource])) !== JSON.stringify([["30.001", alphaId, "auto"], ["30.002", betaId, "auto"]])) throw new Error(`auto links: ${JSON.stringify(linked)}`);
+      if (JSON.stringify(linked.map(l => [l.laufendeNummer, l.projectId, l.projectLinkSource])) !== JSON.stringify([["30.001", alphaId, "auto"], ["30.002", betaId, "auto"], ["30.004", gammaEP, "auto"]])) throw new Error(`auto links: ${JSON.stringify(linked)}`);
       await page.keyboard.press("Escape");
 
       // the ambiguous reports: pick the project explicitly (EP registration)
-      for (const nr of ["30.003", "30.004"]) {
+      for (const nr of ["30.003"]) {
         await page.locator('[data-testid="pu-row"]', { hasText: nr }).getByRole("button", { name: /zuordnen|ändern/ }).click();
         await page.getByTestId("link-dialog").waitFor({ timeout: 10000 });
         await page.getByTestId("link-dialog").getByText(/Mehrere Projekte tragen/).waitFor({ timeout: 10000 });
-        await page.getByTestId("link-dialog").locator('[role="radio"]').nth(1).click(); // candidates are ordered by station, id → the second Gamma registration
+        await page.getByTestId("link-dialog").locator('[role="radio"]').nth(1).click(); // candidates are ordered by station, phase → AP first, EP second
         await page.getByTestId("link-save").click();
         await until(async () => (await page.getByTestId("link-dialog").count()) === 0, 10000, "dialog closed");
       }
       const gamma = await q("SELECT laufendeNummer, projectId, projectLinkSource FROM itk_pruefberichte WHERE laufendeNummer IN ('30.003','30.004') ORDER BY laufendeNummer");
-      if (gamma.some(g => g.projectId !== gammaEP || g.projectLinkSource !== "manual")) throw new Error(`explicit links: ${JSON.stringify(gamma)}`);
+      if (JSON.stringify(gamma.map(g => [g.laufendeNummer, g.projectId, g.projectLinkSource])) !== JSON.stringify([["30.003", gammaEP, "manual"], ["30.004", gammaEP, "auto"]])) throw new Error(`explicit/automatic links: ${JSON.stringify(gamma)}`);
+      // the EP-stating report at a station whose only project is AP was not linked to it
+      if ((await q("SELECT projectId FROM itk_pruefberichte WHERE laufendeNummer='30.006'"))[0].projectId !== null) throw new Error("a report was linked across phases");
       const linkAudit = Number((await q("SELECT COUNT(*) n FROM audit_log WHERE entityType='pruefbericht' AND field='projectId'"))[0].n);
       if (linkAudit !== 4) throw new Error(`link audit rows: ${linkAudit}`);
 
@@ -1060,7 +1063,7 @@ async function main() {
       await page.getByTestId("project-pruefberichte").waitFor({ timeout: 20000 });
       await until(async () => /30\.001/.test(await page.getByTestId("project-pruefberichte").innerText().catch(() => "")), 15000, "Alpha's report in the project detail");
       const detail = (await page.getByTestId("project-pruefberichte").innerText()).replace(/\s+/g, " ");
-      if (!/P30\.001 - Alpha/.test(detail) || /30\.003/.test(detail)) throw new Error(`project detail reports: ${detail}`);
+      if (!/A30\.001 - Alpha/.test(detail) || /30\.003/.test(detail)) throw new Error(`project detail reports: ${detail}`);
       await page.goto(`${URLS[0]}/projects?detail=${betaId}`);
       await until(async () => /30\.002/.test(await page.getByTestId("project-pruefberichte").innerText().catch(() => "")), 15000, "Beta's report");
 
@@ -1068,7 +1071,7 @@ async function main() {
       await page.goto(`${URLS[0]}/psv-itk?tab=abnahme&technik=ZIM&project=${alphaId}`);
       await page.getByTestId("abnahme-report-ref").waitFor({ timeout: 20000 });
       const one = (await page.getByTestId("abnahme-report-ref").innerText()).replace(/\s+/g, " ");
-      if (!/30\.001 \(2030\)/.test(one) || !/P30\.001 - Alpha/.test(one)) throw new Error(`single report: ${one}`);
+      if (!/30\.001 \(2030\)/.test(one) || !/A30\.001 - Alpha/.test(one)) throw new Error(`single report: ${one}`);
       if (await page.getByTestId("abnahme-pdf").isDisabled()) throw new Error("PDF is blocked although exactly one report applies");
 
       await page.goto(`${URLS[0]}/psv-itk?tab=abnahme&technik=ZIM&project=${gammaEP}`);

@@ -7,8 +7,8 @@ export const REGISTER_POLICY = {
   blanks: "Leere Zellen der Datei löschen nie einen vorhandenen Wert. Ein Wert wird nur ersetzt, wenn er hier ausdrücklich bestätigt wird.",
   conflict:
     "Die Datei würde vorhandene Werte ersetzen. Empfehlung: ersetzen nur, wenn die Datei die gepflegtere Quelle ist; sonst ausschließen. Offen lassen ändert nichts und fragt beim nächsten Import erneut.",
-  progression:
-    "Gleiche Projektnummer, Station und Beschreibung, aber anderer Projektstand/Termin. Empfehlung: „Fortschreiben“, wenn es dasselbe Vorhaben ist, das weitergekommen ist (AP → EP); „Neue Anmeldung“, wenn die Phase als eigene Anmeldung geführt wird. Beides bleibt über den Quellschlüssel erhalten.",
+  phase:
+    "AP, EP, VEP … sind verschiedene Phasen und damit verschiedene Anmeldungen mit eigenen Prüfungen, Prüfern und Terminen. Eine Zeile mit anderem Projektstand wird nie mit einem vorhandenen Projekt zusammengeführt, nie als dessen „bearbeitete Fassung“ gehalten, sondern als eigene Anmeldung angelegt. Prüfberichte werden, wenn sie ihre Phase nennen, dem Projekt dieser Phase zugeordnet.",
   ambiguous:
     "Mehrere Projekte kommen in Frage oder ein vorhandenes Projekt könnte die bearbeitete Fassung dieser Zeile sein. Empfehlung: dem Projekt zuordnen, wenn nur die Beschreibung umformuliert wurde; als neues Projekt anlegen, wenn es eine zweite Maßnahme ist. Die Wahl wird gemerkt.",
   sourceGroup:

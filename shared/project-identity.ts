@@ -65,3 +65,14 @@ export const fullKey = (f: IdentityFields): string =>
 /** A record with nothing to identify it by cannot be imported: it would match (or create) "anything". */
 export const hasIdentity = (f: Pick<IdentityFields, "projektnummer" | "station" | "projektbeschreibung">): boolean =>
   coreKey(f) !== "||";
+
+/**
+ * Projektstand is the project's PHASE (AP, EP, VEP, FA, …). A phase is its own registration with its own Prüfungen, Prüfer and
+ * Termine: an EP row is never "the AP project moved on". Two stands are compatible only when they are the same phase — or one
+ * side states none (a blank cannot contradict). Used wherever two records might be the same registration.
+ */
+export const standsCompatible = (a: string | null | undefined, b: string | null | undefined): boolean => {
+  const x = normText(a);
+  const y = normText(b);
+  return x === "" || y === "" || x === y;
+};

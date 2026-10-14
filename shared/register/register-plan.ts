@@ -14,15 +14,17 @@
  * Match evidence, strongest first:
  *   key          a stored source key (an earlier import of this very registration) points at one project
  *   fingerprint  the project's own fields spell out the same fullKey (Projektnummer, Station, Beschreibung, Stand, Termin)
- *   core         same Projektnummer, Station and Beschreibung, and exactly one record on each side; Projektstand and/or
- *                Termin differ — the usual "the project moved on" edit. Their differences surface as overwrites.
+ *   core         same Projektnummer, Station and Beschreibung, the SAME PHASE (or a blank Projektstand on one side), and
+ *                exactly one record on each side; only e.g. the Termin differs. Differences surface as overwrites.
+ * A different Projektstand is a different registration — AP, EP, VEP … are separate phases with their own Prüfungen — so it is
+ * never matched, never held as an "edited" project, never merged: it is simply a new registration.
  * Anything weaker is never a match. In particular `Projektnummer` alone is not evidence: a framework number is shared by
  * dozens of stations.
  *
  * A blank incoming cell never clears a stored value (there is no "clear" rule), and a stored status is compared by its
  * canonical group, so "Projektkonfiguration" does not overwrite "Projektkonfig.".
  */
-import { coreKey, fullKey, normProjektnummer, normStation, normText } from "../project-identity";
+import { coreKey, fullKey, normProjektnummer, normStation, normText, standsCompatible } from "../project-identity";
 import { normalizeReviewStatus } from "../review-status";
 import { DEPARTMENTS } from "../validation";
 import { REGISTER_FIELD_KEYS, type RegisterFields, type RegisterRecord, type RegisterReviews } from "./register-import";
@@ -225,15 +227,17 @@ export function planRegister(
     if (ex.ids.length === 1) return matched(byId.get(ex.ids[0] as number) as ExistingProject, ex.basis);
     if (ex.ids.length > 1) return held(ex.ids.map((id) => byId.get(id) as ExistingProject), "Mehrere bestehende Projekte tragen dieselbe Identität");
 
-    const coreCands = (byCore.get(ck) ?? []).filter((p) => !claimed.has(p.id));
+    // another PHASE is another registration: an EP row is never matched with, held against, or merged into an AP project
+    const samePhase = (p: ExistingProject) => standsCompatible(p.fields.projektstand, rec.fields.projektstand);
+    const coreCands = (byCore.get(ck) ?? []).filter((p) => !claimed.has(p.id) && samePhase(p));
     if (coreCands.length === 1 && incomingCore.get(ck) === 1) return matched(coreCands[0] as ExistingProject, "core");
-    if (coreCands.length > 0) return held(coreCands, "Gleiche Projektnummer, Station und Beschreibung, aber Projektstand/Termin lassen keine eindeutige Zuordnung zu");
+    if (coreCands.length > 0) return held(coreCands, "Gleiche Projektnummer, Station, Beschreibung und Phase, aber der Termin lässt keine eindeutige Zuordnung zu");
 
     // No registration with this description: an existing, otherwise unaccounted-for project at the same Projektnummer
     // and Station may be this very project with an edited description. Creating a second one would duplicate it.
     const pn = normProjektnummer(rec.fields.projektnummer);
-    const weak = pn ? (byPnStation.get(`${pn}|${normStation(rec.fields.station)}`) ?? []).filter((p) => !claimed.has(p.id)) : [];
-    if (weak.length > 0) return held(weak, "Gleiche Projektnummer und Station, andere Beschreibung — bearbeitetes Projekt oder neue Anmeldung?");
+    const weak = pn ? (byPnStation.get(`${pn}|${normStation(rec.fields.station)}`) ?? []).filter((p) => !claimed.has(p.id) && samePhase(p)) : [];
+    if (weak.length > 0) return held(weak, "Gleiche Projektnummer, Station und Phase, andere Beschreibung — bearbeitetes Projekt oder zweite Maßnahme?");
 
     return { ref: rec.ref, fullKey: fk, status: "add", candidates: [], changes: [] };
   });
