@@ -24,8 +24,12 @@ import type { AuditRow, ProjectStore, PruefberichtLinkRow } from "./ports";
 import { requestHash, type RequestContext } from "./projectService";
 
 const SAMPLE_LIMIT = 50;
+const CHUNK = 100;
+/** reasons the dialog prints as they are */
+const GONE = "Projekt inzwischen gelöscht — nicht zugeordnet";
+const CHANGED = "inzwischen geändert — nicht angefasst, bitte erneut starten";
 
-const auditRow = (principal: Principal, ctx: RequestContext, pb: PruefberichtLinkRow, to: number | null, source: "auto" | "manual", version: number): AuditRow => ({
+const auditRow = (principal: Principal, ctx: RequestContext, pb: PruefberichtLinkRow, to: number | null, source: "auto" | "manual" | "detached", version: number): AuditRow => ({
   userId: /^\d+$/.test(principal.id) ? Number(principal.id) : null,
   userName: principal.name || principal.email || principal.id,
   entityType: "pruefbericht", entityId: pb.id, action: "update", field: "projectId",
@@ -33,7 +37,7 @@ const auditRow = (principal: Principal, ctx: RequestContext, pb: PruefberichtLin
   eventId: null, aggregateVersion: version, traceId: ctx.traceId,
   // reports have no workspace; a null scope is visible to unrestricted principals only (like the import's audit rows)
   workspace: null,
-  entityLabel: `${pb.year} / ${pb.laufendeNummer}${source === "auto" ? " · automatisch" : ""}`.slice(0, 255),
+  entityLabel: `${pb.year} / ${pb.laufendeNummer}${source === "auto" ? " · automatisch" : source === "detached" ? " · bewusst gelöst" : ""}`.slice(0, 255),
 });
 
 export class PruefberichtLinkService {
@@ -47,22 +51,23 @@ export class PruefberichtLinkService {
       if (claim.state === "mismatch") throw new IdempotencyKeyReuseError();
       if (claim.state === "replay") return { ...(claim.response as SetLinkResult), replayed: true };
 
-      const pb = await tx.lockPruefbericht(input.id);
-      if (!pb) throw new NotFoundError("Prüfbericht");
+      // lock order everywhere: project, then its reports (project deletion unlinks its reports in that order)
       if (input.projectId !== null) {
         // not visible and not existing are the same answer (no oracle); editing rights on the target are required
         const project = await tx.lockProject(input.projectId);
         if (!project || !canEditProject(principal, project)) throw new NotFoundError();
       }
+      const pb = await tx.lockPruefbericht(input.id);
+      if (!pb) throw new NotFoundError("Prüfbericht");
       if (pb.version !== input.expectedVersion) throw new StaleVersionError("Prüfbericht", input.expectedVersion, pb.version);
 
       let res: SetLinkResult;
       if (pb.projectId === input.projectId) {
         res = { id: pb.id, projectId: pb.projectId, version: pb.version, replayed: false };
       } else {
-        const ok = await tx.setPruefberichtProject(pb.id, pb.version, { projectId: input.projectId, source: input.projectId === null ? null : "manual" });
+        const ok = await tx.setPruefberichtProject(pb.id, pb.version, { projectId: input.projectId, source: input.projectId === null ? "detached" : "manual" });
         if (!ok) throw new StaleVersionError("Prüfbericht", input.expectedVersion, pb.version + 1);
-        await tx.appendAudit([auditRow(principal, ctx, pb, input.projectId, "manual", pb.version + 1)]);
+        await tx.appendAudit([auditRow(principal, ctx, pb, input.projectId, input.projectId === null ? "detached" : "manual", pb.version + 1)]);
         res = { id: pb.id, projectId: input.projectId, version: pb.version + 1, replayed: false };
       }
       await tx.completeIdempotency(principal.id, input.idempotencyKey, res);
@@ -82,19 +87,35 @@ export class PruefberichtLinkService {
       const unlinked = await tx.unlinkedPruefberichte();
       const byPn = indexProjects(await tx.projectsForLinking());
       const result: AutoLinkResult = { dryRun: input.dryRun, examined: unlinked.length, linked: 0, ambiguous: { count: 0, samples: [] }, unmatched: {}, replayed: false };
+      const unique: Array<{ pb: PruefberichtLinkRow; projectId: number }> = [];
       for (const pb of unlinked) {
         const v = matchPruefbericht(pb, byPn);
-        if (v.status === "unique") {
-          result.linked += 1;
-          if (input.dryRun) continue;
-          const ok = await tx.setPruefberichtProject(pb.id, pb.version, { projectId: v.projectId, source: "auto" });
-          if (!ok) throw new StaleVersionError("Prüfbericht", pb.version, pb.version + 1);
-          await tx.appendAudit([auditRow(principal, ctx, pb, v.projectId, "auto", pb.version + 1)]);
-        } else if (v.status === "ambiguous") {
+        if (v.status === "unique") unique.push({ pb, projectId: v.projectId });
+        else if (v.status === "ambiguous") {
           result.ambiguous.count += 1;
           if (result.ambiguous.samples.length < SAMPLE_LIMIT) result.ambiguous.samples.push({ id: pb.id, year: pb.year, laufendeNummer: pb.laufendeNummer, candidates: v.candidateIds.length });
         } else {
           result.unmatched[v.reason] = (result.unmatched[v.reason] ?? 0) + 1;
+        }
+      }
+      if (input.dryRun) {
+        result.linked = unique.length;
+      } else {
+        // Chunks: share-lock the target projects FIRST (a project deleted meanwhile cannot receive a link, and its deletion
+        // waits for us), then write each report with its own version guard. A report somebody changed since the snapshot is
+        // left alone and counted — one concurrent edit never aborts or rolls back the rest.
+        for (let i = 0; i < unique.length; i += CHUNK) {
+          const part = unique.slice(i, i + CHUNK);
+          const alive = await tx.shareLockProjects([...new Set(part.map((u) => u.projectId))]);
+          const audits: AuditRow[] = [];
+          for (const { pb, projectId } of part) {
+            if (!alive.has(projectId)) { result.unmatched[GONE] = (result.unmatched[GONE] ?? 0) + 1; continue; }
+            const ok = await tx.setPruefberichtProject(pb.id, pb.version, { projectId, source: "auto" });
+            if (!ok) { result.unmatched[CHANGED] = (result.unmatched[CHANGED] ?? 0) + 1; continue; }
+            result.linked += 1;
+            audits.push(auditRow(principal, ctx, pb, projectId, "auto", pb.version + 1));
+          }
+          if (audits.length) await tx.appendAudit(audits);
         }
       }
       if (!input.dryRun) await tx.completeIdempotency(principal.id, input.idempotencyKey, result);

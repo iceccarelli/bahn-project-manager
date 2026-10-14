@@ -35,7 +35,7 @@ export function useProjectPruefberichte(projectId: number | null) {
 export function useOpenReportsFor(projektnummer: string | null, enabled: boolean) {
   return useQuery({
     queryKey: [...PRUEFBERICHTE_KEY, "open", projektnummer],
-    queryFn: async () => (await serverApi.pruefberichte.list.query({ limit: 50, verknuepfung: "offen", q: projektnummer as string })).rows as PruefberichtListRow[],
+    queryFn: async () => (await serverApi.pruefberichte.list.query({ limit: 200, verknuepfung: "offen", q: projektnummer as string })).rows as PruefberichtListRow[],
     enabled: SERVER_MODE && enabled && !!projektnummer,
     staleTime: 5_000,
   });
@@ -47,6 +47,20 @@ export function useLinkCandidates(id: number | null) {
     queryFn: () => serverApi.pruefberichte.linkCandidates.query({ id: id as number }) as Promise<LinkCandidates>,
     enabled: SERVER_MODE && id !== null,
     staleTime: 0,
+  });
+}
+
+/** Free project search for the link dialog (the same scoped list the Projekte page uses). Disabled below two characters. */
+export function useProjectSearch(term: string, enabled: boolean) {
+  const q = term.trim();
+  return useQuery({
+    queryKey: [...PRUEFBERICHTE_KEY, "project-search", q],
+    queryFn: async () => {
+      const page = await serverApi.projects.list.query({ search: q, limit: 15, sort: "station", dir: "asc", expand: [] });
+      return page.items.map((p) => ({ projectId: p.id, projektnummer: p.projektnummer, station: p.station, projektstand: p.projektstand, projektbeschreibung: p.projektbeschreibung?.slice(0, 300) ?? null }));
+    },
+    enabled: SERVER_MODE && enabled && q.length >= 2,
+    staleTime: 10_000,
   });
 }
 

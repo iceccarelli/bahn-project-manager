@@ -129,12 +129,15 @@ async function main() {
       }
       return r;
     };`;
+  /** a React render loop ("Maximum update depth") anywhere in any browser fails the run — it used to scroll by as a log line */
+  const renderLoops: string[] = [];
   const openBrowser = async (base: string, token: string, name: string) => {
     const ctx: BrowserContext = await browser.newContext({ viewport: { width: 1500, height: 900 } });
     await ctx.addInitScript(init(token));
     const page = await ctx.newPage();
-    page.on("pageerror", e => console.log(`   [${name} pageerror] ${e.message}`));
-    page.on("console", m => { if (m.type() === "error" && !/tile\.openstreetmap|ERR_|Failed to load resource/.test(m.text())) console.log(`   [${name} console.error] ${m.text().slice(0, 200)}`); });
+    page.on("pageerror", e => { if (/Maximum update depth|Minified React error #185/.test(e.message)) renderLoops.push(name); });
+    page.on("pageerror", e => console.log(`   [${name} pageerror] ${process.env.E2E_CONSOLE_CHARS ? (e.stack ?? e.message).slice(0, Number(process.env.E2E_CONSOLE_CHARS)) : e.message}`));
+    page.on("console", m => { if (m.type() === "error" && !/tile\.openstreetmap|ERR_|Failed to load resource/.test(m.text())) { console.log(`   [${name} console.error] ${m.text().slice(0, Number(process.env.E2E_CONSOLE_CHARS ?? 200))}`); if (process.env.E2E_CONSOLE_CHARS && /Maximum update/.test(m.text())) void Promise.all(m.args().map(a => a.jsonValue().catch(() => "?"))).then(v => console.log("   ARGS", JSON.stringify(v).slice(0, 1500))); } });
     await page.route(/tile\.openstreetmap\.org/, r => r.abort());
     if (process.env.E2E_NET) {
       const t0 = Date.now();
@@ -1086,6 +1089,24 @@ async function main() {
       await page.goto(`${URLS[0]}/psv-itk?tab=abnahme&technik=Video&project=${alphaId}`);
       await page.getByTestId("abnahme-report-none").waitFor({ timeout: 20000 });
       if (!/Kein Video-Prüfbericht/.test(await page.getByTestId("abnahme-report-none").innerText())) throw new Error("empty state wording");
+
+      // ---- a report WITHOUT a Projektnummer can be attached by hand: search the project, pick it, save -------------------------
+      await page.goto(`${URLS[0]}/psv-itk?tab=projektuebersicht&year=2030`);
+      await page.getByTestId("pu-table").waitFor({ timeout: 15000 });
+      await page.locator('[data-testid="pu-row"]', { hasText: "30.005" }).getByRole("button", { name: /zuordnen|ändern/ }).click();
+      await page.getByTestId("link-dialog").waitFor({ timeout: 10000 });
+      await page.getByTestId("link-search").fill("Alpha");
+      await page.getByTestId("link-dialog").locator('[role="radio"]').first().waitFor({ timeout: 10000 });
+      await page.getByTestId("link-dialog").locator('[role="radio"]').first().click();
+      await page.getByTestId("link-save").click();
+      await until(async () => (await page.getByTestId("link-dialog").count()) === 0, 10000, "dialog closed after the manual search link");
+      const manual = (await q("SELECT projectId, projectLinkSource FROM itk_pruefberichte WHERE laufendeNummer='30.005'"))[0];
+      if (manual.projectLinkSource !== "manual" || manual.projectId !== alphaId) throw new Error(`search link: ${JSON.stringify(manual)}`);
+      // and detaching it is a decision the automatic link respects
+      await page.locator('[data-testid="pu-row"]', { hasText: "30.005" }).getByRole("button", { name: /zuordnen|ändern/ }).click();
+      await page.getByTestId("link-dialog").waitFor({ timeout: 10000 });
+      await page.getByRole("button", { name: /Zuordnung entfernen/ }).click();
+      await until(async () => (await q("SELECT projectLinkSource s FROM itk_pruefberichte WHERE laufendeNummer='30.005'"))[0].s === "detached", 10000, "detached marker");
     } finally { await adm2.ctx.close(); }
 
     // ---- who is refused / never offered ---------------------------------------------------------------------------------------
@@ -1109,6 +1130,10 @@ async function main() {
     if (g(await api(URLS[1]!, tokenB, "pruefberichte.autoLink", { dryRun: true, idempotencyKey: key() })) !== 403) throw new Error("B may auto-link");
     const seenB = await api(URLS[1]!, tokenB, "audit.page", { entityType: "pruefbericht", limit: 20, days: 30 }, "GET");
     if (seenB.data?.items?.length) throw new Error("B sees link audit rows");
+  });
+
+  await step("no page of any browser ran into a React render loop", async () => {
+    if (renderLoops.length) throw new Error(`render loop in: ${[...new Set(renderLoops)].join(", ")} (${renderLoops.length}×)`);
   });
 
   await step("integrity: every committed change has exactly one audit set, one event, one feedSeq; feed is gapless; nothing unpublished/dead", async () => {

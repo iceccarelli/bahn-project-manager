@@ -6,6 +6,7 @@
  * with ONE audit row for the batch, so a batch is either fully there with its trace or not at all. Re-importing the same
  * workbook changes nothing. Authorization is the caller's job (routers.ts); this file never decides who may do what.
  */
+import { pnSql } from "./sqlNormalize";
 import type { Pool } from "mysql2/promise";
 import {
   PRUEFBERICHT_FIELDS,
@@ -160,7 +161,7 @@ export async function linkCandidatesOf(pool: Pool, id: number): Promise<LinkCand
   const pn = normProjektnummer(pb.projektnummer);
   if (!pn) return { verdict: "unmatched", reason: UNMATCHED_TEXT["keine-projektnummer"], candidates: [] };
   const [rows] = (await pool.query(
-    "SELECT id, projektnummer, station, projektbeschreibung, projektstand, bahnhofsmanagement FROM projects WHERE UPPER(REPLACE(projektnummer, ' ', '')) = ? ORDER BY station, projektstand, id LIMIT 100",
+    `SELECT id, projektnummer, station, projektbeschreibung, projektstand, bahnhofsmanagement FROM projects WHERE ${pnSql("projektnummer")} = ? ORDER BY station, projektstand, id LIMIT 100`,
     [pn],
   )) as unknown as [Array<{ id: number; projektnummer: string | null; station: string | null; projektbeschreibung: string | null; projektstand: string | null; bahnhofsmanagement: string | null }>];
   const verdict = matchPruefbericht(pb, indexProjects(rows.map((r) => ({ id: r.id, projektnummer: r.projektnummer, station: r.station, projektstand: r.projektstand }))));
@@ -180,16 +181,25 @@ export async function linkCandidatesOf(pool: Pool, id: number): Promise<LinkCand
 /** How many reports are linked and why the others are not — the same evidence rule the automatic link uses, read-only. */
 export async function linkSummary(pool: Pool): Promise<LinkSummary> {
   const [[count]] = (await pool.query("SELECT COUNT(*) total, SUM(projectId IS NOT NULL) linked FROM itk_pruefberichte")) as unknown as [Array<{ total: number; linked: number | null }>];
-  const [open] = (await pool.query("SELECT projektnummer, bahnhofStrecke, taetigkeitsbereich, `phase` FROM itk_pruefberichte WHERE projectId IS NULL")) as unknown as [Array<{ projektnummer: string | null; bahnhofStrecke: string | null; taetigkeitsbereich: string | null; phase: string | null }>];
+  const [open] = (await pool.query("SELECT projektnummer, bahnhofStrecke, taetigkeitsbereich, `phase`, projectLinkSource FROM itk_pruefberichte WHERE projectId IS NULL")) as unknown as [Array<{ projektnummer: string | null; bahnhofStrecke: string | null; taetigkeitsbereich: string | null; phase: string | null; projectLinkSource: string | null }>];
   const [projects] = (await pool.query("SELECT id, projektnummer, station, projektstand FROM projects WHERE projektnummer IS NOT NULL AND TRIM(projektnummer) <> ''")) as unknown as [Array<{ id: number; projektnummer: string | null; station: string | null; projektstand: string | null }>];
   const byPn = indexProjects(projects);
-  const out: LinkSummary = { total: Number(count?.total ?? 0), linked: Number(count?.linked ?? 0), open: open.length, ambiguous: 0, unmatched: {} };
+  const out: LinkSummary = { total: Number(count?.total ?? 0), linked: Number(count?.linked ?? 0), open: open.length, ambiguous: 0, unmatched: {}, staleAuto: 0 };
   for (const r of open) {
+    if (r.projectLinkSource === "detached") { out.unmatched["bewusst nicht zugeordnet"] = (out.unmatched["bewusst nicht zugeordnet"] ?? 0) + 1; continue; }
     const v = matchPruefbericht(r, byPn);
     // a "unique" verdict on an UNLINKED report is a report the automatic link has not run for yet
     if (v.status === "ambiguous") out.ambiguous += 1;
     else if (v.status === "unmatched") out.unmatched[v.reason] = (out.unmatched[v.reason] ?? 0) + 1;
     else out.unmatched["automatisch-zuordenbar"] = (out.unmatched["automatisch-zuordenbar"] ?? 0) + 1;
+  }
+  // automatic links must keep satisfying the rule that created them: a report or a project edited since is surfaced, never silently re-linked or unlinked
+  const [autos] = (await pool.query(
+    "SELECT pb.projektnummer, pb.bahnhofStrecke, pb.taetigkeitsbereich, pb.`phase`, pb.projectId, p.projektnummer pPn, p.station pStation, p.projektstand pStand FROM itk_pruefberichte pb JOIN projects p ON p.id = pb.projectId WHERE pb.projectLinkSource = 'auto'",
+  )) as unknown as [Array<{ projektnummer: string | null; bahnhofStrecke: string | null; taetigkeitsbereich: string | null; phase: string | null; projectId: number; pPn: string | null; pStation: string | null; pStand: string | null }>];
+  for (const r of autos) {
+    const v = matchPruefbericht(r, indexProjects([{ id: r.projectId, projektnummer: r.pPn, station: r.pStation, projektstand: r.pStand }]));
+    if (v.status !== "unique") out.staleAuto += 1;
   }
   return out;
 }

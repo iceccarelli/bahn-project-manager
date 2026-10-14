@@ -2,6 +2,7 @@
  * MySQL/MariaDB adapter for ProjectStore. All SQL for the Project slice lives
  * here; the domain layer sees only the ProjectStore/ProjectTx ports.
  */
+import { pnSql } from "./sqlNormalize";
 import { and, asc, desc, eq, gt, inArray, lt, lte, or, sql, type SQL } from "drizzle-orm";
 import type { MySql2Database } from "drizzle-orm/mysql2";
 import { DomainEventSchema, type DomainEvent } from "@shared/domain-events";
@@ -186,8 +187,8 @@ async function loadRegisterCandidates(x: Executor, source: string, lookup: Regis
   const wantsNumberless = lookup.hints.some(h => !normProjektnummer(h.projektnummer));
   const ownerIds = [...new Set([...owners.values()].flat())];
   const conds: SQL[] = [];
-  if (numbers.length) conds.push(sql`UPPER(REPLACE(${projects.projektnummer}, ' ', '')) IN (${sql.join(numbers.map(n => sql`${n}`), sql`, `)})`);
-  if (wantsNumberless) conds.push(sql`(${projects.projektnummer} IS NULL OR TRIM(${projects.projektnummer}) = '')`);
+  if (numbers.length) conds.push(sql`${sql.raw(pnSql("`projects`.`projektnummer`"))} IN (${sql.join(numbers.map(n => sql`${n}`), sql`, `)})`);
+  if (wantsNumberless) conds.push(sql`(${projects.projektnummer} IS NULL OR ${sql.raw(pnSql("`projects`.`projektnummer`"))} = '')`);
   if (ownerIds.length) conds.push(inArray(projects.id, ownerIds));
   if (!conds.length) return { projects: [], keyOwners: owners, skipped };
   const rows = await x.select().from(projects).where(or(...conds));
@@ -230,6 +231,13 @@ function txAdapter(x: Executor): ProjectTx {
       const [res] = await x.insert(projectSourceKeys).ignore().values(rows.map(r => ({ projectId: r.projectId, source, kind: r.kind ?? "match", sourceKey: r.keyHash })));
       return Number((res as unknown as { affectedRows: number }).affectedRows);
     },
+    async claimSourceKey(source, keyHash) {
+      const [res] = await x.insert(projectSourceKeys).ignore().values({ projectId: null, source, kind: "match", sourceKey: keyHash });
+      return Number((res as unknown as { affectedRows: number }).affectedRows) === 1;
+    },
+    async assignSourceKey(source, keyHash, projectId) {
+      await x.update(projectSourceKeys).set({ projectId }).where(and(eq(projectSourceKeys.source, source), eq(projectSourceKeys.sourceKey, keyHash)));
+    },
     async deleteSkipKeys(source, keyHashes) {
       if (!keyHashes.length) return 0;
       const [res] = await x.delete(projectSourceKeys).where(and(eq(projectSourceKeys.source, source), eq(projectSourceKeys.kind, "skip"), inArray(projectSourceKeys.sourceKey, [...keyHashes])));
@@ -241,13 +249,19 @@ function txAdapter(x: Executor): ProjectTx {
     },
     async setPruefberichtProject(id, expectedVersion, link) {
       const [res] = await x.execute(
-        sql`UPDATE itk_pruefberichte SET projectId = ${link.projectId}, projectLinkSource = ${link.projectId === null ? null : link.source}, projectLinkedAt = ${link.projectId === null ? null : new Date()}, version = version + 1 WHERE id = ${id} AND version = ${expectedVersion}`,
+        sql`UPDATE itk_pruefberichte SET projectId = ${link.projectId}, projectLinkSource = ${link.source}, projectLinkedAt = ${link.source === null ? null : new Date()}, version = version + 1 WHERE id = ${id} AND version = ${expectedVersion}`,
       );
       return (res as unknown as { affectedRows: number }).affectedRows === 1;
     },
     async unlinkedPruefberichte() {
-      const [rows] = (await x.execute(sql.raw(`SELECT ${PB_LINK_COLUMNS} FROM itk_pruefberichte WHERE projectId IS NULL ORDER BY \`year\`, id FOR UPDATE`))) as unknown as RawRows<Record<string, unknown>>;
+      const [rows] = (await x.execute(sql.raw(`SELECT ${PB_LINK_COLUMNS} FROM itk_pruefberichte WHERE projectId IS NULL AND projectLinkSource IS NULL ORDER BY \`year\`, id`))) as unknown as RawRows<Record<string, unknown>>;
       return rows.map(toLinkRow);
+    },
+    async shareLockProjects(ids) {
+      if (!ids.length) return new Set<number>();
+      // LOCK IN SHARE MODE: understood by MySQL 8.x and MariaDB alike (FOR SHARE is MySQL-only)
+      const [rows] = (await x.execute(sql`SELECT id FROM projects WHERE id IN (${sql.join(ids.map((i) => sql`${i}`), sql`, `)}) LOCK IN SHARE MODE`)) as unknown as RawRows<{ id: number }>;
+      return new Set(rows.map((r) => Number(r.id)));
     },
     async projectsForLinking(): Promise<LinkProject[]> {
       return x.select({ id: projects.id, projektnummer: projects.projektnummer, station: projects.station, projektstand: projects.projektstand }).from(projects).where(sql`${projects.projektnummer} IS NOT NULL AND TRIM(${projects.projektnummer}) <> ''`);

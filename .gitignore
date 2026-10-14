@@ -168,3 +168,4 @@ ChecklisteBeispiel.pdf
 
 # Real source workbooks (Übersichtsliste, Projektübersicht ITK): never commit (docs/data-governance.md)
 /private-data/
+dump.rdb

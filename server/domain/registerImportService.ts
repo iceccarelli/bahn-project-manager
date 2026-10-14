@@ -159,12 +159,19 @@ export class RegisterImportService {
             done({ ref: rec.ref, outcome: "exists", reason: planned.reason ?? "Ein Projekt mit dieser Identität existiert inzwischen" });
             continue;
           }
+          // an "add" on the evidence is claimed in the key table first: a concurrent import of the same registration waits here and then loses
+          const claimed = planned.status === "add" ? await tx.claimSourceKey(REGISTER_SOURCE, sourceKeyHash(keyOf(rec))) : null;
+          if (claimed === false) {
+            done({ ref: rec.ref, outcome: "exists", reason: "Dieses Projekt wurde gerade von einer anderen Sitzung angelegt" });
+            continue;
+          }
           const fields = Object.fromEntries(Object.entries(rec.fields).filter(([, v]) => v !== null)) as Partial<Record<EditableProjectField, string | null>>;
           const reviews = Object.entries(rec.reviews).map(([department, r]) => ({
             department, status: r.status, prueferName: r.prueferName, datum: r.datum ? new Date(r.datum) : null,
           }));
           const { id } = await this.projects.createWithin(tx, principal, ctx, normalizeFields(fields), reviews);
-          await remember(id);
+          if (claimed) await tx.assignSourceKey(REGISTER_SOURCE, sourceKeyHash(keyOf(rec)), id);
+          else await remember(id);
           done({ ref: rec.ref, outcome: "created", projectId: id });
           continue;
         }

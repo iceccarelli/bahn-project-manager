@@ -269,8 +269,13 @@ export function summarizePlan(rows: readonly PlanRow[]): PlanSummary {
 /**
  * Chunks for transport. Rows that share a Projektnummer travel together (the "claimed" logic above needs the whole
  * Projektnummer group in one plan), unless that would exceed the byte budget — then the group is split, and the effect is
- * only ever more conservative (an unaccounted-for project turns a row `ambiguous`, never a wrong match).
+ * only ever more conservative (an unaccounted-for project turns a row `ambiguous`, never a wrong match). A group larger than
+ * CHUNK_HARD_MAX is split too (the API refuses bigger requests): its halves are planned apart, and a registration that appears
+ * in both can only be created once — the second apply is answered "exists" (claim in project_source_keys).
  */
+/** A request carries at most this many rows (register-contract `REGISTER_MAX_ROWS`): a larger group is split, whatever its identity. */
+export const CHUNK_HARD_MAX = 150;
+
 export function chunkRecords(records: readonly RegisterRecord[], opts: { maxRecords?: number; maxBytes?: number } = {}): RegisterRecord[][] {
   const maxRecords = opts.maxRecords ?? 60;
   const maxBytes = opts.maxBytes ?? 180_000;
@@ -293,7 +298,7 @@ export function chunkRecords(records: readonly RegisterRecord[], opts: { maxReco
       const startsGroup = r === list[0];
       // a group is kept together: it starts a new chunk when it does not fit the current one but fits a chunk by itself;
       // only the byte budget (the API body limit) may split it
-      if (cur.length > 0 && bytes + size > maxBytes) flush();
+      if (cur.length >= CHUNK_HARD_MAX || (cur.length > 0 && bytes + size > maxBytes)) flush();
       else if (startsGroup && cur.length > 0 && cur.length + list.length > maxRecords) flush();
       cur.push(r);
       bytes += size;

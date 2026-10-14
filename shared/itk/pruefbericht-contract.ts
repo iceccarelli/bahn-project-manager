@@ -88,7 +88,8 @@ export interface PruefberichtRow extends Pruefbericht {
   version: number;
   /** The canonical project this report is linked to (null = not linked); see drizzle/schema.ts `itk_pruefberichte.projectId`. */
   projectId: number | null;
-  projectLinkSource: "auto" | "manual" | null;
+  /** "detached" = a person removed the link on purpose: automatic linking leaves such a report alone */
+  projectLinkSource: "auto" | "manual" | "detached" | null;
   /** Derived on import from the layout's Technik column (technikArtOf); what the filters and the Technik-Übersicht use. */
   technikArt: string | null;
 }
@@ -161,4 +162,6 @@ export interface LinkSummary {
   ambiguous: number;
   /** reason → count (see UNMATCHED_TEXT in shared/itk/project-link.ts) */
   unmatched: Record<string, number>;
+  /** automatic links whose evidence no longer holds (the report or the project changed since): to be looked at, never removed by themselves */
+  staleAuto: number;
 }

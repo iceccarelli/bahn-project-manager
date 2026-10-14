@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { indexProjects, matchPruefbericht, reportPhase, type LinkProject } from "./project-link";
+import { indexProjects, matchPruefbericht, rankOffers, reportPhase, type LinkProject } from "./project-link";
 
 const P = (id: number, projektnummer: string | null, station: string | null): LinkProject => ({ id, projektnummer, station });
 const projects = [
@@ -75,5 +75,18 @@ describe("matchPruefbericht", () => {
 
   it("ignores projects without a Projektnummer entirely", () => {
     expect(idx.size).toBe(2);
+  });
+});
+
+describe("rankOffers", () => {
+  const rep = (year: number, nr: string, bahnhofStrecke: string | null, taetigkeitsbereich: string | null = null) => ({ year, laufendeNummer: nr, bahnhofStrecke, taetigkeitsbereich, phase: null });
+  it("puts the reports of this station and phase first, then this station, then the rest — and drops nothing", () => {
+    const reports = [rep(2026, "26.001", "Beta"), rep(2026, "26.002", "Alpha", "fachtechnische Prüfung AP"), rep(2025, "25.003", "Alpha (Main)", "fachtechnische Prüfung EP"), rep(2026, "26.004", "Alpha")];
+    const out = rankOffers(reports, { station: "Alpha", projektstand: "AP" });
+    expect(out.map((o) => [o.report.laufendeNummer, o.fit])).toEqual([["26.002", "station+phase"], ["26.004", "station+phase"], ["25.003", "station"], ["26.001", "other"]]);
+    expect(out).toHaveLength(reports.length);
+  });
+  it("a project without a station fits nothing in particular", () => {
+    expect(rankOffers([rep(2026, "26.001", "Alpha")], { station: null, projektstand: "AP" })[0]!.fit).toBe("other");
   });
 });

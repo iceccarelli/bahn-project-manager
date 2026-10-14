@@ -109,6 +109,10 @@ in the same transaction.
 
 ## Preview and apply (`projects.registerPreview` / `projects.registerApply`, admin only)
 
+**Two imports of the same registration create one project (DONE).** A create on the evidence first *claims* the registration key in `project_source_keys` (UNIQUE source+key, no owner yet); a concurrent import of the same registration waits on that unique index and then loses — answered `exists` ("gerade von einer anderen Sitzung angelegt") — and the winner names the key's owner. Test: `registerImport.db.test.ts` "two imports of the same new registration with different keys create ONE project". A Projektnummer group larger than a request (150 rows) is split into several requests; its parts are planned apart, and the claim keeps a registration that appears in two parts from being created twice.
+
+The SQL prefilters that load candidate projects strip exactly the whitespace `normProjektnummer` strips (space, tab, CR/LF, VT/FF, NBSP; `server/infra/sqlNormalize.ts`), so a project whose number carries a non-breaking space is found, not duplicated.
+
 1. The browser reads the file (cell values only; `bookVBA` off — **macros are never parsed or executed**), parses it and sends
    chunks to `registerPreview` (read-only; a mutation only to carry the body, like `projects.sync`).
 2. The dialog (*Projekte → Übersichtsliste importieren*) shows what was understood (sheet, header row, 14/14 departments),
@@ -136,7 +140,7 @@ wrong *overwrite* is reverted by editing the project (the audit log has `old →
 
 ## Prüfbericht ↔ project link
 
-`itk_pruefberichte.projectId` (nullable, indexed; `projectLinkSource` `auto|manual`, `projectLinkedAt`). One project, many
+`itk_pruefberichte.projectId` (nullable, indexed; `projectLinkSource` `auto|manual|detached`, `projectLinkedAt`). One project, many
 reports; a report may stay unlinked. The workbook import neither sets nor clears it (`registerImport.db.test.ts` "re-importing the
 workbook keeps the links"). Deleting a project clears and audits the links of its reports in the same transaction.
 
@@ -158,6 +162,24 @@ stand is no single phase ("EP/AP", "FA", "Mieterumbau …", blank) can neither b
 * `pruefberichte.autoLink` — admin; `dryRun` first. Links only `unique` reports that have no link yet.
 * `pruefberichte.forProject`, `linkCandidates`, `list` (`verknuepfung`, `projectId`) — need `canViewPruefberichte` (admin or an
   explicit ALL grant); a workspace-limited principal gets FORBIDDEN on every one of them and never sees a report.
+
+**Hand linking needs no Projektnummer (DONE).** The link dialog proposes the projects of the report's number, and below that has a project
+search (station, number or description; the same scoped list as the Projekte page) — so the 704 reports without a number, or a
+report whose number differs from the project's, can be attached explicitly (`manual`, audited). From a project, the offered open
+reports are ordered by fit (station + phase first, then station, then the rest) and nothing is cut off silently ("N weitere anzeigen").
+
+**A removed link is a decision (DONE).** Detaching writes `projectLinkSource = 'detached'` (audited, "bewusst gelöst"); `autoLink` and the
+"automatisch zuordenbar" count leave such a report alone, a person can still link it by hand. Deleting a project clears its reports' links
+without that marker (the project vanished; nobody decided).
+
+**Automatic linking is gentle (DONE).** `autoLink` reads a snapshot (no locks on the whole table), then writes in chunks of 100: the
+target projects are share-locked first (a project deleted meanwhile cannot receive a link, and its deletion waits), each report is
+written with its own version guard (a report changed since the snapshot is left alone and counted — "inzwischen geändert" — instead of
+aborting the run), audit rows go in per chunk. Lock order everywhere is project → reports (`setLink` locks the project first, like
+project deletion), so link and delete cannot deadlock.
+
+**Stale automatic links are shown, not undone (DONE).** `linkSummary.staleAuto` counts automatic links whose evidence no longer
+holds (report or project edited since); the Projektübersicht ITK shows a notice. Nothing re-links or unlinks by itself.
 
 No project event is emitted for a link (reports are not part of the Project aggregate and carry no workspace); the project's
 version does not move. Clients re-read a project's reports when its detail opens or after a link change.
@@ -204,7 +226,7 @@ Each of these is shown in the import dialog or the link UI with the recommended 
 | **Status outside the vocabulary** (measured: `planungsbegleitend` 9×, `Protokoll erstellt` 7×, both TBQ) | import dialog: table *Status außerhalb des Vokabulars* with value × Gewerk × rows | Keep withheld (Prüfer and Datum are imported). Extending `REVIEW_STATUSES` is a decision of the data owners, made in code with a test — not in the dialog. | not remembered: a code change |
 | **Conflict: the file would replace a stored value** | import dialog: conflict card with `old → new` per cell | Replace only if the file is the better-kept source; otherwise exclude. *Offen lassen* writes nothing and asks again next time. | `skip` key if excluded |
 | **Ambiguous: edited project or second measure?** | import dialog: card with one selectable candidate per project and, for the chosen one, its exact cell changes | Map to the project if only the description was reworded; create a new project if it is a second measure. | `match` key / `skip` key |
-| **Prüfberichte without a Projektnummer** (704 of 1226 measured, plus 108 naming an unknown number and 212 at another station) | *Projektübersicht ITK*: banner with the counts per reason, filter "ohne Projektnummer"; the link dialog repeats the policy | Add the Projektnummer in the Prüfstelle's workbook and re-import (the link survives); until then link by hand. No rule that guesses is offered. | the link itself (audited) |
+| **Prüfberichte without a Projektnummer** (704 of 1226 measured, plus 108 naming an unknown number and 212 at another station) | *Projektübersicht ITK*: banner with the counts per reason, filter "ohne Projektnummer"; the link dialog repeats the policy | Add the Projektnummer in the Prüfstelle's workbook and re-import (the link survives); until then link by hand (project search in the link dialog). No rule that guesses is offered. | the link itself (audited) |
 | **Several projects at one station for one report** (96 measured) | link dialog / banner | Choose the project whose phase the report concerns. | the link; a re-import of the workbook keeps it |
 
 ## Domain separation — **DONE**
@@ -244,7 +266,7 @@ proof, the inspector and a decision-by-decision import of the two real workbooks
 are decided, 152 after the (test) resolution (the 24 winners add candidates; the numbers depend on which row wins), and **no
 linked report contradicts its project's phase** (checked in SQL).
 
-**UNVERIFIED**: MySQL 8.4 (CI's engine — only MariaDB was available; the `mysql-version` gate says so); a production-sized
+**VERIFIED in CI on MySQL 8.4** (PR #7 runs 160–162, `main` run 163): tests, migrations ×2, container gate, server-mode e2e, UI performance. **UNVERIFIED locally**: MySQL 8.4 (only MariaDB is available here; `LOCK IN SHARE MODE` is used because `FOR SHARE` is MySQL-only); a production-sized
 import; the PDF *as rendered bytes* (the printed text is asserted on the document tree); the Redis-outage chaos step of the
 browser proof (needs a Docker container).
 

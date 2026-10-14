@@ -8,6 +8,7 @@ import { LinkProjectDialog } from "@/components/itk/LinkProjectDialog";
 import { useLinkAccess, useOpenReportsFor, useProjectPruefberichte, useSetLink } from "@/hooks/useProjectLinks";
 import type { PruefberichtListRow } from "@shared/itk/pruefbericht-contract";
 import { derivePdfCode } from "@shared/itk/pdf-code";
+import { rankOffers } from "@shared/itk/project-link";
 import { formatGerman } from "@shared/date";
 
 /**
@@ -22,10 +23,13 @@ export function ProjectPruefberichte({ projectId, projektnummer, station, projek
   const open = useOpenReportsFor(projektnummer, access.link);
   const setLink = useSetLink();
   const [picking, setPicking] = useState<PruefberichtListRow | null>(null);
+  const [showAll, setShowAll] = useState(false);
   if (!access.view) return null;
 
   const rows = reports.data ?? [];
-  const offer = (open.data ?? []).filter((r) => r.projectId === null);
+  const offer = rankOffers((open.data ?? []).filter((r) => r.projectId === null), { station, projektstand: projektstand ?? null });
+  const fitting = offer.filter((o) => o.fit !== "other").length;
+  const shown = showAll ? offer : offer.slice(0, Math.max(8, fitting));
 
   const copy = async (code: string) => {
     try { await navigator.clipboard.writeText(code); toast.success("PDF-Code kopiert"); } catch { toast.error("Kopieren nicht möglich"); }
@@ -38,7 +42,7 @@ export function ProjectPruefberichte({ projectId, projektnummer, station, projek
   return (
     <section aria-labelledby="pd-pruefberichte" data-testid="project-pruefberichte">
       <h3 id="pd-pruefberichte" className="mb-3 text-2xs font-bold uppercase tracking-widest text-muted-foreground">
-        ITK-Prüfberichte ({rows.length})
+        ITK-Prüfberichte ({reports.data && reports.data.length >= 200 ? "200+" : rows.length})
       </h3>
       {reports.isLoading ? (
         <output className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> Prüfberichte werden geladen …</output>
@@ -84,17 +88,24 @@ export function ProjectPruefberichte({ projectId, projektnummer, station, projek
             Nicht zugeordnete Prüfberichte mit Projektnummer {projektnummer} — Bahnhof {station ?? "?"} und Phase {projektstand ?? "?"} prüfen (AP, EP und VEP sind verschiedene Anmeldungen), bevor zugeordnet wird:
           </p>
           <ul className="space-y-1">
-            {offer.slice(0, 8).map((r) => (
+            {shown.map(({ report: r, fit }) => (
               <li key={r.id} className="flex flex-wrap items-center gap-2 text-xs">
                 <span className="font-mono font-semibold">{r.laufendeNummer}</span>
                 <span className="text-muted-foreground">{r.year}</span>
                 <span className="min-w-0 truncate">{r.bahnhofStrecke ?? "ohne Bahnhof"} · {r.taetigkeitsbereich ?? "Tätigkeit ?"}</span>
+                {fit === "station+phase" && <Badge variant="secondary" className="text-2xs">passt zu Bahnhof und Phase</Badge>}
+                {fit === "station" && <Badge variant="outline" className="text-2xs">Bahnhof passt, andere Phase</Badge>}
                 <Button variant="outline" size="sm" className="ml-auto h-7 gap-1 px-2 text-xs" onClick={() => setPicking(r)}>
                   <Plus className="h-3 w-3" aria-hidden /> Zuordnen …
                 </Button>
               </li>
             ))}
           </ul>
+          {offer.length > shown.length && (
+            <Button variant="link" size="sm" className="mt-1 h-auto p-0 text-xs" onClick={() => setShowAll(true)} data-testid="offer-more">
+              {offer.length - shown.length} weitere anzeigen
+            </Button>
+          )}
         </div>
       )}
       <LinkProjectDialog report={picking} open={picking !== null} defaultProjectId={projectId} onOpenChange={(o) => { if (!o) setPicking(null); }} />

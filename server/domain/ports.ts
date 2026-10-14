@@ -127,14 +127,23 @@ export interface ProjectTx {
   registerCandidates(source: string, lookup: RegisterLookup): Promise<RegisterCandidates>;
   /** INSERT IGNORE of (project, source key) pairs — or, with kind "skip", of project-less exclusions; returns how many were new */
   recordSourceKeys(source: string, rows: ReadonlyArray<{ projectId: number | null; keyHash: string; kind?: "match" | "skip" }>): Promise<number>;
+  /**
+   * Claim a registration key for a project that is about to be created: INSERT of (source, key) with no owner yet. The UNIQUE
+   * index makes a concurrent claim WAIT for this transaction and then lose (false) — so two imports of the same file cannot both
+   * create the project. `assignSourceKey` then names the owner.
+   */
+  claimSourceKey(source: string, keyHash: string): Promise<boolean>;
+  assignSourceKey(source: string, keyHash: string, projectId: number): Promise<void>;
   /** withdraw earlier "skip" decisions; returns how many were removed */
   deleteSkipKeys(source: string, keyHashes: readonly string[]): Promise<number>;
   // ---- Prüfbericht ↔ project link ----
   lockPruefbericht(id: number): Promise<PruefberichtLinkRow | null>;
   /** UPDATE … WHERE id=? AND version=? ; false when zero rows matched. `projectId` null clears the link. */
-  setPruefberichtProject(id: number, expectedVersion: number, link: { projectId: number | null; source: "auto" | "manual" | null }): Promise<boolean>;
-  /** every report with no project yet */
+  setPruefberichtProject(id: number, expectedVersion: number, link: { projectId: number | null; source: "auto" | "manual" | "detached" | null }): Promise<boolean>;
+  /** every report with no project yet that nobody detached on purpose — a plain snapshot read, no row locks (the versioned UPDATE is the guard) */
   unlinkedPruefberichte(): Promise<PruefberichtLinkRow[]>;
+  /** SELECT … FOR SHARE on the given projects: returns the ids that still exist and keeps them from being deleted until commit */
+  shareLockProjects(ids: readonly number[]): Promise<Set<number>>;
   /** id/Projektnummer/Station of every project that has a Projektnummer */
   projectsForLinking(): Promise<LinkProject[]>;
   /** clears the link of every report pointing at the project (the project is about to be deleted); returns the reports changed */

@@ -103,6 +103,13 @@ export default function ProjektuebersichtView() {
         </Card>
       ) : (
         <>
+          {summary.data && summary.data.staleAuto > 0 && (
+            <Card className="border-amber-300 shadow-sm" data-testid="stale-auto">
+              <CardContent className="p-4 text-sm">
+                <strong>{summary.data.staleAuto.toLocaleString("de-DE")}</strong> automatische Zuordnungen passen nach späteren Änderungen an Prüfbericht oder Projekt (Nummer, Bahnhof, Phase) nicht mehr zur Regel. Sie bleiben bestehen, bis jemand sie prüft — im Prüfbericht „Zuordnen“ öffnen und bestätigen oder entfernen.
+              </CardContent>
+            </Card>
+          )}
           {summary.data && summary.data.open > 0 && (
             <Card className="shadow-sm" data-testid="link-summary">
               <CardContent className="space-y-2 p-4 text-sm">

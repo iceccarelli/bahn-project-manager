@@ -119,3 +119,24 @@ export const LINK_POLICY = {
   phase:
     "AP, EP und VEP sind verschiedene Phasen und damit verschiedene Anmeldungen. Ein Prüfbericht, der seine Phase nennt, wird nie einem Projekt einer anderen Phase zugeordnet — auch nicht, wenn es das einzige Projekt an diesem Bahnhof ist.",
 } as const;
+
+/**
+ * Order the open reports offered to ONE project: the ones whose station and phase fit it come first (a framework number is
+ * shared by dozens of stations, so the report for this station must not drown in the rest). Pure ordering — nothing is hidden or linked.
+ */
+export function rankOffers<R extends Pick<LinkSubject, "taetigkeitsbereich" | "phase"> & { bahnhofStrecke: string | null; year: number; laufendeNummer: string }>(
+  reports: readonly R[], project: { station: string | null; projektstand: string | null },
+): Array<{ report: R; fit: "station+phase" | "station" | "other" }> {
+  const st = normStation(project.station);
+  const pp = projectPhase({ projektstand: project.projektstand });
+  const score = (r: R): "station+phase" | "station" | "other" => {
+    const rs = normStation(r.bahnhofStrecke);
+    const stationOk = st !== "" && rs !== "" && (rs === st || rs.includes(st) || st.includes(rs));
+    if (!stationOk) return "other";
+    const rp = reportPhase(r);
+    return rp === null || pp === null || rp === pp ? "station+phase" : "station";
+  };
+  const rank = { "station+phase": 0, station: 1, other: 2 } as const;
+  return reports.map((report) => ({ report, fit: score(report) }))
+    .sort((a, b) => rank[a.fit] - rank[b.fit] || b.report.year - a.report.year || a.report.laufendeNummer.localeCompare(b.report.laufendeNummer, "de", { numeric: true }));
+}
