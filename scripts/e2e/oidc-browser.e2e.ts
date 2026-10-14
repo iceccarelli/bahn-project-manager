@@ -108,7 +108,12 @@ await step("unauthenticated visit: bounced to /login, no data requested, no toke
   await A.page.waitForURL(/\/login/, { timeout: 10000 });
   await A.page.getByRole("button", { name: /Mit Microsoft anmelden/ }).waitFor();
   if (await A.page.getByLabel("Passwort").count()) throw new Error("password form present in SSO mode");
-  if (await A.page.getByText(/demo/i).count()) throw new Error("demo affordance visible in SSO mode");
+  if (await A.page.getByRole("button", { name: /Demo/ }).count()) throw new Error("demo sign-in button visible in SSO mode");
+  if (await A.page.getByText(/admin@bahn|pruefer@bahn/i).count()) throw new Error("demo credentials visible in SSO mode");
+  // the demo stays reachable, but only as a plain link to the separate static deployment (VITE_DEMO_URL baked into this build)
+  const demo = A.page.getByTestId("demo-link");
+  if ((await demo.getAttribute("href")) !== "https://demo.example.test/") throw new Error("demo link missing or wrong target");
+  if (await A.page.getByRole("button", { name: /Mit Microsoft anmelden/ }).count() !== 1) throw new Error("Microsoft sign-in is not the one primary action");
   const s = await storage(A.page);
   if (JSON.stringify(s).match(JWT_RE)) throw new Error("token in storage before sign-in");
   if (A.seen.trpcAuth.some(x => x)) throw new Error("bearer sent before sign-in");
@@ -190,6 +195,15 @@ await step("authorization is not loosened by sign-in: no claim = no data; Frankf
     if (label === "unknown role" && s.role !== "viewer") throw new Error(`unknown role elevated to ${s.role}`);
     if (who.workspaces?.[0] === "*" && JSON.stringify(s.workspaces) === '"ALL"') throw new Error("'*' granted ALL");
   }
+});
+
+await step("first Microsoft sign-in of an account without any grant: a clear 'noch keine Freigabe' page, not empty lists", async () => {
+  const N = await session({ oid: "nogrant", name: "Nora", roles: ["editor"] });
+  await N.page.goto(`${APP}/login`);
+  await N.page.getByRole("button", { name: /Mit Microsoft anmelden/ }).click();
+  await N.page.getByTestId("access-pending").waitFor({ timeout: 15000 });
+  if (!(await N.page.getByText(/Nora/).count())) throw new Error("the page does not say who is signed in");
+  await N.page.getByRole("button", { name: "Abmelden" }).waitFor();
 });
 
 await step("a user signed in as a restricted principal sees only their workspace through the real UI", async () => {

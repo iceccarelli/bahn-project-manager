@@ -261,7 +261,7 @@ jobs:
       - run: pnpm exec playwright install --with-deps chromium
       - run: scripts/e2e/build-server-mode.sh
       - run: pnpm exec tsx scripts/e2e/server-mode.e2e.ts
-      - run: OUT=dist-oidc VITE_OIDC_AUTHORITY=http://127.0.0.1:3290/ VITE_OIDC_CLIENT_ID=bahn-spa VITE_OIDC_SCOPE='openid profile' scripts/e2e/build-server-mode.sh
+      - run: OUT=dist-oidc VITE_OIDC_AUTHORITY=http://127.0.0.1:3290/ VITE_OIDC_CLIENT_ID=bahn-spa VITE_OIDC_SCOPE='openid profile' VITE_DEMO_URL=https://demo.example.test/ scripts/e2e/build-server-mode.sh
       - run: OUT=dist-oidc pnpm exec tsx scripts/e2e/oidc-browser.e2e.ts
       - uses: actions/upload-artifact@v4
         if: always()

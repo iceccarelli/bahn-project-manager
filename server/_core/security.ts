@@ -24,7 +24,7 @@ export const INSTANCE_ID = createHash("sha256").update(hostname()).digest("hex")
  */
 export function buildCsp(env: NodeJS.ProcessEnv = process.env): string {
   const origins = new Set<string>(["'self'"]);
-  try { if (env.OIDC_ISSUER) origins.add(new URL(env.OIDC_ISSUER).origin); } catch { /* assertProductionConfig reports a bad issuer */ }
+  try { if (env.OIDC_ISSUER) origins.add(new URL(env.OIDC_ISSUER.split(/[,\s]+/)[0] as string).origin); } catch { /* assertProductionConfig reports a bad issuer */ }
   for (const o of (env.CSP_CONNECT_EXTRA ?? "").split(/\s+/).filter(Boolean)) { try { origins.add(new URL(o).origin); } catch { /* ignore */ } }
   return [
     "default-src 'self'",

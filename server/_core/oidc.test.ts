@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { SignJWT, exportJWK, generateKeyPair, createLocalJWKSet } from "jose";
-import { verifyBearer, type OidcConfig } from "./oidc";
+import { listOf, oidcConfigFromEnv, verifyBearer, type OidcConfig } from "./oidc";
 import { assertProductionConfig, sameOriginForCookies } from "./security";
 
 const ISS = "https://login.microsoftonline.com/tenant-1/v2.0", AUD = "api://bahn";
@@ -45,6 +45,27 @@ describe("OIDC bearer verification (Entra-shaped tokens)", () => {
     const b64 = (o: object) => Buffer.from(JSON.stringify(o)).toString("base64url");
     const none = `${b64({ alg: "none" })}.${b64({ iss: ISS, aud: AUD, sub: "x", exp: 9999999999, roles: ["admin"] })}.`;
     await expect(verifyBearer(none, cfg)).rejects.toThrow();
+  });
+});
+
+describe("Entra v1 and v2 tokens (issuer and audience lists)", () => {
+  const V1 = "https://sts.windows.net/tenant-1/", GUID = "11111111-2222-3333-4444-555555555555";
+  it("listOf keeps a single value a string and splits comma/space lists", () => {
+    expect(listOf(ISS)).toBe(ISS);
+    expect(listOf(`${ISS}, ${V1}`)).toEqual([ISS, V1]);
+    expect(listOf(`api://bahn ${GUID}`)).toEqual(["api://bahn", GUID]);
+  });
+  it("a v1 token (sts.windows.net issuer, App ID URI audience) verifies when both spellings are configured — and only then", async () => {
+    const both: OidcConfig = { ...cfg, issuer: [ISS, V1], audience: ["api://bahn", GUID] };
+    expect((await verifyBearer(await sign({ tid: "t", oid: "o-3", roles: ["editor"] }, { iss: V1 }), both)).role).toBe("editor");
+    expect((await verifyBearer(await sign({ tid: "t", oid: "o-3" }, { aud: GUID }), both)).subject).toBe("t:o-3");
+    await expect(verifyBearer(await sign({ sub: "s" }, { iss: V1 }), cfg)).rejects.toThrow();
+    await expect(verifyBearer(await sign({ sub: "s" }, { iss: "https://sts.windows.net/other/" }), both)).rejects.toThrow();
+    await expect(verifyBearer(await sign({ sub: "s" }, { aud: "api://other" }), both)).rejects.toThrow();
+  });
+  it("the JWKS URI is derived from the first issuer, v1 spelling included", () => {
+    expect(oidcConfigFromEnv({ OIDC_ISSUER: `${V1},${ISS}`, OIDC_AUDIENCE: "a" } as never)).not.toBeNull();
+    expect(oidcConfigFromEnv({ OIDC_ISSUER: ISS } as never)).toBeNull();
   });
 });
 

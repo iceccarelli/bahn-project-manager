@@ -166,3 +166,16 @@ function useLocalAuth() {
 }
 
 export const useAuth: typeof useLocalAuth = SERVER_MODE ? (useServerAuth as unknown as typeof useLocalAuth) : useLocalAuth;
+
+/**
+ * Signed in, but the token grants nothing to look at: not an admin and no workspace (a missing `workspaces` claim is "no access",
+ * docs/auth.md). Without this the first real Microsoft sign-in would land on empty lists and look broken.
+ * Demo (browser-local) users always have access to the synthetic data.
+ */
+export function useAccessPending(): { pending: boolean; who: string | null } {
+  const auth = useAuth() as unknown as { session?: { role: string; workspaces: unknown; name: string | null; email: string | null } | null };
+  const s = auth.session;
+  if (!SERVER_MODE || !s) return { pending: false, who: null };
+  const none = s.role !== "admin" && Array.isArray(s.workspaces) && s.workspaces.length === 0;
+  return { pending: none, who: s.name ?? s.email ?? null };
+}
