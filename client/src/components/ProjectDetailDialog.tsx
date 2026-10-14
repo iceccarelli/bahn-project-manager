@@ -69,6 +69,7 @@ import {
 } from "lucide-react";
 import { Link } from "wouter";
 import { PdfPreviewDialog, usePdfPreview } from "@/components/PdfPreviewDialog";
+import { ProjectPruefberichte } from "@/components/itk/ProjectPruefberichte";
 import type { Project } from "@/hooks/useDataQuery";
 import { useProjectHistory } from "@/hooks/useAuditFeed";
 import { DEPARTMENTS, type Department } from "@shared/types";
@@ -296,6 +297,16 @@ function projectHref(projektnummer: string | null | undefined): string {
   const nr = String(projektnummer ?? "").trim();
   if (typeof window === "undefined" || !nr) return "";
   return `${window.location.origin}/projects?q=${encodeURIComponent(nr)}`;
+}
+
+function ProjectLinkedReports({ project }: { project: Project | null }) {
+  if (!project || !SERVER_MODE) return null;
+  return (
+    <>
+      <Separator className="my-5" />
+      <ProjectPruefberichte projectId={project.id} projektnummer={project.projektnummer ?? null} station={project.station ?? null} projektstand={project.projektstand ?? null} />
+    </>
+  );
 }
 
 export function ProjectDetailDialog({
@@ -842,6 +853,9 @@ export function ProjectDetailDialog({
               </table>
             </div>
           </section>
+
+          {/* Server mode, and only for principals who may see ITK Prüfberichte; renders nothing otherwise */}
+          <ProjectLinkedReports project={project} />
 
           {history.length > 0 && (
             <>

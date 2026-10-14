@@ -5,6 +5,10 @@
 > replacement for the Prüfstelle ITK). Nothing of that stack is imported; this is a domain mapping onto the one runtime,
 > one data plane and one navigation model of this app.
 
+> Related: [project-register-import.md](project-register-import.md) (the Übersichtsliste import, identity, links, decisions) ·
+> [abnahme.md](abnahme.md) (the Prüfbericht reference of the protocol) · [data-governance.md](data-governance.md) (`private-data/`) ·
+> [production-readiness.md](production-readiness.md) (what is verified, known red).
+
 ## The two records
 
 The platform's central record is the **Prüfbericht** (one row of the yearly workbook: laufende Nummer, Tätigkeitsbereich,
@@ -26,7 +30,7 @@ Prüfer; **0 of 510** project descriptions name a Technik, so Technik cannot be 
 | Audit log, version history, optimistic locking, WebSocket sync | existing Änderungshistorie, `version` + conflict dialog, SSE | **DONE** (not ported) |
 | Technik filter / Technik-Verteilung | needs the Prüfbericht record | see below |
 | PDF-Code (Beschriftung) | derived from the Prüfbericht record | done |
-| Excel import "100 % Datentreue", 2017–2019 legacy formats | extends the existing Excel import with the Prüfbericht columns | see below |
+| Excel import "100 % Datentreue", 2017–2019 legacy formats | Prüfbericht workbook import (below); the project register has its own import under Projekte | **DONE** |
 | Expo mobile app, offline-first | out of scope | — |
 
 ## Prüfberichte — DONE, verified against the real workbook
@@ -47,5 +51,22 @@ re-import, dates intact. What the real file taught us (all handled in `shared/it
   genuine edits or drift in the workbook (e.g. 2022 A/P prefixes), shown to the user rather than silently normalised.
 - The platform's README form `PB_…` is never produced by its own code; the workbook formula is the truth.
 
-Still open: linking a Prüfbericht to a Project through `projektnummer` (and giving the Abnahme its laufende Nummer /
-PDF-Code), and the migration of platform-only data (its seed script reads the wrong columns, so nothing is taken from it).
+## Prüfbericht ↔ Projekt — DONE (this change), see [project-register-import.md](project-register-import.md)
+
+The relationship the platform's two records lacked is now a column: `itk_pruefberichte.projectId` (nullable; one project, many
+reports; a report may stay unlinked), written only by `PruefberichtLinkService` (versioned, idempotent, one audit row per change),
+never by the workbook import. The evidence rule is *same Projektnummer **and** same station, exactly one project* — and, since AP, EP and VEP are different
+registrations, a report that states its phase goes to the project of that phase and never to another phase's — anything less
+is a suggestion a person confirms (`shared/itk/project-link.ts`; measured on the supplied workbooks in the new doc). The links
+show where they belong:
+
+| Where | What |
+|---|---|
+| `/psv-itk` → **Projektübersicht ITK** (new tab) | the Prüfbericht register with the canonical project of each report, back-link to the project, filters *zugeordnet / nicht zugeordnet*, *Zuordnen …*, admin *Automatisch zuordnen* (dry run first) and the existing workbook import |
+| `/psv-itk` → **PDF-Codes** | a *Projekt* column linking back to the project |
+| `/projects` → project detail | *ITK-Prüfberichte*: the linked reports with their canonical PDF-Code |
+| `/psv-itk` → **Abnahme** | for a project: its linked report of the selected Technik — none: explicit empty state; one: used; several: the user must choose, and the protocol carries the running number and the **derived** PDF-Code (`docs/abnahme.md`) |
+
+The project register itself (the *Übersichtsliste*) is imported under **Projekte**, not here:
+[project-register-import.md](project-register-import.md). Still open: the migration of platform-only data (its seed script
+reads the wrong columns, so nothing is taken from it).

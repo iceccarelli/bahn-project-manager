@@ -29,9 +29,10 @@ import { pageAudit } from "./infra/auditQuery";
 import { searchGlobal } from "./infra/searchQuery";
 import { buildPortfolio, buildReelView } from "@shared/portfolio-view";
 import { buildItkYears } from "@shared/itk/jahresansicht";
-import { ImportBatchInputSchema, ListInputSchema } from "@shared/itk/pruefbericht-contract";
+import { AutoLinkInputSchema, ImportBatchInputSchema, ListInputSchema, SetLinkInputSchema } from "@shared/itk/pruefbericht-contract";
+import { RegisterApplyInputSchema, RegisterPreviewInputSchema } from "@shared/register/register-contract";
 import { buildPruefberichtView, type PruefberichtView } from "@shared/itk/pruefbericht-view";
-import { importPruefberichte, listPruefberichte, loadAllPruefberichte } from "./infra/pruefberichtStore";
+import { importPruefberichte, linkCandidatesOf, linkSummary, listPruefberichte, loadAllPruefberichte, pruefberichteOfProject } from "./infra/pruefberichtStore";
 import { drillProjectIds, isEmptyDrill, startOfDayUtc, type Drill } from "@shared/drilldown";
 import { AUDIT_DOCUMENT_KINDS } from "@shared/audit-contract";
 import type { PortfolioProject } from "@shared/portfolio-metrics";
@@ -263,6 +264,27 @@ export const appRouter = router({
         return projects.createReview(ctx.principal, input, { traceId: ctx.traceId, requestId: ctx.requestId });
       }),
 
+    /**
+     * Übersichtsliste import, step 1: what would happen to these records (docs/project-register-import.md). Admin only.
+     * Read-only; a mutation only to carry a large body (like `sync`).
+     */
+    registerPreview: adminProcedure
+      .input(RegisterPreviewInputSchema)
+      .mutation(async ({ input, ctx }) => {
+        const { registerImport } = await requireServices();
+        return registerImport.preview(ctx.principal, input);
+      }),
+
+    /** Übersichtsliste import, step 2: apply one chunk through the project write path (version, idempotency, audit, outbox). Admin only. */
+    registerApply: adminProcedure
+      .input(RegisterApplyInputSchema)
+      .mutation(async ({ input, ctx }) => {
+        const { registerImport } = await requireServices();
+        const res = await registerImport.apply(ctx.principal, input, { traceId: ctx.traceId, requestId: ctx.requestId });
+        m.mutations.inc({ outcome: res.replayed ? "replay" : "ok" });
+        return res;
+      }),
+
     /** Follow / unfollow a project (recipient set of the notification policy). */
     watch: protectedProcedure
       .input(z.object({ projectId: z.number().int().positive(), on: z.boolean() }))
@@ -465,6 +487,37 @@ export const appRouter = router({
       if (!canViewPruefberichte(ctx.principal)) throw new TRPCError({ code: "FORBIDDEN" });
       const { pool } = await requireServices();
       return listPruefberichte(pool, input);
+    }),
+    /** The Prüfberichte linked to one project. Needs the right to see Prüfberichte AND to see that project (otherwise NOT_FOUND). */
+    forProject: protectedProcedure.input(z.object({ projectId: z.number().int().positive() })).query(async ({ input, ctx }) => {
+      if (!canViewPruefberichte(ctx.principal)) throw new TRPCError({ code: "FORBIDDEN" });
+      const { pool, projects } = await requireServices();
+      await projects.get(ctx.principal, input.projectId);
+      return { rows: await pruefberichteOfProject(pool, input.projectId) };
+    }),
+    /** Where the reports stand: linked, and why the rest is not (ambiguous / no Projektnummer / unknown number / other station). */
+    linkSummary: protectedProcedure.query(async ({ ctx }) => {
+      if (!canViewPruefberichte(ctx.principal)) throw new TRPCError({ code: "FORBIDDEN" });
+      const { pool } = await requireServices();
+      return linkSummary(pool);
+    }),
+    /** Projects a report could belong to, with the evidence rule's verdict. Suggestions only — linking is a separate, explicit call. */
+    linkCandidates: protectedProcedure.input(z.object({ id: z.number().int().positive() })).query(async ({ input, ctx }) => {
+      if (!canViewPruefberichte(ctx.principal)) throw new TRPCError({ code: "FORBIDDEN" });
+      const { pool } = await requireServices();
+      const res = await linkCandidatesOf(pool, input.id);
+      if (!res) throw new TRPCError({ code: "NOT_FOUND" });
+      return res;
+    }),
+    /** Set or clear the project of one report (versioned, idempotent, audited). */
+    setLink: protectedProcedure.input(SetLinkInputSchema).mutation(async ({ input, ctx }) => {
+      const { pruefberichtLinks } = await requireServices();
+      return pruefberichtLinks.setLink(ctx.principal, input, { traceId: ctx.traceId, requestId: ctx.requestId });
+    }),
+    /** Link every unlinked report with exactly one evidenced project (admin). `dryRun` reports without writing. */
+    autoLink: adminProcedure.input(AutoLinkInputSchema).mutation(async ({ input, ctx }) => {
+      const { pruefberichtLinks } = await requireServices();
+      return pruefberichtLinks.autoLink(ctx.principal, input, { traceId: ctx.traceId, requestId: ctx.requestId });
     }),
     /** One batch of the workbook import (the browser parses the file and sends it in parts). Admin only; idempotent by (year, laufende Nummer). */
     import: adminProcedure.input(ImportBatchInputSchema).mutation(async ({ input, ctx }) => {

@@ -18,6 +18,10 @@ import { SignJWT, exportJWK, generateKeyPair } from "jose";
 import mysql from "mysql2/promise";
 import * as XLSX from "xlsx";
 import { H2020, row2020 } from "../../shared/itk/testing";
+import { importWorkbookSheets } from "../../shared/itk/pruefbericht-import";
+import { registerRow, registerSheet } from "../../shared/register/testing";
+import { coreKey, fullKey } from "../../shared/project-identity";
+import { DEPARTMENTS } from "../../shared/validation";
 
 const DB_BASE = process.env.E2E_DB_BASE ?? "mysql://bahn:bahn@127.0.0.1:3306";
 const DB_NAME = "bahn_e2e";
@@ -901,6 +905,210 @@ async function main() {
     const w2 = await apiUpdate(tokenA, fr, { kommentar: "after-restart" }); if (w2.status !== 200) throw new Error("write after restart");
     await until(() => again.events.some(e => e.changes?.kommentar?.to === "after-restart"), 8000, "live delivery through the restarted instance");
     again.close();
+  });
+
+  await step("ÜBERSICHTSLISTE + PRÜFBERICHT-VERKNÜPFUNG: an admin previews and imports the register through the UI (conflicts held, duplicates named, re-import a no-op); reports are linked (auto + explicit), shown in the project detail, the ITK tab and the Abnahme; everyone else is refused", async () => {
+    const tokenAdmin = await mint("admin-reg", "Admin (Übersichtsliste)", ["admin"]);
+    const none: Record<string, [null, null, null]> = Object.fromEntries(DEPARTMENTS.map(d => [d, [null, null, null] as [null, null, null]]));
+    const R = (o: Parameters<typeof registerRow>[0]) => registerRow({ reviews: none as never, ...o });
+
+    // one existing (seeded) project whose identity is unique in the database → a conflict row built from its own fields
+    const all = await q("SELECT id, projektnummer, station, projektbeschreibung, projektstand, terminProjektvorstellung, projektleiter, bahnhofsmanagement, syncVersion FROM projects");
+    const day = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : null);
+    const idOf = (p: any) => fullKey({ projektnummer: p.projektnummer, station: p.station, projektbeschreibung: p.projektbeschreibung, projektstand: p.projektstand, terminProjektvorstellung: day(p.terminProjektvorstellung) });
+    const coreCount = new Map<string, number>(), fullCount = new Map<string, number>();
+    for (const p of all) { coreCount.set(coreKey(p), (coreCount.get(coreKey(p)) ?? 0) + 1); fullCount.set(idOf(p), (fullCount.get(idOf(p)) ?? 0) + 1); }
+    const seed = all.find(p => p.projektnummer && p.station && p.projektbeschreibung && p.projektleiter && fullCount.get(idOf(p)) === 1 && coreCount.get(coreKey(p)) === 1 && p.bahnhofsmanagement);
+    if (!seed) throw new Error("no uniquely identified seeded project to build the conflict from");
+
+    const rowsReg = [
+      R({ projektnummer: "G.E2E.1", station: "Alpha", bm: "Kassel", beschreibung: "E2E Umbau Alpha", reviews: { ITK: ["offen", "Pia Prüfer", 45_000] } as never }),
+      R({ projektnummer: "G.E2E.1", station: "Beta", bm: "Kassel", beschreibung: "E2E Umbau Beta" }),
+      R({ projektnummer: "G.E2E.2", station: "Gamma", bm: "Mainz", beschreibung: "E2E Gamma", stand: "AP" }),
+      R({ projektnummer: "G.E2E.2", station: "Gamma", bm: "Mainz", beschreibung: "E2E Gamma", stand: "EP", termin: 45_100 }),
+      R({ projektnummer: "G.E2E.3", station: "Delta", bm: "Mainz", beschreibung: "E2E Duplikat", kommentar: "erste Fassung" }),
+      R({ projektnummer: "G.E2E.3", station: "Delta", bm: "Mainz", beschreibung: "E2E Duplikat", kommentar: "zweite Fassung" }),
+      R({ projektnummer: "G.E2E.4", station: "Epsilon", bm: "Mainz", beschreibung: "E2E Statusfall", reviews: { TBQ: ["Protokoll erstellt", "Tom Prüfer", 45_000] } as never }),
+      // the seeded project, unchanged except for the Projektleiter → a conflict that must be HELD
+      R({ projektnummer: seed.projektnummer, station: seed.station, bm: seed.bahnhofsmanagement, beschreibung: seed.projektbeschreibung, stand: seed.projektstand, termin: day(seed.terminProjektvorstellung) ?? "-", pl: "Neue Leitung E2E" }),
+    ];
+    const regFile = path.join("/tmp", `e2e-register-${Date.now()}.xlsx`);
+    const regWb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(regWb, XLSX.utils.aoa_to_sheet(registerSheet(rowsReg).rows as unknown[][]), "Übersicht");
+    XLSX.utils.book_append_sheet(regWb, XLSX.utils.aoa_to_sheet([["Auszug", "nicht übernehmen"], ["G.E2E.99", "Zwilling"]]), "BVB-EEA");
+    XLSX.writeFile(regWb, regFile);
+
+    const baseline = async () => ({
+      projects: Number((await q("SELECT COUNT(*) n FROM projects"))[0].n),
+      events: Number((await q("SELECT COUNT(*) n FROM domain_events"))[0].n),
+      audits: Number((await q("SELECT COUNT(*) n FROM audit_log WHERE NOT (entityType='project' AND field='import')"))[0].n),
+      keys: Number((await q("SELECT COUNT(*) n FROM project_source_keys"))[0].n),
+    });
+    const before = await baseline();
+    const adm = await openBrowser(URLS[0]!, tokenAdmin, "admin-reg");
+    try {
+      const { page } = adm;
+      // ---- preview, then import ------------------------------------------------------------------------------
+      await page.getByTestId("register-import-open").click();
+      await page.getByTestId("register-file").setInputFiles(regFile);
+      await page.getByTestId("register-review").waitFor({ timeout: 30000 });
+      const summary = (await page.getByTestId("register-summary").innerText()).replace(/\s+/g, " ");
+      if (!/Neu 5 /.test(summary) || !/Konflikte 1 /.test(summary) || !/Mehrdeutig 2 /.test(summary)) throw new Error(`preview summary: ${summary}`);
+      // the open decisions are first-class: the differing cells of the two undecidable rows, side by side, with the policy at hand
+      const group = (await page.getByTestId("register-source-group").innerText()).replace(/\s+/g, " ");
+      if (!/Kommentar/.test(group) || !/erste Fassung/.test(group) || !/zweite Fassung/.test(group) || !/Diese Zeile gilt/.test(group)) throw new Error(`source group card: ${group}`);
+      if (!/Protokoll erstellt/.test(await page.getByTestId("register-unknown-status").innerText())) throw new Error("the status outside the vocabulary is not surfaced");
+      const conflict = (await page.getByTestId("register-row-conflict").innerText()).replace(/\s+/g, " ");
+      if (!/Projektleiter/.test(conflict) || !/Neue Leitung E2E/.test(conflict) || !conflict.includes(seed.projektleiter)) throw new Error(`conflict row lacks the old → new values: ${conflict}`);
+      if ((await q("SELECT COUNT(*) n FROM projects WHERE projektnummer LIKE 'G.E2E.%'"))[0].n !== 0) throw new Error("the preview wrote");
+      // the administrator decides the group: the second row of the file wins; the first is excluded for good
+      await page.getByTestId("register-source-group").locator('input[type="radio"]').nth(1).check();
+      await page.getByTestId("register-apply").click();
+      await page.getByTestId("register-done").waitFor({ timeout: 60000 });
+      const done = (await page.getByTestId("register-done").innerText()).replace(/\s+/g, " ");
+      if (!/6 Projekte neu, 0 geändert, 0 unverändert/.test(done) || !/1 Zeilen dauerhaft ausgeschlossen/.test(done) || !/Nicht übernommen: 1 offene Fragen/.test(done)) throw new Error(`import result: ${done}`);
+
+      const created = await q("SELECT id, station, projektstand, syncVersion FROM projects WHERE projektnummer LIKE 'G.E2E.%' ORDER BY id");
+      if (created.length !== 6) throw new Error(`created ${created.length}, expected Alpha, Beta, Gamma AP, Gamma EP, Epsilon and the winner of the undecidable group`);
+      const [winner] = await q("SELECT kommentar FROM projects WHERE projektnummer='G.E2E.3'");
+      if (winner?.kommentar !== "zweite Fassung") throw new Error(`the chosen row did not win: ${JSON.stringify(winner)}`);
+      if (Number((await q("SELECT COUNT(*) n FROM project_source_keys WHERE kind='skip' AND projectId IS NULL"))[0].n) !== 1) throw new Error("the exclusion is not remembered");
+      if (Number((await q("SELECT COUNT(*) n FROM audit_log WHERE field='import.skip'"))[0].n) !== 1) throw new Error("the exclusion is not audited");
+      const [tbq] = await q("SELECT r.status, r.prueferName FROM department_reviews r JOIN projects p ON p.id=r.projectId WHERE p.station='Epsilon' AND r.department='TBQ'");
+      if (tbq?.status !== null || tbq?.prueferName !== "Tom Prüfer") throw new Error(`withheld status: ${JSON.stringify(tbq)}`);
+      const [kept] = await q("SELECT projektleiter FROM projects WHERE id=?", [seed.id]);
+      if (kept.projektleiter !== seed.projektleiter) throw new Error("the held conflict overwrote the Projektleiter");
+      const alpha = created.find(p => p.station === "Alpha")!;
+      const [itk] = await q("SELECT status, prueferName FROM department_reviews WHERE projectId=? AND department='ITK'", [alpha.id]);
+      if (itk?.status !== "offen" || itk?.prueferName !== "Pia Prüfer") throw new Error(`ITK review: ${JSON.stringify(itk)}`);
+      const sets = await q("SELECT COUNT(DISTINCT eventId) n FROM audit_log WHERE entityType='project' AND action='create' AND entityId IN (?)", [created.map(p => p.id)]);
+      if (Number(sets[0].n) !== created.length) throw new Error("each created project must have exactly one audit set / event");
+      const afterFirst = await baseline();
+      if (afterFirst.projects !== before.projects + 6 || afterFirst.keys !== before.keys + 7) throw new Error(`counts after import: ${JSON.stringify({ before, afterFirst })}`);
+      // the history shows the import (one batch row)
+      if (Number((await q("SELECT COUNT(*) n FROM audit_log WHERE entityType='project' AND field='import'"))[0].n) < 1) throw new Error("no audit row for the import batch");
+
+      // ---- the same file again changes nothing ------------------------------------------------------------------
+      await page.getByTestId("register-import-open").waitFor();
+      await page.keyboard.press("Escape");
+      await page.getByTestId("register-import-open").click();
+      await page.getByTestId("register-file").setInputFiles(regFile);
+      await page.getByTestId("register-review").waitFor({ timeout: 30000 });
+      const again = (await page.getByTestId("register-summary").innerText()).replace(/\s+/g, " ");
+      if (!/Neu 0 /.test(again) || !/Unverändert 6 /.test(again) || !/Konflikte 1 /.test(again) || !/Mehrdeutig 0 /.test(again) || !/Ausgeschlossen 1 /.test(again)) throw new Error(`re-import preview: ${again}`);
+      if ((await page.getByTestId("register-source-group").count()) !== 0) throw new Error("the decided group asks again");
+      await page.getByTestId("register-apply").click();
+      await page.getByTestId("register-done").waitFor({ timeout: 60000 });
+      if (!/0 Projekte neu, 0 geändert, 6 unverändert/.test((await page.getByTestId("register-done").innerText()).replace(/\s+/g, " "))) throw new Error("re-import was not a no-op");
+      const afterSecond = await baseline();
+      if (afterSecond.projects !== afterFirst.projects || afterSecond.events !== afterFirst.events || afterSecond.audits !== afterFirst.audits || afterSecond.keys !== afterFirst.keys) throw new Error(`re-import wrote: ${JSON.stringify({ afterFirst, afterSecond })}`);
+    } finally { await adm.ctx.close(); }
+
+    // ---- Prüfberichte of the same projects, then links ----------------------------------------------------------------
+    const reports = importWorkbookSheets([{ name: "2030", rows: [[...H2020],
+      row2020("30.001", { projektnummer: "G.E2E.1", bahnhof: "Alpha", bauform: "ZIM", taetigkeit: "Abnahmeprüfung" }),           // unique → auto
+      row2020("30.002", { projektnummer: "G.E2E.1", bahnhof: "Beta", bauform: "Video", taetigkeit: "Abnahmeprüfung" }),         // unique → auto
+      row2020("30.003", { projektnummer: "G.E2E.2", bahnhof: "Gamma", bauform: "ZIM", taetigkeit: "Abnahmeprüfung" }),          // Gamma AP + EP, no phase stated → ambiguous
+      row2020("30.004", { projektnummer: "G.E2E.2", bahnhof: "Gamma", bauform: "ZIM", taetigkeit: "fachtechnische Prüfung EP" }), // states EP → Gamma's EP project, automatically
+      row2020("30.005", { projektnummer: null, bahnhof: "Alpha", bauform: "ZIM" }),                                             // no number → stays open
+      row2020("30.006", { projektnummer: "G.E2E.1", bahnhof: "Alpha", bauform: "ZIM", taetigkeit: "fachtechnische Prüfung EP" }), // states EP; Alpha's only project is AP → NOT linked
+    ] }]).records;
+    const imp = await api(URLS[0]!, tokenAdmin, "pruefberichte.import", { source: "e2e-links.xlsx", part: { index: 1, total: 1 }, records: reports });
+    if (imp.status !== 200) throw new Error(`report import: ${imp.status} ${JSON.stringify(imp.error)}`);
+    const pid = async (station: string, stand?: string) => (await q(`SELECT id FROM projects WHERE projektnummer LIKE 'G.E2E.%' AND station=?${stand ? " AND projektstand=?" : ""}`, stand ? [station, stand] : [station]))[0].id as number;
+    const alphaId = await pid("Alpha"), betaId = await pid("Beta"), gammaEP = await pid("Gamma", "EP");
+
+    const adm2 = await openBrowser(URLS[0]!, tokenAdmin, "admin-link");
+    try {
+      const { page } = adm2;
+      await page.goto(`${URLS[0]}/psv-itk?tab=projektuebersicht&year=2030`);
+      await page.getByTestId("pu-table").waitFor({ timeout: 15000 });
+      if ((await page.locator('[data-testid="pu-row"]').count()) !== 6) throw new Error("the new tab does not list the 6 reports of 2030");
+      // dry run first, then apply
+      await page.getByTestId("autolink-open").click();
+      await page.getByTestId("autolink-result").waitFor({ timeout: 15000 });
+      if (!/3 von \d+ nicht zugeordneten Prüfberichten würden zugeordnet/.test((await page.getByTestId("autolink-result").innerText()).replace(/\s+/g, " "))) throw new Error("dry run verdict");
+      if (Number((await q("SELECT COUNT(*) n FROM itk_pruefberichte WHERE projectId IS NOT NULL"))[0].n) !== 0) throw new Error("the dry run linked");
+      await page.getByTestId("autolink-apply").click();
+      await until(async () => /3 Prüfberichte zugeordnet/.test(await page.getByTestId("autolink-result").innerText().catch(() => "")), 15000, "auto-link result");
+      const linked = await q("SELECT laufendeNummer, projectId, projectLinkSource FROM itk_pruefberichte WHERE projectId IS NOT NULL ORDER BY laufendeNummer");
+      if (JSON.stringify(linked.map(l => [l.laufendeNummer, l.projectId, l.projectLinkSource])) !== JSON.stringify([["30.001", alphaId, "auto"], ["30.002", betaId, "auto"], ["30.004", gammaEP, "auto"]])) throw new Error(`auto links: ${JSON.stringify(linked)}`);
+      await page.keyboard.press("Escape");
+
+      // the ambiguous reports: pick the project explicitly (EP registration)
+      for (const nr of ["30.003"]) {
+        await page.locator('[data-testid="pu-row"]', { hasText: nr }).getByRole("button", { name: /zuordnen|ändern/ }).click();
+        await page.getByTestId("link-dialog").waitFor({ timeout: 10000 });
+        await page.getByTestId("link-dialog").getByText(/Mehrere Projekte tragen/).waitFor({ timeout: 10000 });
+        await page.getByTestId("link-dialog").locator('[role="radio"]').nth(1).click(); // candidates are ordered by station, phase → AP first, EP second
+        await page.getByTestId("link-save").click();
+        await until(async () => (await page.getByTestId("link-dialog").count()) === 0, 10000, "dialog closed");
+      }
+      const gamma = await q("SELECT laufendeNummer, projectId, projectLinkSource FROM itk_pruefberichte WHERE laufendeNummer IN ('30.003','30.004') ORDER BY laufendeNummer");
+      if (JSON.stringify(gamma.map(g => [g.laufendeNummer, g.projectId, g.projectLinkSource])) !== JSON.stringify([["30.003", gammaEP, "manual"], ["30.004", gammaEP, "auto"]])) throw new Error(`explicit/automatic links: ${JSON.stringify(gamma)}`);
+      // the EP-stating report at a station whose only project is AP was not linked to it
+      if ((await q("SELECT projectId FROM itk_pruefberichte WHERE laufendeNummer='30.006'"))[0].projectId !== null) throw new Error("a report was linked across phases");
+      const linkAudit = Number((await q("SELECT COUNT(*) n FROM audit_log WHERE entityType='pruefbericht' AND field='projectId'"))[0].n);
+      if (linkAudit !== 4) throw new Error(`link audit rows: ${linkAudit}`);
+
+      // back to the project from the report
+      await page.reload();
+      await page.getByTestId("pu-table").waitFor({ timeout: 15000 });
+      const href = await page.locator('[data-testid="pu-row"]', { hasText: "30.001" }).getByTestId("pu-project-link").getAttribute("href");
+      if (href !== `/projects?detail=${alphaId}`) throw new Error(`back link: ${href}`);
+      if (!(await page.locator('[data-testid="pu-row"]', { hasText: "30.005" }).getByText("nicht zugeordnet").count())) throw new Error("the report without a Projektnummer must stay unlinked and say so");
+
+      // the project detail lists exactly its reports, with the canonical PDF-Code
+      await page.goto(`${URLS[0]}/projects?detail=${alphaId}`);
+      await page.getByTestId("project-pruefberichte").waitFor({ timeout: 20000 });
+      await until(async () => /30\.001/.test(await page.getByTestId("project-pruefberichte").innerText().catch(() => "")), 15000, "Alpha's report in the project detail");
+      const detail = (await page.getByTestId("project-pruefberichte").innerText()).replace(/\s+/g, " ");
+      if (!/A30\.001 - Alpha/.test(detail) || /30\.003/.test(detail)) throw new Error(`project detail reports: ${detail}`);
+      await page.goto(`${URLS[0]}/projects?detail=${betaId}`);
+      await until(async () => /30\.002/.test(await page.getByTestId("project-pruefberichte").innerText().catch(() => "")), 15000, "Beta's report");
+
+      // ---- Abnahme: one → used; several → must choose; none → empty state --------------------------------------------
+      await page.goto(`${URLS[0]}/psv-itk?tab=abnahme&technik=ZIM&project=${alphaId}`);
+      await page.getByTestId("abnahme-report-ref").waitFor({ timeout: 20000 });
+      const one = (await page.getByTestId("abnahme-report-ref").innerText()).replace(/\s+/g, " ");
+      if (!/30\.001 \(2030\)/.test(one) || !/A30\.001 - Alpha/.test(one)) throw new Error(`single report: ${one}`);
+      if (await page.getByTestId("abnahme-pdf").isDisabled()) throw new Error("PDF is blocked although exactly one report applies");
+
+      await page.goto(`${URLS[0]}/psv-itk?tab=abnahme&technik=ZIM&project=${gammaEP}`);
+      await page.getByTestId("abnahme-report-choose").waitFor({ timeout: 20000 });
+      if (!(await page.getByTestId("abnahme-pdf").isDisabled())) throw new Error("PDF must wait for the explicit choice among several reports");
+      await page.locator("#abnahme-pruefbericht").click();
+      await page.getByRole("option", { name: /30\.004/ }).click();
+      await page.getByTestId("abnahme-report-ref").waitFor({ timeout: 10000 });
+      if (!/30\.004 \(2030\)/.test(await page.getByTestId("abnahme-report-ref").innerText()) || (await page.getByTestId("abnahme-pdf").isDisabled())) throw new Error("the choice was not applied");
+      if (!/pruefbericht=/.test(page.url())) throw new Error("the choice is not in the URL");
+
+      await page.goto(`${URLS[0]}/psv-itk?tab=abnahme&technik=Video&project=${alphaId}`);
+      await page.getByTestId("abnahme-report-none").waitFor({ timeout: 20000 });
+      if (!/Kein Video-Prüfbericht/.test(await page.getByTestId("abnahme-report-none").innerText())) throw new Error("empty state wording");
+    } finally { await adm2.ctx.close(); }
+
+    // ---- who is refused / never offered ---------------------------------------------------------------------------------------
+    const ed = await openBrowser(URLS[0]!, tokenA, "A-reg");
+    try {
+      await ed.page.waitForSelector("tbody tr", { timeout: 20000 });
+      if ((await ed.page.getByTestId("register-import-open").count()) !== 0) throw new Error("an editor is offered the register import");
+    } finally { await ed.ctx.close(); }
+    const lim = await openBrowser(URLS[1]!, tokenB, "B-reg");
+    try {
+      await lim.page.goto(`${URLS[1]}/projects?detail=${(await q("SELECT id FROM projects WHERE bahnhofsmanagement='Frankfurt' LIMIT 1"))[0].id}`);
+      await lim.page.waitForSelector('[data-testid="drawer-edit"], [role="dialog"]', { timeout: 20000 });
+      await sleep(800);
+      if ((await lim.page.getByTestId("project-pruefberichte").count()) !== 0) throw new Error("a workspace-limited principal is shown the reports section");
+    } finally { await lim.ctx.close(); }
+    const g = (r: { status: number }) => r.status;
+    if (g(await api(URLS[1]!, tokenB, "pruefberichte.forProject", { projectId: alphaId }, "GET")) !== 403) throw new Error("B may read a project's reports");
+    if (g(await api(URLS[1]!, tokenB, "pruefberichte.setLink", { id: 1, expectedVersion: 1, projectId: alphaId, idempotencyKey: key() })) !== 403) throw new Error("B may link");
+    if (g(await api(URLS[0]!, tokenA, "projects.registerPreview", { records: [] })) === 200) throw new Error("an editor previewed the register import");
+    if (g(await api(URLS[0]!, tokenA, "projects.registerApply", { source: "x", part: { index: 1, total: 1 }, rows: [], idempotencyKey: key() })) === 200) throw new Error("an editor applied the register import");
+    if (g(await api(URLS[1]!, tokenB, "pruefberichte.autoLink", { dryRun: true, idempotencyKey: key() })) !== 403) throw new Error("B may auto-link");
+    const seenB = await api(URLS[1]!, tokenB, "audit.page", { entityType: "pruefbericht", limit: 20, days: 30 }, "GET");
+    if (seenB.data?.items?.length) throw new Error("B sees link audit rows");
   });
 
   await step("integrity: every committed change has exactly one audit set, one event, one feedSeq; feed is gapless; nothing unpublished/dead", async () => {

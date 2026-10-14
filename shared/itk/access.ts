@@ -13,3 +13,6 @@ export const mayViewPruefberichte = (g: Grant): boolean => g.role === "admin" ||
 
 /** Importing replaces records by key: admin only. An ALL grant on an editor is not enough. */
 export const mayImportPruefberichte = (g: Pick<Grant, "role">): boolean => g.role === "admin";
+
+/** Linking a report to a project changes what the project detail and the Abnahme show: editors with an all-workspaces grant, and admins. */
+export const mayLinkPruefberichte = (g: Grant): boolean => mayViewPruefberichte(g) && (g.role === "admin" || g.role === "editor");

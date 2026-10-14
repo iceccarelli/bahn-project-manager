@@ -18,7 +18,7 @@
  * because a claim was absent.
  */
 import { slugify } from "@shared/domain-events";
-import { mayImportPruefberichte, mayViewPruefberichte } from "@shared/itk/access";
+import { mayImportPruefberichte, mayLinkPruefberichte, mayViewPruefberichte } from "@shared/itk/access";
 
 export type Role = "admin" | "editor" | "viewer";
 
@@ -95,6 +95,19 @@ export function canViewPruefberichte(p: Principal): boolean {
 /** Importing the workbook replaces records by key; admin only. */
 export function canImportPruefberichte(p: Principal): boolean {
   return mayImportPruefberichte(p);
+}
+
+/** Setting or clearing the project of ONE report: an editor with an all-workspaces grant (and admins); the target project must also be editable by the caller. */
+export function canLinkPruefberichte(p: Principal): boolean {
+  return mayLinkPruefberichte(p);
+}
+
+/** Linking all reports by evidence in one step, and importing the Übersichtsliste: both write many records at once → admin only. */
+export function canBulkLink(p: Principal): boolean {
+  return mayImportPruefberichte(p);
+}
+export function canImportRegister(p: Principal): boolean {
+  return isAdmin(p);
 }
 
 export function canExport(p: Principal): boolean {

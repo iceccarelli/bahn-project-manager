@@ -343,6 +343,73 @@ export class ProjectService {
   }
 
   /**
+   * Apply changes to a project that the CALLER HAS ALREADY LOCKED, inside the caller's open transaction: field update,
+   * review inserts/updates, audit rows, one `project.updated` event, watcher notifications — the rows `update` and
+   * `updateReview` write, as one version step. Used by the Übersichtsliste import so that a bulk write is made of the same
+   * domain transitions as a single edit (version, audit, outbox, read models, realtime), not a bypass around them.
+   * Authorization and the version check are the caller's: it holds the lock and knows `current.syncVersion` is the one it
+   * planned against. Returns null when nothing differs (no version bump, no event, no audit).
+   */
+  async updateWithin(
+    tx: ProjectTx, principal: Principal, ctx: RequestContext, current: Project,
+    change: { fields: Partial<Record<EditableProjectField, string | null>>; reviews: ReadonlyArray<{ department: string; status?: string | null; prueferName?: string | null; datum?: string | null }> },
+  ): Promise<{ eventId: string; version: number } | null> {
+    const norm = normalizePatch(change.fields as Record<string, string | null | undefined>);
+    const changes = diffOf(current, norm);
+    const reviewWrites: Array<() => Promise<void>> = [];
+    for (const r of change.reviews) {
+      const existing = await tx.lockReview(current.id, r.department);
+      const to: Partial<Record<ReviewField, string | null>> = {};
+      for (const f of ["status", "prueferName", "datum"] as ReviewField[]) {
+        const v = r[f];
+        if (v === undefined) continue;
+        if (f === "datum") {
+          const c = cleanStr(v);
+          if (c === null) to[f] = null;
+          else { const d = new Date(c); if (Number.isNaN(d.getTime())) throw new ValidationError(`Ungültiges Datum: "${v}"`, f); to[f] = dateToWire(d); }
+        } else to[f] = cleanStr(v);
+      }
+      const from = (f: ReviewField): string | null => (!existing ? null : f === "datum" ? dateToWire(existing.datum) : existing[f]);
+      const delta: Partial<Record<ReviewField, string | null>> = {};
+      for (const [f, v] of Object.entries(to) as [ReviewField, string | null][]) {
+        if (from(f) !== v) { delta[f] = v; changes[reviewChangeKey(r.department, f)] = { from: from(f), to: v }; }
+      }
+      if (Object.keys(delta).length === 0) continue;
+      const row = (d: Partial<Record<ReviewField, string | null>>) => ({
+        ...(d.status !== undefined ? { status: d.status } : {}),
+        ...(d.prueferName !== undefined ? { prueferName: d.prueferName } : {}),
+        ...(d.datum !== undefined ? { datum: d.datum === null ? null : new Date(d.datum) } : {}),
+      });
+      reviewWrites.push(async () => {
+        if (existing) await tx.updateReview(existing.id, row(delta));
+        else await tx.insertReview(current.id, { department: r.department, status: delta.status ?? null, prueferName: delta.prueferName ?? null, datum: delta.datum ? new Date(delta.datum) : null });
+      });
+    }
+    if (Object.keys(changes).length === 0) return null;
+
+    for (const w of reviewWrites) await w();
+    const fieldChanges = Object.entries(changes).filter(([k]) => !k.startsWith("review."));
+    const ok = await tx.updateVersioned(current.id, current.syncVersion, toColumnValues(Object.fromEntries(fieldChanges.map(([k, c]) => [k, c.to]))));
+    if (!ok) throw new Error(`Projekt ${current.id}: Version nicht mehr aktuell (Sperre verloren)`);
+    const version = current.syncVersion + 1;
+    const workspace = "bahnhofsmanagement" in changes ? changes.bahnhofsmanagement!.to : current.bahnhofsmanagement;
+    const event = this.buildEvent("project.updated", principal, ctx, current.id, version, changes, {
+      workspace,
+      workspaceBefore: workspace !== current.bahnhofsmanagement ? current.bahnhofsmanagement : null,
+    });
+    const station = "station" in changes ? changes.station!.to : current.station;
+    await tx.appendAudit(this.auditRows(principal, event, "update", changes, labelOf(station, current.projektnummer)));
+    await tx.appendEvent(event);
+    await this.notifyWatchers(tx, principal, event, { id: current.id, projektnummer: current.projektnummer, station });
+    return { eventId: event.eventId, version };
+  }
+
+  /** Wake the outbox relay once after the caller's transaction committed. */
+  nudgeAfterCommit(): void {
+    this.notifyAfterCommit();
+  }
+
+  /**
    * The creation steps inside an OPEN transaction (authorize → insert → audit → event). Used by `create` and by
    * aggregates that create a project as part of their own transition (checklist submission), so both write the
    * same audit rows and the same event as a direct create.
@@ -392,6 +459,16 @@ export class ProjectService {
       const snapshot = snapshotJson(await tx.detail(input.id));
       // notify BEFORE the project (and its watcher rows) are removed
       await this.notifyWatchers(tx, principal, event, { id: input.id, projektnummer: current.projektnummer, station: current.station });
+      // ITK Prüfberichte linked to this project stay (they are their own records) but lose the link — audited per report
+      const unlinked = await tx.unlinkPruefberichteOf(input.id);
+      if (unlinked.length) {
+        await tx.appendAudit(unlinked.map(r => ({
+          userId: actorNumericId(principal), userName: principal.name || principal.email || principal.id,
+          entityType: "pruefbericht" as const, entityId: r.id, action: "update" as const, field: "projectId",
+          oldValue: String(input.id), newValue: null, eventId: event.eventId, aggregateVersion: null, traceId: ctx.traceId,
+          workspace: null, entityLabel: `${r.year} / ${r.laufendeNummer}`,
+        })));
+      }
       await tx.deleteProject(input.id);
       await tx.appendAudit(this.auditRows(principal, event, "delete", {}, labelOf(current.station, current.projektnummer), snapshot));
       await tx.appendEvent(event);

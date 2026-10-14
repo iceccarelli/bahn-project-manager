@@ -1,5 +1,6 @@
 import { AlertTriangle, Copy, FileSpreadsheet, Loader2, PackageOpen, Search } from "lucide-react";
 import { useDeferredValue, useMemo, useState } from "react";
+import { Link } from "wouter";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -170,6 +171,7 @@ export default function PdfCodesView() {
                       <TableHead>abgeschlossen</TableHead>
                       <TableHead>PL</TableHead>
                       <TableHead>FS</TableHead>
+                      <TableHead>Projekt</TableHead>
                       <TableHead>PDF-Code</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -188,6 +190,15 @@ export default function PdfCodesView() {
                           <TableCell>{r.abgeschlossen ? <Badge className={`text-2xs font-bold ${badgeFor(r.abgeschlossen)}`}>{r.abgeschlossen}</Badge> : "—"}</TableCell>
                           <TableCell className="whitespace-nowrap">{r.zustaendigerPl ?? "—"}</TableCell>
                           <TableCell className="whitespace-nowrap">{r.zustaendigerFs ?? "—"}</TableCell>
+                          <TableCell className="max-w-[14rem] truncate">
+                            {r.projectId !== null ? (
+                              <Link href={`/projects?detail=${r.projectId}`} className="text-primary hover:underline" data-testid="pdfcode-project-link">
+                                {[r.project?.projektnummer, r.project?.station].filter(Boolean).join(" · ") || `Projekt ${r.projectId}`}
+                              </Link>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
                           <TableCell>
                             {code ? (
                               <span className="flex items-center gap-1.5">

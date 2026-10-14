@@ -6,8 +6,9 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
-const tracked = spawnSync("git", ["ls-files"], { encoding: "utf8" }).stdout.split("\n").filter(Boolean);
-const forbidden = [/^client\/public\/(data|schedule)\.json$/, /^data\/(contacts\.(source|report)|normalize-report|schedule\.report)\.json$/, /^data\/.*\.xlsm$/, /^dist/, /ChecklisteBeispiel\.pdf$/];
+// -z: git quotes non-ASCII paths ("private-data/\303\234bersichtsliste …") otherwise, and the path patterns below would not match them
+const tracked = spawnSync("git", ["ls-files", "-z"], { encoding: "utf8" }).stdout.split("\0").filter(Boolean);
+const forbidden = [/^private-data\//, /\.xlsm$/, /^client\/public\/(data|schedule)\.json$/, /^data\/(contacts\.(source|report)|normalize-report|schedule\.report)\.json$/, /^data\/.*\.xlsm$/, /^dist/, /ChecklisteBeispiel\.pdf$/];
 const problems = [];
 for (const f of tracked) if (forbidden.some(r => r.test(f))) problems.push(`forbidden tracked path: ${f}`);
 const SENSITIVE = [/[A-Za-z0-9._%+-]+@deutschebahn\.com/gi, /dbsw\.sharepoint\.com/gi];

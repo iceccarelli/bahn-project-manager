@@ -23,12 +23,14 @@ import { AbnahmeSummary } from "@/components/abnahme/AbnahmeSummary";
 import { MaengelListe } from "@/components/abnahme/MaengelListe";
 import { useAbnahmeSession } from "@/components/abnahme/useAbnahmeSession";
 import { PdfPreviewDialog, usePdfPreview } from "@/components/PdfPreviewDialog";
+import type { ReportState } from "@/components/abnahme/AbnahmeReport";
 import { useAuth } from "@/_core/hooks/useAuth";
 import type { Project } from "@/hooks/useDataQuery";
 import { formatGerman } from "@shared/date";
 import { filterTemplate, isAbnahmeFilter, type AbnahmeFilter } from "@shared/abnahme/filter";
 import { deriveMaengel, summarizeTemplate } from "@shared/abnahme/summary";
 import type { ChecklistTemplate } from "@shared/abnahme/types";
+import { needsChoice, protocolReference } from "@shared/abnahme/pruefbericht";
 
 const FILTER_LABEL: Record<AbnahmeFilter, string> = {
   alle: "Alle",
@@ -51,10 +53,13 @@ export function AbnahmeChecklist({
   template,
   projectId,
   project,
+  report,
 }: {
   template: ChecklistTemplate;
   projectId: number | null;
   project: Project | null;
+  /** The linked Prüfbericht of this Technik, as AbnahmeView resolved it ("off" = not applicable). */
+  report: ReportState;
 }) {
   const session = useAbnahmeSession(template, projectId);
   const { user } = useAuth();
@@ -109,6 +114,12 @@ export function AbnahmeChecklist({
     }
   }, [jumpTo, openSections, visible]);
 
+  // The protocol carries the report's running number and canonical PDF-Code. While the user still has to pick one of
+  // several reports (or the list has not arrived) it is not produced: a protocol without the reference it should carry
+  // would be filed as if it were complete.
+  const reference = protocolReference(report.kind === "ready" ? report.selection : null);
+  const pdfBlocked = report.kind === "loading" || report.kind === "error" || (report.kind === "ready" && needsChoice(report.selection));
+
   const showPdf = () =>
     pdf.show(async () => {
       const { renderAbnahmePdf } = await import("@/pdf/renderAbnahmePdf");
@@ -122,6 +133,7 @@ export function AbnahmeChecklist({
         projektleiter: project?.projektleiter ?? "",
         pruefer: itk?.prueferName ?? "",
         pruefDatum: formatGerman(itk?.pruefDatum) || "",
+        pruefbericht: reference,
         // Taken when the button is pressed, not when the page loaded: the stamp says when this sheet was made.
         generatedAt: new Date().toISOString(),
         generatedBy: user?.name || user?.email || "",
@@ -194,7 +206,14 @@ export function AbnahmeChecklist({
               {allOpen ? <ChevronsDownUp className="h-4 w-4" aria-hidden /> : <ChevronsUpDown className="h-4 w-4" aria-hidden />}
               {allOpen ? "Alle schließen" : "Alle öffnen"}
             </Button>
-            <Button size="sm" className="h-10 gap-1.5 bg-primary text-white hover:bg-primary/90" onClick={showPdf}>
+            <Button
+              size="sm"
+              className="h-10 gap-1.5 bg-primary text-white hover:bg-primary/90"
+              onClick={showPdf}
+              disabled={pdfBlocked}
+              title={pdfBlocked ? "Erst den Prüfbericht wählen" : undefined}
+              data-testid="abnahme-pdf"
+            >
               <FileText className="h-4 w-4" aria-hidden /> PDF
             </Button>
             <AlertDialog>

@@ -20,7 +20,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Download, Table, LayoutGrid, MapPin, Filter, X, MessageSquare, Loader2 } from "lucide-react";
+import { Plus, Download, Table, LayoutGrid, MapPin, Filter, X, MessageSquare, Loader2, FileSpreadsheet } from "lucide-react";
 import { DEPARTMENTS, REVIEW_STATUSES } from "@shared/types";
 import { percent } from "@shared/project-metrics";
 import { statusBadgeClass, statusPulseClass } from "@shared/status-appearance";
@@ -38,6 +38,8 @@ import { toast } from "sonner";
 import { MapView, type StationSelection } from "@/components/Map";
 import ServerMap from "@/components/ServerMap";
 import { ProjectDetailDialog } from "@/components/ProjectDetailDialog";
+import { RegisterImportDialog } from "@/components/projects/RegisterImportDialog";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { documentFilename } from "@shared/generated-stamp";
 import { useAuditTrail } from "@/hooks/useAuditTrail";
 import { useTableStream } from "@/hooks/useTableStream";
@@ -162,6 +164,10 @@ export default function Projects() {
   const { recordDocument } = useAuditTrail();
   // Phone-width screens default to the card view (a 14-column table is not an operations surface at 390 px); same
   // domain operations and authorization either way — only the presentation differs. Not persisted: it is a width default.
+  // Admin-only bulk import of the Übersichtsliste: server mode only (it writes through the server's domain path)
+  const { session: authSession } = useAuth() as ReturnType<typeof useAuth> & { session?: { role: string } | null };
+  const canImportRegister = SERVER_MODE && authSession?.role === "admin";
+  const [registerImportOpen, setRegisterImportOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"table" | "cards" | "map">(() =>
     typeof window !== "undefined" && window.matchMedia?.("(max-width: 639px)").matches ? "cards" : "table");
   /** Set by the map; narrows the card view to one station's exact project ids. */
@@ -684,6 +690,12 @@ export default function Projects() {
             <Download className="h-4 w-4" />
             Export
           </Button>
+          {canImportRegister && (
+            <Button variant="outline" onClick={() => setRegisterImportOpen(true)} className="gap-2 h-10" data-testid="register-import-open">
+              <FileSpreadsheet className="h-4 w-4" aria-hidden="true" />
+              Übersichtsliste importieren
+            </Button>
+          )}
         </div>
       </div>
 
@@ -1232,6 +1244,8 @@ export default function Projects() {
           onLoadMore={() => pager.fetchNextPage?.()}
         />
       )}
+
+      {canImportRegister && <RegisterImportDialog open={registerImportOpen} onOpenChange={setRegisterImportOpen} />}
 
       <ProjectDetailDialog
         variant="drawer"

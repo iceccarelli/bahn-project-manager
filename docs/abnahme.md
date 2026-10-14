@@ -89,3 +89,25 @@ To persist it on the server:
   `Technik` and a running number; belongs in `shared/abnahme/` with a test. The year comes from the ITK `pruefDatum`.
 * **ELA, WLAN, SAA checklists** — one template module each plus one line in `templates/index.ts`; the selector
   already lists them (disabled).
+
+
+## Prüfbericht reference (added with the project ↔ Prüfbericht link)
+
+When an Abnahme is bound to a project and the user may see ITK Prüfberichte (server mode), the project's **linked reports of the
+selected Technik** are resolved by `shared/abnahme/pruefbericht.ts` (`technikMatches`: the report's "Bauform / Bezeichnung der Anlage"
+equals the Abnahme's Technik; ELA matches "ELA AN1/AN2"; a report with no Technik is eligible and labelled "Technik unbekannt"):
+
+| Eligible reports | Behaviour |
+|---|---|
+| none | explicit empty state ("Kein ZIM-Prüfbericht mit diesem Projekt verknüpft", with the number of other-Technik reports); the protocol is produced without a reference |
+| one | used and shown (Nr., Jahr, PDF-Code) |
+| several | the user picks (`?pruefbericht=<id>` in the URL); nothing is preselected; **PDF is disabled until they do** |
+
+The protocol (`AbnahmeDocument`) then prints *Prüfbericht-Nr.* (`25.002 (2025)`) and *PDF-Code*, the **derived** code
+(`derivePdfCode`), not the free text stored in the workbook. The answers themselves are unchanged: still `sessionStorage`,
+still keyed by (Technik, project) — the report choice is not part of the stored record. **DONE**, with:
+`shared/abnahme/pruefbericht.test.ts` (selection rule and `protocolReference`, the single function the screen and the PDF both use),
+`client/src/pdf/AbnahmeDocument.test.ts` (the printed *Prüfbericht-Nr.* / *PDF-Code* cells are present with a selection and absent
+without), `server/domain/registerEdgeCases.db.test.ts` (none → one → must-choose after real links, with the derived code), and the
+browser proof in `scripts/e2e/server-mode.e2e.ts`. **UNVERIFIED**: the PDF as rendered bytes. Cross-links:
+[project-register-import.md](project-register-import.md) · [itk-platform.md](itk-platform.md).

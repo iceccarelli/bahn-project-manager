@@ -186,3 +186,19 @@ principal's cache key is its normalized workspace set, never shared with another
 A drill is resolved server-side to an id set over the caller's authorized rows and intersected with the list's own workspace
 condition; a client-supplied id outside the caller's scope matches nothing (`DRILL-DOWN` e2e step). Counts and lists are the
 same computation, so a badge and the list it opens cannot disagree (`portfolioModel.db.test.ts`).
+
+
+## Bulk import of the Übersichtsliste and the Prüfbericht link
+
+Both are made of the domain transitions above, not around them (details and policy: [project-register-import.md](project-register-import.md)).
+
+* `projects.registerApply` (admin) — per chunk ONE transaction: idempotency claim → candidates → re-plan under the transaction →
+  per record `ProjectService.createWithin` / `updateWithin` (row lock, version check, per-field audit rows, one outbox event per
+  project, read models, watcher notifications) → `project_source_keys` → one batch audit row. A project changed since the preview
+  is `stale`, never overwritten; replacing a non-empty value needs an explicit `overwrite`; blanks never clear.
+* `pruefberichte.setLink` / `autoLink` — idempotency claim → report row lock → `expectedVersion` → `UPDATE … WHERE version = ?` →
+  audit row per report (`entityType pruefbericht`, `projectId old → new`). No project event: reports are not part of the Project
+  aggregate. Deleting a project clears (and audits) its reports' links in the same transaction.
+* Dashboards and counts read TTL-cached read models (5–60 s); right after a bulk import they catch up within that window — the
+  same as after any edit. (Observed while writing the browser proof: a Dashboard count taken seconds after an import can differ
+  from a drill-down list by the imported rows until the cache expires.)
