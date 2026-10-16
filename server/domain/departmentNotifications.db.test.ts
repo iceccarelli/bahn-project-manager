@@ -84,9 +84,12 @@ describe.skipIf(!hasTestDb)("Projektanmeldung → department notifications (real
     // one outbox event per notification, addressed to its recipient only
     const ev = await q<{ n: number }>("SELECT COUNT(*) n FROM domain_events WHERE eventType='notification.created' AND JSON_EXTRACT(envelope, '$.changes.department.to') IS NOT NULL");
     expect(Number(ev[0]!.n)).toBe(4);
-    // the reviews that caused it exist, "offen" for exactly EEA and ITK
-    const open = await q<{ department: string }>("SELECT department FROM department_reviews WHERE projectId=? AND status='offen' ORDER BY department", [s.projectId]);
-    expect(open.map((r) => r.department)).toEqual(["EEA", "ITK"]);
+    // the submission created the project and all 14 department reviews atomically; "offen" for exactly EEA and ITK
+    const all = await q<{ department: string; status: string }>("SELECT department, status FROM department_reviews WHERE projectId=? ORDER BY department", [s.projectId]);
+    expect(all).toHaveLength(14);
+    expect(all.filter((r) => r.status === "offen").map((r) => r.department)).toEqual(["EEA", "ITK"]);
+    expect(all.filter((r) => r.status === "nicht erforderlich")).toHaveLength(12);
+    expect(Number((await q<{ n: number }>("SELECT COUNT(*) n FROM project_checklists WHERE id=? AND status='submitted' AND projectId=?", [d.checklist.id, s.projectId]))[0]!.n)).toBe(1);
     // what each recipient reads back
     expect((await store.listNotifications(eeaAnna.id, { limit: 10 }, null)).items.map((i) => i.department)).toEqual(["EEA"]);
     expect(await store.unreadCount(bothBea.id, null)).toBe(2);
