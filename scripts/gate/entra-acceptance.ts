@@ -14,10 +14,12 @@
  *
  * Exit 0 only when at least one persona ran, every persona that ran passed, and the issuer is Microsoft's.
  * Exit 2 = nothing could be run (no tokens). A token, an object id, a name or an e-mail is never printed.
- * Against a non-Microsoft issuer (the local mock IdP) the verdict can never be "real-entra": it is "selftest-not-entra"
- * and only with ENTRA_ACCEPTANCE_ALLOW_NON_ENTRA=1.
+ * The verdict is "real-entra" only if every issuer is a Microsoft issuer of ONE tenant AND the signing keys are Microsoft's
+ * for that tenant (no OIDC_JWKS_URI, or exactly that tenant's login.microsoftonline.com key endpoint). A mock IdP, a custom
+ * OIDC_JWKS_URI or a Microsoft-looking issuer string over other keys is "selftest-not-entra", exit 1 unless
+ * ENTRA_ACCEPTANCE_ALLOW_NON_ENTRA=1.
  */
-import { assess, claimShape, decodePayload, idpKind, PERSONAS, subjectLabel, tokenEnvName, type Persona } from "../../server/_core/entraAcceptance";
+import { assess, claimShape, compareWithServer, decodePayload, idpKind, PERSONAS, subjectLabel, tokenEnvName, trustsMicrosoftKeys, type Persona } from "../../server/_core/entraAcceptance";
 import { oidcConfigFromEnv, verifyBearer } from "../../server/_core/oidc";
 
 interface Row { persona: Persona; status: "pass" | "fail" | "not-run"; problems: string[]; warnings: string[]; shape?: ReturnType<typeof claimShape>; subject?: string; server?: unknown }
@@ -26,7 +28,8 @@ const cfg = oidcConfigFromEnv();
 const url = process.env.ENTRA_ACCEPTANCE_URL?.replace(/\/$/, "");
 const allowNonEntra = process.env.ENTRA_ACCEPTANCE_ALLOW_NON_ENTRA === "1";
 const issuers = cfg ? ([] as string[]).concat(cfg.issuer) : [];
-const entra = issuers.length > 0 && issuers.every(i => idpKind(i) === "microsoft-entra");
+const keyTrust = trustsMicrosoftKeys(issuers, process.env.OIDC_JWKS_URI);
+const entra = issuers.length > 0 && issuers.every(i => idpKind(i) === "microsoft-entra") && keyTrust.ok;
 
 async function session(token?: string): Promise<{ status: number; data: any }> {
   const r = await fetch(`${url}/api/trpc/auth.session?input=${encodeURIComponent(JSON.stringify({ json: undefined }))}`, { headers: token ? { authorization: `Bearer ${token}` } : {} });
@@ -54,8 +57,8 @@ for (const persona of PERSONAS) {
     if (url) {
       const s = await session(token);
       row.server = { status: s.status, role: s.data?.role ?? null, workspaces: s.data?.workspaces ?? null, departments: s.data?.departments ?? null };
-      const sameWs = JSON.stringify(s.data?.workspaces) === JSON.stringify(id.workspaces);
-      if (s.status !== 200 || s.data?.role !== id.role || !sameWs) { row.status = "fail"; row.problems.push("the deployed server derived a different principal than local verification (different OIDC_ISSUER/OIDC_AUDIENCE/claims handling?)"); }
+      const disagree = compareWithServer(id, { status: s.status, role: s.data?.role, workspaces: s.data?.workspaces, departments: s.data?.departments });
+      if (disagree.length) { row.status = "fail"; row.problems.push(...disagree, "the deployed server derived a different principal than local verification (different OIDC_ISSUER/OIDC_AUDIENCE/claims handling or build?)"); }
     }
     rows.push(row);
   } catch (e) {
@@ -78,7 +81,7 @@ const ran = rows.filter(r => r.status !== "not-run");
 const failed = ran.some(r => r.status === "fail") || extra.some(x => x.status === "fail");
 const verdict = ran.length === 0 ? "not-run" : failed ? "fail" : entra ? "real-entra" : "selftest-not-entra";
 const report = {
-  verdict, issuers, audience: ([] as string[]).concat(cfg.audience), idp: entra ? "microsoft-entra" : "NOT-MICROSOFT",
+  verdict, issuers, keySource: process.env.OIDC_JWKS_URI ? `OIDC_JWKS_URI override (${keyTrust.ok ? "accepted" : "NOT Microsoft's"}): ${keyTrust.reason}` : keyTrust.reason, audience: ([] as string[]).concat(cfg.audience), idp: entra ? "microsoft-entra" : "NOT-MICROSOFT",
   target: url ?? "local verification only (no ENTRA_ACCEPTANCE_URL)", personas: rows, checks: extra, at: new Date().toISOString(),
   note: verdict === "real-entra" ? "Covers sign-in claims and authorization mapping for the personas that ran; browser redirect/CSP/logout steps are in docs/entra-acceptance.md." : undefined,
 };

@@ -10,14 +10,36 @@ export const PERSONAS = ["admin", "editor", "viewer", "nogrant"] as const;
 export type Persona = (typeof PERSONAS)[number];
 
 /** What the owner must have configured in Entra for each test user. `some` = an explicit list of workspaces, not ALL. */
-export const EXPECTED: Record<Persona, { role: Role; workspaces: "ALL" | "some" | "none" }> = {
-  admin: { role: "admin", workspaces: "ALL" },
-  editor: { role: "editor", workspaces: "some" },
-  viewer: { role: "viewer", workspaces: "some" },
-  nogrant: { role: "viewer", workspaces: "none" },
+export const EXPECTED: Record<Persona, { role: Role; workspaces: "ALL" | "some" | "none"; departments: "any" | "some" | "none" }> = {
+  admin: { role: "admin", workspaces: "ALL", departments: "any" },
+  editor: { role: "editor", workspaces: "some", departments: "some" },
+  viewer: { role: "viewer", workspaces: "some", departments: "none" },
+  nogrant: { role: "viewer", workspaces: "none", departments: "none" },
 };
 
 export const tokenEnvName = (p: Persona) => `ENTRA_TOKEN_${p.toUpperCase()}`;
+
+const MS_HOSTS = new Set(["login.microsoftonline.com", "sts.windows.net"]);
+const tenantOfIssuer = (issuer: string): string | null => {
+  try { const u = new URL(issuer); return MS_HOSTS.has(u.hostname) ? (u.pathname.split("/").filter(Boolean)[0] ?? null) : null; } catch { return null; }
+};
+
+/**
+ * May this configuration produce the verdict `real-entra`? Only when the signing keys are Microsoft's for the SAME tenant the
+ * issuers name: every issuer is a Microsoft issuer of one tenant, and the key source is either the default derived from the
+ * issuer (no OIDC_JWKS_URI) or exactly that tenant's `login.microsoftonline.com/<tid>/discovery/v2.0/keys`. Any other
+ * OIDC_JWKS_URI (a mock, a proxy, another tenant) is verified-against-something-else and can only be a self-test.
+ */
+export function trustsMicrosoftKeys(issuers: readonly string[], jwksUri: string | undefined): { ok: boolean; reason: string } {
+  if (issuers.length === 0) return { ok: false, reason: "no issuer configured" };
+  const tenants = new Set(issuers.map(tenantOfIssuer));
+  if (tenants.has(null) || tenants.size !== 1) return { ok: false, reason: "issuers are not all Microsoft issuers of one tenant" };
+  const tenant = [...tenants][0] as string;
+  if (jwksUri === undefined || jwksUri.trim() === "") return { ok: true, reason: "default Microsoft key source derived from the issuer" };
+  return jwksUri.trim() === `https://login.microsoftonline.com/${tenant}/discovery/v2.0/keys`
+    ? { ok: true, reason: "OIDC_JWKS_URI equals the tenant's Microsoft key endpoint" }
+    : { ok: false, reason: "OIDC_JWKS_URI overrides the key source with something other than the tenant's Microsoft key endpoint; tokens were checked against those keys, not Microsoft's" };
+}
 
 export function idpKind(issuer: string): "microsoft-entra" | "other" {
   try {
@@ -66,16 +88,38 @@ export const subjectLabel = (subject: string) => createHash("sha256").update(sub
 export interface Assessment { ok: boolean; problems: string[]; warnings: string[] }
 
 /** Compare what the server derived from a verified token with what this test user is supposed to be. */
-export function assess(persona: Persona, id: Pick<VerifiedIdentity, "role" | "workspaces">, shape: ClaimShape): Assessment {
+export function assess(persona: Persona, id: Pick<VerifiedIdentity, "role" | "workspaces" | "departments">, shape: ClaimShape): Assessment {
   const want = EXPECTED[persona], problems: string[] = [], warnings: string[] = [];
   if (id.role !== want.role) problems.push(`role is "${id.role}", expected "${want.role}" (assign the app role to this user in Enterprise applications → Users and groups)`);
   const ws = id.workspaces;
   if (want.workspaces === "ALL" && ws !== "ALL") problems.push(`workspaces are ${JSON.stringify(ws)}, expected the explicit all-workspaces grant (app role "Workspace.ALL" or claim ["ALL"])`);
   if (want.workspaces === "some" && (ws === "ALL" || ws.length === 0)) problems.push(`workspaces are ${JSON.stringify(ws)}, expected an explicit non-empty list (app roles "Workspace.<Name>")`);
   if (want.workspaces === "none" && !(Array.isArray(ws) && ws.length === 0)) problems.push(`workspaces are ${JSON.stringify(ws)}, expected none — this user is the "Angemeldet — noch keine Freigabe" case`);
+  const ds = id.departments, wantD = want.departments;
+  if (wantD === "some" && ds.length === 0) problems.push('departments are [], expected at least one (app role "Department.<Gewerk>")');
+  if (wantD === "none" && ds.length > 0) problems.push(`departments are ${JSON.stringify([...ds].sort())}, expected none for this persona`);
   if (shape.workspacesClaim === "string" || shape.departmentsClaim === "string")
     warnings.push("the tenant emits workspaces/departments as a single string, which the server (default-deny) ignores — grant them as app roles (Workspace.<Name>, Department.<Gewerk>) instead");
   if (shape.idtyp === "app") warnings.push("this is an app-only token (idtyp=app), not a signed-in user");
   if (!shape.hasTid || !shape.hasOid) warnings.push("token has no tid/oid; the identity falls back to sub, which is not tenant-scoped");
   return { ok: problems.length === 0, problems, warnings };
+}
+
+const sameSet = (a: readonly string[], b: readonly string[]) => a.length === b.length && [...a].sort().every((x, i) => x === [...b].sort()[i]);
+
+/** What the deployed server's `auth.session` says must equal what local verification derived — order does not matter. */
+export function compareWithServer(
+  id: Pick<VerifiedIdentity, "role" | "workspaces" | "departments">,
+  server: { status: number; role?: unknown; workspaces?: unknown; departments?: unknown },
+): string[] {
+  const problems: string[] = [];
+  if (server.status !== 200) return [`the deployed server answered auth.session with HTTP ${server.status}`];
+  if (server.role !== id.role) problems.push(`role: deployed server says ${JSON.stringify(server.role)}, local verification says "${id.role}"`);
+  const listOrAll = (v: unknown): "ALL" | string[] | null => (v === "ALL" ? "ALL" : Array.isArray(v) && v.every(x => typeof x === "string") ? (v as string[]) : null);
+  const w = listOrAll(server.workspaces);
+  if (w === null || (w === "ALL") !== (id.workspaces === "ALL") || (w !== "ALL" && id.workspaces !== "ALL" && !sameSet(w, id.workspaces)))
+    problems.push(`workspaces: deployed server says ${JSON.stringify(server.workspaces)}, local verification says ${JSON.stringify(id.workspaces)}`);
+  const d = listOrAll(server.departments);
+  if (d === null || d === "ALL" || !sameSet(d, id.departments)) problems.push(`departments: deployed server says ${JSON.stringify(server.departments)}, local verification says ${JSON.stringify(id.departments)}`);
+  return problems;
 }

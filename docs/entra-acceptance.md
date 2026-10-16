@@ -61,12 +61,19 @@ export OIDC_ISSUER=… OIDC_AUDIENCE=…            # exactly the production val
 export ENTRA_ACCEPTANCE_URL=https://<host>        # optional but required for the "deployed server agrees" evidence
 mkdir -p artifacts && pnpm exec tsx scripts/gate/entra-acceptance.ts > artifacts/entra-acceptance.json; echo "exit $?"
 ```
-It verifies each token against the tenant's real JWKS with the server's own code, checks role/workspace expectations per
-persona, compares with the deployed server's `auth.session`, and checks that a tampered token and an anonymous request
+It verifies each token against the tenant's real JWKS with the server's own code, checks the role, workspace **and department**
+expectations per persona (admin: `admin` + `ALL`; editor: `editor` + a non-empty workspace list + at least one department;
+viewer: `viewer` + workspaces, **no** department; nogrant: `viewer`, no workspace, no department), compares role, workspaces and
+departments (order-insensitively) with the deployed server's `auth.session`, and checks that a tampered token and an anonymous request
 get no identity. Exit `0` = pass; `1` = fail (problems name the Entra setting to fix); `2` = no tokens (nothing ran).
 The report holds claim *structure* (iss, aud, ver, role values, claim shapes, lifetime) and an 8-hex subject label — no token,
-object id, name or e-mail. A non-Microsoft issuer can never produce `real-entra` (`selftest-not-entra`, exit 1 unless
-`ENTRA_ACCEPTANCE_ALLOW_NON_ENTRA=1`, which exists only for the mock-IdP self-test).
+object id, name or e-mail.
+
+**When the verdict can be `real-entra`:** every issuer is a Microsoft issuer of one tenant **and** the signing keys are Microsoft's for
+that tenant — `OIDC_JWKS_URI` unset, or exactly `https://login.microsoftonline.com/<tid>/discovery/v2.0/keys`. Any other
+`OIDC_JWKS_URI` (a mock, a proxy, another tenant's keys), even with a Microsoft-looking issuer string, yields `selftest-not-entra`
+(exit 1 unless `ENTRA_ACCEPTANCE_ALLOW_NON_ENTRA=1`, which exists only for self-tests and never changes the verdict). The report's
+`keySource` field states which key source was used. Run the procedure against the production configuration, i.e. without `OIDC_JWKS_URI`.
 
 ## 5. Browser checks (manual, with the real tenant; tick each in the PR that records the result)
 
