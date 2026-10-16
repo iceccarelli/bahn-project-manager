@@ -46,9 +46,18 @@ VITE_OIDC_SCOPE="openid profile api://<api-id>/access_as_user"
 
 ## 3. Create four test users and obtain their access tokens (never print them)
 
-Users: **admin** (role `admin`, `Workspace.ALL`), **editor** (`editor`, one `Workspace.<BM>`, one `Department.<Gewerk>`),
-**viewer** (`viewer`, one `Workspace.<BM>`), **nogrant** (signed in, assigned nothing but able to authenticate — assignment
-is required, so give this user only `viewer` and no `Workspace.*`).
+The acceptance script judges each user against this exact configuration (`EXPECTED` in `server/_core/entraAcceptance.ts`);
+a missing **or unexpected** grant fails:
+
+| Persona (`ENTRA_TOKEN_…`) | App roles to assign in Entra | Resolves to |
+|---|---|---|
+| `ADMIN` | `admin`, `Workspace.ALL` | role admin, workspaces `ALL`, departments **none** |
+| `EDITOR` | `editor`, exactly one `Workspace.<BM>` (not `ALL`), `Department.ITK` | role editor, one workspace, departments exactly `["ITK"]` |
+| `VIEWER` | `viewer`, exactly one `Workspace.<BM>` | role viewer, one workspace, departments **none** |
+| `NOGRANT` | `viewer` only (assignment is required for the user to sign in at all) | role viewer, no workspace, departments **none** — the "Angemeldet — noch keine Freigabe" case |
+
+Departments are not given to the admin because an admin needs none (role admin is unrestricted); granting one would be flagged as unexpected.
+`ITK` is the fixed test Gewerk; using a different one requires changing `EXPECTED` in the script and its tests together.
 
 For each user sign in once through the deployed SPA in a private window, then copy the token **without echoing it**:
 DevTools → Application → Session Storage → `bahn.access_token` → copy value; then in the shell
@@ -61,10 +70,9 @@ export OIDC_ISSUER=… OIDC_AUDIENCE=…            # exactly the production val
 export ENTRA_ACCEPTANCE_URL=https://<host>        # optional but required for the "deployed server agrees" evidence
 mkdir -p artifacts && pnpm exec tsx scripts/gate/entra-acceptance.ts > artifacts/entra-acceptance.json; echo "exit $?"
 ```
-It verifies each token against the tenant's real JWKS with the server's own code, checks the role, workspace **and department**
-expectations per persona (admin: `admin` + `ALL`; editor: `editor` + a non-empty workspace list + at least one department;
-viewer: `viewer` + workspaces, **no** department; nogrant: `viewer`, no workspace, no department), compares role, workspaces and
-departments (order-insensitively) with the deployed server's `auth.session`, and checks that a tampered token and an anonymous request
+It verifies each token with the server's own code (signature, issuer, audience, expiry, algorithm), checks the role, workspace **and
+exact department set** per persona (table above), compares role, workspaces and departments (order-insensitively; a server that omits
+or differs on any of them is a failure) with the deployed server's `auth.session`, and checks that a tampered token and an anonymous request
 get no identity. Exit `0` = pass; `1` = fail (problems name the Entra setting to fix); `2` = no tokens (nothing ran).
 The report holds claim *structure* (iss, aud, ver, role values, claim shapes, lifetime) and an 8-hex subject label — no token,
 object id, name or e-mail.
@@ -74,6 +82,9 @@ that tenant — `OIDC_JWKS_URI` unset, or exactly `https://login.microsoftonline
 `OIDC_JWKS_URI` (a mock, a proxy, another tenant's keys), even with a Microsoft-looking issuer string, yields `selftest-not-entra`
 (exit 1 unless `ENTRA_ACCEPTANCE_ALLOW_NON_ENTRA=1`, which exists only for self-tests and never changes the verdict). The report's
 `keySource` field states which key source was used. Run the procedure against the production configuration, i.e. without `OIDC_JWKS_URI`.
+Claim fields shown under `shape` are read from the token *without* verification and are diagnostic only; nothing in the verdict
+depends on them. A passing run is evidence about those personas and that key source, not a statement about the browser flow (step 5)
+and not a substitute for it.
 
 ## 5. Browser checks (manual, with the real tenant; tick each in the PR that records the result)
 

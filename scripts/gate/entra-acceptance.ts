@@ -19,7 +19,7 @@
  * OIDC_JWKS_URI or a Microsoft-looking issuer string over other keys is "selftest-not-entra", exit 1 unless
  * ENTRA_ACCEPTANCE_ALLOW_NON_ENTRA=1.
  */
-import { assess, claimShape, compareWithServer, decodePayload, idpKind, PERSONAS, subjectLabel, tokenEnvName, trustsMicrosoftKeys, type Persona } from "../../server/_core/entraAcceptance";
+import { assess, claimShape, compareWithServer, decideVerdict, decodePayload, PERSONAS, subjectLabel, tokenEnvName, type Persona } from "../../server/_core/entraAcceptance";
 import { oidcConfigFromEnv, verifyBearer } from "../../server/_core/oidc";
 
 interface Row { persona: Persona; status: "pass" | "fail" | "not-run"; problems: string[]; warnings: string[]; shape?: ReturnType<typeof claimShape>; subject?: string; server?: unknown }
@@ -28,13 +28,13 @@ const cfg = oidcConfigFromEnv();
 const url = process.env.ENTRA_ACCEPTANCE_URL?.replace(/\/$/, "");
 const allowNonEntra = process.env.ENTRA_ACCEPTANCE_ALLOW_NON_ENTRA === "1";
 const issuers = cfg ? ([] as string[]).concat(cfg.issuer) : [];
-const keyTrust = trustsMicrosoftKeys(issuers, process.env.OIDC_JWKS_URI);
-const entra = issuers.length > 0 && issuers.every(i => idpKind(i) === "microsoft-entra") && keyTrust.ok;
 
-async function session(token?: string): Promise<{ status: number; data: any }> {
+
+interface SessionData { role?: unknown; workspaces?: unknown; departments?: unknown }
+async function session(token?: string): Promise<{ status: number; data: SessionData | null }> {
   const r = await fetch(`${url}/api/trpc/auth.session?input=${encodeURIComponent(JSON.stringify({ json: undefined }))}`, { headers: token ? { authorization: `Bearer ${token}` } : {} });
   const j = await r.json().catch(() => ({}));
-  return { status: r.status, data: (j as any)?.result?.data?.json ?? null };
+  return { status: r.status, data: (j as { result?: { data?: { json?: SessionData | null } } })?.result?.data?.json ?? null };
 }
 
 const rows: Row[] = [];
@@ -79,10 +79,11 @@ if (url) {
 
 const ran = rows.filter(r => r.status !== "not-run");
 const failed = ran.some(r => r.status === "fail") || extra.some(x => x.status === "fail");
-const verdict = ran.length === 0 ? "not-run" : failed ? "fail" : entra ? "real-entra" : "selftest-not-entra";
+const { verdict, entra, keySource } = decideVerdict({ ran: ran.length, failed, issuers, jwksUri: process.env.OIDC_JWKS_URI });
 const report = {
-  verdict, issuers, keySource: process.env.OIDC_JWKS_URI ? `OIDC_JWKS_URI override (${keyTrust.ok ? "accepted" : "NOT Microsoft's"}): ${keyTrust.reason}` : keyTrust.reason, audience: ([] as string[]).concat(cfg.audience), idp: entra ? "microsoft-entra" : "NOT-MICROSOFT",
+  verdict, issuers, keySource, audience: ([] as string[]).concat(cfg.audience), idp: entra ? "microsoft-entra" : "NOT-VERIFIED-AS-MICROSOFT",
   target: url ?? "local verification only (no ENTRA_ACCEPTANCE_URL)", personas: rows, checks: extra, at: new Date().toISOString(),
+  claimShapeNote: "persona.shape is read from the token WITHOUT verification and is diagnostic only; trust comes from verifyBearer (signature, issuer, audience, expiry, algorithm) alone",
   note: verdict === "real-entra" ? "Covers sign-in claims and authorization mapping for the personas that ran; browser redirect/CSP/logout steps are in docs/entra-acceptance.md." : undefined,
 };
 console.log(JSON.stringify(report, null, 2));

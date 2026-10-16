@@ -10,11 +10,16 @@ export const PERSONAS = ["admin", "editor", "viewer", "nogrant"] as const;
 export type Persona = (typeof PERSONAS)[number];
 
 /** What the owner must have configured in Entra for each test user. `some` = an explicit list of workspaces, not ALL. */
-export const EXPECTED: Record<Persona, { role: Role; workspaces: "ALL" | "some" | "none"; departments: "any" | "some" | "none" }> = {
-  admin: { role: "admin", workspaces: "ALL", departments: "any" },
-  editor: { role: "editor", workspaces: "some", departments: "some" },
-  viewer: { role: "viewer", workspaces: "some", departments: "none" },
-  nogrant: { role: "viewer", workspaces: "none", departments: "none" },
+/**
+ * `departments` is the EXACT set the test user must resolve to (the app roles `Department.<Gewerk>` assigned in Entra):
+ * the editor holds `Department.ITK` and nothing else; the admin, viewer and no-grant users hold no department role.
+ * A missing grant and an unexpected one both fail.
+ */
+export const EXPECTED: Record<Persona, { role: Role; workspaces: "ALL" | "some" | "none"; departments: readonly string[] }> = {
+  admin: { role: "admin", workspaces: "ALL", departments: [] },
+  editor: { role: "editor", workspaces: "some", departments: ["ITK"] },
+  viewer: { role: "viewer", workspaces: "some", departments: [] },
+  nogrant: { role: "viewer", workspaces: "none", departments: [] },
 };
 
 export const tokenEnvName = (p: Persona) => `ENTRA_TOKEN_${p.toUpperCase()}`;
@@ -95,9 +100,10 @@ export function assess(persona: Persona, id: Pick<VerifiedIdentity, "role" | "wo
   if (want.workspaces === "ALL" && ws !== "ALL") problems.push(`workspaces are ${JSON.stringify(ws)}, expected the explicit all-workspaces grant (app role "Workspace.ALL" or claim ["ALL"])`);
   if (want.workspaces === "some" && (ws === "ALL" || ws.length === 0)) problems.push(`workspaces are ${JSON.stringify(ws)}, expected an explicit non-empty list (app roles "Workspace.<Name>")`);
   if (want.workspaces === "none" && !(Array.isArray(ws) && ws.length === 0)) problems.push(`workspaces are ${JSON.stringify(ws)}, expected none — this user is the "Angemeldet — noch keine Freigabe" case`);
-  const ds = id.departments, wantD = want.departments;
-  if (wantD === "some" && ds.length === 0) problems.push('departments are [], expected at least one (app role "Department.<Gewerk>")');
-  if (wantD === "none" && ds.length > 0) problems.push(`departments are ${JSON.stringify([...ds].sort())}, expected none for this persona`);
+  const missing = want.departments.filter(d => !id.departments.includes(d));
+  const unexpected = id.departments.filter(d => !want.departments.includes(d));
+  if (missing.length) problems.push(`missing department grant(s) ${JSON.stringify(missing)} (assign the app role "Department.<Gewerk>" to this user)`);
+  if (unexpected.length) problems.push(`unexpected department grant(s) ${JSON.stringify([...unexpected].sort())}; this persona is meant to hold ${want.departments.length ? JSON.stringify(want.departments) : "none"}`);
   if (shape.workspacesClaim === "string" || shape.departmentsClaim === "string")
     warnings.push("the tenant emits workspaces/departments as a single string, which the server (default-deny) ignores — grant them as app roles (Workspace.<Name>, Department.<Gewerk>) instead");
   if (shape.idtyp === "app") warnings.push("this is an app-only token (idtyp=app), not a signed-in user");
@@ -122,4 +128,18 @@ export function compareWithServer(
   const d = listOrAll(server.departments);
   if (d === null || d === "ALL" || !sameSet(d, id.departments)) problems.push(`departments: deployed server says ${JSON.stringify(server.departments)}, local verification says ${JSON.stringify(id.departments)}`);
   return problems;
+}
+
+export type Verdict = "real-entra" | "selftest-not-entra" | "fail" | "not-run";
+
+/**
+ * The one place the certification label is decided. `real-entra` needs: something ran, nothing failed, and the configuration
+ * is Microsoft's end to end (issuers AND signing-key source, see trustsMicrosoftKeys). The issuer string alone is never enough.
+ */
+export function decideVerdict(i: { ran: number; failed: boolean; issuers: readonly string[]; jwksUri: string | undefined }): { verdict: Verdict; entra: boolean; keySource: string } {
+  const trust = trustsMicrosoftKeys(i.issuers, i.jwksUri);
+  const entra = i.issuers.length > 0 && i.issuers.every(x => idpKind(x) === "microsoft-entra") && trust.ok;
+  const keySource = i.jwksUri?.trim() ? `OIDC_JWKS_URI override (${trust.ok ? "accepted" : "NOT Microsoft's"}): ${trust.reason}` : trust.reason;
+  const verdict: Verdict = i.ran === 0 ? "not-run" : i.failed ? "fail" : entra ? "real-entra" : "selftest-not-entra";
+  return { verdict, entra, keySource };
 }
