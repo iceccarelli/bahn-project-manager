@@ -270,6 +270,4 @@ linked report contradicts its project's phase** (checked in SQL).
 import; the PDF *as rendered bytes* (the printed text is asserted on the document tree); the Redis-outage chaos step of the
 browser proof (needs a Docker container).
 
-**Known failure, not caused by this change**: `server/infra/readModels.db.test.ts` › "map: authorization and filters are the
-list's …" fails identically on untouched `main` in this environment (a station key shared across workspaces in the synthetic
-data). It is the only red test in `pnpm test`; it also turns the deployment gate's `db-integration` red.
+**Formerly known failure, fixed**: `server/infra/readModels.db.test.ts` › "map: authorization and filters are the list's …" depended on the order of `markers[0]` (an earlier test in the file moves projects between workspaces), not on an authorization defect; it now selects a Frankfurt-only station by SQL (see docs/production-readiness.md). `pnpm test` is fully green on MariaDB and MySQL 8.4.

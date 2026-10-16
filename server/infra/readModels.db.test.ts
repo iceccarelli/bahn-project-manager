@@ -127,13 +127,25 @@ describe.skipIf(!hasTestDb)("read models + geo + map (real DB)", () => {
     const [[{ n }]] = (await t.pool.query("SELECT COUNT(*) n FROM project_geo g JOIN projects p ON p.id=g.projectId WHERE p.bahnhofsmanagement='Kassel'")) as unknown as [{ n: number }[]];
     expect(kassel.total).toBe(Number(n));
     expect((await store.mapQuery(q, { workspaces: [] })).markers).toEqual([]);
-    // a station key from another workspace yields nothing for the restricted principal
-    const ffmStation = (await store.mapQuery(q, { workspaces: ["Frankfurt"] })).markers[0]!;
-    const leak = await store.mapStation({ stationKey: ffmStation.key }, { workspaces: ["Kassel"] });
+    // a station key that only another workspace's projects carry yields nothing for the restricted principal.
+    // (Earlier tests move projects between workspaces, so "the first Frankfurt marker" may also hold a Kassel project — which the
+    // Kassel principal rightly sees; the engine's tie order in `markers[0]` must not decide this test.)
+    const [[only]] = (await t.pool.query(
+      "SELECT g.stationKey k FROM project_geo g JOIN projects p ON p.id=g.projectId GROUP BY g.stationKey HAVING SUM(p.bahnhofsmanagement='Kassel') = 0 AND SUM(p.bahnhofsmanagement='Frankfurt') > 0 LIMIT 1",
+    )) as unknown as [Array<{ k: string }>];
+    expect(only, "the seed has a station that only Frankfurt projects carry").toBeDefined();
+    const leak = await store.mapStation({ stationKey: only!.k }, { workspaces: ["Kassel"] });
     expect(leak.total).toBe(0);
     expect(leak.projects).toEqual([]);
-    const ok = await store.mapStation({ stationKey: ffmStation.key }, { workspaces: ["Frankfurt"] });
+    const ok = await store.mapStation({ stationKey: only!.k }, { workspaces: ["Frankfurt"] });
     expect(ok.total).toBeGreaterThan(0);
+    // and whatever station a Kassel principal opens, every project it gets back is a Kassel project
+    for (const m of (await store.mapQuery(q, { workspaces: ["Frankfurt", "Kassel"] })).markers) {
+      const got = await store.mapStation({ stationKey: m.key }, { workspaces: ["Kassel"] });
+      if (!got.projects.length) continue;
+      const [rows] = (await t.pool.query("SELECT DISTINCT bahnhofsmanagement b FROM projects WHERE id IN (?)", [got.projects.map((x) => x.id)])) as unknown as [Array<{ b: string }>];
+      expect(rows.map((r) => r.b)).toEqual(["Kassel"]);
+    }
     // filters narrow the map exactly as they narrow the table
     const ep = await store.mapQuery({ ...q, projektstand: "EP" }, { workspaces: null });
     const list = await store.list({ limit: 100, sort: "id", dir: "asc", expand: [], includeTotal: true, projektstand: "EP" } as never, { workspaces: null });
