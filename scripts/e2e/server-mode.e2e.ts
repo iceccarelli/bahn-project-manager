@@ -1040,7 +1040,9 @@ async function main() {
     const baseline = async () => ({
       projects: Number((await q("SELECT COUNT(*) n FROM projects"))[0].n),
       events: Number((await q("SELECT COUNT(*) n FROM domain_events"))[0].n),
-      audits: Number((await q("SELECT COUNT(*) n FROM audit_log WHERE NOT (entityType='project' AND field='import')"))[0].n),
+      // the register's own batch rows and the provisioner's write-behind grant rows (a new identity's first sighting is flushed
+      // on a timer, which may land between the two readings) are not writes OF the re-import
+      audits: Number((await q("SELECT COUNT(*) n FROM audit_log WHERE NOT (entityType='project' AND field='import') AND NOT (traceId='provisioner')"))[0].n),
       keys: Number((await q("SELECT COUNT(*) n FROM project_source_keys"))[0].n),
     });
     const before = await baseline();
