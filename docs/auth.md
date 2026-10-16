@@ -68,6 +68,40 @@ page (with sign-out) instead of empty lists (`scripts/e2e/oidc-browser.e2e.ts`).
    Until they exist a user gets the "noch keine Freigabe" page.
 5. **Build args**: `VITE_OIDC_AUTHORITY=https://login.microsoftonline.com/<tid>/v2.0`, `VITE_OIDC_CLIENT_ID=<spa-client-id>`,
    `VITE_OIDC_SCOPE="openid profile api://<api-id>/access_as_user"`, optionally `VITE_DEMO_URL`.
+6. **Migrations** before the new version serves: `node dist/migrate.js` applies 0014 (`users.principalId` backfill, `department_subscriptions`,
+   `notifications.dedupKey`). The backfill derives the same principal ids the running server uses; identities whose `openId` was longer than
+   64 characters (a real tenant's `tid:oid`) were truncated before 0014 and are re-created on their next sign-in — no such deployment existed.
+7. **Verification levels**: ☑ mock identity provider (`oidc-browser.e2e.ts`, `server-mode.e2e.ts`) · ☑ locally against MariaDB + Redis ·
+   ☑ CI against MySQL 8.4 + Redis 7 (`ci.yml`) · ☐ real Entra tenant · ☐ deployed environment. **Microsoft SSO is not production-verified until the
+   real tenant flow has been exercised** (token version, claims, redirect URI, CSP origin).
+
+## Provisioning contract: Entra → application identity → permissions
+
+What the token says is what the user may do; nothing in the database widens it. The contract, as the code enforces it:
+
+| Entra | Application | Where |
+|---|---|---|
+| **App role** `admin` / `editor` / `viewer` (claim `roles`, highest wins; unknown or missing → `viewer`) | `Principal.role` | `server/_core/oidc.ts` `verifyBearer` |
+| claim `workspaces: string[]` — Bahnhofsmanagement names, or exactly `["ALL"]` | `Principal.workspaces`; missing/empty/`"*"` → **no workspace** (default-deny) | `workspacesFromClaim` |
+| claim `departments: string[]` — Gewerke (`EEA`, `ITK`, … from `shared/validation.ts`) | `Principal.departments`: review editing (`canEditDepartment`), department subscriptions | `verifyBearer`, `permissions.ts` |
+| `tid` + `oid` | stable identity: `users.openId = oidc:<tid>:<oid>` (varchar 128, never truncated), **principal id** `o` + 31 hex of sha256(openId) (`server/domain/principalId.ts`, stored in `users.principalId`) | `identity.ts`, migration 0014 |
+| `name`, `email` / `preferred_username` | `users.name`, `users.email` — the only profile attributes mapped. No Graph call, no group resolution, no job title/department text: an attribute the token does not carry is not invented. | provisioner |
+
+* **Display name, e-mail, department text are never identity and never a grant.** Only `tid:oid` identifies, only `roles` / `workspaces` / `departments` claims grant.
+* **Groups**: not consumed. If the tenant prefers security groups, map them to the app roles / claims above in Entra (app-role assignment to groups, or a claims-mapping policy emitting `workspaces` / `departments`). Group-id → permission mapping in this application, and Microsoft Graph for group overage, are **not implemented**; a token whose claims are missing lands on the pending page below rather than being resolved by a lookup.
+* **First login**: idempotent write-behind upsert (`provisionBatch`): the `users` row, `principalId`, the grant snapshot; a new or changed grant is audited (`entityType user`, field `grant`). The request itself never waits for the database.
+* **No grant yet**: "Angemeldet — noch keine Freigabe" (sign-out offered); lists stay empty, nothing is widened.
+* **Revocation**: access follows the token (30 s identity cache). The next token without `editor` or without a department stops edits, subscriptions and deliveries at once; the stored grant snapshot is updated on the next sighting, and the audit trail shows the change.
+* **Existing sessions**: a token is re-validated on every request; a changed grant takes effect within 30 s of the IdP issuing the new token (the SPA holds no refresh token; it re-authenticates silently when the access token expires).
+* **Administrators review mappings** in the audit (`field = grant`) and correct department subscriptions per user (`notifications.subscriptionsOfUser` / `setSubscriptionForUser`, audited `subscription.<Gewerk>`). Role and workspace corrections are made in Entra, never in the application.
+
+## Department notifications (Gewerk subscriptions)
+
+`department_subscriptions` (migration 0014) stores explicit decisions — the user's own (`source = user`) or an administrator's (`admin`). Without a row the default applies: an **editor follows exactly the departments of their grant**, an **administrator follows none** and opts in. An explicit "off" is a row: sign-ins, re-provisioning and imports never undo it. Eligibility is re-read at delivery time from the user's current grant (`users.grantSnapshot`): an explicit "on" for a department the grant no longer carries delivers nothing.
+
+Event → recipients: `ChecklistService.submit` (Projektanmeldung) creates the project and its reviews through `ProjectService.createWithin`; the departments whose generated review is `offen` (`buildDepartmentReviews`, the workbook's trigger rule) are the ones with work. For each such department every eligible, subscribed user who may see the project's workspace — minus the actor — gets **one** notification row (`kind assignment`, `department`, link to the project) and one `notification.created` outbox event addressed to them, in the **same transaction** as the submission. Draft saves, idempotent retries and reviews that are "nicht erforderlich" produce nothing. Uniqueness is the logical fact, not the event: `notifications.dedupKey = checklist.submitted:<checklistId>:<department>` per recipient (unique), so a regenerated event cannot deliver twice; watcher notifications use `event:<eventId>`. Reads re-check workspace access (`notifications.list` filters by the recipient's current workspaces). Project watchers (`project_watchers`) are a separate feature and unchanged.
+
+Settings: `/einstellungen` (Benachrichtigungen je Gewerk) lists what the current grant allows and the effective state; the bell links there. Tests: `server/domain/departmentNotifications.test.ts` (policy), `departmentNotifications.db.test.ts` (real DB: provisioning, recipients, dedup, rollback, revocation, admin audit, watchers), `mutationPlane.test.ts`, the server-mode browser proof step "PROJEKTANMELDUNG → GEWERK".
 
 ## One production auth model: OIDC bearer tokens
 

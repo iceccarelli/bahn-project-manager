@@ -166,8 +166,14 @@ export interface ProjectTx {
   checklistDetail(id: number): Promise<ChecklistDTO | null>;
   deleteProject(id: number): Promise<void>;
   watchersOf(projectId: number): Promise<string[]>;
-  /** returns the notification id */
-  insertNotification(row: { userId: string; kind: string; title: string; body: string | null; link: string; workspace: string | null; eventId: string }): Promise<number>;
+  /** returns the notification id — or null when this recipient already holds that logical notification (`dedupKey`) */
+  insertNotification(row: { userId: string; kind: string; title: string; body: string | null; link: string; workspace: string | null; eventId: string; department?: string | null; dedupKey: string }): Promise<number | null>;
+  // ---- department subscriptions (server/domain/departmentNotifications.ts) ----
+  /** every user whose stored grant names one of the departments (or who holds a subscription row for one), with their current grant */
+  departmentCandidates(departments: readonly string[]): Promise<Array<{ principalId: string; grantSnapshot: string | null }>>;
+  subscriptionRows(userIds: readonly string[], departments: readonly string[]): Promise<Array<{ userId: string; department: string; enabled: boolean; source: "user" | "admin" }>>;
+  /** upsert one explicit decision; returns the previous row (null = none) so the change can be audited */
+  setSubscription(row: { userId: string; department: string; enabled: boolean; source: "user" | "admin" }): Promise<{ enabled: boolean; source: "user" | "admin" } | null>;
   /** SELECT … FOR UPDATE on one department review of a project */
   lockReview(projectId: number, department: string): Promise<{ id: number; status: string | null; prueferName: string | null; datum: Date | null } | null>;
   /** INSERT one department review (unique per project+department); returns its id */
@@ -196,6 +202,10 @@ export interface ProjectStore {
   listChecklists(o: { workspaces: readonly string[] | null; principalId: string; isAdmin: boolean; status?: "draft" | "submitted" | "cancelled"; limit: number }): Promise<ChecklistDTO[]>;
   checklistDetail(id: number): Promise<ChecklistDTO | null>;
   versions(ids: number[]): Promise<Map<number, { version: number; bahnhofsmanagement: string | null }>>;
+  /** a user's explicit department subscription rows */
+  subscriptionsOf(userId: string): Promise<Array<{ department: string; enabled: boolean; source: "user" | "admin"; updatedAt: string }>>;
+  /** the stored grant of one user, by principal id (admin review of another user's eligibility) */
+  grantOfPrincipal(principalId: string): Promise<{ principalId: string; name: string | null; email: string | null; grantSnapshot: string | null } | null>;
   eventsSince(aggregateId: number, afterVersion: number, limit: number): Promise<DomainEvent[]>;
   shellSummary(workspaces: readonly string[] | null): Promise<{ projectCount: number; lastUpdatedAt: string | null }>;
   /** highest published feedSeq (0 when empty) */

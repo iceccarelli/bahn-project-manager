@@ -99,6 +99,13 @@
       "when": 1791913798168,
       "tag": "0013_source_key_decisions",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "5",
+      "when": 1792132481667,
+      "tag": "0014_department_subscriptions",
+      "breakpoints": true
     }
   ]
 }

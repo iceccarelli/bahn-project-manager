@@ -499,6 +499,102 @@ async function main() {
   });
 
   // ---------------- PROOF 4: workspace move Frankfurt → Kassel -----------------------------------------
+  // ---------------- department subscriptions + Projektanmeldung notifications ----------------------------------------
+  await step("PROJEKTANMELDUNG → GEWERK: an EEA subscriber's bell gets the EEA notification live, the ITK subscriber gets ITK, nobody gets the other; the settings page switches it off durably; an admin sees and corrects another user's subscription (audited)", async () => {
+    const tokenEEA = await mint("erika", "Erika (EEA)", ["editor"], ["ALL"], ["EEA"]);
+    const tokenITK = await mint("ivo", "Ivo (ITK)", ["editor"], ["ALL"], ["ITK"]);
+    const tokenBoth = await mint("bo", "Bo (EEA+ITK)", ["editor"], ["ALL"], ["EEA", "ITK"]);
+    const tokenAdm = await mint("adalbert", "Adalbert", ["admin"], ["ALL"]);
+    // first sighting provisions the grants the recipient resolution reads (write-behind, flushed within a second)
+    for (const tk of [tokenEEA, tokenITK, tokenBoth, tokenAdm]) if ((await api(URLS[0]!, tk, "auth.session", undefined, "GET")).status !== 200) throw new Error("session");
+    await until(async () => Number((await q("SELECT COUNT(*) n FROM users WHERE principalId IS NOT NULL AND email IN ('erika@e2e.test','ivo@e2e.test','bo@e2e.test','adalbert@e2e.test')"))[0].n) === 4, 8000, "provisioned");
+    const pidOf = async (email: string) => (await q("SELECT principalId p FROM users WHERE email=?", [email]))[0].p as string;
+
+    const E = await openBrowser(URLS[1]!, tokenEEA, "erika");
+    try {
+      await E.page.waitForSelector("tbody tr", { timeout: 20000 });
+      if ((await E.page.getByTestId("notification-badge").count()) !== 0) throw new Error("Erika starts with unread notifications");
+      // A (ITK editor) files a Projektanmeldung with EEA + ITK work through the API, as the form does: draft, then submit
+      const submitAnmeldung = async (station: string, answers: Record<string, { answer: string }>) => {
+        const { defaultAnswers } = await import("../../shared/checklist");
+        const d = await api(URLS[0]!, tokenA, "checklists.save", { mode: "Projektanmeldung", header: { bahnhofsmanagement: "Frankfurt", stationsname: station, projektbezeichnung: "E2E Anmeldung", projektstand: "AP" }, answers: { ...defaultAnswers("Projektanmeldung"), ...answers }, idempotencyKey: key() });
+        if (d.status !== 200) throw new Error(`draft: ${JSON.stringify(d.error)}`);
+        const s = await api(URLS[0]!, tokenA, "checklists.submit", { id: d.data.checklist.id, expectedVersion: d.data.checklist.version, idempotencyKey: key() });
+        if (s.status !== 200) throw new Error(`submit: ${JSON.stringify(s.error)}`);
+        return { checklistId: d.data.checklist.id as number, projectId: s.data.projectId as number };
+      };
+      // a draft alone notifies nobody
+      const d0 = await api(URLS[0]!, tokenA, "checklists.save", { mode: "Projektanmeldung", header: { bahnhofsmanagement: "Frankfurt", stationsname: "E2E Entwurf", projektbezeichnung: "x", projektstand: "AP" }, answers: { eea: { answer: "Ja" } }, idempotencyKey: key() });
+      if (d0.status !== 200 || Number((await q("SELECT COUNT(*) n FROM notifications WHERE department IS NOT NULL"))[0].n) !== 0) throw new Error("a draft notified");
+
+      const both = await submitAnmeldung("E2E Beide", { eea: { answer: "Ja" }, itk: { answer: "Ja" } });
+      await until(async () => (await E.page.getByTestId("notification-badge").count()) > 0, 10000, "EEA badge live");
+      if (!(await noReload(E.page))) throw new Error("reloaded");
+      await E.page.getByTestId("notification-bell").click();
+      const item = E.page.getByTestId("notification-item").first();
+      await until(async () => (await item.count()) > 0, 5000, "item");
+      if ((await item.getAttribute("data-department")) !== "EEA" || !/EEA/.test((await item.textContent()) ?? "") || !/E2E Beide/.test((await item.textContent()) ?? "")) throw new Error(`EEA item: ${await item.textContent()}`);
+      if ((await E.page.getByTestId("notification-item").count()) !== 1) throw new Error("Erika got more than the EEA notification");
+      await item.click(); // mark read + navigate to the project
+      await until(async () => new RegExp(`projekt=${both.projectId}`).test(E.page.url()), 5000, "link opens the project");
+      await until(async () => (await E.page.getByTestId("notification-badge").count()) === 0, 5000, "read");
+      // ITK subscriber: exactly ITK; both: both; the actor (A, ITK) nothing; the admin (opted out by default) nothing
+      const list = async (tk: string) => ((await api(URLS[0]!, tk, "notifications.list", { limit: 20 }, "GET")).data.items as any[]).filter(i => i.department).map(i => i.department).sort();
+      if (JSON.stringify(await list(tokenITK)) !== '["ITK"]') throw new Error(`Ivo: ${JSON.stringify(await list(tokenITK))}`);
+      if (JSON.stringify(await list(tokenBoth)) !== '["EEA","ITK"]') throw new Error(`Bo: ${JSON.stringify(await list(tokenBoth))}`);
+      if ((await list(tokenA)).length !== 0 || (await list(tokenAdm)).length !== 0) throw new Error("actor or admin notified");
+      // the outbox event of each notification is addressed to its recipient; nobody else's stream carried it
+      const rows = await q("SELECT userId, department FROM notifications WHERE dedupKey LIKE ?", [`checklist.submitted:${both.checklistId}:%`]);
+      if (rows.length !== 4) throw new Error(`${rows.length} rows for the submission`);
+      const erikaId = await pidOf("erika@e2e.test");
+      if (!rows.some(r => r.userId === erikaId && r.department === "EEA")) throw new Error("Erika's row is not keyed by her principal id");
+
+      // settings: Erika switches EEA off; the next submission with EEA work reaches her no more — and a fresh sign-in keeps it off
+      await E.page.goto(`${URLS[1]}/einstellungen`);
+      await E.page.getByTestId("subscription-EEA").waitFor({ timeout: 15000 });
+      if (await E.page.getByTestId("subscription-ITK").count()) throw new Error("ITK offered without a grant");
+      const sw = E.page.getByTestId("subscription-EEA").getByRole("switch");
+      if ((await sw.getAttribute("aria-checked")) !== "true") throw new Error("EEA default is not on");
+      await sw.click();
+      await until(async () => (await sw.getAttribute("aria-checked")) === "false", 5000, "switched off");
+      await until(async () => Number((await q("SELECT COUNT(*) n FROM department_subscriptions WHERE department='EEA' AND enabled=0"))[0].n) === 1, 5000, "row stored");
+      const tokenEEA2 = await mint("erika", "Erika (EEA)", ["editor"], ["ALL"], ["EEA"]);   // a new token = a new sign-in → re-provisioned grant
+      if ((await api(URLS[0]!, tokenEEA2, "auth.session", undefined, "GET")).status !== 200) throw new Error("session 2");
+      const only = await submitAnmeldung("E2E Nur EEA", { eea: { answer: "Ja" } });
+      await until(async () => Number((await q("SELECT COUNT(*) n FROM notifications WHERE dedupKey LIKE ?", [`checklist.submitted:${only.checklistId}:%`]))[0].n) === 1, 8000, "Bo's EEA row");
+      if (Number((await q("SELECT COUNT(*) n FROM notifications WHERE dedupKey LIKE ? AND userId=?", [`checklist.submitted:${only.checklistId}:%`, await pidOf("erika@e2e.test")]))[0].n) !== 0) throw new Error("Erika was notified after unsubscribing");
+      if ((await list(tokenITK)).length !== 1) throw new Error("Ivo got an EEA-only submission");
+
+      // administrator: sees Erika's state, switches it back on (audited); a non-admin is refused
+      const adm = await api(URLS[0]!, tokenAdm, "notifications.subscriptionsOfUser", { principalId: await pidOf("erika@e2e.test") }, "GET");
+      if (adm.status !== 200 || !adm.data.items.some((s: any) => s.department === "EEA" && s.subscribed === false && s.explicit?.source === "user")) throw new Error(`admin view: ${JSON.stringify(adm.data).slice(0, 300)}`);
+      if ((await api(URLS[0]!, tokenITK, "notifications.subscriptionsOfUser", { principalId: await pidOf("erika@e2e.test") }, "GET")).status !== 403) throw new Error("a non-admin read another user's subscriptions");
+      if ((await api(URLS[0]!, tokenITK, "notifications.setSubscriptionForUser", { principalId: await pidOf("erika@e2e.test"), department: "EEA", enabled: true })).status !== 403) throw new Error("a non-admin changed another user's subscription");
+      if ((await api(URLS[0]!, tokenEEA, "notifications.setSubscription", { department: "ITK", enabled: true })).status !== 403) throw new Error("subscribed to a department without a grant");
+      const fix = await api(URLS[0]!, tokenAdm, "notifications.setSubscriptionForUser", { principalId: await pidOf("erika@e2e.test"), department: "EEA", enabled: true });
+      if (fix.status !== 200) throw new Error(`admin set: ${JSON.stringify(fix.error)}`);
+      if (Number((await q("SELECT COUNT(*) n FROM audit_log WHERE entityType='user' AND field='subscription.EEA'"))[0].n) !== 1) throw new Error("admin change not audited");
+      await E.page.reload();
+      await E.page.getByTestId("subscription-EEA").waitFor({ timeout: 15000 });
+      await until(async () => (await E.page.getByTestId("subscription-EEA").getByRole("switch").getAttribute("aria-checked")) === "true", 5000, "admin's correction visible");
+      if (!/Administrator/.test((await E.page.getByTestId("subscription-EEA").innerText()))) throw new Error("source not shown");
+      // the bell's footer leads to the settings
+      await E.page.goto(`${URLS[1]}/projects`);
+      await E.page.waitForSelector("tbody tr", { timeout: 20000 });
+      await E.page.getByTestId("notification-bell").click();
+      await E.page.getByTestId("notification-settings").click();
+      await until(async () => /\/einstellungen/.test(E.page.url()), 5000, "settings from the bell");
+    } finally { await E.ctx.close(); }
+    // a reconnecting client recovers a department notification it missed, from the durable rows
+    const F = await openBrowser(URLS[1]!, tokenBoth, "bo");
+    try {
+      await F.page.waitForSelector("tbody tr", { timeout: 20000 });
+      await until(async () => (await F.page.getByTestId("notification-badge").textContent())?.trim() === "3", 8000, "Bo's three unread (EEA, ITK, EEA)");
+      await F.page.getByTestId("notification-bell").click();
+      await until(async () => (await F.page.getByTestId("notification-item").count()) === 3, 5000, "three items");
+    } finally { await F.ctx.close(); }
+  });
+
   await step("PROOF 4: A moves 481 Frankfurt → Kassel; Frankfurt-only B loses the row and receives no Kassel state (stream + DOM + API)", async () => {
     await B.page.evaluate(() => { (window as any).__sse.length = 0; });
     const r = await apiUpdate(tokenA, PID, { bahnhofsmanagement: "Kassel", projektstand: "EIGV erfolgt", kommentar: "nur-in-Kassel-sichtbar" });

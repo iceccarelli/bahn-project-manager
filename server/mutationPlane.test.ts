@@ -75,6 +75,8 @@ describe("one mutation plane", () => {
       "projects.sync": "read (a mutation only to carry a large body)",
       "projects.watch": "personal subscription state (own row, project must be visible)",
       "notifications.markRead": "personal state (own notifications)",
+      "notifications.setSubscription": "domain: SubscriptionService.set (own department subscription row; ON needs eligibility under the current grant)",
+      "notifications.setSubscriptionForUser": "domain: SubscriptionService.setForUser (admin; tx + audit row field subscription.<Gewerk>)",
       "auth.logout": "clears the (development-only) session cookie",
       "auth.demoLogin": "development only: NOT_FOUND in production, boot refuses ALLOW_DEMO_LOGIN",
     };

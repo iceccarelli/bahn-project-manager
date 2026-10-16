@@ -8,8 +8,21 @@ export interface NotificationDTO {
   title: string;
   body: string | null;
   link: string | null;
+  /** the Gewerk a department notification concerns (EEA, ITK, …); null for watcher notifications */
+  department?: string | null;
   createdAt: string;
   read: boolean;
+}
+
+/** One line of the subscription settings: a department the user may follow, and whether they currently do. */
+export interface DepartmentSubscriptionDTO {
+  department: string;
+  /** may receive this department's notifications under the CURRENT grant (admin: always; editor: department in grant) */
+  eligible: boolean;
+  /** the effective state (explicit row, or the default policy) */
+  subscribed: boolean;
+  /** null = the default policy applies, no explicit decision stored */
+  explicit: { enabled: boolean; source: "user" | "admin"; updatedAt: string } | null;
 }
 
 /** Severity order for the bell (highest first). */

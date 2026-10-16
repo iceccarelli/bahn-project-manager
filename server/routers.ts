@@ -332,6 +332,30 @@ export const appRouter = router({
         await store.markRead(ctx.principal.id, input.ids);
         return { ok: true as const };
       }),
+    // Department (Gewerk) subscriptions — docs/auth.md "Department notifications". Own rows only; an administrator may
+    // review and correct another user's (audited).
+    subscriptions: protectedProcedure.query(async ({ ctx }) => {
+      const { subscriptions } = await requireServices();
+      return subscriptions.mine(ctx.principal);
+    }),
+    setSubscription: protectedProcedure
+      .input(z.object({ department: z.string().trim().min(1).max(64), enabled: z.boolean() }))
+      .mutation(async ({ input, ctx }) => {
+        const { subscriptions } = await requireServices();
+        return subscriptions.set(ctx.principal, input);
+      }),
+    subscriptionsOfUser: adminProcedure
+      .input(z.object({ principalId: z.string().trim().min(1).max(64) }))
+      .query(async ({ input, ctx }) => {
+        const { subscriptions } = await requireServices();
+        return subscriptions.ofUser(ctx.principal, input.principalId);
+      }),
+    setSubscriptionForUser: adminProcedure
+      .input(z.object({ principalId: z.string().trim().min(1).max(64), department: z.string().trim().min(1).max(64), enabled: z.boolean() }))
+      .mutation(async ({ input, ctx }) => {
+        const { subscriptions } = await requireServices();
+        return subscriptions.setForUser(ctx.principal, input, { traceId: ctx.traceId, requestId: ctx.requestId });
+      }),
   }),
 
   // ============= DASHBOARD =============

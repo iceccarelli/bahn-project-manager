@@ -20,9 +20,10 @@ import { normalizeBahnhofsmanagement } from "@shared/bahnhofsmanagement";
 import type { ProjectChecklist } from "../../drizzle/schema";
 import { AggregateConflictError, ForbiddenError, IdempotencyKeyReuseError, NotFoundError, ValidationError } from "./errors";
 import { canEditProject, canViewProject, type Principal } from "./permissions";
+import { departmentsWithWork, grantFromSnapshot, planDepartmentNotifications, type GrantHolder } from "./departmentNotifications";
 import { requestHash, type ProjectService, type RequestContext } from "./projectService";
 import type { BookingService } from "./bookingService";
-import type { AfterCommit, AuditRow, ProjectStore } from "./ports";
+import type { AfterCommit, AuditRow, ProjectStore, ProjectTx } from "./ports";
 
 const HEADER_COLS = ["projektnummer", "projektbezeichnung", "stationsname", "bahnhofsnummer", "streckennummer", "projektstand", "bahnhofsmanagement", "projektleitung", "pkpLink", "freischaltungFaa", "unterschriftenblatt", "mitProjektvorstellung", "anmerkungen", "terminVon", "terminBis"] as const;
 const DATE_COLS = ["uebergabeDatum", "terminDatum"] as const;
@@ -135,12 +136,39 @@ export class ChecklistService {
       const event = this.event(p, ctx, "checklist.submitted", cur.id, cur.syncVersion + 1, changes, cur.bahnhofsmanagement, null);
       await tx.appendAudit(this.audit(p, event, "update", changes));
       await tx.appendEvent(event);
+      // the departments with work are told in the SAME transaction (rows + outbox events); a rollback takes them with it
+      await this.notifyDepartments(tx, p, event, { checklistId: cur.id, projectId: created.id, workspace: cur.bahnhofsmanagement, station: cur.stationsname, projektnummer: cur.projektnummer }, reviews);
       const res = { checklist: after, projectId: created.id, eventId: event.eventId };
       await tx.completeIdempotency(p.id, input.idempotencyKey, res);
       return { ...res, replayed: false };
     });
     if (!result.replayed) this.nudge();
     return result;
+  }
+
+  /**
+   * checklist.submitted → the departments whose generated review is "offen" → eligible, subscribed recipients → one
+   * notification row (dedup key per checklist × department × recipient) + one `notification.created` outbox event each.
+   * Recipient resolution reads the users' CURRENT stored grants; the pure policy decides (departmentNotifications.ts).
+   */
+  private async notifyDepartments(tx: ProjectTx, p: Principal, e: DomainEvent, work: { checklistId: number; projectId: number; workspace: string | null; station: string | null; projektnummer: string | null }, reviews: ReadonlyArray<{ department: string; status: string | null }>) {
+    const departments = departmentsWithWork(reviews);
+    if (!departments.length) return;
+    const candidates = await tx.departmentCandidates(departments);
+    const holders: GrantHolder[] = [];
+    for (const c of candidates) { const grant = grantFromSnapshot(c.grantSnapshot); if (grant) holders.push({ principalId: c.principalId, grant }); }
+    const rows = await tx.subscriptionRows(holders.map((h) => h.principalId), departments);
+    const planned = planDepartmentNotifications({ checklistId: work.checklistId, projectId: work.projectId, workspace: work.workspace, departments }, holders, rows, p.id, { station: work.station, projektnummer: work.projektnummer, actorName: p.name });
+    for (const n of planned) {
+      const id = await tx.insertNotification({ userId: n.userId, kind: n.kind, title: n.title, body: n.body, link: n.link, workspace: n.workspace, eventId: e.eventId, department: n.department, dedupKey: n.dedupKey });
+      if (id === null) continue; // already delivered for this logical fact
+      await tx.appendEvent({
+        schemaVersion: EVENT_SCHEMA_VERSION, eventId: randomUUID(), eventType: "notification.created", aggregateType: "notification",
+        aggregateId: String(id), aggregateVersion: 1, actorId: p.id, actorName: p.name, timestamp: this.clock().toISOString(), traceId: e.traceId,
+        changes: { kind: { from: null, to: n.kind }, title: { from: null, to: n.title }, body: { from: null, to: n.body }, link: { from: null, to: n.link }, department: { from: null, to: n.department }, sourceEventId: { from: null, to: e.eventId } },
+        context: { recipient: n.userId, workspace: n.workspace },
+      });
+    }
   }
 
   private nudge() { try { this.afterCommit(); } catch { /* the relay also polls */ } this.projects; }

@@ -1,6 +1,6 @@
 import {
   int, bigint, double, mysqlEnum, mysqlTable, text, timestamp, varchar, datetime, json, date,
-  index, uniqueIndex, primaryKey
+  index, uniqueIndex, primaryKey, boolean
 } from "drizzle-orm/mysql-core";
 import { relations } from "drizzle-orm";
 
@@ -15,13 +15,20 @@ import { relations } from "drizzle-orm";
 // Users
 export const users = mysqlTable("users", {
   id: int("id").autoincrement().primaryKey(),
-  openId: varchar("openId", { length: 64 }).notNull().unique(),
+  /** `oidc:<tid>:<oid>` for Microsoft identities (78 chars: never truncated — migration 0014 widened the column) */
+  openId: varchar("openId", { length: 128 }).notNull().unique(),
   name: text("name"),
   email: varchar("email", { length: 320 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
   role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
   /** JSON of the last OBSERVED authorization grant (role/workspaces/departments from the verified token); changes are audited. */
   grantSnapshot: varchar("grantSnapshot", { length: 1024 }),
+  /**
+   * The id this user acts under (what `notifications.userId`, `project_watchers.userId`, audit actors carry):
+   * OIDC → `o` + 31 hex of sha256("oidc:<tid>:<oid>") (server/domain/principalId.ts); legacy cookie users → their numeric id.
+   * Stored so recipients can be resolved in SQL; backfilled by migration 0014.
+   */
+  principalId: varchar("principalId", { length: 64 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
@@ -456,11 +463,41 @@ export const notifications = mysqlTable("notifications", {
   workspace: varchar("workspace", { length: 128 }),
   /** the domain event that caused it */
   eventId: varchar("eventId", { length: 36 }).notNull(),
+  /** the Gewerk a department notification is about (null for watcher notifications) */
+  department: varchar("department", { length: 64 }),
+  /**
+   * Logical identity of the notification for one recipient — the ONE uniqueness of the inbox since migration 0014:
+   * watcher notifications `event:<eventId>` (one per event, as before), department notifications
+   * `checklist.submitted:<checklistId>:<department>` (one event may legitimately cause several, a regenerated event for the
+   * same fact may not deliver twice).
+   */
+  dedupKey: varchar("dedupKey", { length: 128 }).notNull(),
   createdAt: datetime("createdAt", { fsp: 3 }).notNull(),
   readAt: datetime("readAt", { fsp: 3 }),
 }, (table) => ({
   userIdx: index("notifications_user_idx").on(table.userId, table.id),
-  userEventUnique: uniqueIndex("notifications_user_event_uq").on(table.userId, table.eventId),
+  userEventIdx: index("notifications_user_event_idx").on(table.userId, table.eventId),
+  userDedupUnique: uniqueIndex("notifications_user_dedup_uq").on(table.userId, table.dedupKey),
+}));
+
+/**
+ * Department (Gewerk) subscriptions: "notify me when a Projektanmeldung creates review work for EEA / ITK / …".
+ * A row is an explicit decision (by the user or an administrator); without a row the default policy applies
+ * (server/domain/departmentNotifications.ts). An explicit `enabled = false` survives sign-ins, imports and re-provisioning.
+ * Eligibility is re-checked at delivery time against the user's CURRENT grant — a subscription never widens access.
+ */
+export const departmentSubscriptions = mysqlTable("department_subscriptions", {
+  /** principal id (users.principalId) */
+  userId: varchar("userId", { length: 64 }).notNull(),
+  department: varchar("department", { length: 64 }).notNull(),
+  enabled: boolean("enabled").notNull(),
+  /** who decided: the user themselves or an administrator */
+  source: mysqlEnum("source", ["user", "admin"]).notNull(),
+  createdAt: datetime("createdAt", { fsp: 3 }).notNull(),
+  updatedAt: datetime("updatedAt", { fsp: 3 }).notNull(),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.userId, table.department] }),
+  departmentIdx: index("dept_subs_department_idx").on(table.department, table.enabled),
 }));
 
 /** Who follows which project (the recipient set of the current notification policy). */

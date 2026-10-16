@@ -14,7 +14,7 @@ import {
   type ProjectSummary,
 } from "@shared/project-contract";
 import {
-  auditLog, departmentReviews, projectSourceKeys, projectChecklists, projectChecklistAnswers, scheduleSlots, type ProjectChecklist, type ScheduleSlot, domainEvents, idempotencyKeys, notifications, notificationUnread, projects, projectWatchers, type Project,
+  auditLog, departmentReviews, projectSourceKeys, projectChecklists, projectChecklistAnswers, scheduleSlots, type ProjectChecklist, type ScheduleSlot, domainEvents, idempotencyKeys, notifications, notificationUnread, projects, projectWatchers, users, departmentSubscriptions, type Project,
 } from "../../drizzle/schema";
 import type { AuditRow, IdempotencyClaim, ProjectStore, ProjectTx, PruefberichtLinkRow, RegisterCandidates, RegisterLookup } from "../domain/ports";
 import { normProjektnummer } from "@shared/project-identity";
@@ -343,9 +343,34 @@ function txAdapter(x: Executor): ProjectTx {
       return rows.map(r => r.u);
     },
     async insertNotification(row) {
-      const [res] = await x.insert(notifications).values({ ...row, kind: row.kind as never, createdAt: new Date() });
+      // INSERT IGNORE: the unique (userId, dedupKey) makes a second delivery of the same logical notification a no-op —
+      // and then the unread counter must not move either
+      const [res] = await x.insert(notifications).ignore().values({ ...row, kind: row.kind as never, department: row.department ?? null, createdAt: new Date() });
+      const r = res as unknown as { insertId: number; affectedRows: number };
+      if (Number(r.affectedRows) === 0) return null;
       await x.execute(sql`INSERT INTO notification_unread (userId, workspace, n) VALUES (${row.userId}, ${row.workspace ?? ""}, 1) ON DUPLICATE KEY UPDATE n = n + 1`);
-      return Number((res as unknown as { insertId: number }).insertId);
+      return Number(r.insertId);
+    },
+    async departmentCandidates(departments) {
+      if (!departments.length) return [];
+      // candidates by grant text (the JSON snapshot names the department) or by an explicit subscription row; the pure policy
+      // re-checks every one of them against the parsed grant, so an over-wide match here costs a row, never a notification
+      const like = departments.map((d) => sql`${users.grantSnapshot} LIKE ${`%${d.replace(/[%_\\]/g, "")}%`}`);
+      const rows = await x.select({ principalId: users.principalId, grantSnapshot: users.grantSnapshot }).from(users)
+        .where(and(sql`${users.principalId} IS NOT NULL`, or(or(...like), sql`${users.principalId} IN (SELECT userId FROM department_subscriptions WHERE department IN (${sql.join(departments.map((d) => sql`${d}`), sql`, `)}))`)));
+      return rows.filter((r): r is { principalId: string; grantSnapshot: string | null } => r.principalId !== null);
+    },
+    async setSubscription(row) {
+      const [prev] = await x.select({ enabled: departmentSubscriptions.enabled, source: departmentSubscriptions.source }).from(departmentSubscriptions)
+        .where(and(eq(departmentSubscriptions.userId, row.userId), eq(departmentSubscriptions.department, row.department))).for("update");
+      const now = new Date();
+      await x.insert(departmentSubscriptions).values({ ...row, createdAt: now, updatedAt: now }).onDuplicateKeyUpdate({ set: { enabled: row.enabled, source: row.source, updatedAt: now } });
+      return prev ? { enabled: prev.enabled, source: prev.source } : null;
+    },
+    async subscriptionRows(userIds, departments) {
+      if (!userIds.length || !departments.length) return [];
+      return x.select({ userId: departmentSubscriptions.userId, department: departmentSubscriptions.department, enabled: departmentSubscriptions.enabled, source: departmentSubscriptions.source })
+        .from(departmentSubscriptions).where(and(inArray(departmentSubscriptions.userId, [...userIds]), inArray(departmentSubscriptions.department, [...departments])));
     },
     async lockReview(projectId, department) {
       const rows = await x
@@ -503,6 +528,15 @@ export class MysqlProjectStore implements ProjectStore {
     return r.length > 0;
   }
 
+  async subscriptionsOf(userId: string) {
+    const rows = await this.db.select().from(departmentSubscriptions).where(eq(departmentSubscriptions.userId, userId));
+    return rows.map(r => ({ department: r.department, enabled: r.enabled, source: r.source, updatedAt: r.updatedAt.toISOString() }));
+  }
+  async grantOfPrincipal(principalId: string) {
+    const [r] = await this.db.select({ principalId: users.principalId, name: users.name, email: users.email, grantSnapshot: users.grantSnapshot }).from(users).where(eq(users.principalId, principalId)).limit(1);
+    return r && r.principalId ? { principalId: r.principalId, name: r.name, email: r.email, grantSnapshot: r.grantSnapshot } : null;
+  }
+
   /** Newest first, keyset on id. `workspaces`: null = unrestricted; a list re-checks the recipient's CURRENT access. */
   async listNotifications(userId: string, o: { cursor?: number; limit: number; unreadOnly?: boolean }, workspaces: readonly string[] | null) {
     if (workspaces !== null && workspaces.length === 0) return { items: [], nextCursor: null as number | null };
@@ -513,7 +547,7 @@ export class MysqlProjectStore implements ProjectStore {
     const rows = await this.db.select().from(notifications).where(and(...conds)).orderBy(desc(notifications.id)).limit(o.limit + 1);
     const page = rows.slice(0, o.limit);
     return {
-      items: page.map(r => ({ id: r.id, kind: r.kind, title: r.title, body: r.body, link: r.link, createdAt: r.createdAt.toISOString(), read: r.readAt !== null })),
+      items: page.map(r => ({ id: r.id, kind: r.kind, title: r.title, body: r.body, link: r.link, department: r.department ?? null, createdAt: r.createdAt.toISOString(), read: r.readAt !== null })),
       nextCursor: rows.length > o.limit ? page[page.length - 1]!.id : null,
     };
   }

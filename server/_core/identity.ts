@@ -17,6 +17,7 @@ import { m } from "../observability/metrics";
 import { UserProvisioner, type ProvisionedUser } from "../infra/userProvisioner";
 import type { Pool } from "mysql2/promise";
 import { roleFromLegacy, type Principal } from "../domain/permissions";
+import { principalIdForOpenId } from "../domain/principalId";
 import { oidcConfigFromEnv, verifyBearer, type OidcConfig } from "./oidc";
 import { sdk } from "./sdk";
 
@@ -34,9 +35,9 @@ export async function provisionBatch(pool: Pool, users: ProvisionedUser[]): Prom
       const [prev] = (await conn.query("SELECT openId, grantSnapshot FROM users WHERE openId IN (?)", [users.map(u => u.openId)])) as unknown as [Array<{ openId: string; grantSnapshot: string | null }>];
       const before = new Map(prev.map(r => [r.openId, r.grantSnapshot]));
       await conn.query(
-        `INSERT INTO users (openId, name, email, loginMethod, role, grantSnapshot, lastSignedIn) VALUES ${users.map(() => "(?, ?, ?, 'oidc', ?, ?, NOW())").join(",")}
-         ON DUPLICATE KEY UPDATE name = VALUES(name), email = VALUES(email), role = VALUES(role), grantSnapshot = VALUES(grantSnapshot), lastSignedIn = NOW()`,
-        users.flatMap(u => [u.openId, u.name, u.email, u.role, u.grant]),
+        `INSERT INTO users (openId, principalId, name, email, loginMethod, role, grantSnapshot, lastSignedIn) VALUES ${users.map(() => "(?, ?, ?, ?, 'oidc', ?, ?, NOW())").join(",")}
+         ON DUPLICATE KEY UPDATE principalId = VALUES(principalId), name = VALUES(name), email = VALUES(email), role = VALUES(role), grantSnapshot = VALUES(grantSnapshot), lastSignedIn = NOW()`,
+        users.flatMap(u => [u.openId, principalIdForOpenId(u.openId), u.name, u.email, u.role, u.grant]),
       );
       const changed = users.filter(u => (before.get(u.openId) ?? null) !== u.grant);
       if (changed.length) {
@@ -128,13 +129,13 @@ async function resolveIdentityInner(req: Pick<IncomingMessage, "headers">): Prom
         const t0 = performance.now();
         const id = await verifyBearer(token, cfg);
         m.authVerifyMs.observe(performance.now() - t0);
+        // the stored openId is what the principal id is derived from (same derivation as the provisioner and migration 0014)
         const openId = `oidc:${id.subject}`;
         const principal: Principal = {
-          // stable, fits the 64-char actor columns, never a raw tenant/object id
-          id: `o${createHash("sha256").update(openId).digest("hex").slice(0, 31)}`,
+          id: principalIdForOpenId(openId),
           name: id.name, email: id.email, role: id.role, workspaces: id.workspaces, departments: id.departments,
         };
-        provisioner().enqueue({ openId: openId.slice(0, 64), name: id.name, email: id.email, role: id.role === "admin" ? "admin" : "user", grant: grantJson(principal) });
+        provisioner().enqueue({ openId, name: id.name, email: id.email, role: id.role === "admin" ? "admin" : "user", grant: grantJson(principal) });
         const value = { user: null, principal };
         remember(ck, value);
         return value;
