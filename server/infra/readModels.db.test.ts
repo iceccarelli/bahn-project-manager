@@ -198,7 +198,7 @@ describe.skipIf(!hasTestDb)("notification retention (real DB)", () => {
     try {
       const { purgeNotifications } = await import("./notificationRetention");
       const day = 86_400_000, now = new Date("2026-10-01T00:00:00Z");
-      const ins = (u: string, ageDays: number, read: boolean, ws = "Frankfurt") => t.pool.query("INSERT INTO notifications (userId, kind, title, workspace, eventId, createdAt, readAt) VALUES (?,?,?,?,?,?,?)", [u, "workflow", "t", ws, randomUUID(), new Date(now.getTime() - ageDays * day), read ? new Date(now.getTime() - ageDays * day) : null]);
+      const ins = (u: string, ageDays: number, read: boolean, ws = "Frankfurt") => t.pool.query("INSERT INTO notifications (userId, kind, title, workspace, eventId, dedupKey, createdAt, readAt) VALUES (?,?,?,?,?,?,?,?)", [u, "workflow", "t", ws, randomUUID(), `event:${randomUUID()}`, new Date(now.getTime() - ageDays * day), read ? new Date(now.getTime() - ageDays * day) : null]);
       for (let i = 0; i < 5; i++) await ins("u1", 40, true);       // read, older than 30 d → deleted
       for (let i = 0; i < 3; i++) await ins("u1", 10, true);       // read, recent → kept
       for (let i = 0; i < 4; i++) await ins("u1", 60, false);      // unread, older than 30 d but < 180 d → kept

@@ -77,7 +77,7 @@ add("server-mode-browser", "two-browser proof against two instances + Redis + re
 add("oidc-browser", "real browser sign-in (code + PKCE), storage audit, logout, token refusal, legacy-snapshot protection — mock authority, NOT Entra", async () => {
   if (skip.has("oidc-browser")) return { ok: null, evidence: "skipped by flag" };
   if (!process.env.E2E_DB_BASE) return { ok: null, evidence: "E2E_DB_BASE not set" };
-  const b = sh("OUT=dist-oidc VITE_OIDC_AUTHORITY=http://127.0.0.1:3290/ VITE_OIDC_CLIENT_ID=bahn-spa VITE_OIDC_SCOPE='openid profile' scripts/e2e/build-server-mode.sh");
+  const b = sh("OUT=dist-oidc VITE_OIDC_AUTHORITY=http://127.0.0.1:3290/ VITE_OIDC_CLIENT_ID=bahn-spa VITE_OIDC_SCOPE='openid profile' VITE_DEMO_URL=https://demo.example.test/ scripts/e2e/build-server-mode.sh");
   if (b.code !== 0) return { ok: false, evidence: b.out.slice(-300), ms: b.ms };
   const r = sh("OUT=dist-oidc pnpm exec tsx scripts/e2e/oidc-browser.e2e.ts", {}, 900_000); const m = /(\d+)\/(\d+) passed/.exec(r.out);
   return { ok: r.code === 0 && !!m && m[1] === m[2], evidence: m ? `${m[1]}/${m[2]} passed (artifacts/e2e-oidc-browser.json)` : r.out.slice(-300), ms: r.ms };

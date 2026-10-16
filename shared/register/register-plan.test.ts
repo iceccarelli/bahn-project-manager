@@ -198,6 +198,16 @@ describe("planRegister — what an import may change", () => {
 });
 
 describe("chunkRecords", () => {
+  it("never produces a chunk the API would refuse, even for one huge Projektnummer group", async () => {
+    const { REGISTER_MAX_ROWS } = await import("./register-contract");
+    const { CHUNK_HARD_MAX } = await import("./register-plan");
+    expect(CHUNK_HARD_MAX).toBe(REGISTER_MAX_ROWS);
+    const proto = rec({ projektnummer: "G.1", station: "x" });
+    const big = Array.from({ length: 401 }, (_, i): RegisterRecord => ({ ...proto, ref: i + 1, fields: { ...proto.fields, station: `Station ${i}` } }));
+    const chunks = chunkRecords(big);
+    expect(chunks.every((c) => c.length <= REGISTER_MAX_ROWS)).toBe(true);
+    expect(chunks.flat()).toHaveLength(401);
+  });
   it("keeps every Projektnummer group in one chunk while it fits, and preserves every record exactly once", () => {
     const records = [...Array(30)].map((_, i) => rec({ projektnummer: `G.${i % 5}`, station: `S${i}` }, 9 + i));
     const chunks = chunkRecords(records, { maxRecords: 12 });

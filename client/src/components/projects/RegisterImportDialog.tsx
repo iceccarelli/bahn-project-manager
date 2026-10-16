@@ -59,18 +59,21 @@ export function RegisterImportDialog({ open, onOpenChange }: { open: boolean; on
   const [shown, setShown] = useState(PAGE);
   const [filter, setFilter] = useState<Filter>("attention");
   const input = useRef<HTMLInputElement>(null);
-  const cancelled = useRef(false);
+  /** Every read/apply/close takes a new token; a loop that finds a different token has been superseded and stops, whatever `cancelled` was reset to. */
+  const run = useRef(0);
   const qc = useQueryClient();
 
   const reset = () => { setState({ phase: "pick" }); setChoices({}); setUntaken(new Set()); setShown(PAGE); };
   const close = (next: boolean) => {
-    if (!next) { cancelled.current = true; reset(); }
+    // an apply in flight is not interrupted by a stray click: its chunks are committed one by one and the summary is shown at the end
+    if (!next && state.phase === "applying") return;
+    if (!next) { run.current += 1; reset(); }
     onOpenChange(next);
   };
   const choose = (ref: number, c: Choice) => setChoices((prev) => ({ ...prev, [ref]: c }));
 
   const read = async (file: File) => {
-    cancelled.current = false;
+    const token = ++run.current;
     setChoices({}); setUntaken(new Set()); setShown(PAGE);
     if (file.size > MAX_BYTES) return setState({ phase: "error", message: `Die Datei ist größer als ${MAX_BYTES / 1024 / 1024} MB.`, name: file.name });
     setState({ phase: "reading", name: file.name });
@@ -86,19 +89,21 @@ export function RegisterImportDialog({ open, onOpenChange }: { open: boolean; on
       const chunks = chunkRecords(source.forPlanning);
       const rows: ReviewRow[] = [];
       for (const [i, chunk] of chunks.entries()) {
-        if (cancelled.current) return;
+        if (run.current !== token) return;
         setState({ phase: "previewing", name: file.name, done: i, total: chunks.length });
         const preview = await serverApi.projects.registerPreview.mutate({ records: chunk });
         for (const plan of preview.rows) rows.push({ plan, record: chunk.find((r) => r.ref === plan.ref) as RegisterRecord, chunk: i });
       }
+      if (run.current !== token) return;
       setState({ phase: "review", name: file.name, parsed, source, rows, chunks: chunks.length });
     } catch (e) {
+      if (run.current !== token) return;
       setState({ phase: "error", name: file.name, message: `Die Datei konnte nicht geprüft werden: ${e instanceof Error ? e.message : "unbekannter Fehler"}` });
     }
   };
 
   const apply = async (s: Extract<State, { phase: "review" }>) => {
-    cancelled.current = false;
+    const token = ++run.current;
     const totals = emptyCounts();
     let openRows = 0;
     let winnersOpen = 0;
@@ -112,7 +117,7 @@ export function RegisterImportDialog({ open, onOpenChange }: { open: boolean; on
         if (p) winnerPlans.set(r.plan.ref, p as PlanRow);
       }
       for (let i = 0; i < s.chunks; i++) {
-        if (cancelled.current) return;
+        if (run.current !== token) return;
         setState({ phase: "applying", name: s.name, done: i, total: s.chunks });
         const chunkRows = s.rows.filter((r) => r.chunk === i);
         const built = buildApplyRows(chunkRows, choices, winnerPlans);

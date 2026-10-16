@@ -52,7 +52,9 @@ RUN pnpm run check
 ARG VITE_OIDC_AUTHORITY=
 ARG VITE_OIDC_CLIENT_ID=
 ARG VITE_OIDC_SCOPE="openid profile"
-ENV VITE_OIDC_AUTHORITY=$VITE_OIDC_AUTHORITY VITE_OIDC_CLIENT_ID=$VITE_OIDC_CLIENT_ID VITE_OIDC_SCOPE=$VITE_OIDC_SCOPE
+# optional: where the static demo lives (shown as "Demo ansehen" on the sign-in page)
+ARG VITE_DEMO_URL=
+ENV VITE_OIDC_AUTHORITY=$VITE_OIDC_AUTHORITY VITE_OIDC_CLIENT_ID=$VITE_OIDC_CLIENT_ID VITE_OIDC_SCOPE=$VITE_OIDC_SCOPE VITE_DEMO_URL=$VITE_DEMO_URL
 # This image IS the production artifact: server-authoritative data plane, always. There is deliberately
 # no VITE_SERVER_MODE build-arg — `build:production` pins it to 1, refuses to build otherwise, and
 # asserts the emitted build-info.json (see scripts/assert-build-target.mjs). The browser-local demo is

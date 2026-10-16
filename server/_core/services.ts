@@ -12,6 +12,7 @@ import { ChecklistService } from "../domain/checklistService";
 import { ProjectService } from "../domain/projectService";
 import { PruefberichtLinkService } from "../domain/pruefberichtLinkService";
 import { RegisterImportService } from "../domain/registerImportService";
+import { SubscriptionService } from "../domain/subscriptionService";
 import type { RealtimePublisher, RealtimeSubscriber } from "../domain/ports";
 import { MysqlProjectStore } from "../infra/mysqlProjectStore";
 import { MysqlOutbox } from "../infra/mysqlOutbox";
@@ -30,6 +31,8 @@ export interface Services {
   registerImport: RegisterImportService;
   /** ITK Prüfbericht ↔ project link */
   pruefberichtLinks: PruefberichtLinkService;
+  /** department (Gewerk) notification subscriptions */
+  subscriptions: SubscriptionService;
   publisher: RealtimePublisher;
   subscriber: RealtimeSubscriber;
   relay: OutboxRelay;
@@ -83,6 +86,7 @@ export async function getServices(log: (msg: string, e?: unknown) => void = cons
   const checklists = new ChecklistService(store, svc, bookings, relay.nudge);
   const registerImport = new RegisterImportService(store, svc);
   const pruefberichtLinks = new PruefberichtLinkService(store);
+  const subscriptions = new SubscriptionService(store);
 
   // Sampled gauges: cheap, and they make saturation visible before it hurts.
   const sampler = setInterval(async () => {
@@ -115,7 +119,7 @@ export async function getServices(log: (msg: string, e?: unknown) => void = cons
 
   relay.start();
   services = {
-    store, projects: svc, bookings, checklists, registerImport, pruefberichtLinks, publisher: bus, subscriber: bus, relay, presence, pool, redisStatus,
+    store, projects: svc, bookings, checklists, registerImport, pruefberichtLinks, subscriptions, publisher: bus, subscriber: bus, relay, presence, pool, redisStatus,
     async shutdown() {
       clearInterval(sampler);
       clearInterval(sweeper);

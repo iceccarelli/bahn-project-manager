@@ -93,6 +93,8 @@ those lists). Not done: presence rate limiting per principal; departments' prese
 
 ## Notifications delivery
 
+Two producers write notification rows + `notification.created` outbox events inside the producing transaction: project watchers (`ProjectService.notifyWatchers`, policy `notificationPolicy.ts`) and department subscriptions on a submitted Projektanmeldung (`ChecklistService.notifyDepartments`, policy `departmentNotifications.ts`, docs/auth.md "Department notifications"). Both are idempotent per recipient through `notifications.dedupKey` (unique with `userId`); the relay may re-publish an event, the client store de-duplicates by notification id and the server list is the durable truth (keyset pagination, "Ältere laden").
+
 See docs/data-plane.md. `notification.created` events share the envelope, outbox and feed with project events.
 
 

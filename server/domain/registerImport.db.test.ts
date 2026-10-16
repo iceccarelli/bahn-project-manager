@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import { hasTestDb, createTestDatabase } from "../testing/testDb";
 import { MysqlProjectStore } from "../infra/mysqlProjectStore";
-import { importPruefberichte, listPruefberichte, linkCandidatesOf, pruefberichteOfProject } from "../infra/pruefberichtStore";
+import { importPruefberichte, linkSummary, listPruefberichte, linkCandidatesOf, pruefberichteOfProject } from "../infra/pruefberichtStore";
 import { ProjectService } from "./projectService";
 import { PruefberichtLinkService } from "./pruefberichtLinkService";
 import { RegisterImportService, sourceKeyHash } from "./registerImportService";
@@ -459,7 +459,7 @@ describe.skipIf(!hasTestDb)("Übersichtsliste import (real DB)", () => {
     it("unlinking clears the link and is audited", async () => {
       const pb = await pbOf("26.004");
       await links.setLink(admin, { id: pb.id, expectedVersion: pb.version, projectId: null, idempotencyKey: key() }, ctx());
-      expect(await pbOf("26.004")).toMatchObject({ projectId: null, projectLinkSource: null });
+      expect(await pbOf("26.004")).toMatchObject({ projectId: null, projectLinkSource: "detached" }); // a decision, not "never linked"
       expect(await count("audit_log", `entityType='pruefbericht' AND entityId=${pb.id} AND oldValue='${beta}' AND newValue IS NULL`)).toBe(1);
     });
 
@@ -479,6 +479,72 @@ describe.skipIf(!hasTestDb)("Übersichtsliste import (real DB)", () => {
       await expect(links.setLink(admin, { id: 987_654, expectedVersion: 1, projectId: alphaAP, idempotencyKey: key() }, ctx())).rejects.toBeInstanceOf(NotFoundError);
       await expect(links.autoLink(markus, { dryRun: true, idempotencyKey: key() }, ctx())).rejects.toBeInstanceOf(ForbiddenError);
       expect((await pbOf("26.005")).projectId).toBeNull();
+    });
+
+    it("a link removed on purpose is not re-attached by the automatic link — and can still be set by hand", async () => {
+      const pb = await pbOf("26.003"); // unique: Beta
+      expect(pb.projectId).toBe(beta);
+      await links.setLink(admin, { id: pb.id, expectedVersion: pb.version, projectId: null, idempotencyKey: key() }, ctx());
+      expect(await pbOf("26.003")).toMatchObject({ projectId: null, projectLinkSource: "detached" });
+      const dry = await links.autoLink(admin, { dryRun: true, idempotencyKey: key() }, ctx());
+      const wet = await links.autoLink(admin, { dryRun: false, idempotencyKey: key() }, ctx());
+      expect(wet.linked).toBe(dry.linked);
+      expect((await pbOf("26.003")).projectId).toBeNull();
+      expect((await linkSummary(t.pool)).unmatched["bewusst nicht zugeordnet"]).toBeGreaterThanOrEqual(1);
+      const again = await pbOf("26.003");
+      await links.setLink(admin, { id: again.id, expectedVersion: again.version, projectId: beta, idempotencyKey: key() }, ctx());
+      expect(await pbOf("26.003")).toMatchObject({ projectId: beta, projectLinkSource: "manual" });
+    });
+
+    it("automatic links that no longer satisfy the rule are counted, not undone", async () => {
+      const before = (await linkSummary(t.pool)).staleAuto;
+      const auto = (await q<{ id: number; projectId: number }>("SELECT id, projectId FROM itk_pruefberichte WHERE projectLinkSource='auto' LIMIT 1"))[0]!;
+      await t.pool.query("UPDATE projects SET station='Ganz woanders' WHERE id=?", [auto.projectId]);
+      expect((await linkSummary(t.pool)).staleAuto).toBeGreaterThan(before);
+      expect((await q<{ projectId: number }>("SELECT projectId FROM itk_pruefberichte WHERE id=?", [auto.id]))[0]!.projectId).toBe(auto.projectId);
+    });
+  });
+
+  describe("concurrency and number spelling", () => {
+    const one = (extra: Partial<RowSpec> = {}) => parse([{ projektnummer: "G.RACE1", station: "Rennstadt", beschreibung: "Gleichzeitig", stand: "AP", ...extra } as RowSpec])[0]!;
+
+    it("two imports of the same new registration with different keys create ONE project; the loser is told", async () => {
+      const rec = one();
+      const send = (rowKey: string) => imp.apply(admin, { source: "race.xlsm", part: { index: 1, total: 1 }, rows: [{ record: rec, action: "create", overwrite: false, confirmed: false }], idempotencyKey: rowKey }, ctx());
+      const [a, b] = await Promise.all([send(key()), send(key())]);
+      const kinds = [a.outcomes[0]!.outcome, b.outcomes[0]!.outcome].sort();
+      expect(kinds).toEqual(["created", "exists"]);
+      expect(await count("projects", "projektnummer='G.RACE1'")).toBe(1);
+      // the key row names its owner
+      expect(await count("project_source_keys", `sourceKey='${sourceKeyHash(fullKey({ ...rec.fields }))}' AND projectId IS NOT NULL`)).toBe(1);
+    });
+
+    it("a project whose number carries a non-breaking space is still found (SQL and JavaScript agree on 'the same number')", async () => {
+      const spaced = one({ projektnummer: "G.\u00a0NB1", station: "Leerzeichen", beschreibung: "NBSP" });
+      await imp.apply(admin, { source: "nb.xlsm", part: { index: 1, total: 1 }, rows: [{ record: spaced, action: "create", overwrite: false, confirmed: false }], idempotencyKey: key() }, ctx());
+      await t.pool.query("DELETE FROM project_source_keys WHERE projectId IN (SELECT id FROM projects WHERE station='Leerzeichen')"); // as if created by hand, not by an import
+      const again = one({ projektnummer: "G.NB1", station: "Leerzeichen", beschreibung: "NBSP" });
+      const plan = (await imp.preview(admin, { records: [again] })).rows[0]!;
+      expect(plan.status).toBe("unchanged");
+      expect(await linkCandidatesOf(t.pool, (await pbOf2("G.NB1")).id)).toMatchObject({ candidates: [{ station: "Leerzeichen" }] });
+    });
+
+    const pbOf2 = async (pn: string) => {
+      await importPruefberichte(t.pool, { source: "nb", part: { index: 1, total: 1 }, records: importWorkbookSheets([{ name: "2026", rows: [[...H2020], row2020("26.900", { projektnummer: pn, bahnhof: "Leerzeichen", taetigkeit: "Abnahmeprüfung" })] }]).records }, { name: "t" });
+      return (await q<{ id: number }>("SELECT id FROM itk_pruefberichte WHERE laufendeNummer='26.900'"))[0]!;
+    };
+
+    it("auto-link never links to a project that is deleted meanwhile (target locked first), and one changed report does not abort the run", async () => {
+      const gone = one({ projektnummer: "G.GONE", station: "Verschwindet", beschreibung: "x" });
+      const res = await imp.apply(admin, { source: "g.xlsm", part: { index: 1, total: 1 }, rows: [{ record: gone, action: "create", overwrite: false, confirmed: false }], idempotencyKey: key() }, ctx());
+      const id = res.outcomes[0]!.projectId!;
+      await importPruefberichte(t.pool, { source: "g", part: { index: 1, total: 1 }, records: importWorkbookSheets([{ name: "2026", rows: [[...H2020], row2020("26.901", { projektnummer: "G.GONE", bahnhof: "Verschwindet", taetigkeit: "Abnahmeprüfung" })] }]).records }, { name: "t" });
+      const p = (await q<{ syncVersion: number }>("SELECT syncVersion FROM projects WHERE id=?", [id]))[0]!;
+      await projects.delete(admin, { id, expectedVersion: p.syncVersion, idempotencyKey: key() }, ctx());
+      const out = await links.autoLink(admin, { dryRun: false, idempotencyKey: key() }, ctx());
+      expect(out.examined).toBeGreaterThan(0);
+      expect(await count("itk_pruefberichte", "laufendeNummer='26.901' AND projectId IS NOT NULL")).toBe(0);
+      expect(await count("itk_pruefberichte", "projectId IS NOT NULL AND projectId NOT IN (SELECT id FROM projects)")).toBe(0);
     });
   });
 });

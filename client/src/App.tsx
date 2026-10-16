@@ -33,6 +33,7 @@ const Anmeldung = lazy(() => import("@/pages/Anmeldung"));
 const BvbEea = lazy(() => import("@/pages/BvbEea"));
 const PsvItk = lazy(() => import("@/pages/PsvItk"));
 const AuditLogPage = lazy(() => import("@/pages/AuditLog"));
+const Einstellungen = lazy(() => import("@/pages/Einstellungen"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
 
 /**
@@ -97,6 +98,7 @@ function App() {
                         <Route path="/bvb-eea" component={BvbEea} />
                         <Route path="/psv-itk" component={PsvItk} />
                         <Route path="/audit" component={AuditLogPage} />
+                        <Route path="/einstellungen" component={Einstellungen} />
                         <Route component={NotFound} />
                       </Switch>
                     </Suspense>

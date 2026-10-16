@@ -121,6 +121,9 @@ export async function upsertUser(user: InsertUser): Promise<void> {
     await db.insert(users).values(values).onDuplicateKeyUpdate({
       set: updateSet,
     });
+    // Cookie-session users (development demo login, legacy OAuth) act under their numeric id (principalFromUser); store it
+    // like migration 0014 does, so recipient resolution (users.principalId) sees them too. OIDC rows are written by the provisioner.
+    await db.execute(sql`UPDATE users SET principalId = CAST(id AS CHAR) WHERE openId = ${user.openId} AND principalId IS NULL AND (loginMethod IS NULL OR loginMethod <> 'oidc')`);
   } catch (error) {
     console.error("[Database] Failed to upsert user:", error);
     throw error;

@@ -2,6 +2,7 @@
  * MySQL/MariaDB adapter for ProjectStore. All SQL for the Project slice lives
  * here; the domain layer sees only the ProjectStore/ProjectTx ports.
  */
+import { pnSql } from "./sqlNormalize";
 import { and, asc, desc, eq, gt, inArray, lt, lte, or, sql, type SQL } from "drizzle-orm";
 import type { MySql2Database } from "drizzle-orm/mysql2";
 import { DomainEventSchema, type DomainEvent } from "@shared/domain-events";
@@ -13,7 +14,7 @@ import {
   type ProjectSummary,
 } from "@shared/project-contract";
 import {
-  auditLog, departmentReviews, projectSourceKeys, projectChecklists, projectChecklistAnswers, scheduleSlots, type ProjectChecklist, type ScheduleSlot, domainEvents, idempotencyKeys, notifications, notificationUnread, projects, projectWatchers, type Project,
+  auditLog, departmentReviews, projectSourceKeys, projectChecklists, projectChecklistAnswers, scheduleSlots, type ProjectChecklist, type ScheduleSlot, domainEvents, idempotencyKeys, notifications, notificationUnread, projects, projectWatchers, users, departmentSubscriptions, type Project,
 } from "../../drizzle/schema";
 import type { AuditRow, IdempotencyClaim, ProjectStore, ProjectTx, PruefberichtLinkRow, RegisterCandidates, RegisterLookup } from "../domain/ports";
 import { normProjektnummer } from "@shared/project-identity";
@@ -186,8 +187,8 @@ async function loadRegisterCandidates(x: Executor, source: string, lookup: Regis
   const wantsNumberless = lookup.hints.some(h => !normProjektnummer(h.projektnummer));
   const ownerIds = [...new Set([...owners.values()].flat())];
   const conds: SQL[] = [];
-  if (numbers.length) conds.push(sql`UPPER(REPLACE(${projects.projektnummer}, ' ', '')) IN (${sql.join(numbers.map(n => sql`${n}`), sql`, `)})`);
-  if (wantsNumberless) conds.push(sql`(${projects.projektnummer} IS NULL OR TRIM(${projects.projektnummer}) = '')`);
+  if (numbers.length) conds.push(sql`${sql.raw(pnSql("`projects`.`projektnummer`"))} IN (${sql.join(numbers.map(n => sql`${n}`), sql`, `)})`);
+  if (wantsNumberless) conds.push(sql`(${projects.projektnummer} IS NULL OR ${sql.raw(pnSql("`projects`.`projektnummer`"))} = '')`);
   if (ownerIds.length) conds.push(inArray(projects.id, ownerIds));
   if (!conds.length) return { projects: [], keyOwners: owners, skipped };
   const rows = await x.select().from(projects).where(or(...conds));
@@ -230,6 +231,13 @@ function txAdapter(x: Executor): ProjectTx {
       const [res] = await x.insert(projectSourceKeys).ignore().values(rows.map(r => ({ projectId: r.projectId, source, kind: r.kind ?? "match", sourceKey: r.keyHash })));
       return Number((res as unknown as { affectedRows: number }).affectedRows);
     },
+    async claimSourceKey(source, keyHash) {
+      const [res] = await x.insert(projectSourceKeys).ignore().values({ projectId: null, source, kind: "match", sourceKey: keyHash });
+      return Number((res as unknown as { affectedRows: number }).affectedRows) === 1;
+    },
+    async assignSourceKey(source, keyHash, projectId) {
+      await x.update(projectSourceKeys).set({ projectId }).where(and(eq(projectSourceKeys.source, source), eq(projectSourceKeys.sourceKey, keyHash)));
+    },
     async deleteSkipKeys(source, keyHashes) {
       if (!keyHashes.length) return 0;
       const [res] = await x.delete(projectSourceKeys).where(and(eq(projectSourceKeys.source, source), eq(projectSourceKeys.kind, "skip"), inArray(projectSourceKeys.sourceKey, [...keyHashes])));
@@ -241,13 +249,19 @@ function txAdapter(x: Executor): ProjectTx {
     },
     async setPruefberichtProject(id, expectedVersion, link) {
       const [res] = await x.execute(
-        sql`UPDATE itk_pruefberichte SET projectId = ${link.projectId}, projectLinkSource = ${link.projectId === null ? null : link.source}, projectLinkedAt = ${link.projectId === null ? null : new Date()}, version = version + 1 WHERE id = ${id} AND version = ${expectedVersion}`,
+        sql`UPDATE itk_pruefberichte SET projectId = ${link.projectId}, projectLinkSource = ${link.source}, projectLinkedAt = ${link.source === null ? null : new Date()}, version = version + 1 WHERE id = ${id} AND version = ${expectedVersion}`,
       );
       return (res as unknown as { affectedRows: number }).affectedRows === 1;
     },
     async unlinkedPruefberichte() {
-      const [rows] = (await x.execute(sql.raw(`SELECT ${PB_LINK_COLUMNS} FROM itk_pruefberichte WHERE projectId IS NULL ORDER BY \`year\`, id FOR UPDATE`))) as unknown as RawRows<Record<string, unknown>>;
+      const [rows] = (await x.execute(sql.raw(`SELECT ${PB_LINK_COLUMNS} FROM itk_pruefberichte WHERE projectId IS NULL AND projectLinkSource IS NULL ORDER BY \`year\`, id`))) as unknown as RawRows<Record<string, unknown>>;
       return rows.map(toLinkRow);
+    },
+    async shareLockProjects(ids) {
+      if (!ids.length) return new Set<number>();
+      // LOCK IN SHARE MODE: understood by MySQL 8.x and MariaDB alike (FOR SHARE is MySQL-only)
+      const [rows] = (await x.execute(sql`SELECT id FROM projects WHERE id IN (${sql.join(ids.map((i) => sql`${i}`), sql`, `)}) LOCK IN SHARE MODE`)) as unknown as RawRows<{ id: number }>;
+      return new Set(rows.map((r) => Number(r.id)));
     },
     async projectsForLinking(): Promise<LinkProject[]> {
       return x.select({ id: projects.id, projektnummer: projects.projektnummer, station: projects.station, projektstand: projects.projektstand }).from(projects).where(sql`${projects.projektnummer} IS NOT NULL AND TRIM(${projects.projektnummer}) <> ''`);
@@ -329,9 +343,39 @@ function txAdapter(x: Executor): ProjectTx {
       return rows.map(r => r.u);
     },
     async insertNotification(row) {
-      const [res] = await x.insert(notifications).values({ ...row, kind: row.kind as never, createdAt: new Date() });
+      // the unique (userId, dedupKey) makes a second delivery of the same logical notification a no-op — and then the unread
+      // counter must not move either. Only that duplicate is tolerated (no INSERT IGNORE: a malformed row must still fail the transaction).
+      let r: { insertId: number };
+      try {
+        const [res] = await x.insert(notifications).values({ ...row, kind: row.kind as never, department: row.department ?? null, createdAt: new Date() });
+        r = res as unknown as { insertId: number };
+      } catch (e) {
+        if ((e as { errno?: number; cause?: { errno?: number } }).errno === 1062 || (e as { cause?: { errno?: number } }).cause?.errno === 1062) return null; // ER_DUP_ENTRY
+        throw e;
+      }
       await x.execute(sql`INSERT INTO notification_unread (userId, workspace, n) VALUES (${row.userId}, ${row.workspace ?? ""}, 1) ON DUPLICATE KEY UPDATE n = n + 1`);
-      return Number((res as unknown as { insertId: number }).insertId);
+      return Number(r.insertId);
+    },
+    async departmentCandidates(departments) {
+      if (!departments.length) return [];
+      // candidates by grant text (the JSON snapshot names the department) or by an explicit subscription row; the pure policy
+      // re-checks every one of them against the parsed grant, so an over-wide match here costs a row, never a notification
+      const like = departments.map((d) => sql`${users.grantSnapshot} LIKE ${`%${d.replace(/[%_\\]/g, "")}%`}`);
+      const rows = await x.select({ principalId: users.principalId, grantSnapshot: users.grantSnapshot }).from(users)
+        .where(and(sql`${users.principalId} IS NOT NULL`, or(or(...like), sql`${users.principalId} IN (SELECT userId FROM department_subscriptions WHERE department IN (${sql.join(departments.map((d) => sql`${d}`), sql`, `)}))`)));
+      return rows.filter((r): r is { principalId: string; grantSnapshot: string | null } => r.principalId !== null);
+    },
+    async setSubscription(row) {
+      const [prev] = await x.select({ enabled: departmentSubscriptions.enabled, source: departmentSubscriptions.source }).from(departmentSubscriptions)
+        .where(and(eq(departmentSubscriptions.userId, row.userId), eq(departmentSubscriptions.department, row.department))).for("update");
+      const now = new Date();
+      await x.insert(departmentSubscriptions).values({ ...row, createdAt: now, updatedAt: now }).onDuplicateKeyUpdate({ set: { enabled: row.enabled, source: row.source, updatedAt: now } });
+      return prev ? { enabled: prev.enabled, source: prev.source } : null;
+    },
+    async subscriptionRows(userIds, departments) {
+      if (!userIds.length || !departments.length) return [];
+      return x.select({ userId: departmentSubscriptions.userId, department: departmentSubscriptions.department, enabled: departmentSubscriptions.enabled, source: departmentSubscriptions.source })
+        .from(departmentSubscriptions).where(and(inArray(departmentSubscriptions.userId, [...userIds]), inArray(departmentSubscriptions.department, [...departments])));
     },
     async lockReview(projectId, department) {
       const rows = await x
@@ -489,6 +533,15 @@ export class MysqlProjectStore implements ProjectStore {
     return r.length > 0;
   }
 
+  async subscriptionsOf(userId: string) {
+    const rows = await this.db.select().from(departmentSubscriptions).where(eq(departmentSubscriptions.userId, userId));
+    return rows.map(r => ({ department: r.department, enabled: r.enabled, source: r.source, updatedAt: r.updatedAt.toISOString() }));
+  }
+  async grantOfPrincipal(principalId: string) {
+    const [r] = await this.db.select({ id: users.id, principalId: users.principalId, name: users.name, email: users.email, grantSnapshot: users.grantSnapshot }).from(users).where(eq(users.principalId, principalId)).limit(1);
+    return r && r.principalId ? { id: r.id, principalId: r.principalId, name: r.name, email: r.email, grantSnapshot: r.grantSnapshot } : null;
+  }
+
   /** Newest first, keyset on id. `workspaces`: null = unrestricted; a list re-checks the recipient's CURRENT access. */
   async listNotifications(userId: string, o: { cursor?: number; limit: number; unreadOnly?: boolean }, workspaces: readonly string[] | null) {
     if (workspaces !== null && workspaces.length === 0) return { items: [], nextCursor: null as number | null };
@@ -499,7 +552,7 @@ export class MysqlProjectStore implements ProjectStore {
     const rows = await this.db.select().from(notifications).where(and(...conds)).orderBy(desc(notifications.id)).limit(o.limit + 1);
     const page = rows.slice(0, o.limit);
     return {
-      items: page.map(r => ({ id: r.id, kind: r.kind, title: r.title, body: r.body, link: r.link, createdAt: r.createdAt.toISOString(), read: r.readAt !== null })),
+      items: page.map(r => ({ id: r.id, kind: r.kind, title: r.title, body: r.body, link: r.link, department: r.department ?? null, createdAt: r.createdAt.toISOString(), read: r.readAt !== null })),
       nextCursor: rows.length > o.limit ? page[page.length - 1]!.id : null,
     };
   }

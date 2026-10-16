@@ -22,6 +22,7 @@ import {
   Network,
   History,
   LogOut,
+  Settings,
 } from "lucide-react";
 import { type CSSProperties, useEffect, useRef, useState, useMemo } from "react";
 import { useLocation } from "wouter";
@@ -40,6 +41,7 @@ const menuItems = [
   { icon: FileCheck, label: "BVB-EEA", path: "/bvb-eea" },
   { icon: Network, label: "PSV-ITK", path: "/psv-itk" },
   { icon: History, label: "Änderungshistorie", path: "/audit" },
+  { icon: Settings, label: "Einstellungen", path: "/einstellungen" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";

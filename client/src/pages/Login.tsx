@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Loader2, AlertCircle, CheckCircle2, ExternalLink } from "lucide-react";
+import { entryLink } from "@shared/entry-links";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 /** Server mode: the server decides (cookie session from auth.demoLogin, which is off in production). */
@@ -19,6 +20,19 @@ async function attemptLogin(email: string, password: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+const DEMO_URL = entryLink(import.meta.env.VITE_DEMO_URL as string | undefined);
+const APP_URL = entryLink(import.meta.env.VITE_APP_URL as string | undefined);
+
+/** The static demo is a separate, browser-local deployment: always one click away from the real sign-in. */
+function DemoLink() {
+  if (!DEMO_URL) return null;
+  return (
+    <a href={DEMO_URL} data-testid="demo-link" className="inline-flex items-center justify-center gap-2 text-sm text-muted-foreground underline-offset-4 hover:underline">
+      Demo ansehen (Beispieldaten, ohne Anmeldung) <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+    </a>
+  );
 }
 
 /** Real sign-in (server mode + OIDC configured): no credential form exists, the IdP owns the credentials. */
@@ -46,6 +60,7 @@ function SsoLogin() {
           <Button onClick={go} disabled={busy} className="w-full">
             {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Mit Microsoft anmelden
           </Button>
+          <DemoLink />
         </CardContent>
       </Card>
     </div>
@@ -162,6 +177,15 @@ function DemoLogin() {
                 <AlertTitle>Erfolg</AlertTitle>
                 <AlertDescription>Anmeldung erfolgreich. Weiterleitung...</AlertDescription>
               </Alert>
+            )}
+
+            {!SERVER_MODE && APP_URL && (
+              <>
+                <Button asChild className="w-full" data-testid="sso-link">
+                  <a href={`${APP_URL.replace(/\/$/, "")}/login`}>Mit Microsoft anmelden (Produktivsystem)</a>
+                </Button>
+                <p className="text-xs text-center text-muted-foreground -mt-2">Dies ist die Demo mit Beispieldaten. Die echte Anmeldung läuft über Ihr Microsoft-Konto.</p>
+              </>
             )}
 
             <form onSubmit={handleLogin} className="grid gap-4">

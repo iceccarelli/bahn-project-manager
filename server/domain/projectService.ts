@@ -557,7 +557,8 @@ export class ProjectService {
     const workspace = e.context?.workspace ?? null;
     for (const userId of await tx.watchersOf(project.id)) {
       if (userId === principal.id) continue;
-      const id = await tx.insertNotification({ userId, kind: plan.kind, title: plan.title, body: plan.body, link: plan.link, workspace, eventId: e.eventId });
+      const id = await tx.insertNotification({ userId, kind: plan.kind, title: plan.title, body: plan.body, link: plan.link, workspace, eventId: e.eventId, dedupKey: `event:${e.eventId}` });
+      if (id === null) continue; // this recipient already holds the notification of this event
       await tx.appendEvent({
         schemaVersion: EVENT_SCHEMA_VERSION, eventId: randomUUID(), eventType: "notification.created", aggregateType: "notification",
         aggregateId: String(id), aggregateVersion: 1, actorId: principal.id, actorName: principal.name, timestamp: this.clock().toISOString(), traceId: e.traceId,

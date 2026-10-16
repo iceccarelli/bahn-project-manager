@@ -30,7 +30,7 @@ export const RegisterRecordSchema = z.object({
 }) satisfies z.ZodType<RegisterRecord>;
 
 /** Rows per request. The API body limit is 256 kB; `chunkRecords` keeps a chunk well below it. */
-export const REGISTER_MAX_ROWS = 150;
+export const REGISTER_MAX_ROWS = 150; // = CHUNK_HARD_MAX in register-plan.ts (a test pins both)
 
 /**
  * Records of the same chunk that the request does not act on, reduced to the fields identity is made of. The planner needs

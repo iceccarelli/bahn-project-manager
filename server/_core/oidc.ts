@@ -4,8 +4,13 @@
  * nothing the browser stores is trusted for identity or role.
  *
  * Configuration (all required to enable; otherwise the bearer path is off):
- *   OIDC_ISSUER     e.g. https://login.microsoftonline.com/<tenant>/v2.0
+ *   OIDC_ISSUER     e.g. https://login.microsoftonline.com/<tenant>/v2.0 — the FIRST entry is the discovery issuer
  *   OIDC_AUDIENCE   the API's application (client) id / App ID URI
+ *
+ * Both accept a comma/space separated list. Microsoft Entra issues v1 tokens (iss https://sts.windows.net/<tid>/,
+ * aud api://<id>) unless the API app registration sets accessTokenAcceptedVersion=2 (iss …/v2.0, aud <client-id>);
+ * listing both spellings makes the first real sign-in work either way. Nothing else is relaxed: signature,
+ * algorithm, expiry and "one of exactly these" issuers/audiences are still enforced.
  *   OIDC_JWKS_URI   optional; defaults to <tenant>/discovery/v2.0/keys for Entra
  *
  * Authorization data comes from token claims:
@@ -27,14 +32,22 @@ export interface VerifiedIdentity {
   departments: string[];
 }
 
-export interface OidcConfig { issuer: string; audience: string; jwks: JWTVerifyGetKey }
+export interface OidcConfig { issuer: string | string[]; audience: string | string[]; jwks: JWTVerifyGetKey }
+
+/** "a, b" → ["a","b"]; a single value stays a plain string (what jose and the tests have always seen). */
+export function listOf(v: string): string | string[] {
+  const parts = v.split(/[,\s]+/).map(x => x.trim()).filter(Boolean);
+  return parts.length === 1 ? (parts[0] as string) : parts;
+}
 
 export function oidcConfigFromEnv(env: NodeJS.ProcessEnv = process.env): OidcConfig | null {
   const issuer = env.OIDC_ISSUER, audience = env.OIDC_AUDIENCE;
   if (!issuer || !audience) return null;
-  const tenant = /login\.microsoftonline\.com\/([^/]+)/.exec(issuer)?.[1];
-  const uri = env.OIDC_JWKS_URI ?? (tenant ? `https://login.microsoftonline.com/${tenant}/discovery/v2.0/keys` : `${issuer.replace(/\/$/, "")}/.well-known/jwks.json`);
-  return { issuer, audience, jwks: createRemoteJWKSet(new URL(uri), { cooldownDuration: 30_000, cacheMaxAge: 10 * 60_000 }) };
+  const issuers = listOf(issuer);
+  const first = Array.isArray(issuers) ? (issuers[0] as string) : issuers;
+  const tenant = /login\.microsoftonline\.com\/([^/]+)/.exec(first)?.[1] ?? /sts\.windows\.net\/([^/]+)/.exec(first)?.[1];
+  const uri = env.OIDC_JWKS_URI ?? (tenant ? `https://login.microsoftonline.com/${tenant}/discovery/v2.0/keys` : `${first.replace(/\/$/, "")}/.well-known/jwks.json`);
+  return { issuer: issuers, audience: listOf(audience), jwks: createRemoteJWKSet(new URL(uri), { cooldownDuration: 30_000, cacheMaxAge: 10 * 60_000 }) };
 }
 
 /** Explicit grant only: the literal "ALL" (any case) or a list of names. Anything else is no access. */
