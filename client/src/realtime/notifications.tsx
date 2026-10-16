@@ -39,6 +39,11 @@ export class NotificationClientStore {
 
 const KEY = ["server", "notifications"] as const;
 
+/** older pages already fetched beyond the first; once one was loaded, ITS cursor (possibly null = exhausted) is the only truth */
+export interface OlderPages { items: NotificationDTO[]; nextCursor: number | null; loaded: boolean; loading: boolean }
+export const nextCursorOf = (older: Pick<OlderPages, "nextCursor" | "loaded">, firstPageCursor: number | null): number | null =>
+  older.loaded ? older.nextCursor : firstPageCursor;
+
 export function useNotificationCenter() {
   const { notifications: store, retain } = useRt();
   const qc = useQueryClient();
@@ -49,15 +54,15 @@ export function useNotificationCenter() {
   const list = useQuery({ queryKey: [...KEY, "list"], queryFn: () => serverApi.notifications.list.query({ limit: 20 }), staleTime: Infinity });
   const unread = useQuery({ queryKey: [...KEY, "unread"], queryFn: () => serverApi.notifications.unreadCount.query(), staleTime: Infinity });
   // older pages, server-backed (keyset on id); reset whenever the first page is refetched
-  const [older, setOlder] = useState<{ items: NotificationDTO[]; nextCursor: number | null; loading: boolean }>({ items: [], nextCursor: null, loading: false });
-  useEffect(() => { if (list.data) { store.reconcile(new Set(list.data.items.map(i => i.id))); setOlder({ items: [], nextCursor: null, loading: false }); } }, [list.data, store]);
-  const nextCursor = older.nextCursor ?? list.data?.nextCursor ?? null;
+  const [older, setOlder] = useState<OlderPages>({ items: [], nextCursor: null, loaded: false, loading: false });
+  useEffect(() => { if (list.data) { store.reconcile(new Set(list.data.items.map(i => i.id))); setOlder({ items: [], nextCursor: null, loaded: false, loading: false }); } }, [list.data, store]);
+  const nextCursor = nextCursorOf(older, list.data?.nextCursor ?? null);
   const loadMore = useCallback(async () => {
     if (!nextCursor || older.loading) return;
     setOlder(o => ({ ...o, loading: true }));
     try {
       const page = await serverApi.notifications.list.query({ limit: 20, cursor: nextCursor });
-      setOlder(o => ({ items: [...o.items, ...page.items], nextCursor: page.nextCursor, loading: false }));
+      setOlder(o => ({ items: [...o.items, ...page.items], nextCursor: page.nextCursor, loaded: true, loading: false }));
     } catch { setOlder(o => ({ ...o, loading: false })); }
   }, [nextCursor, older.loading]);
   // the COUNT is server-owned (refetched on every arrival); a live item and its server row are the same id, shown once

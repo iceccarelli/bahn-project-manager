@@ -163,9 +163,11 @@ describe.skipIf(!hasTestDb)("Projektanmeldung → department notifications (real
     await expect(subs.setForUser(eeaAnna, { principalId: itkIngo.id, department: "ITK", enabled: false }, ctx())).rejects.toBeInstanceOf(ForbiddenError);
     await expect(subs.ofUser(adminAda, "o0000000000000000000000000000000")).rejects.toBeInstanceOf(NotFoundError);
     await subs.setForUser(adminAda, { principalId: offOtto.id, department: "ITK", enabled: true }, ctx());
-    const audit = await q<{ field: string; newValue: string }>("SELECT field, newValue FROM audit_log WHERE entityType='user' AND field='subscription.ITK'");
+    const audit = await q<{ field: string; newValue: string; entityId: number }>("SELECT field, newValue, entityId FROM audit_log WHERE entityType='user' AND field='subscription.ITK'");
     expect(audit).toHaveLength(1);
     expect(JSON.parse(audit[0]!.newValue)).toEqual({ enabled: true, source: "admin" });
+    // linkable like the provisioner's grant rows: entityId is the users.id of the affected user
+    expect(audit[0]!.entityId).toBe((await q<{ id: number }>("SELECT id FROM users WHERE principalId=?", [offOtto.id]))[0]!.id);
     // the admin themselves: no default, explicit opt-in works
     expect((await subs.mine(adminAda)).find((s) => s.department === "EEA")).toMatchObject({ eligible: true, subscribed: false });
     await subs.set(adminAda, { department: "EEA", enabled: true });
@@ -184,5 +186,28 @@ describe.skipIf(!hasTestDb)("Projektanmeldung → department notifications (real
     await projects.update(authorMax, { id: s.projectId, expectedVersion: detail.version, changes: { projektstand: "EP" }, idempotencyKey: key() }, ctx());
     const watcherRows = await q<{ department: string | null; kind: string }>("SELECT department, kind FROM notifications WHERE userId=? AND link=? ORDER BY id", [itkIngo.id, `/projects?projekt=${s.projectId}`]);
     expect(watcherRows).toEqual([{ department: null, kind: "workflow" }]);
+  });
+
+  it("migration 0014 safety: a pre-0014 writer that sets no dedupKey still gets a row (trigger derives event:<id>); a pre-0014 row with a truncated openId is never a recipient", async () => {
+    // (a) the legacy-writer trigger
+    const ev = randomUUID();
+    await t.pool.query("INSERT INTO notifications (userId, kind, title, link, workspace, eventId, createdAt) VALUES (?,?,?,?,?,?,NOW(3))", [eeaAnna.id, "workflow", "legacy", "/x", "Frankfurt", ev]);
+    expect((await q<{ dedupKey: string }>("SELECT dedupKey FROM notifications WHERE eventId=?", [ev]))[0]!.dedupKey).toBe(`event:${ev}`);
+    await expect(t.pool.query("INSERT INTO notifications (userId, kind, title, link, workspace, eventId, createdAt) VALUES (?,?,?,?,?,?,NOW(3))", [eeaAnna.id, "workflow", "legacy again", "/x", "Frankfurt", ev])).rejects.toMatchObject({ errno: 1062 });
+    // (b) the ghost-row guard: seed what a pre-0014 server stored for a real Entra subject (openId cut at 64 chars) and re-run the guard statements
+    const truncated = "oidc:11111111-2222-3333-4444-555555555555:bbbbbbbb-0000-0000-0000-000000000009".slice(0, 64);
+    expect(truncated).toHaveLength(64);
+    await t.pool.query("INSERT INTO users (openId, name, email, loginMethod, role, grantSnapshot, principalId) VALUES (?,?,?,?,?,?,?)", [truncated, "Ghost", "ghost@example.test", "oidc", "user", grantJson({ role: "editor", workspaces: "ALL", departments: ["EEA"] }), "oghostghostghostghostghostghost1"]);
+    const { readFileSync } = await import("node:fs");
+    const sqlText = readFileSync(new URL("../../drizzle/0014_department_subscriptions.sql", import.meta.url), "utf8");
+    const guards = sqlText.split("--> statement-breakpoint").map((x) => x.trim()).filter((x) => /UPDATE `users`/.test(x) && /CHAR_LENGTH\(`openId`\)/.test(x));
+    expect(guards).toHaveLength(2);
+    for (const g of guards) await t.pool.query(g.replace(/^(--.*\n)+/m, ""));
+    expect((await q<{ principalId: string | null; grantSnapshot: string | null }>("SELECT principalId, grantSnapshot FROM users WHERE openId=?", [truncated]))[0]).toEqual({ principalId: null, grantSnapshot: null });
+    // and the real identities kept theirs
+    expect((await q<{ principalId: string }>("SELECT principalId FROM users WHERE openId=?", [eeaAnna.openId]))[0]!.principalId).toBe(eeaAnna.id);
+    const d = await draft(authorMax, { eea: { answer: "Ja" } });
+    await checklists.submit(authorMax, { id: d.checklist.id, expectedVersion: 1, idempotencyKey: key() }, ctx());
+    expect(await count("dedupKey=? AND userId NOT IN (SELECT principalId FROM users WHERE principalId IS NOT NULL)", [`checklist.submitted:${d.checklist.id}:EEA`])).toBe(0);
   });
 });

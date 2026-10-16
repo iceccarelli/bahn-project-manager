@@ -327,9 +327,9 @@ jobs:
       - run: pnpm run build:server
       - run: DATABASE_URL=mysql://root:root@127.0.0.1:3306/bahn node dist/migrate.js
       - run: DATABASE_URL=mysql://root:root@127.0.0.1:3306/bahn node dist/migrate.js
-      - name: FULLTEXT index and audit triggers exist
+      - name: FULLTEXT index and triggers exist (2 audit_log guards + notifications dedup default)
         run: |
-          docker run --rm --network host mysql:8.4 mysql -h127.0.0.1 -uroot -proot bahn -e "SELECT COUNT(*) AS ft FROM information_schema.statistics WHERE table_schema='bahn' AND index_name='projects_search_ft' AND index_type='FULLTEXT'; SELECT COUNT(*) AS triggers FROM information_schema.triggers WHERE trigger_schema='bahn';" | tee /dev/stderr | grep -E "^(4|2)$" | wc -l | grep -q 2
+          docker run --rm --network host mysql:8.4 mysql -h127.0.0.1 -uroot -proot bahn -e "SELECT COUNT(*) AS ft FROM information_schema.statistics WHERE table_schema='bahn' AND index_name='projects_search_ft' AND index_type='FULLTEXT'; SELECT COUNT(*) AS triggers FROM information_schema.triggers WHERE trigger_schema='bahn';" | tee /dev/stderr | grep -E "^(4|3)$" | wc -l | grep -q 2
 
   # PRODUCTION IMAGE (server-mode client, OIDC build args). Built for every push; PUBLISHED from main only. The
   # image — not Vercel — is the unit that is deployed (deploy/staging/docker-compose.yml → docs/topology.md).

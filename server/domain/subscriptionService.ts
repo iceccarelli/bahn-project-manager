@@ -3,7 +3,7 @@
  *
  *   mine        what the caller may follow (eligibility from the CURRENT principal), and the effective state per department.
  *   set         the caller's own explicit decision (an "off" survives sign-ins, imports and re-provisioning: it is a row, not a default).
- *   setForUser  an administrator's decision for another user, audited (`entityType user`, field `subscription.<Gewerk>`).
+ *   setForUser  an administrator's decision for another user, audited like the provisioner's grant rows (`entityType user`, `entityId users.id`, field `subscription.<Gewerk>`).
  *
  * Nothing here grants access: eligibility is derived from the grant the token carries, delivery re-checks it.
  */
@@ -69,7 +69,7 @@ export class SubscriptionService {
       const prev = await tx.setSubscription({ userId: input.principalId, department, enabled: input.enabled, source: "admin" });
       await tx.appendAudit([{
         userId: /^\d+$/.test(p.id) ? Number(p.id) : null, userName: p.name || p.email || p.id,
-        entityType: "user", entityId: 0, action: prev ? "update" : "create", field: `subscription.${department}`,
+        entityType: "user", entityId: u.id, action: prev ? "update" : "create", field: `subscription.${department}`,
         oldValue: prev ? JSON.stringify(prev) : null, newValue: JSON.stringify({ enabled: input.enabled, source: "admin" }),
         eventId: null, aggregateVersion: null, traceId: ctx.traceId, workspace: null, entityLabel: (u.email || u.name || u.principalId).slice(0, 255),
       }]);

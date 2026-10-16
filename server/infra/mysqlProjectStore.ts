@@ -343,11 +343,16 @@ function txAdapter(x: Executor): ProjectTx {
       return rows.map(r => r.u);
     },
     async insertNotification(row) {
-      // INSERT IGNORE: the unique (userId, dedupKey) makes a second delivery of the same logical notification a no-op —
-      // and then the unread counter must not move either
-      const [res] = await x.insert(notifications).ignore().values({ ...row, kind: row.kind as never, department: row.department ?? null, createdAt: new Date() });
-      const r = res as unknown as { insertId: number; affectedRows: number };
-      if (Number(r.affectedRows) === 0) return null;
+      // the unique (userId, dedupKey) makes a second delivery of the same logical notification a no-op — and then the unread
+      // counter must not move either. Only that duplicate is tolerated (no INSERT IGNORE: a malformed row must still fail the transaction).
+      let r: { insertId: number };
+      try {
+        const [res] = await x.insert(notifications).values({ ...row, kind: row.kind as never, department: row.department ?? null, createdAt: new Date() });
+        r = res as unknown as { insertId: number };
+      } catch (e) {
+        if ((e as { errno?: number; cause?: { errno?: number } }).errno === 1062 || (e as { cause?: { errno?: number } }).cause?.errno === 1062) return null; // ER_DUP_ENTRY
+        throw e;
+      }
       await x.execute(sql`INSERT INTO notification_unread (userId, workspace, n) VALUES (${row.userId}, ${row.workspace ?? ""}, 1) ON DUPLICATE KEY UPDATE n = n + 1`);
       return Number(r.insertId);
     },
@@ -533,8 +538,8 @@ export class MysqlProjectStore implements ProjectStore {
     return rows.map(r => ({ department: r.department, enabled: r.enabled, source: r.source, updatedAt: r.updatedAt.toISOString() }));
   }
   async grantOfPrincipal(principalId: string) {
-    const [r] = await this.db.select({ principalId: users.principalId, name: users.name, email: users.email, grantSnapshot: users.grantSnapshot }).from(users).where(eq(users.principalId, principalId)).limit(1);
-    return r && r.principalId ? { principalId: r.principalId, name: r.name, email: r.email, grantSnapshot: r.grantSnapshot } : null;
+    const [r] = await this.db.select({ id: users.id, principalId: users.principalId, name: users.name, email: users.email, grantSnapshot: users.grantSnapshot }).from(users).where(eq(users.principalId, principalId)).limit(1);
+    return r && r.principalId ? { id: r.id, principalId: r.principalId, name: r.name, email: r.email, grantSnapshot: r.grantSnapshot } : null;
   }
 
   /** Newest first, keyset on id. `workspaces`: null = unrestricted; a list re-checks the recipient's CURRENT access. */

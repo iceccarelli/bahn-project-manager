@@ -205,7 +205,7 @@ export interface ProjectStore {
   /** a user's explicit department subscription rows */
   subscriptionsOf(userId: string): Promise<Array<{ department: string; enabled: boolean; source: "user" | "admin"; updatedAt: string }>>;
   /** the stored grant of one user, by principal id (admin review of another user's eligibility) */
-  grantOfPrincipal(principalId: string): Promise<{ principalId: string; name: string | null; email: string | null; grantSnapshot: string | null } | null>;
+  grantOfPrincipal(principalId: string): Promise<{ id: number; principalId: string; name: string | null; email: string | null; grantSnapshot: string | null } | null>;
   eventsSince(aggregateId: number, afterVersion: number, limit: number): Promise<DomainEvent[]>;
   shellSummary(workspaces: readonly string[] | null): Promise<{ projectCount: number; lastUpdatedAt: string | null }>;
   /** highest published feedSeq (0 when empty) */
