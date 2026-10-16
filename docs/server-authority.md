@@ -16,7 +16,7 @@ Everything below is the **production** path.
 | Dashboard | server read models (`dashboard.*`, per-scope cache), drill-down is server-evaluated | `usePortfolio`; steps "DASHBOARD + AUDIT", "DRILL-DOWN" |
 | Audit | `audit.page` (workspace-scoped, one keyset page at a time); no unscoped `audit.list` exists | `useAuditFeed` selects the server feed when `SERVER_MODE`; step "DASHBOARD + AUDIT" |
 | PSV-ITK | `ServerDepartmentView department="ITK"` — the Project aggregate filtered to one Gewerk | `pages/PsvItk.tsx`; step "PSV-ITK (server)" |
-| BVB-EEA | `ServerDepartmentView department="EEA"` (same component) | `pages/BvbEea.tsx`; **no browser step names this page** (see gaps) |
+| BVB-EEA | `ServerDepartmentView department="EEA"` (same component) | `pages/BvbEea.tsx`; step "BVB-EEA (server)": own route, heading, EEA-only controls, scoped KPIs, non-EEA editor refused (403), EEA editor's edit reaches B live. Run locally on MariaDB 10.11 (29 of 30 steps pass; the 30th is the Docker-only Redis-outage step) and fails when the page is pointed at ITK (mutation check). Not yet run on MySQL 8.4 / CI when this was written |
 | Projektanmeldung / Abnahme | `checklists.save/submit`, `bookings.*` | `useChecklistDraft`, `useSchedule` have server branches; step "PROJEKTANMELDUNG → GEWERK" |
 | Einstellungen (Gewerk subscriptions) | `notifications.subscriptions/setSubscription` | step "PROJEKTANMELDUNG → GEWERK" (settings switch) |
 | Prüfberichte / ITK tabs | `pruefberichte.*` | steps "ITK PRÜFBERICHTE", "ÜBERSICHTSLISTE + PRÜFBERICHT-VERKNÜPFUNG" |
@@ -54,7 +54,7 @@ project tables. Counts below are occurrences in the service source, a pointer to
 
 ## Gaps found by this audit (not fixed here)
 
-1. **BVB-EEA has no browser proof.** It renders the same `ServerDepartmentView` as PSV-ITK, so the shared component is exercised, but nothing asserts the EEA page, its title or its `EEA` filter in a real browser. Smallest fix: a step in `scripts/e2e/server-mode.e2e.ts` next to "PSV-ITK (server)"; it needs MySQL + Redis, so it can only be verified in CI.
+1. ~~BVB-EEA has no browser proof.~~ Closed by the step "BVB-EEA (server)" in `scripts/e2e/server-mode.e2e.ts` (see the page table). It does not cover the map view, export or detail dialog of that page, which `ServerDepartmentView` shares with PSV-ITK and which the PSV-ITK step does not exercise either.
 2. **`audit.record` rate limit is per instance** (an in-process `Map`, 120/min/principal): with N instances the effective limit is N times higher, and it resets on restart. Acceptable as abuse damping, not as a quota.
 3. **What the browser shows while an operation is pending, failed or conflicted** was not traced page by page. PROOF 3a/3b cover the conflict dialog for the project table; Anmeldung, Einstellungen, link and import dialogs were not audited for pending/failed/offline states.
 4. **`audit.record` takes no idempotency key** (the other mutations in the table do), so a client retry is a second call. Whether a duplicate document-action entry matters was not assessed.
