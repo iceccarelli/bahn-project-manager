@@ -352,6 +352,48 @@ async function main() {
     await search(page, "");
   });
 
+  await step("BVB-EEA (server): the page is its own route over the same aggregate filtered to EEA — EEA controls only, scoped KPIs, an EEA editor's review edit reaches B live, a non-EEA editor is refused", async () => {
+    const { page } = B;
+    await page.goto(`${URLS[1]}/bvb-eea`);
+    await page.waitForSelector('[data-testid="server-department-view"]', { timeout: 15000 });
+    await page.waitForSelector("table tbody tr td", { timeout: 15000 });
+    const heading = (await page.locator('[data-testid="server-department-view"] h1').first().innerText()).trim();
+    if (heading !== "BVB-EEA Prüfungen") throw new Error(`BVB-EEA page heading is "${heading}"`);
+    // this is the EEA view and not the ITK one: only EEA status controls exist
+    if ((await page.locator('tbody tr button[aria-label^="Status EEA für Projekt"]').count()) === 0) throw new Error("no EEA status control on the BVB-EEA page");
+    if ((await page.locator('tbody tr button[aria-label^="Status ITK für Projekt"]').count()) !== 0) throw new Error("the BVB-EEA page shows ITK status controls");
+    const domRows = await page.$$eval("table tbody tr:not([data-spacer])", r => r.length);
+    const setSize = await rowSet(page);
+    if (setSize <= 20 || domRows >= 80) throw new Error(`virtualization: ${domRows} DOM rows for a set of ${setSize}`);
+    const kpi = await page.locator('[data-testid="server-department-view"] .text-4xl').first().innerText();
+    if (!/\d/.test(kpi)) throw new Error(`KPI card shows "${kpi}" (read model not served)`);
+    // B (Frankfurt-only) sees Frankfurt EEA reviews only — fewer than the unrestricted total
+    const sess = await api(URLS[1]!, tokenB, "dashboard.department", { department: "EEA" }, "GET");
+    const all = await api(URLS[0]!, tokenA, "dashboard.department", { department: "EEA" }, "GET");
+    if (!(sess.data.total > 0 && sess.data.total < all.data.total)) throw new Error(`EEA department KPI scope: B ${sess.data.total} vs ALL ${all.data.total}`);
+    if (sess.data.byWorkspace.some((w: any) => w.workspace !== "Frankfurt")) throw new Error("B's EEA aggregate contains another workspace");
+    // the server, not the page, decides who may edit an EEA review: A holds ITK only
+    const denied = await api(URLS[0]!, tokenA, "projects.updateReview", { projectId: PID, department: "EEA", expectedVersion: await ver(PID), changes: { status: "abgelehnt" }, idempotencyKey: key() });
+    if (denied.status !== 403) throw new Error(`non-EEA editor got ${denied.status}`);
+    // live: filter to project 481 and watch the EEA status cell change when an EEA editor edits it
+    await page.locator("#dept-search").fill(PNR);
+    await until(async () => (await rowSet(page)) === 1 && (await page.locator('tbody tr button[aria-label^="Status EEA für Projekt"]').count()) === 1, 10000, "exactly the EEA row of 481 (search by Projektnummer)");
+    const cellNow = async () => ((await page.locator('tbody tr button[aria-label^="Status EEA für Projekt"]').first().textContent({ timeout: 1500 }).catch(() => null)) ?? "").trim();
+    const before = await cellNow();
+    const target = before === "in Bearbeitung" ? "prüffähig" : "in Bearbeitung";
+    // the SAME identity the Projektanmeldung step uses (oid "erika"): a second EEA editor would be one more notification recipient there
+    const tokenEea = await mint("erika", "Erika (EEA)", ["editor"], ["ALL"], ["EEA"]);
+    const v = await ver(PID);
+    const r = await api(URLS[0]!, tokenEea, "projects.updateReview", { projectId: PID, department: "EEA", expectedVersion: v, changes: { status: target }, idempotencyKey: key() });
+    if (r.status !== 200) throw new Error(JSON.stringify(r.error));
+    await until(async () => (await cellNow()) === target, 8000, `B's EEA status to show ${target}`)
+      .catch(async e => { throw new Error(`${e.message} | before="${before}" now="${await cellNow()}" rows=${await page.locator("tbody tr").count()}`); });
+    if ((await ver(PID)) !== v + 1) throw new Error("the EEA edit did not commit exactly one version");
+    if (!(await noReload(page))) throw new Error("reloaded");
+    await page.goto(`${URLS[1]}/projects`); // restore B's page for the following steps
+    await search(page, "");
+  });
+
   await step("ITEM 2: A creates a project → B (online) gets it via the event-triggered targeted list refresh, no reload", async () => {
     await search(B.page, ""); // list of all Frankfurt projects, newest id first
     await until(async () => (await rowSet(B.page)) > 20, 10000, "B list loaded");

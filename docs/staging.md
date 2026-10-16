@@ -28,8 +28,9 @@ Topology: see [topology.md](topology.md) (containers + Caddy; Vercel is a static
    staging stack and are reported `not-run` by `certify.mjs`.
 4. **No real Entra tenant.** The browser flow, the claim mapping (`roles`, `workspaces`, `departments`) and token audience are
    unproven against Entra.
-5. Remaining pages are not server-authoritative yet (Dashboard, BVB-EEA, PSV-ITK, Anmeldung, Audit, Gewerk workspaces): they
-   read the legacy snapshot, read-only in server mode. Per the plan they are migrated only after staging certification.
+5. **Server-authoritative pages: the earlier list here (Dashboard, BVB-EEA, PSV-ITK, Anmeldung, Audit, Gewerk workspaces as legacy snapshots) is out of date.**
+   In server mode those pages read the server; the per-page evidence and the open gaps are in
+   [server-authority.md](server-authority.md). Nothing there has run on a deployed staging stack.
 
 ## External prerequisites (exact)
 
