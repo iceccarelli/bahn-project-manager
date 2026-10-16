@@ -10,7 +10,9 @@
 2. Otherwise the signed session cookie (existing SDK path).
 
 Claims → principal: `roles` (`admin` > `editor` > else **viewer**, i.e. least privilege), `workspaces[]`,
-`departments[]`. Subject = `tid:oid`; the principal id is `o` + 31 hex of its SHA-256 (fits the 64-char actor columns,
+`departments[]` — and, because Entra can emit only `roles` as a multi-valued claim, the same grants as app roles
+`Workspace.<BM|ALL>` / `Department.<Gewerk>` inside `roles` (unioned with the arrays; unknown names grant nothing; see
+[entra-acceptance.md](entra-acceptance.md)). Subject = `tid:oid`; the principal id is `o` + 31 hex of its SHA-256 (fits the 64-char actor columns,
 never a raw tenant/object id).
 
 **No database on the authentication path.** Authorization derives from the verified token alone. A `users` row is
@@ -63,8 +65,9 @@ page (with sign-out) instead of empty lists (`scripts/e2e/oidc-browser.e2e.ts`).
    `accessTokenAcceptedVersion: 2` (`iss=…/v2.0`, `aud=<client-id>`). Either works — set both spellings:
    `OIDC_ISSUER="https://login.microsoftonline.com/<tid>/v2.0,https://sts.windows.net/<tid>/"` and
    `OIDC_AUDIENCE="api://<api-id>,<api-id>"` (comma or space separated; every other issuer/audience is refused).
-4. **Workspaces**: Entra emits no `workspaces`/`departments` claim by itself. Add them (optional claims / claims-mapping policy / directory extension
-   attributes) as string arrays; `["ALL"]` is the only all-workspaces grant. Admins (app role `admin`) see everything without it.
+4. **Workspaces**: Entra emits no `workspaces`/`departments` claim by itself, and a claims-mapping policy emits one string per claim, not an array
+   (a single string is ignored — default-deny). Assign them as **app roles** `Workspace.<Name>` / `Workspace.ALL` / `Department.<Gewerk>` (to users or groups);
+   if a tenant does produce string arrays they are honoured too. `ALL` is the only all-workspaces grant. Admins (app role `admin`) see everything without it.
    Until they exist a user gets the "noch keine Freigabe" page.
 5. **Build args**: `VITE_OIDC_AUTHORITY=https://login.microsoftonline.com/<tid>/v2.0`, `VITE_OIDC_CLIENT_ID=<spa-client-id>`,
    `VITE_OIDC_SCOPE="openid profile api://<api-id>/access_as_user"`, optionally `VITE_DEMO_URL`.
@@ -76,6 +79,7 @@ page (with sign-out) instead of empty lists (`scripts/e2e/oidc-browser.e2e.ts`).
 7. **Verification levels**: ☑ mock identity provider (`oidc-browser.e2e.ts`, `server-mode.e2e.ts`) · ☑ locally against MariaDB + Redis ·
    ☑ CI against MySQL 8.4 + Redis 7 (`ci.yml`) · ☐ real Entra tenant · ☐ deployed environment. **Microsoft SSO is not production-verified until the
    real tenant flow has been exercised** (token version, claims, redirect URI, CSP origin).
+   The repeatable procedure and report: [entra-acceptance.md](entra-acceptance.md) (`scripts/gate/entra-acceptance.ts`; not yet run against any tenant).
 
 ## Provisioning contract: Entra → application identity → permissions
 
@@ -84,8 +88,8 @@ What the token says is what the user may do; nothing in the database widens it. 
 | Entra | Application | Where |
 |---|---|---|
 | **App role** `admin` / `editor` / `viewer` (claim `roles`, highest wins; unknown or missing → `viewer`) | `Principal.role` | `server/_core/oidc.ts` `verifyBearer` |
-| claim `workspaces: string[]` — Bahnhofsmanagement names, or exactly `["ALL"]` | `Principal.workspaces`; missing/empty/`"*"` → **no workspace** (default-deny) | `workspacesFromClaim` |
-| claim `departments: string[]` — Gewerke (`EEA`, `ITK`, … from `shared/validation.ts`) | `Principal.departments`: review editing (`canEditDepartment`), department subscriptions | `verifyBearer`, `permissions.ts` |
+| claim `workspaces: string[]` — Bahnhofsmanagement names, or exactly `["ALL"]` — **and/or** app roles `Workspace.<Name>` / `Workspace.ALL` (`grantsFromRoles`) | `Principal.workspaces`; missing/empty/`"*"` → **no workspace** (default-deny) | `workspacesFromClaim` |
+| claim `departments: string[]` and/or app roles `Department.<Gewerk>` — Gewerke (`EEA`, `ITK`, … from `shared/validation.ts`) | `Principal.departments`: review editing (`canEditDepartment`), department subscriptions | `verifyBearer`, `permissions.ts` |
 | `tid` + `oid` | stable identity: `users.openId = oidc:<tid>:<oid>` (varchar 128, never truncated), **principal id** `o` + 31 hex of sha256(openId) (`server/domain/principalId.ts`, stored in `users.principalId`) | `identity.ts`, migration 0014 |
 | `name`, `email` / `preferred_username` | `users.name`, `users.email` — the only profile attributes mapped. No Graph call, no group resolution, no job title/department text: an attribute the token does not carry is not invented. | provisioner |
 

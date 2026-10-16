@@ -18,8 +18,15 @@
  *   workspaces   string[] of Bahnhofsmanagement names, or containing "ALL" for an explicit
  *                all-workspaces grant. Missing/empty = NO workspace access (default-deny).
  *   departments  optional string[] enabling department review actions
+ *
+ * Entra cannot natively emit those two arrays (a claims-mapping policy emits one string per claim, and only
+ * app roles and groups are multi-valued), so the same grants may ALSO be assigned as app roles, which land in
+ * the multi-valued `roles` claim: `Workspace.Frankfurt`, `Workspace.ALL`, `Department.EEA` (see grantsFromRoles).
+ * Both sources are unioned; either one alone is enough. Nothing is inferred from anything else.
  */
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from "jose";
+import { toCanonicalBm } from "@shared/bahnhofsmanagement";
+import { DEPARTMENTS } from "@shared/validation";
 import type { Role, WorkspaceAccess } from "../domain/permissions";
 
 export interface VerifiedIdentity {
@@ -56,6 +63,29 @@ export function workspacesFromClaim(v: unknown): WorkspaceAccess {
   return list.some(s => s.toUpperCase() === "ALL") ? "ALL" : list;
 }
 
+/**
+ * Workspace / department grants carried as app roles. App-role values may not contain spaces and are best kept ASCII,
+ * which fits the Bahnhofsmanagement vocabulary (`Workspace.Giessen`, `Workspace.Saarbruecken` resolve to the canonical
+ * names). Anything that is not exactly `Workspace.<known BM | ALL>` / `Department.<known Gewerk>` grants nothing:
+ * unknown names are dropped, never passed through, so a typo in Entra means less access, not more.
+ */
+export function grantsFromRoles(roles: readonly string[]): { workspaces: string[]; departments: string[] } {
+  const workspaces = new Set<string>(), departments = new Set<string>();
+  for (const r of roles) {
+    const m = /^(workspace|department)\.(.+)$/i.exec(r.trim());
+    if (!m) continue;
+    const name = (m[2] as string).trim();
+    if (m[1]!.toLowerCase() === "workspace") {
+      if (name.toUpperCase() === "ALL") workspaces.add("ALL");
+      else { const bm = toCanonicalBm(name); if (bm) workspaces.add(bm); }
+    } else {
+      const d = DEPARTMENTS.find(x => x.toLowerCase() === name.toLowerCase());
+      if (d) departments.add(d);
+    }
+  }
+  return { workspaces: [...workspaces], departments: [...departments] };
+}
+
 const strings = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
 
 export async function verifyBearer(token: string, cfg: OidcConfig): Promise<VerifiedIdentity> {
@@ -65,7 +95,9 @@ export async function verifyBearer(token: string, cfg: OidcConfig): Promise<Veri
     algorithms: ["RS256", "ES256", "PS256"],
     clockTolerance: 30,
   });
-  const roles = strings(payload.roles).map(r => r.toLowerCase());
+  const rawRoles = strings(payload.roles);
+  const roles = rawRoles.map(r => r.toLowerCase());
+  const fromRoles = grantsFromRoles(rawRoles);
   const role: Role = roles.includes("admin") ? "admin" : roles.includes("editor") ? "editor" : "viewer"; // unknown/missing roles = least privilege
   const tid = typeof payload.tid === "string" ? payload.tid : null;
   const oid = typeof payload.oid === "string" ? payload.oid : null;
@@ -76,7 +108,7 @@ export async function verifyBearer(token: string, cfg: OidcConfig): Promise<Veri
     name: typeof payload.name === "string" ? payload.name : null,
     email: typeof payload.email === "string" ? payload.email : typeof payload.preferred_username === "string" ? payload.preferred_username : null,
     role,
-    workspaces: workspacesFromClaim(payload.workspaces),
-    departments: strings(payload.departments),
+    workspaces: workspacesFromClaim([...strings(payload.workspaces), ...fromRoles.workspaces]),
+    departments: [...new Set([...strings(payload.departments), ...fromRoles.departments])],
   };
 }
