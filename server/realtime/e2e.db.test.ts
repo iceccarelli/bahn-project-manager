@@ -125,8 +125,15 @@ describe.skipIf(!hasTestDb)("realtime data plane (real DB, real HTTP/SSE)", () =
     expect(B.engine.recentChanges(p.id)[0]).toMatchObject({ field: "projektstand", from: "EP", to: "AP", actorName: "Lena" });
     // the event arrived once and was processed by the outbox exactly once
     expect(B.received.filter(e => e.aggregateVersion === 2)).toHaveLength(1);
-    const [[row]] = (await t.pool.query("SELECT processedAt FROM domain_events WHERE aggregateId=? AND aggregateVersion=2", [p.id])) as any;
-    expect(row.processedAt).not.toBeNull();
+    // the relay publishes first (B has the event) and stamps processedAt afterwards, so wait for the stamp instead of racing it
+    let row: { processedAt: Date | null } | undefined;
+    for (let i = 0; i < 400; i++) {
+      [[row]] = (await t.pool.query("SELECT processedAt FROM domain_events WHERE aggregateId=? AND aggregateVersion=2", [p.id])) as any;
+      if (row?.processedAt) break;
+      await new Promise(r => setTimeout(r, 5));
+    }
+    expect(row?.processedAt).not.toBeNull();
+    expect(row?.processedAt).toBeDefined();
   });
 
   it("A and B edit the same project simultaneously → exactly one succeeds, the other gets a conflict; both UIs converge", async () => {
