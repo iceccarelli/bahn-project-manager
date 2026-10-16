@@ -46,7 +46,7 @@ reports a layer it could not run as passed. CI runs the same layers as separate 
 
 | Item | What is missing |
 |---|---|
-| Real Microsoft Entra sign-in | a tenant; proven only against the mock IdP (`oidc-browser.e2e.ts`) |
+| Real Microsoft Entra sign-in | a tenant; proven only against the mock IdP (`oidc-browser.e2e.ts`). Owner procedure + report: [entra-acceptance.md](entra-acceptance.md), `scripts/gate/entra-acceptance.ts` — **never run against a tenant** |
 | Public HTTPS staging, 2 instances | hosts, DNS, TLS, Entra; `deploy/staging` + `scripts/gate/staging-smoke.mjs` exist, never run publicly |
 | Separate-host load certification 100…10,000 | a load host separate from the system under test; `docs/load-testing.md` |
 | History rewrite | owner decision and a coordinated force-push |

@@ -65,5 +65,21 @@ const runbook = read("docs/runbook.md");
 const anchors = new Set([...runbook.matchAll(/^#{1,4} (.+)$/gm)].map((m) => m[1].toLowerCase().replace(/[^a-z0-9 -]/g, "").trim().replace(/ /g, "-")));
 for (const a of new Set([...alerts.matchAll(/runbook\.md#([a-z0-9-]+)/g)].map((x) => x[1]))) if (!anchors.has(a)) bad(`alerts.yml points at docs/runbook.md#${a}, which is not a heading`);
 
+// every setting an example env file advertises must have a consumer (code, build, compose, Dockerfile, CI or a script):
+// a documented variable nobody reads — e.g. a MICROSOFT_CLIENT_SECRET for an app that has no client secret — misleads the
+// person configuring a tenant. Docs and the example files themselves do not count as consumers.
+{
+  const consumers = ["server", "client/src", "shared", "scripts", "deploy", ".github", "docker-compose.yml", "Dockerfile", "vite.config.ts", "package.json", "vercel.json"]
+    .filter((r) => fs.existsSync(r)).flatMap(walk)
+    .filter((f) => !/node_modules|\.example$|\.md$/.test(f) && path.normalize(f) !== self)
+    .map((f) => { try { return read(f); } catch { return ""; } });
+  for (const ex of [".env.example", "deploy/staging/.env.example"]) {
+    if (!fs.existsSync(ex)) continue;
+    for (const key of new Set([...read(ex).matchAll(/^#?\s*([A-Z][A-Z0-9_]+)=/gm)].map((m) => m[1]))) {
+      if (!consumers.some((t) => t.includes(key))) bad(`${ex} advertises ${key}, which nothing in the repository reads`);
+    }
+  }
+}
+
 if (problems.length) { console.error("consistency: FAIL\n - " + problems.join("\n - ")); process.exit(1); }
 console.log(`consistency: ok (${required.length} required checks, all present in ci.yml)`);

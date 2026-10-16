@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { SignJWT, exportJWK, generateKeyPair, createLocalJWKSet } from "jose";
-import { listOf, oidcConfigFromEnv, verifyBearer, type OidcConfig } from "./oidc";
+import { grantsFromRoles, listOf, oidcConfigFromEnv, verifyBearer, type OidcConfig } from "./oidc";
 import { assertProductionConfig, sameOriginForCookies } from "./security";
 
 const ISS = "https://login.microsoftonline.com/tenant-1/v2.0", AUD = "api://bahn";
@@ -104,5 +104,33 @@ describe("production guards", () => {
     expect(run({ origin: "https://evil.example", host: "bahn.example", authorization: "Bearer x" }).nexted).toBe(true);
     expect(run({ host: "bahn.example" }).nexted).toBe(true);
     expect(run({ origin: "https://evil.example", host: "bahn.example" }, "GET").nexted).toBe(true);
+  });
+});
+
+describe("workspace / department grants carried as Entra app roles (the claim Entra can actually emit)", () => {
+  it("Workspace.<BM> and Department.<Gewerk> roles grant exactly those, with ASCII spellings resolving to canonical names", () => {
+    expect(grantsFromRoles(["editor", "Workspace.Frankfurt", "workspace.giessen", "Workspace.Saarbruecken", "Department.EEA", "department.itk"]))
+      .toEqual({ workspaces: ["Frankfurt", "Gießen", "Saarbrücken"], departments: ["EEA", "ITK"] });
+    expect(grantsFromRoles(["Workspace.ALL"]).workspaces).toEqual(["ALL"]);
+  });
+  it("anything that is not exactly a known name grants nothing (typos mean less access, never more)", () => {
+    expect(grantsFromRoles(["Workspace.", "Workspace.Atlantis", "Workspace.*", "Department.Foo", "Workspaces.Frankfurt", "Frankfurt", "EEA", "admin"]))
+      .toEqual({ workspaces: [], departments: [] });
+  });
+  it("a token whose only grants are app roles resolves to the same principal as the array claims; both sources union", async () => {
+    const viaRoles = await verifyBearer(await sign({ tid: "t", oid: "r-1", roles: ["Editor", "Workspace.Kassel", "Department.ITK"] }), cfg);
+    const viaClaims = await verifyBearer(await sign({ tid: "t", oid: "r-1", roles: ["Editor"], workspaces: ["Kassel"], departments: ["ITK"] }), cfg);
+    expect(viaRoles).toEqual(viaClaims);
+    const both = await verifyBearer(await sign({ tid: "t", oid: "r-2", roles: ["Workspace.Mainz", "Department.EEA"], workspaces: ["Kassel"], departments: ["ITK"] }), cfg);
+    expect(both.workspaces).toEqual(["Kassel", "Mainz"]);
+    expect([...both.departments].sort()).toEqual(["EEA", "ITK"]);
+    expect(both.role).toBe("viewer"); // grants never promote a role
+  });
+  it("Workspace.ALL is the explicit all-workspaces grant, and a grant-role never makes someone an admin", async () => {
+    const id = await verifyBearer(await sign({ tid: "t", oid: "r-3", roles: ["Viewer", "Workspace.ALL"] }), cfg);
+    expect(id.workspaces).toBe("ALL");
+    expect(id.role).toBe("viewer");
+    const noGrant = await verifyBearer(await sign({ tid: "t", oid: "r-4", roles: ["Workspace.Atlantis"] }), cfg);
+    expect(noGrant.workspaces).toEqual([]); // default-deny survives an unknown name
   });
 });

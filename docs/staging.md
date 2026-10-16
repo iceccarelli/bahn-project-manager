@@ -19,8 +19,10 @@ Topology: see [topology.md](topology.md) (containers + Caddy; Vercel is a static
 ## What is NOT done (each is a blocker for "certified")
 
 1. **No public HTTPS staging** with ≥ 2 app instances, real MySQL, real Redis. → `staging-smoke` is `not-run`.
-2. **The `Dockerfile` has not been built successfully.** A build was attempted on the dev host; it stopped at
-   `corepack prepare pnpm` because the Docker build network could not reach `registry.npmjs.org`. The image is therefore unverified.
+2. **The image has been built and gated only in CI, not deployed.** An earlier attempt on the development host stopped at `corepack prepare pnpm`
+   (no route to `registry.npmjs.org`); the CI `container` job (`docker build` + `scripts/gate/container-ci.sh`: boot, health, ready, migrations, DB,
+   Redis, shutdown) passed on `main` `90b1c84` ([run 38899752085](https://github.com/iceccarelli/bahn-project-manager/actions/runs/38899752085)). That is evidence for those
+   checks on a CI runner, not for a running staging stack.
 3. **No external load run.** `certify.mjs` refuses same-host runs (`X-Instance`), so `load-certification` stays failed/not-run.
    Fault scenarios (Redis restart, instance restart, relay interruption, DB degradation) and soak need orchestrator access to the
    staging stack and are reported `not-run` by `certify.mjs`.
@@ -35,9 +37,8 @@ Topology: see [topology.md](topology.md) (containers + Caddy; Vercel is a static
 * Docker Hub (or a mirror) and the npm registry reachable from the image build.
 * A **separate** load-generator host (different machine; not the app host) with network access to `PUBLIC_HOST`, ≥ 8 vCPU for 10k connections.
 * Microsoft Entra ID:
-  * API app registration: expose scope `access_as_user`; app roles `admin|editor|viewer`; optional claims `workspaces`
-    (Bahnhofsmanagement names, or the literal list `["ALL"]`), `departments`; set `accessTokenAcceptedVersion: 2`.
-    `OIDC_ISSUER=https://login.microsoftonline.com/<tenant>/v2.0`, `OIDC_AUDIENCE=<api client id>`.
+  * API app registration: expose scope `access_as_user`; app roles `admin|editor|viewer`; app roles `Workspace.*` / `Department.*` (or, if the tenant can emit them, array claims `workspaces`, `departments`); set `accessTokenAcceptedVersion: 2`.
+    `OIDC_ISSUER=https://login.microsoftonline.com/<tenant>/v2.0`, `OIDC_AUDIENCE=<api client id>` (lists are accepted; see [auth.md](auth.md) for the v1/v2 spellings). Workspace/department grants are assigned as app roles (`Workspace.<Name>`, `Department.<Gewerk>`): [entra-acceptance.md](entra-acceptance.md).
   * SPA app registration: platform *Single-page application*, redirect URI `https://<PUBLIC_HOST>/auth/callback`,
     post-logout URI `https://<PUBLIC_HOST>/login`; `VITE_OIDC_AUTHORITY`, `VITE_OIDC_CLIENT_ID`, `VITE_OIDC_SCOPE=openid profile api://<api client id>/access_as_user`.
   * Three test users → tokens: `SMOKE_TOKEN` (admin, `["ALL"]`), `SMOKE_TOKEN_RESTRICTED` (editor, exactly one workspace =
