@@ -1,8 +1,8 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BellRing, Loader2 } from "lucide-react";
+import { BellRing, Loader2, UserRound } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { useAuth } from "@/_core/hooks/useAuth";
+import { useAuth, useIdentity } from "@/_core/hooks/useAuth";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,6 +20,7 @@ export const SUBSCRIPTIONS_KEY = ["server", "subscriptions"] as const;
  */
 export default function Einstellungen() {
   const { session } = useAuth() as ReturnType<typeof useAuth> & { session?: { role: string; departments: string[]; name: string | null; email: string | null } | null };
+  const identity = useIdentity();
   const qc = useQueryClient();
   const subs = useQuery({ queryKey: SUBSCRIPTIONS_KEY, queryFn: () => serverApi.notifications.subscriptions.query() as Promise<DepartmentSubscriptionDTO[]>, enabled: SERVER_MODE, staleTime: 10_000 });
   const [busy, setBusy] = useState<string | null>(null);
@@ -42,8 +43,43 @@ export default function Einstellungen() {
     <div className="mx-auto max-w-3xl space-y-6 p-4 sm:p-6" data-testid="settings-page">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Einstellungen</h1>
-        <p className="text-sm text-muted-foreground">{session?.name ?? session?.email ?? ""}</p>
+        <p className="text-sm text-muted-foreground">{identity?.displayName ?? ""}</p>
       </div>
+      {identity && (
+        <Card data-testid="account-card">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><UserRound className="h-5 w-5" aria-hidden /> Konto</CardTitle>
+            <CardDescription>
+              {identity.source === "demo"
+                ? "Demo-Konto: Es schützt nichts und gilt nur in diesem Browser. Die Anmeldung mit dem Microsoft-Konto gibt es im Produktivsystem."
+                : "Angemeldet mit Ihrem Microsoft-Konto. Rolle und Freigaben werden von Administratoren in Microsoft Entra vergeben und gelten ab der nächsten Anmeldung."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-[10rem_1fr]">
+              <dt className="text-muted-foreground">Name</dt>
+              <dd className="font-medium break-words" data-testid="account-name">{identity.displayName}</dd>
+              <dt className="text-muted-foreground">E-Mail</dt>
+              <dd className="break-all" data-testid="account-email">{identity.email ?? "nicht angegeben"}</dd>
+              <dt className="text-muted-foreground">Rolle</dt>
+              <dd data-testid="account-role">{identity.roleLabel}</dd>
+              <dt className="text-muted-foreground">Bahnhofsmanagement</dt>
+              <dd data-testid="account-workspaces">{identity.workspaceSummary}</dd>
+              <dt className="text-muted-foreground">Gewerke-Freigabe</dt>
+              <dd data-testid="account-departments">
+                {identity.departments.length
+                  ? <span className="flex flex-wrap gap-1">{identity.departments.map(d => <Badge key={d} variant="outline">{d}</Badge>)}</span>
+                  : identity.source === "demo" ? "nicht zutreffend" : "keine"}
+              </dd>
+            </dl>
+            {identity.source === "microsoft" && (
+              <p className="mt-4 text-xs text-muted-foreground">
+                Eine Gewerke-Freigabe erlaubt die Prüfung und Benachrichtigung für dieses Gewerk. Sie ist keine Funktionsbezeichnung.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><BellRing className="h-5 w-5" aria-hidden /> Benachrichtigungen je Gewerk</CardTitle>

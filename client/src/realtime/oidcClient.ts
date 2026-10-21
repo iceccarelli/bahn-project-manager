@@ -80,6 +80,19 @@ export async function beginSignIn(s: OidcSettings, d: Deps, returnTo = "/"): Pro
 
 export class SignInError extends Error {}
 
+/**
+ * Where to go after sign-in: a same-origin absolute PATH, or "/". Browsers treat `/\host` like `//host` and silently drop
+ * tabs/newlines inside a URL, so those (also percent-decoded) are refused along with schemes and protocol-relative forms.
+ */
+export function safeReturnPath(p: unknown): string {
+  if (typeof p !== "string" || !p.startsWith("/")) return "/";
+  let decoded: string;
+  try { decoded = decodeURIComponent(p); } catch { return "/"; }
+  const unsafe = (c: string) => c.startsWith("//") || [...c].some(ch => ch === "\\" || ch.charCodeAt(0) < 0x20 || ch.charCodeAt(0) === 0x7f);
+  if (unsafe(p) || unsafe(decoded)) return "/";
+  try { return new URL(p, "https://app.invalid").origin === "https://app.invalid" ? p : "/"; } catch { return "/"; }
+}
+
 /** Complete sign-in on the redirect URI. Returns where to go next. Throws SignInError on any mismatch. */
 export async function completeSignIn(s: OidcSettings, d: Deps, search: string): Promise<string> {
   const q = new URLSearchParams(search);
@@ -100,7 +113,7 @@ export async function completeSignIn(s: OidcSettings, d: Deps, search: string): 
   if (!t.access_token || (t.token_type && t.token_type.toLowerCase() !== "bearer")) throw new SignInError("no bearer access token in response");
   d.store.setItem(TOKEN_KEY, t.access_token);
   d.store.setItem(EXP_KEY, String(d.now() + (t.expires_in ?? 3600) * 1000));
-  return flow.returnTo.startsWith("/") && !flow.returnTo.startsWith("//") ? flow.returnTo : "/";
+  return safeReturnPath(flow.returnTo);
 }
 
 /** Current access token, or null when absent/expired (the caller then signs in again). */

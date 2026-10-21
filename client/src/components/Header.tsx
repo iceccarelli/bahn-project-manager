@@ -4,10 +4,10 @@ import { useMemo } from "react";
 import { CommandSearch } from "@/components/CommandSearch";
 import { Bell, Sun, Moon, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { useSidebar } from "@/components/ui/sidebar";
 import PresenceIndicator from "./PresenceIndicator";
-import { useAuth } from "@/_core/hooks/useAuth";
+import { useIdentity } from "@/_core/hooks/useAuth";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,7 +33,7 @@ export default function Header() {
   const [, setLocation] = useLocation();
   const { theme, toggleTheme } = useTheme();
   const { toggleSidebar } = useSidebar();
-  const { user } = useAuth();
+  const identity = useIdentity();
   /**
    * The bell shows the audit trail, because that is the app's only real event
    * stream.
@@ -51,14 +51,6 @@ export default function Header() {
   const { data: auditEntries } = useAuditLog();
   const notifications = useMemo(() => (auditEntries ?? []).slice(0, 10), [auditEntries]);
 
-  const userInitials = useMemo(
-    () =>
-      user?.name
-        ?.split(" ")
-        .map(n => n[0])
-        .join("") || "DB",
-    [user?.name]
-  );
 
   // sticky, not fixed. As `fixed inset-x-0 z-50` the header spanned the whole
   // viewport and sat on top of the sidebar's own header (z-10), which made the
@@ -178,13 +170,17 @@ export default function Header() {
           </DropdownMenu>
           )}
 
-          {/* No cursor-pointer and no hover ring: there is no menu behind this,
-              and an affordance that promises one is a control that lies. */}
-          <Avatar className="h-8 w-8 ring-2 ring-offset-2 ring-primary/30">
-            <AvatarFallback className="bg-primary text-white text-xs font-bold">
-              {userInitials}
-            </AvatarFallback>
-          </Avatar>
+          {/* The avatar is the signed-in person (validated session), and it leads to their account page. */}
+          {identity && (
+            <Link href="/einstellungen" data-testid="header-account"
+              aria-label={`Konto und Einstellungen: ${identity.displayName}, ${identity.roleLabel}`}
+              title={`${identity.displayName} · ${identity.roleLabel}`}
+              className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              <Avatar className="h-8 w-8 ring-2 ring-offset-2 ring-primary/30">
+                <AvatarFallback className="bg-primary text-white text-xs font-bold">{identity.initials}</AvatarFallback>
+              </Avatar>
+            </Link>
+          )}
         </div>
       </div>
     </header>

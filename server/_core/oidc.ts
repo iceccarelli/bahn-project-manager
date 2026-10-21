@@ -88,12 +88,23 @@ export function grantsFromRoles(roles: readonly string[]): { workspaces: string[
 
 const strings = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
 
+const MICROSOFT_ISSUER_HOSTS = new Set(["login.microsoftonline.com", "sts.windows.net"]);
+
+/** The tenant id a Microsoft issuer URL names (`…/<tid>/v2.0`, `sts.windows.net/<tid>/`), or null for any other issuer. */
+export function microsoftTenantOfIssuer(issuer: string): string | null {
+  try {
+    const u = new URL(issuer);
+    return MICROSOFT_ISSUER_HOSTS.has(u.hostname) ? (u.pathname.split("/").filter(Boolean)[0] ?? null) : null;
+  } catch { return null; }
+}
+
 export async function verifyBearer(token: string, cfg: OidcConfig): Promise<VerifiedIdentity> {
   const { payload } = await jwtVerify(token, cfg.jwks, {
     issuer: cfg.issuer,
     audience: cfg.audience,
     algorithms: ["RS256", "ES256", "PS256"],
     clockTolerance: 30,
+    requiredClaims: ["exp"], // jose checks exp only when present: without this a token with no expiry would be valid forever
   });
   const rawRoles = strings(payload.roles);
   const roles = rawRoles.map(r => r.toLowerCase());
@@ -101,7 +112,12 @@ export async function verifyBearer(token: string, cfg: OidcConfig): Promise<Veri
   const role: Role = roles.includes("admin") ? "admin" : roles.includes("editor") ? "editor" : "viewer"; // unknown/missing roles = least privilege
   const tid = typeof payload.tid === "string" ? payload.tid : null;
   const oid = typeof payload.oid === "string" ? payload.oid : null;
-  const subject = tid && oid ? `${tid}:${oid}` : String(payload.sub ?? "");
+  // Microsoft Entra: the identity IS tenant + object id. A Microsoft token without both, or whose tid is not the tenant of the
+  // issuer that signed it, is refused — never degraded to the app-pairwise `sub`, which would be a second, unrelated identity space.
+  const msTenant = typeof payload.iss === "string" ? microsoftTenantOfIssuer(payload.iss) : null;
+  if (msTenant !== null && (!tid || !oid || tid.toLowerCase() !== msTenant.toLowerCase())) throw new Error("Microsoft token without a matching tenant/object identity");
+  // Entra GUIDs are lowercase; normalising makes "one person, one subject" independent of how a token spells them
+  const subject = tid && oid ? (msTenant !== null ? `${tid.toLowerCase()}:${oid.toLowerCase()}` : `${tid}:${oid}`) : String(payload.sub ?? "");
   if (!subject) throw new Error("token has no subject");
   return {
     subject,

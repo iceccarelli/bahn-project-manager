@@ -1,3 +1,4 @@
+import { ABNAHME_SESSION_PREFIX } from "@/realtime/accountState";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { AbnahmeRecordSchema, pruneAnswers, type AbnahmeRecord } from "@shared/abnahme/persistence";
 import { reduce, type AbnahmeState as State } from "@shared/abnahme/state";
@@ -24,7 +25,7 @@ import {
  * rather than pretending it is.
  */
 
-const STORAGE_PREFIX = "abnahme:v1";
+const STORAGE_PREFIX = ABNAHME_SESSION_PREFIX; // registered in accountState: cleared on sign-out and on an account switch
 
 export function storageKey(technik: string, projectId: number | null): string {
   return `${STORAGE_PREFIX}:${technik}:${projectId ?? "frei"}`;

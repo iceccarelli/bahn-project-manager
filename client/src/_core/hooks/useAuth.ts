@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState, useMemo } from "react";
 import { OIDC, SERVER_MODE, serverApi } from "@/realtime/serverApi";
-import { browserDeps, clearAuth, signOutUrl } from "@/realtime/oidcClient";
+import { TOKEN_KEY, browserDeps, clearAuth, currentToken, signOutUrl } from "@/realtime/oidcClient";
+import { browserStores, reconcilePrincipal, signOutCleanup } from "@/realtime/accountState";
+import { describeDemoUser, describeSession, type IdentityView } from "@/_core/identityView";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 export type DemoUser = {
@@ -81,20 +83,33 @@ export function logoutDemo() {
  * the bearer token or session cookie). Nothing is read from localStorage, so
  * a browser cannot assert a role by editing its own storage.
  */
+/** Is there a credential this tab could present? (expiry-checked in OIDC builds; the raw dev/test token otherwise) */
+function hasCredential(): boolean {
+  try { return OIDC ? currentToken(browserDeps()) !== null : sessionStorage.getItem(TOKEN_KEY) !== null; } catch { return false; }
+}
+
 function useServerAuth() {
   const qc = useQueryClient();
   const q = useQuery({
     queryKey: ["server", "session"],
-    queryFn: () => serverApi.auth.session.query(),
+    queryFn: async () => {
+      const s = await serverApi.auth.session.query();
+      // Before anything personal is read or rendered: a different person than the last one in this browser inherits nothing.
+      if (s) reconcilePrincipal(s.id, browserStores());
+      return s;
+    },
     staleTime: 60_000,
     retry: false,
+    // A failed lookup is not "signed out". While it is failing, keep asking: the recovery screen disappears by itself.
+    refetchInterval: query => (query.state.status === "error" ? 10_000 : false),
   });
   // memoised: consumers use `user` as an effect dependency, a fresh object per render would loop them
   const user = useMemo<DemoUser | null>(
     () =>
       q.data
         ? {
-            id: Number(q.data.id), name: q.data.name ?? q.data.email ?? "Benutzer", email: q.data.email ?? "",
+            // `id` is a demo-only numeric id; the server principal id is `openId` (an opaque string, never a number)
+            id: 0, name: q.data.name ?? q.data.email ?? "Angemeldet", email: q.data.email ?? "",
             role: q.data.role === "admin" ? "admin" : "user", openId: q.data.id, loginMethod: "server",
             createdAt: "", updatedAt: "", lastSignedIn: "",
           }
@@ -105,6 +120,7 @@ function useServerAuth() {
     const d = browserDeps();
     // Drop every client-side credential first, whatever the network does next.
     try { clearAuth(d); } catch { /* ignore */ }
+    signOutCleanup(browserStores()); // recent searches, typed-in recipients, Abnahme records: the next person starts clean
     const leave = async () => {
       qc.clear();
       const idp = OIDC ? await signOutUrl(OIDC, d, `${window.location.origin}/login`) : null;
@@ -112,7 +128,9 @@ function useServerAuth() {
     };
     void serverApi.auth.logout.mutate().catch(() => undefined).finally(leave);
   }, [qc]);
-  return { user, loading: q.isLoading, isAuthenticated: !!user, logout, session: q.data ?? null };
+  const sessionError = q.isError && !q.data && hasCredential();
+  const retrySession = useCallback(() => { void q.refetch(); }, [q]);
+  return { user, loading: q.isLoading, isAuthenticated: !!user, logout, session: q.data ?? null, sessionError, retrySession };
 }
 
 function useLocalAuth() {
@@ -178,4 +196,22 @@ export function useAccessPending(): { pending: boolean; who: string | null } {
   if (!SERVER_MODE || !s) return { pending: false, who: null };
   const none = s.role !== "admin" && Array.isArray(s.workspaces) && s.workspaces.length === 0;
   return { pending: none, who: s.name ?? s.email ?? null };
+}
+
+/**
+ * The session lookup itself failed (server or network down) while this tab holds a credential. That is NOT "signed out":
+ * the gate offers a retry and a sign-out instead of bouncing the person through the IdP again for no reason.
+ */
+export function useSessionRecovery(): { failed: boolean; retry: () => void; logout: () => void } {
+  const auth = useAuth() as unknown as { sessionError?: boolean; retrySession?: () => void; logout: () => void };
+  return { failed: !!auth.sessionError, retry: auth.retrySession ?? (() => undefined), logout: auth.logout };
+}
+
+/** Who is signed in, as shown in the UI: the validated server session, or the labelled demo account. */
+export function useIdentity(): IdentityView | null {
+  const auth = useAuth() as unknown as { user: DemoUser | null; session?: Parameters<typeof describeSession>[0] | null };
+  return useMemo(() => {
+    if (SERVER_MODE) return auth.session ? describeSession(auth.session) : null;
+    return auth.user ? describeDemoUser(auth.user) : null;
+  }, [auth.session, auth.user]);
 }

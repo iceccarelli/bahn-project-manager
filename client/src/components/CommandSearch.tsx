@@ -21,6 +21,7 @@
  *   the fold does not leave the reader looking at a stale row;
  * — hovering does not steal the keyboard cursor mid-typing.
  */
+import { RECENT_SEARCHES_KEY } from "@/realtime/accountState";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import {
@@ -53,7 +54,7 @@ const KIND_ICON: Record<HitKind, typeof SearchIcon> = {
   benachrichtigung: Bell,
 };
 
-const RECENT_KEY = "bpm-recent-searches";
+const RECENT_KEY = RECENT_SEARCHES_KEY; // registered in accountState: cleared on sign-out and on an account switch
 const RECENT_MAX = 6;
 
 function readRecent(): string[] {

@@ -69,6 +69,19 @@ describe("OIDC code + PKCE", () => {
     expect(await completeSignIn(S, d, `?code=c&state=${u.searchParams.get("state")}`)).toBe("/");
   });
 
+  it("returnTo is a same-origin path and nothing else: backslash, control-character, scheme and encoded variants all fall back to /", async () => {
+    for (const bad of ["/\\evil.test", "/\\/evil.test", "/\t/evil.test", "/\n/evil.test", "\\evil.test", "https://evil.test/x", "javascript:alert(1)", "//evil.test", "/%5Cevil.test", "relative/path", ""]) {
+      const d = deps();
+      const u = new URL(await beginSignIn(S, d, bad));
+      expect(await completeSignIn(S, d, `?code=c&state=${u.searchParams.get("state")}`), JSON.stringify(bad)).toBe("/");
+    }
+    for (const good of ["/", "/projects?x=1#top", "/psv-itk"]) {
+      const d = deps();
+      const u = new URL(await beginSignIn(S, d, good));
+      expect(await completeSignIn(S, d, `?code=c&state=${u.searchParams.get("state")}`)).toBe(good);
+    }
+  });
+
   it("does not hand out an expired (or nearly expired) token, and logout clears everything", async () => {
     const d = deps();
     const u = new URL(await beginSignIn(S, d));
