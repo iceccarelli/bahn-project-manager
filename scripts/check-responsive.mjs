@@ -33,14 +33,16 @@ const ROUTES = [
 ];
 const VIEWPORTS = [
   { label:"mobile  375", width:375, height:812 },
-  { label:"tablet  744", width:744, height:1133 },   // iPad mini portrait
+  { label:"mobile  390", width:390, height:844 },
+  { label:"mobile  430", width:430, height:932 },
+  { label:"phone   744", width:744, height:1133 },   // iPad mini portrait: still below 768 -> bottom bar
   { label:"tablet  768", width:768, height:1024 },
   // 834 and 820 are iPad Pro 11 and iPad Air in portrait. They sat in the dead
   // band where the sidebar had not mounted and the trigger was already hidden,
   // so they are pinned here permanently.
   { label:"tablet  820", width:820, height:1180 },
   { label:"tablet  834", width:834, height:1194 },
-  { label:"laptop 1024", width:1024, height:768 }, { label:"desktop 1440", width:1440, height:900 },
+  { label:"laptop 1024", width:1024, height:768 }, { label:"laptop 1280", width:1280, height:800 }, { label:"desktop 1440", width:1440, height:900 },
 ];
 const DEMO_USER = { id:1, name:"Admin", email:"admin@bahn.de", role:"admin", openId:"demo-admin",
   loginMethod:"demo", createdAt:new Date().toISOString(), updatedAt:new Date().toISOString(), lastSignedIn:new Date().toISOString() };
@@ -75,48 +77,61 @@ try {
       log(m.s <= m.c + 2, `${vp.label}px  ${route.name.padEnd(18)} main ${m.s}/${m.c}px`);
     }
     /*
-     * 1024, not 768 — this must track MOBILE_BREAKPOINT in
-     * client/src/hooks/useMobile.tsx. When they disagreed, 768–1023px had the
-     * sheet-based sidebar but no trigger to open it: no navigation at all on
-     * iPad Pro 11 and iPad Air in portrait. The `navigation is reachable`
-     * assertion below is the one that fails when they drift apart again.
+     * The shell contract (client/src/hooks/useMobile.tsx, components/BottomTabBar.tsx, navModel.ts):
+     *   < 768   phones   a bottom tab bar (4 destinations + Mehr), no side rail, no hamburger, content never hidden behind the bar
+     *   >= 768  tablets+ a side rail (icons below 1280, icon + label above), no bottom bar
+     * Both must reach every destination without a keyboard trick.
      */
-    if (vp.width < 1024) {
-      await page.goto(`${base}/`, { waitUntil: "networkidle" });
-      await page.waitForSelector("header");
-      const btn = page.getByRole("button", { name: "Navigation öffnen" });
-      const visible = await btn.isVisible().catch(() => false);
-      log(visible, `${vp.label}px  hamburger visible`);
-      if (visible) {
-        await btn.click(); await page.waitForTimeout(400);
-        const navOk = await page.getByText("Änderungshistorie", { exact: true }).isVisible().catch(() => false);
-        log(navOk, `${vp.label}px  nav sheet opens with all tabs`);
+    const phone = vp.width < 768;
+    await page.goto(`${base}/`, { waitUntil: "networkidle" });
+    await page.waitForSelector("header");
+    const bar = page.getByTestId("bottom-nav");
+    const railState = page.locator('[data-slot="sidebar"][data-state]').first();
+    const rail = page.locator('[data-slot="sidebar-inner"]').first();
+    const railItem = (name) => page.locator('[data-sidebar="menu-button"], [data-slot="sidebar-menu-button"]').filter({ hasText: name }).first();
+    log(!(await page.getByRole("button", { name: "Navigation öffnen" }).count()), `${vp.label}px  no hamburger (navigation is never behind a drawer)`);
+    if (phone) {
+      log(await bar.isVisible(), `${vp.label}px  bottom tab bar visible`);
+      const tabs = await bar.locator("a, button").count();
+      log(tabs === 5, `${vp.label}px  bottom bar has 5 targets (${tabs})`);
+      const small = await bar.locator("a, button").evaluateAll(els => els.filter(e => { const r = e.getBoundingClientRect(); return r.height < 44 || r.width < 44; }).length);
+      log(small === 0, `${vp.label}px  every tab is a >= 44px touch target`);
+      // the document scrolls: at the very end, the last thing on the page must sit above the bar, not under it
+      const geo = await page.evaluate(async () => {
+        window.scrollTo(0, document.documentElement.scrollHeight); await new Promise(r => setTimeout(r, 150));
+        const b = document.querySelector('[data-testid="bottom-nav"]').getBoundingClientRect();
+        const inset = document.querySelector('[data-slot="sidebar-inset"]');
+        const last = inset.lastElementChild.getBoundingClientRect();
+        return { barTop: b.top, barBottom: b.bottom, vh: innerHeight, mainBottom: last.bottom, docW: document.documentElement.scrollWidth, vw: innerWidth };
+      });
+      log(Math.abs(geo.barBottom - geo.vh) <= 1, `${vp.label}px  bar is pinned to the bottom edge`);
+      log(geo.mainBottom <= geo.barTop + 1, `${vp.label}px  content ends above the bar (${Math.round(geo.mainBottom)} <= ${Math.round(geo.barTop)})`);
+      log(geo.docW <= geo.vw, `${vp.label}px  no horizontal page scroll`);
+      log(!(await rail.isVisible().catch(() => false)), `${vp.label}px  no side rail on a phone`);
+      for (const [tab, re] of [["tab-projekte", /\/projects$/], ["tab-aktivitaet", /\/audit$/], ["tab-anmeldung", /\/anmeldung$/], ["tab-start", /\/$/]]) {
+        await page.getByTestId(tab).click(); await page.waitForTimeout(250);
+        log(re.test(new URL(page.url()).pathname) && (await page.getByTestId(tab).getAttribute("aria-current")) === "page", `${vp.label}px  ${tab} navigates and is marked current`);
       }
+      await page.getByTestId("tab-more").click(); await page.waitForTimeout(350);
+      const sheetOk = await page.getByTestId("more-sheet").isVisible();
+      log(sheetOk, `${vp.label}px  Mehr opens the sheet`);
+      log(await page.getByText("Konto und Einstellungen").isVisible().catch(() => false) && await page.getByRole("link", { name: /BVB-EEA/ }).isVisible().catch(() => false) && await page.getByRole("link", { name: /PSV-ITK/ }).isVisible().catch(() => false), `${vp.label}px  Mehr lists BVB-EEA, PSV-ITK and Konto`);
+      await page.getByRole("link", { name: /BVB-EEA/ }).click(); await page.waitForTimeout(400);
+      log(/\/bvb-eea$/.test(new URL(page.url()).pathname) && !(await page.getByTestId("more-sheet").isVisible().catch(() => false)), `${vp.label}px  Mehr -> BVB-EEA navigates and closes the sheet`);
+      log((await page.getByTestId("tab-more").getAttribute("aria-expanded")) === "false" && /text-primary-strong/.test((await page.getByTestId("tab-more").getAttribute("class")) ?? ""), `${vp.label}px  Mehr is the highlighted tab while a page behind it is open`);
     } else {
-      await page.goto(`${base}/`, { waitUntil: "networkidle" });
-      await page.getByText("Projekte", { exact: true }).first().click();
-      await page.waitForTimeout(300);
-      log(/\/projects$/.test(page.url()), `${vp.label}px  sidebar nav -> /projects`);
-    }
-
-    // Breakpoint-agnostic: however this width is meant to navigate, it must be
-    // possible to reach /projects from the dashboard without a keyboard trick.
-    {
-      await page.goto(`${base}/`, { waitUntil: "networkidle" });
-      await page.waitForSelector("header");
-      const trigger = page.getByRole("button", { name: "Navigation öffnen" });
-      if (await trigger.isVisible().catch(() => false)) {
-        await trigger.click();
-        await page.waitForTimeout(400);
-      }
-      const link = page.getByText("Projekte", { exact: true }).first();
-      const reachable = await link.isVisible().catch(() => false);
-      log(reachable, `${vp.label}px  navigation is reachable`);
-      if (reachable) {
-        await link.click();
-        await page.waitForTimeout(400);
-        log(/\/projects$/.test(page.url()), `${vp.label}px  navigation lands on /projects`);
-      }
+      log(!(await bar.isVisible().catch(() => false)), `${vp.label}px  no bottom bar on tablet/desktop`);
+      log(await rail.isVisible(), `${vp.label}px  side rail visible`);
+      const expanded = vp.width >= 1280;
+      const st = await railState.getAttribute("data-state");
+      log(st === (expanded ? "expanded" : "collapsed"), `${vp.label}px  rail starts ${expanded ? "expanded (icon + label)" : "collapsed (icons)"} (state=${st})`);
+      log(await page.getByTestId("rail-new").isVisible(), `${vp.label}px  primary action "Projekt anmelden" visible in the rail`);
+      await railItem("Projekte").click(); await page.waitForTimeout(300);
+      log(/\/projects$/.test(new URL(page.url()).pathname), `${vp.label}px  rail nav -> /projects`);
+      await page.getByTestId("rail-new").click(); await page.waitForTimeout(300);
+      log(/\/anmeldung$/.test(new URL(page.url()).pathname), `${vp.label}px  rail primary action -> /anmeldung`);
+      const cur = await page.locator('[aria-current="page"]').count();
+      log(cur >= 1, `${vp.label}px  the open page is marked aria-current`);
     }
     await ctx.close();
   }

@@ -2,10 +2,9 @@ import { SERVER_MODE } from "@/realtime/serverApi";
 import { NotificationBell } from "@/realtime/notifications";
 import { useMemo } from "react";
 import { CommandSearch } from "@/components/CommandSearch";
-import { Bell, Sun, Moon, Menu } from "lucide-react";
+import { Bell, Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useLocation, Link } from "wouter";
-import { useSidebar } from "@/components/ui/sidebar";
 import PresenceIndicator from "./PresenceIndicator";
 import { useIdentity } from "@/_core/hooks/useAuth";
 import {
@@ -32,7 +31,6 @@ export default function Header() {
    */
   const [, setLocation] = useLocation();
   const { theme, toggleTheme } = useTheme();
-  const { toggleSidebar } = useSidebar();
   const identity = useIdentity();
   /**
    * The bell shows the audit trail, because that is the app's only real event
@@ -73,15 +71,6 @@ export default function Header() {
             split-screen window in that band had no navigation at all. The class
             and the constant now name the same width — keep them in step.
           */}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={toggleSidebar}
-            aria-label="Navigation öffnen"
-            className="h-9 w-9 rounded-lg text-foreground hover:bg-accent lg:hidden"
-          >
-            <Menu className="h-5 w-5" />
-          </Button>
           <div className="w-9 h-9 bg-primary rounded flex items-center justify-center text-white font-bold text-3xl leading-none pt-0.5 shadow-inner ring-1 ring-white/20">
             DB
           </div>

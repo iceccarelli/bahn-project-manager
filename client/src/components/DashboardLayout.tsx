@@ -13,17 +13,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useIsMobile } from "@/hooks/useMobile";
-import {
-  ClipboardCheck,
-  LayoutDashboard,
-  PanelLeft,
-  Table2,
-  FileCheck,
-  Network,
-  History,
-  LogOut,
-  Settings,
-} from "lucide-react";
+import { LogOut, PanelLeft, Plus } from "lucide-react";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation, Link } from "wouter";
 import { useAuth, useIdentity } from "@/_core/hooks/useAuth";
@@ -33,16 +23,12 @@ import ConnectionBadge from "@/realtime/ConnectionBadge";
 import LegacyPlaneNotice from "@/realtime/LegacyPlaneNotice";
 import Header from "./Header";
 import Footer from "./Footer";
+import BottomTabBar from "./BottomTabBar";
+import { NAV_ICONS } from "./navIcons";
+import { NAV_ITEMS, isActivePath } from "./navModel";
 
-const menuItems = [
-  { icon: LayoutDashboard, label: "Dashboard", path: "/" },
-  { icon: ClipboardCheck, label: "Projektanmeldung", path: "/anmeldung" },
-  { icon: Table2, label: "Projekte", path: "/projects" },
-  { icon: FileCheck, label: "BVB-EEA", path: "/bvb-eea" },
-  { icon: Network, label: "PSV-ITK", path: "/psv-itk" },
-  { icon: History, label: "Änderungshistorie", path: "/audit" },
-  { icon: Settings, label: "Einstellungen", path: "/einstellungen" },
-];
+// One definition for the side rail and the phone's bottom bar (navModel.ts)
+const menuItems = NAV_ITEMS.map(i => ({ icon: NAV_ICONS[i.id], label: i.label, path: i.path }));
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
 const DEFAULT_WIDTH = 260;
@@ -69,6 +55,8 @@ export default function DashboardLayout({
 
   return (
     <SidebarProvider
+      // a rail of icons below 1280 px, icon + label above it; the person's own toggle wins afterwards
+      defaultOpen={typeof window === "undefined" || window.innerWidth >= 1280}
       style={
         {
           "--sidebar-width": `${sidebarWidth}px`,
@@ -120,10 +108,11 @@ function SidebarFooterContent() {
       {SERVER_MODE && <div className="px-1 group-data-[collapsible=icon]:hidden"><ConnectionBadge /></div>}
       <button type="button"
         onClick={handleLogout}
-        className="w-full px-3 py-2 text-sm text-left text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors flex items-center gap-2"
+        aria-label="Abmelden" title="Abmelden"
+        className="w-full px-3 py-2 text-sm text-left text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors flex items-center gap-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
       >
-        <LogOut className="h-4 w-4" />
-        <span>Abmelden</span>
+        <LogOut className="h-4 w-4 shrink-0" />
+        <span className="group-data-[collapsible=icon]:hidden">Abmelden</span>
       </button>
     </div>
   );
@@ -212,9 +201,18 @@ function DashboardLayoutContent({
             </SidebarHeader>
 
             <SidebarContent className="gap-0">
+              {/* The one primary action, always in reach (icon-only while the rail is collapsed) */}
+              <div className="px-2 pb-1 pt-3">
+                <button type="button" onClick={() => setLocation("/anmeldung")} data-testid="rail-new"
+                  aria-label="Neues Projekt anmelden" title="Neues Projekt anmelden"
+                  className="flex h-11 w-full items-center justify-center gap-2 rounded-full bg-primary px-3 text-sm font-semibold text-primary-foreground shadow-sm outline-none hover:bg-[hsl(354_100%_32%)] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 motion-safe:transition-colors motion-safe:active:scale-[0.98]">
+                  <Plus className="h-5 w-5 shrink-0" strokeWidth={2.5} aria-hidden />
+                  {!isCollapsed && <span>Projekt anmelden</span>}
+                </button>
+              </div>
               <SidebarMenu className="px-2 py-1">
                 {menuItems.map((item) => {
-                  const isActive = location === item.path;
+                  const isActive = isActivePath(location, item.path);
                   return (
                     <SidebarMenuItem key={item.path}>
                       {/* aria-current, because `isActive` only produced a colour and a left
@@ -225,11 +223,11 @@ function DashboardLayoutContent({
                         aria-current={isActive ? "page" : undefined}
                         onClick={() => setLocation(item.path)}
                         tooltip={item.label}
-                        className={`h-10 transition-all font-normal ${
-                          isActive ? "text-primary-strong border-l-4 border-primary pl-3" : ""
+                        className={`h-11 font-normal motion-safe:transition-colors ${
+                          isActive ? "bg-primary/10 font-semibold text-primary-strong" : ""
                         }`}
                       >
-                        <item.icon className={`h-4 w-4 ${isActive ? "text-primary-strong" : ""}`} />
+                        <item.icon className={`!h-5 !w-5 ${isActive ? "text-primary-strong" : ""}`} strokeWidth={isActive ? 2.5 : 1.75} />
                         <span>{item.label}</span>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
@@ -272,7 +270,7 @@ function DashboardLayoutContent({
           )}
         </div>
 
-        <SidebarInset className="flex flex-col flex-1 min-w-0 bg-background overflow-hidden">
+        <SidebarInset className="flex flex-col flex-1 min-w-0 bg-background overflow-hidden pb-[calc(3.75rem+env(safe-area-inset-bottom))] md:pb-0">
           <Header />
           <LegacyPlaneNotice />
           {/* No mt-[60px] any more: the header is sticky inside this column
@@ -291,6 +289,7 @@ function DashboardLayoutContent({
             one page — every route can be asked about. */}
         {/* Ask Bahn answers from a browser-local snapshot; the server build has none, so it is not offered there until it is server-backed. */}
         {!SERVER_MODE && <AskBahn />}
+        <BottomTabBar />
       </div>
     </div>
   );
