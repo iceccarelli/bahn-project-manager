@@ -2,7 +2,7 @@
  * The two ways in — and the link between them.
  *
  *   production (container, SSO)   Microsoft sign-in is the only credential path; `VITE_DEMO_URL` adds a "Demo ansehen" link
- *   static demo (browser-local)   demo accounts, no backend; `VITE_APP_URL` adds a "Mit Microsoft anmelden" link to production
+ *   static demo (browser-local)   demo accounts, no backend; `VITE_APP_URL` adds a "Mit SSO anmelden" link to production
  *
  * The demo is never served by, nor authenticated against, the production server (docs/auth.md). Both values are public,
  * build-time and only ever used as a navigation target, so they are accepted as an absolute https URL (http only for

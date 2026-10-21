@@ -28,7 +28,7 @@ with Entra-shaped tokens and in the two-browser proof (a local test IdP + JWKS).
 
 `client/src/realtime/oidcClient.ts`: OIDC **authorization code + PKCE (S256)**, no client secret, discovery from
 `VITE_OIDC_AUTHORITY` (Entra v2.0 compatible), redirect URI `/auth/callback`. Build-time config: `VITE_OIDC_AUTHORITY`,
-`VITE_OIDC_CLIENT_ID`, `VITE_OIDC_SCOPE`. With these set the Login page shows only "Mit Microsoft anmelden" (no password form).
+`VITE_OIDC_CLIENT_ID`, `VITE_OIDC_SCOPE`. With these set the Login page shows only "Mit SSO anmelden" (no password form).
 
 * Token storage: access token in memory + `sessionStorage` (per tab) with its expiry; **never `localStorage`**; no refresh token,
   no id token. An expired token is not sent; the user is bounced through the IdP again (silent when the IdP session lives).
@@ -69,8 +69,8 @@ percent-decoding).
 
 | Deployment | What the sign-in page offers |
 |---|---|
-| **Production** (container, `build:production`) | "Mit Microsoft anmelden" is the one primary action (no password form, no demo credentials). With `VITE_DEMO_URL` set at build time a plain link "Demo ansehen" leads to the static demo. |
-| **Static demo** (`build:demo`, Vercel) | browser-local demo accounts (they protect nothing and say so). With `VITE_APP_URL` set at build time a "Mit Microsoft anmelden (Produktivsystem)" button leads to the production sign-in. |
+| **Production** (container, `build:production`) | "Mit SSO anmelden" is the one primary action (no password form, no demo credentials). With `VITE_DEMO_URL` set at build time a plain link "Demo ansehen" leads to the static demo. |
+| **Static demo** (`build:demo`, Vercel) | browser-local demo accounts (they protect nothing and say so). With `VITE_APP_URL` set at build time a "Mit SSO anmelden (Produktivsystem)" button leads to the production sign-in. |
 
 The demo is a separate deployment on purpose: demo authentication can never be enabled on the production server (boot refuses it),
 so "demo always available" means the static demo stays up and each side links to the other. Both URLs are validated as absolute

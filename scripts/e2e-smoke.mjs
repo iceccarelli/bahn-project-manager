@@ -190,10 +190,10 @@ const rowCount = (page) =>
 const assert = (cond, msg) => { if (!cond) throw new Error(msg); };
 
 await page.goto(U("/login"));
-await check("the demo login always shows its Microsoft entry: a link to production, or the reason there is none", async () => {
+await check("the demo login always shows its SSO entry: a link to production, or the reason there is none", async () => {
   const link = await page.locator('[data-testid="sso-link"]').count();
   const why = await page.locator('[data-testid="sso-unavailable"]').count();
-  assert(link + why === 1, `expected exactly one Microsoft entry, got link=${link} unavailable=${why}`);
+  assert(link + why === 1, `expected exactly one SSO entry, got link=${link} unavailable=${why}`);
   if (link) assert((await page.locator('[data-testid="sso-link"]').getAttribute("href")).endsWith("/login"), "SSO link must end in /login");
 });
 await page.evaluate(() => localStorage.setItem("bahn-demo-user",

@@ -106,21 +106,21 @@ await step("unauthenticated visit: bounced to /login, no data requested, no toke
   A = await session({ oid: "anna", name: "Anna", roles: ["editor"], workspaces: ["ALL"] });
   await A.page.goto(`${APP}/projects`);
   await A.page.waitForURL(/\/login/, { timeout: 10000 });
-  await A.page.getByRole("button", { name: /Mit Microsoft anmelden/ }).waitFor();
+  await A.page.getByRole("button", { name: /Mit SSO anmelden/ }).waitFor();
   if (await A.page.getByLabel("Passwort").count()) throw new Error("password form present in SSO mode");
   if (await A.page.getByRole("button", { name: /Demo/ }).count()) throw new Error("demo sign-in button visible in SSO mode");
   if (await A.page.getByText(/admin@bahn|pruefer@bahn/i).count()) throw new Error("demo credentials visible in SSO mode");
   // the demo stays reachable, but only as a plain link to the separate static deployment (VITE_DEMO_URL baked into this build)
   const demo = A.page.getByTestId("demo-link");
   if ((await demo.getAttribute("href")) !== "https://demo.example.test/") throw new Error("demo link missing or wrong target");
-  if (await A.page.getByRole("button", { name: /Mit Microsoft anmelden/ }).count() !== 1) throw new Error("Microsoft sign-in is not the one primary action");
+  if (await A.page.getByRole("button", { name: /Mit SSO anmelden/ }).count() !== 1) throw new Error("Microsoft sign-in is not the one primary action");
   const s = await storage(A.page);
   if (JSON.stringify(s).match(JWT_RE)) throw new Error("token in storage before sign-in");
   if (A.seen.trpcAuth.some(x => x)) throw new Error("bearer sent before sign-in");
 });
 
 await step("sign-in via the IdP: PKCE code exchange, lands signed in on the Projects page with rows", async () => {
-  await A.page.getByRole("button", { name: /Mit Microsoft anmelden/ }).click();
+  await A.page.getByRole("button", { name: /Mit SSO anmelden/ }).click();
   await A.page.waitForURL(u => u.origin === APP && !/\/(login|auth)/.test(u.pathname), { timeout: 15000 })
     .catch(async e => { throw new Error(`${e.message.split("\n")[0]} — stuck at ${A.page.url()}: ${(await A.page.locator("body").innerText()).slice(0, 200)}`); });
   await A.page.goto(`${APP}/projects`);
@@ -200,7 +200,7 @@ await step("authorization is not loosened by sign-in: no claim = no data; Frankf
 await step("first Microsoft sign-in of an account without any grant: a clear 'noch keine Freigabe' page, not empty lists", async () => {
   const N = await session({ oid: "nogrant", name: "Nora", roles: ["editor"] });
   await N.page.goto(`${APP}/login`);
-  await N.page.getByRole("button", { name: /Mit Microsoft anmelden/ }).click();
+  await N.page.getByRole("button", { name: /Mit SSO anmelden/ }).click();
   await N.page.getByTestId("access-pending").waitFor({ timeout: 15000 });
   if (!(await N.page.getByText(/Nora/).count())) throw new Error("the page does not say who is signed in");
   await N.page.getByRole("button", { name: "Abmelden" }).waitFor();
@@ -209,7 +209,7 @@ await step("first Microsoft sign-in of an account without any grant: a clear 'no
 await step("a user signed in as a restricted principal sees only their workspace through the real UI", async () => {
   const B = await session({ oid: "bernd", name: "Bernd", roles: ["editor"], workspaces: ["Frankfurt"] });
   await B.page.goto(`${APP}/login`);
-  await B.page.getByRole("button", { name: /Mit Microsoft anmelden/ }).click();
+  await B.page.getByRole("button", { name: /Mit SSO anmelden/ }).click();
   await B.page.waitForURL(u => u.origin === APP && !/\/(login|auth)/.test(u.pathname), { timeout: 15000 });
   await B.page.goto(`${APP}/projects`);
   await B.page.locator("tbody tr").first().waitFor({ timeout: 15000 });
@@ -236,7 +236,7 @@ await step("no dataset side door: the server artifact has no /data.json or /sche
 const PERSONAL_KEYS = { recent: "bpm-recent-searches", overrides: "bahn-recipient-overrides", abnahme: "abnahme:v1:ELA:481", marker: "bahn.last_principal" };
 const signInFromLoginPage = async (page: import("playwright").Page) => {
   await page.goto(`${APP}/login`);
-  await page.getByRole("button", { name: /Mit Microsoft anmelden/ }).click();
+  await page.getByRole("button", { name: /Mit SSO anmelden/ }).click();
   await page.waitForURL(u => u.origin === APP && !/\/(login|auth)/.test(u.pathname), { timeout: 15000 });
 };
 const seedPersonalState = (page: import("playwright").Page, tag: string) => page.evaluate(([k, tag]) => {
@@ -314,7 +314,7 @@ await step("RECOVERY: a failing session lookup is not 'signed out' — recovery 
   await X.page.goto(`${APP}/projects`);
   await X.page.getByTestId("session-error").waitFor({ timeout: 15000 });
   if (/\/login/.test(X.page.url())) throw new Error("bounced to /login during a server outage");
-  if (await X.page.getByRole("button", { name: /Mit Microsoft anmelden/ }).count()) throw new Error("sign-in offered during an outage");
+  if (await X.page.getByRole("button", { name: /Mit SSO anmelden/ }).count()) throw new Error("sign-in offered during an outage");
   if ((await storage(X.page)).session["bahn.access_token"] !== tokenBefore) throw new Error("credential dropped during an outage");
   const tokenCallsBefore = tokenRequests;
   await X.page.unroute(down);
