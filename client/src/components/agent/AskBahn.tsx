@@ -243,7 +243,7 @@ export function AskBahn() {
            * pulses. At 3 s it is slower than a resting heartbeat, it animates
            * box-shadow only, and prefers-reduced-motion turns it off.
            */
-          className="pulse-brand fixed bottom-5 right-5 z-40 flex h-12 items-center gap-2 rounded-full bg-primary px-4 text-primary-foreground shadow-lg transition-colors hover:bg-[hsl(354_100%_32%)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+          className="pulse-brand fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom))] right-4 z-40 md:bottom-5 md:right-5 flex h-12 items-center gap-2 rounded-full bg-primary px-4 text-primary-foreground shadow-lg transition-colors hover:bg-[hsl(354_100%_32%)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
         >
           <Bot className="h-5 w-5" aria-hidden="true" />
           <span className="text-sm font-semibold">Ask Bahn</span>
@@ -262,7 +262,7 @@ export function AskBahn() {
           // Declares this a floating layer to the UI audit: content beneath an
           // opaque overlay is covered on purpose, not text painted on text.
           data-overlay="true"
-          className="fixed bottom-5 right-5 z-40 flex max-h-[min(34rem,80vh)] w-[min(24rem,calc(100vw-2.5rem))] flex-col overflow-hidden rounded-2xl border border-border bg-background shadow-2xl"
+          className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom))] right-4 z-40 md:bottom-5 md:right-5 flex max-h-[min(34rem,80vh)] w-[min(24rem,calc(100vw-2.5rem))] flex-col overflow-hidden rounded-2xl border border-border bg-background shadow-2xl"
         >
           <header className="flex items-start gap-2 bg-primary p-4 text-primary-foreground">
             <Bot className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />

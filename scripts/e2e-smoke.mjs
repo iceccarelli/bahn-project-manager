@@ -2906,7 +2906,7 @@ await check("an open status pulses and a settled one does not", async () => {
   console.log(`     ${open.length} open pulsing, ${rest.length} not open and quiet`);
 });
 
-await check("the mobile drawer is opaque, not a window onto the page", async () => {
+await check("the phone's 'Mehr' sheet is opaque, not a window onto the page", async () => {
   const phone = await browser.newPage({ viewport: { width: 375, height: 812 } });
   try {
     // A fresh context has empty localStorage, so without this the app sends the
@@ -2919,10 +2919,11 @@ await check("the mobile drawer is opaque, not a window onto the page", async () 
       ),
     );
     await phone.goto(U("/projects"), { waitUntil: "domcontentloaded" });
-    const menu = phone.getByRole("button", { name: "Navigation öffnen" });
+    // Phones have no hamburger drawer any more: the bottom bar's "Mehr" opens the overlay that must be opaque.
+    const menu = phone.getByTestId("tab-more");
     await menu.waitFor({ timeout: 25000 });
     await menu.click();
-    const drawer = phone.locator('[data-sidebar="sidebar"][data-mobile="true"]');
+    const drawer = phone.getByTestId("more-sheet");
     await drawer.waitFor({ timeout: 10000 });
     await phone.waitForTimeout(700);
 
@@ -2936,10 +2937,10 @@ await check("the mobile drawer is opaque, not a window onto the page", async () 
     const bg = await drawer.evaluate((el) => getComputedStyle(el).backgroundColor);
     const alpha = /rgba?\(([^)]+)\)/.exec(bg);
     const parts = alpha ? alpha[1].split(",").map((v) => Number.parseFloat(v)) : [];
-    assert(parts.length >= 3, `the drawer has no background colour: ${bg}`);
+    assert(parts.length >= 3, `the Mehr sheet has no background colour: ${bg}`);
     assert(
       parts.length === 3 || parts[3] >= 0.99,
-      `the drawer background is see-through: ${bg}`,
+      `the Mehr sheet background is see-through: ${bg}`,
     );
   } finally {
     await phone.close();
