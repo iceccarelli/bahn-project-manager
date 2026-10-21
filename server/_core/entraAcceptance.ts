@@ -4,7 +4,7 @@
  */
 import { createHash } from "node:crypto";
 import type { Role } from "../domain/permissions";
-import type { VerifiedIdentity } from "./oidc";
+import { microsoftTenantOfIssuer, type VerifiedIdentity } from "./oidc";
 
 export const PERSONAS = ["admin", "editor", "viewer", "nogrant"] as const;
 export type Persona = (typeof PERSONAS)[number];
@@ -24,10 +24,7 @@ export const EXPECTED: Record<Persona, { role: Role; workspaces: "ALL" | "some" 
 
 export const tokenEnvName = (p: Persona) => `ENTRA_TOKEN_${p.toUpperCase()}`;
 
-const MS_HOSTS = new Set(["login.microsoftonline.com", "sts.windows.net"]);
-const tenantOfIssuer = (issuer: string): string | null => {
-  try { const u = new URL(issuer); return MS_HOSTS.has(u.hostname) ? (u.pathname.split("/").filter(Boolean)[0] ?? null) : null; } catch { return null; }
-};
+const tenantOfIssuer = microsoftTenantOfIssuer;
 
 /**
  * May this configuration produce the verdict `real-entra`? Only when the signing keys are Microsoft's for the SAME tenant the

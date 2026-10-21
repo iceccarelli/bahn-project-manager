@@ -21,6 +21,7 @@
  * in the tree it sits.
  */
 import { useCallback, useSyncExternalStore } from "react";
+import { RECIPIENT_OVERRIDES_KEY, onUserStateReset } from "@/realtime/accountState";
 import {
   normalizeOverride,
   validateOverride,
@@ -28,7 +29,7 @@ import {
   type RecipientOverride,
 } from "@shared/contact-overrides";
 
-const KEY = "bahn-recipient-overrides";
+const KEY = RECIPIENT_OVERRIDES_KEY;
 
 function readStorage(): RecipientOverride[] {
   if (typeof window === "undefined") return [];
@@ -48,6 +49,9 @@ const listeners = new Set<() => void>();
 /* Cached, because useSyncExternalStore compares snapshots by identity and
    parsing JSON on every render would hand it a new array every time. */
 let snapshot: RecipientOverride[] = readStorage();
+
+/* A purge (sign-out, account switch) removes the stored list; this resets the in-memory copy every subscriber reads. */
+onUserStateReset(() => { snapshot = []; for (const l of listeners) l(); });
 
 function publish(next: RecipientOverride[]) {
   snapshot = next;

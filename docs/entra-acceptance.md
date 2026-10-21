@@ -86,6 +86,22 @@ Claim fields shown under `shape` are read from the token *without* verification 
 depends on them. A passing run is evidence about those personas and that key source, not a statement about the browser flow (step 5)
 and not a substitute for it.
 
+## Certificates, managed devices and Conditional Access: tenant configuration, not application code
+
+The application uses the standard Microsoft Entra OIDC flow (authorization code + PKCE, public client, **no client secret**) and validates the resulting
+access token on the server. Everything about *how* the employee proves who they are is evaluated by Entra **before** a token exists:
+
+* certificate-based authentication, Conditional Access, "require compliant / hybrid-joined device", MFA and device registration are configured by the
+  tenant administrators and enforced at sign-in; an employee who fails them never reaches the application's callback with a token;
+* the application never sees, collects, stores or transmits a password or a device/user private key, and it does not read device-compliance claims or infer
+  anything from them — it has no "certificate recognition" feature and does not claim that a device is compliant;
+* an `@deutschebahn.com` address grants nothing; only the app roles / claims of step 1 do. A successful sign-in without grants lands on
+  "Angemeldet — noch keine Freigabe".
+
+What the owner verifies in the tenant (cannot be proven from this repository): the test users are subject to the same Conditional Access / certificate /
+device policies as production employees and can complete sign-in from an approved device; the SPA and API registrations are in scope of those policies;
+sign-in from a non-compliant device is refused **by Entra** (expected, not an application defect).
+
 ## 5. Browser checks (manual, with the real tenant; tick each in the PR that records the result)
 
 - [ ] Login page shows only "Mit Microsoft anmelden" (+ "Demo ansehen" when `VITE_DEMO_URL` is set); no password form.
@@ -95,5 +111,8 @@ and not a substitute for it.
 - [ ] Sign-out ends the Entra session and returns to `/login`; browser Back does not show data; a copied pre-logout token still works until it expires (access tokens are not revocable — expected, bounded by token lifetime).
 - [ ] After removing `Workspace.<BM>` from the editor in Entra and signing in again, the workspace is gone (≤ 1 token lifetime + 30 s identity cache).
 - [ ] A callback URL replayed in the address bar ends on the sign-in error, not in the app.
+- [ ] Sidebar, header avatar and `/einstellungen` → Konto show *this* user's name, e-mail, role, Bahnhofsmanagements and Gewerke-Freigabe (editor test user: `Bearbeiter`, one workspace, `ITK`) — and no other person's.
+- [ ] Sign out as the editor, sign in as the viewer in the same browser profile: the viewer's Konto card shows the viewer, and no recent search or typed-in recipient of the editor is present.
+- [ ] With the API deliberately unreachable (stop the app containers behind the proxy) a signed-in tab shows "Server nicht erreichbar" and returns by itself when the API is back, without a second Microsoft sign-in.
 
 Record: commit SHA of the deployed image, the JSON report, who ran it, date, tenant id *not* included.

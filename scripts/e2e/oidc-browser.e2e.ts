@@ -231,6 +231,100 @@ await step("no dataset side door: the server artifact has no /data.json or /sche
   }
 });
 
+// ---- account identity, account isolation, session-lookup recovery -------------------------------------------------
+// App roles carry the grants here (Workspace.<BM>, Department.<Gewerk>), so these steps also exercise the Entra-shaped contract end to end.
+const PERSONAL_KEYS = { recent: "bpm-recent-searches", overrides: "bahn-recipient-overrides", abnahme: "abnahme:v1:ELA:481", marker: "bahn.last_principal" };
+const signInFromLoginPage = async (page: import("playwright").Page) => {
+  await page.goto(`${APP}/login`);
+  await page.getByRole("button", { name: /Mit Microsoft anmelden/ }).click();
+  await page.waitForURL(u => u.origin === APP && !/\/(login|auth)/.test(u.pathname), { timeout: 15000 });
+};
+const seedPersonalState = (page: import("playwright").Page, tag: string) => page.evaluate(([k, tag]) => {
+  localStorage.setItem(k.recent, JSON.stringify([`suche-${tag}`]));
+  localStorage.setItem(k.overrides, JSON.stringify([{ department: "LST", address: `${tag}@private.example` }]));
+  sessionStorage.setItem(k.abnahme, JSON.stringify({ answers: { x: tag } }));
+}, [PERSONAL_KEYS, tag] as const);
+const personalState = (page: import("playwright").Page) => page.evaluate(k => ({
+  recent: localStorage.getItem(k.recent), overrides: localStorage.getItem(k.overrides), abnahme: sessionStorage.getItem(k.abnahme), marker: localStorage.getItem(k.marker),
+}), PERSONAL_KEYS);
+const principalOf = async (page: import("playwright").Page) => {
+  const tok = (await storage(page)).session["bahn.access_token"];
+  return ((await (await fetch(`${APP}/api/trpc/auth.session`, { headers: { authorization: `Bearer ${tok}` } })).json()) as { result: { data: { json: { id: string } } } }).result.data.json.id;
+};
+let X: Awaited<ReturnType<typeof session>>;
+
+await step("IDENTITY: the shell shows the person the server validated — name, e-mail, role, workspace and department grants — and no generic persona", async () => {
+  X = await session({ oid: "erika", name: "Erika Muster", roles: ["editor", "Workspace.Kassel", "Department.ITK"] });
+  await signInFromLoginPage(X.page);
+  await X.page.goto(`${APP}/einstellungen`);
+  await X.page.getByTestId("account-card").waitFor({ timeout: 15000 });
+  const t = async (id: string) => ((await X.page.getByTestId(id).first().innerText()) ?? "").trim();
+  const got = { name: await t("account-name"), email: await t("account-email"), role: await t("account-role"), ws: await t("account-workspaces"), dep: await t("account-departments"), side: await t("sidebar-account-name"), sideRole: await t("sidebar-account-role") };
+  if (got.name !== "Erika Muster" || got.email !== "erika@idp.test" || got.role !== "Bearbeiter" || got.ws !== "Kassel" || got.dep !== "ITK") throw new Error(JSON.stringify(got));
+  if (got.side !== "Erika Muster" || !got.sideRole.startsWith("Bearbeiter")) throw new Error(JSON.stringify(got));
+  const label = (await X.page.getByTestId("header-account").getAttribute("aria-label")) ?? "";
+  if (!label.includes("Erika Muster") || !label.includes("Bearbeiter")) throw new Error(`header account label: ${label}`);
+  const body = await X.page.locator("body").innerText();
+  if (/Bahn Prüfer|Vincenzo|Grimaldi|ITK-Fachspezialist/.test(body)) throw new Error("a generic or hard-coded persona is shown");
+});
+
+await step("ACCOUNT SWITCH: after an expiry bounce another person inherits none of the previous person's personal browser state", async () => {
+  const erika = await principalOf(X.page);
+  await seedPersonalState(X.page, "erika");
+  const before = await personalState(X.page);
+  if (before.marker !== erika) throw new Error(`marker ${before.marker} != principal ${erika}`);
+  // the access token runs out (no explicit logout); the IdP then signs in a DIFFERENT person
+  nextIdentity = { oid: "bernd2", name: "Bernd Beispiel", roles: ["viewer", "Workspace.Frankfurt"] };
+  await X.page.evaluate(() => sessionStorage.removeItem("bahn.access_token"));
+  await signInFromLoginPage(X.page);
+  await X.page.goto(`${APP}/einstellungen`);
+  await X.page.getByTestId("account-card").waitFor({ timeout: 15000 });
+  const after = await personalState(X.page);
+  if (after.recent || after.overrides || after.abnahme) throw new Error(`state inherited from the previous person: ${JSON.stringify(after)}`);
+  const bernd = await principalOf(X.page);
+  if (bernd === erika || after.marker !== bernd) throw new Error("marker not updated to the new principal");
+  const all = JSON.stringify(await storage(X.page)) + (await X.page.locator("body").innerText());
+  if (/Erika|erika@|suche-erika/.test(all)) throw new Error("something of the previous person is still in storage or on the page");
+  if ((await X.page.getByTestId("account-name").innerText()).trim() !== "Bernd Beispiel" || (await X.page.getByTestId("account-role").innerText()).trim() !== "Lesezugriff") throw new Error("account card does not show the new person");
+});
+
+await step("ACCOUNT SWITCH: the SAME person returning after an expiry bounce keeps their state; explicit sign-out removes it and the marker", async () => {
+  await seedPersonalState(X.page, "bernd");
+  await X.page.evaluate(() => sessionStorage.removeItem("bahn.access_token"));
+  await signInFromLoginPage(X.page); // nextIdentity is still Bernd
+  await X.page.goto(`${APP}/einstellungen`);
+  await X.page.getByTestId("account-card").waitFor({ timeout: 15000 });
+  const kept = await personalState(X.page);
+  if (!kept.recent || !kept.overrides || !kept.abnahme) throw new Error(`same person lost their state: ${JSON.stringify(kept)}`);
+  await X.page.getByText("Abmelden").first().click();
+  await X.page.waitForURL(/\/login/, { timeout: 10000 });
+  const gone = await personalState(X.page);
+  if (gone.recent || gone.overrides || gone.abnahme || gone.marker) throw new Error(`personal state survived sign-out: ${JSON.stringify(gone)}`);
+  const s = await storage(X.page);
+  if (JSON.stringify(s).match(JWT_RE) || /Bernd|bernd/.test(JSON.stringify(s))) throw new Error("token or identity left in storage after sign-out");
+});
+
+await step("RECOVERY: a failing session lookup is not 'signed out' — recovery screen, credential kept, automatic return when the server answers", async () => {
+  nextIdentity = { oid: "erika", name: "Erika Muster", roles: ["editor", "Workspace.Kassel", "Department.ITK"] };
+  await signInFromLoginPage(X.page);
+  const tokenBefore = (await storage(X.page)).session["bahn.access_token"];
+  if (!tokenBefore) throw new Error("no token after sign-in");
+  const down = (u: URL) => u.pathname.startsWith("/api/trpc/") && u.pathname.includes("auth.session");
+  await X.page.route(down, r => r.fulfill({ status: 503, contentType: "application/json", body: "{}" }));
+  await X.page.goto(`${APP}/projects`);
+  await X.page.getByTestId("session-error").waitFor({ timeout: 15000 });
+  if (/\/login/.test(X.page.url())) throw new Error("bounced to /login during a server outage");
+  if (await X.page.getByRole("button", { name: /Mit Microsoft anmelden/ }).count()) throw new Error("sign-in offered during an outage");
+  if ((await storage(X.page)).session["bahn.access_token"] !== tokenBefore) throw new Error("credential dropped during an outage");
+  const tokenCallsBefore = tokenRequests;
+  await X.page.unroute(down);
+  await X.page.getByRole("button", { name: "Erneut versuchen" }).click();
+  await X.page.getByTestId("sidebar-account").waitFor({ timeout: 15000 });
+  if (tokenRequests !== tokenCallsBefore) throw new Error("recovery went through the IdP again");
+  if ((await X.page.getByTestId("sidebar-account-name").innerText()).trim() !== "Erika Muster") throw new Error("not back as the same person");
+  await X.ctx.close();
+});
+
 await browser.close(); idp.close(); srv.kill("SIGTERM");
 const failed = results.filter(r => !r.ok);
 mkdirSync("artifacts", { recursive: true });

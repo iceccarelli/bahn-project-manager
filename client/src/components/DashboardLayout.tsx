@@ -24,9 +24,9 @@ import {
   LogOut,
   Settings,
 } from "lucide-react";
-import { type CSSProperties, useEffect, useRef, useState, useMemo } from "react";
-import { useLocation } from "wouter";
-import { useAuth } from "@/_core/hooks/useAuth";
+import { type CSSProperties, useEffect, useRef, useState } from "react";
+import { useLocation, Link } from "wouter";
+import { useAuth, useIdentity } from "@/_core/hooks/useAuth";
 import { useShellSummary } from "@/hooks/useShellSummary";
 import { SERVER_MODE } from "@/realtime/serverApi";
 import ConnectionBadge from "@/realtime/ConnectionBadge";
@@ -83,7 +83,8 @@ export default function DashboardLayout({
 }
 
 function SidebarFooterContent() {
-  const { user, logout } = useAuth();
+  const { logout } = useAuth();
+  const identity = useIdentity();
   const [, navigate] = useLocation();
   // The count used to be the literal string "1.299 Projekte", which was wrong
   // the moment the Projektanmeldung wizard created project 1299 (making 1,299
@@ -95,29 +96,27 @@ function SidebarFooterContent() {
     navigate("/login", { replace: true });
   };
 
-  const userInitials = useMemo(() => 
-    user?.name?.split(" ").map((n) => n[0]).join("").toUpperCase() || "DB",
-    [user?.name]
-  );
-
   return (
     <div className="p-3 space-y-3 border-t border-border/50">
-      <div className="flex items-center gap-3 rounded-lg px-1 py-1 w-full group-data-[collapsible=icon]:justify-center">
-        <Avatar className="h-9 w-9 border shrink-0">
-          <AvatarFallback className="text-xs font-medium bg-primary text-white">
-            {userInitials}
-          </AvatarFallback>
-        </Avatar>
-        <div className="flex-1 min-w-0 group-data-[collapsible=icon]:hidden">
-          <p className="text-sm font-medium truncate leading-none">
-            {user?.name || "Bahn Prüfer"}
-          </p>
-          <p className="text-xs text-muted-foreground truncate mt-1.5">
-            {user?.role === "admin" ? "Admin" : "Prüfer"}
-            {projectCount !== null ? ` • ${projectCount.toLocaleString("de-DE")} Projekte` : ""}
-          </p>
-        </div>
-      </div>
+      {identity && (
+        <Link href="/einstellungen" data-testid="sidebar-account"
+          aria-label={`Konto und Einstellungen: ${identity.displayName}, ${identity.roleLabel}`}
+          title={[identity.displayName, identity.email, identity.roleLabel, identity.workspaceSummary].filter(Boolean).join(" · ")}
+          className="flex items-center gap-3 rounded-lg px-1 py-1 w-full hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-data-[collapsible=icon]:justify-center">
+          <Avatar className="h-9 w-9 border shrink-0">
+            <AvatarFallback className="text-xs font-medium bg-primary text-white">
+              {identity.initials}
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex-1 min-w-0 group-data-[collapsible=icon]:hidden">
+            <p className="text-sm font-medium truncate leading-none" data-testid="sidebar-account-name">{identity.displayName}</p>
+            <p className="text-xs text-muted-foreground truncate mt-1.5" data-testid="sidebar-account-role">
+              {identity.roleLabel}
+              {projectCount !== null ? ` • ${projectCount.toLocaleString("de-DE")} Projekte` : ""}
+            </p>
+          </div>
+        </Link>
+      )}
       {SERVER_MODE && <div className="px-1 group-data-[collapsible=icon]:hidden"><ConnectionBadge /></div>}
       <button type="button"
         onClick={handleLogout}

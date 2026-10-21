@@ -42,6 +42,29 @@ with Entra-shaped tokens and in the two-browser proof (a local test IdP + JWKS).
   access; only the literal `["ALL"]` grants all workspaces to a non-admin; unknown roles = viewer. Proven end to end in
   `scripts/e2e/oidc-browser.e2e.ts` (mock authority, real browser, real server bundle). **Not proven against Entra.**
 
+### Token acceptance is fail-closed
+
+Beyond signature, issuer, audience and algorithm (`server/_core/oidc.ts`): a token **must carry `exp`** (the library checks expiry only when the claim is
+present, so an expiry-less token would otherwise be valid forever), and a token from a **Microsoft issuer** (`login.microsoftonline.com`, `sts.windows.net`)
+must carry **both `tid` and `oid`, and its `tid` must be the tenant of the issuer that signed it**. The identity is `tid:oid`; a Microsoft token is never
+degraded to the app-pairwise `sub`, which would be a second, unrelated identity space. Other OIDC providers (the local test IdP) keep the `sub` fallback.
+The browser's post-sign-in `returnTo` is a same-origin path only (`safeReturnPath`: no scheme, no `//`, no backslash or control characters, also after
+percent-decoding).
+
+### Who is shown, and account isolation in the browser
+
+* **Identity in the UI** is the server-validated session (`auth.session`), never a hard-coded persona: name (else e-mail, else "Angemeldet"), e-mail, the
+  application role (Administrator / Bearbeiter / Lesezugriff), Bahnhofsmanagements and **Gewerke-Freigabe** (department grants, shown as grants — not as a job
+  title; an employment title would need its own trusted claim, none is consumed). Sidebar, header avatar and the Konto card on `/einstellungen` render
+  one view-model (`client/src/_core/identityView.ts`). The demo shows its demo account, labelled "Demo-Konto".
+* **Account isolation** (`client/src/realtime/accountState.ts`): the browser state that belongs to one person (recent searches, typed-in recipient
+  addresses, Abnahme records) is listed in one registry. Explicit sign-out purges it and forgets who was signed in; signing in as a **different principal**
+  than the last one in this browser (expiry bounce, IdP account picker) purges it before anything personal renders; the **same** principal returning keeps it.
+  The marker is the opaque server-derived principal id. UI preferences (theme, sidebar width) are kept. A new personal browser store must be added to that
+  registry. The browser-local demo shares one local store by design and is not covered.
+* **A failed session lookup is not "signed out"**: while this tab holds a credential and `auth.session` fails (server or network), the shell shows
+  "Server nicht erreichbar" with retry, sign-out and an automatic retry every 10 s, instead of bouncing the person through the IdP.
+
 ## Two entrances: Microsoft sign-in first, the demo always one click away
 
 | Deployment | What the sign-in page offers |
