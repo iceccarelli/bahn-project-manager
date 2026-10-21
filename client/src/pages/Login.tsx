@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Loader2, AlertCircle, CheckCircle2, ExternalLink } from "lucide-react";
-import { entryLink } from "@shared/entry-links";
+import { entryLink, ssoEntry } from "@shared/entry-links";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 /** Server mode: the server decides (cookie session from auth.demoLogin, which is off in production). */
@@ -23,7 +23,7 @@ async function attemptLogin(email: string, password: string): Promise<boolean> {
 }
 
 const DEMO_URL = entryLink(import.meta.env.VITE_DEMO_URL as string | undefined);
-const APP_URL = entryLink(import.meta.env.VITE_APP_URL as string | undefined);
+const APP_URL_RAW = import.meta.env.VITE_APP_URL as string | undefined;
 
 /** The static demo is a separate, browser-local deployment: always one click away from the real sign-in. */
 function DemoLink() {
@@ -32,6 +32,32 @@ function DemoLink() {
     <a href={DEMO_URL} data-testid="demo-link" className="inline-flex items-center justify-center gap-2 text-sm text-muted-foreground underline-offset-4 hover:underline">
       Demo ansehen (Beispieldaten, ohne Anmeldung) <ExternalLink className="h-3.5 w-3.5" aria-hidden />
     </a>
+  );
+}
+
+/** The demo's Microsoft entry: a link to the verified production sign-in, or an explicit notice why there is none. */
+function DemoSsoEntry() {
+  const entry = ssoEntry(APP_URL_RAW, window.location.origin);
+  if (entry.kind === "link") {
+    return (
+      <>
+        <Button asChild className="w-full" data-testid="sso-link">
+          <a href={entry.href}>Mit Microsoft anmelden (Produktivsystem)</a>
+        </Button>
+        <p className="text-xs text-center text-muted-foreground -mt-2">Dies ist die Demo mit Beispieldaten. Die echte Anmeldung läuft über Ihr Microsoft-Konto.</p>
+      </>
+    );
+  }
+  return (
+    <div data-testid="sso-unavailable" className="grid gap-2">
+      <Button type="button" variant="outline" className="w-full" disabled aria-describedby="sso-unavailable-why">
+        Mit Microsoft anmelden (nicht verfügbar)
+      </Button>
+      <p id="sso-unavailable-why" className="text-xs text-center text-muted-foreground -mt-1">
+        Dies ist die Demo mit Beispieldaten. Die Adresse des Produktivsystems ist für diese Version nicht hinterlegt
+        ({entry.reason === "self" ? "sie zeigt auf die Demo selbst" : entry.reason === "invalid" ? "ungültige Adresse" : "nicht konfiguriert"}).
+      </p>
+    </div>
   );
 }
 
@@ -179,14 +205,7 @@ function DemoLogin() {
               </Alert>
             )}
 
-            {!SERVER_MODE && APP_URL && (
-              <>
-                <Button asChild className="w-full" data-testid="sso-link">
-                  <a href={`${APP_URL.replace(/\/$/, "")}/login`}>Mit Microsoft anmelden (Produktivsystem)</a>
-                </Button>
-                <p className="text-xs text-center text-muted-foreground -mt-2">Dies ist die Demo mit Beispieldaten. Die echte Anmeldung läuft über Ihr Microsoft-Konto.</p>
-              </>
-            )}
+            {!SERVER_MODE && <DemoSsoEntry />}
 
             <form onSubmit={handleLogin} className="grid gap-4">
               <div className="grid gap-2">
