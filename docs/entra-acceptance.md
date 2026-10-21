@@ -104,7 +104,7 @@ sign-in from a non-compliant device is refused **by Entra** (expected, not an ap
 
 ## 5. Browser checks (manual, with the real tenant; tick each in the PR that records the result)
 
-- [ ] Login page shows only "Mit Microsoft anmelden" (+ "Demo ansehen" when `VITE_DEMO_URL` is set); no password form.
+- [ ] Login page shows only "Mit SSO anmelden" (+ "Demo ansehen" when `VITE_DEMO_URL` is set); no password form.
 - [ ] Sign-in as **editor** lands on the app, project lists show only the granted workspace; as **nogrant** shows "Angemeldet — noch keine Freigabe".
 - [ ] No CSP violations in the console during sign-in (login.microsoftonline.com discovery + token endpoint).
 - [ ] The notification bell and live project updates arrive for the editor within the granted workspace and not outside it (open the app as editor and admin, change a project in a second workspace).

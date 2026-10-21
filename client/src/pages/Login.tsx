@@ -42,7 +42,7 @@ function DemoSsoEntry() {
     return (
       <>
         <Button asChild className="w-full" data-testid="sso-link">
-          <a href={entry.href}>Mit Microsoft anmelden (Produktivsystem)</a>
+          <a href={entry.href}>Mit SSO anmelden (Produktivsystem)</a>
         </Button>
         <p className="text-xs text-center text-muted-foreground -mt-2">Dies ist die Demo mit Beispieldaten. Die echte Anmeldung läuft über Ihr Microsoft-Konto.</p>
       </>
@@ -51,7 +51,7 @@ function DemoSsoEntry() {
   return (
     <div data-testid="sso-unavailable" className="grid gap-2">
       <Button type="button" variant="outline" className="w-full" disabled aria-describedby="sso-unavailable-why">
-        Mit Microsoft anmelden (nicht verfügbar)
+        Mit SSO anmelden (nicht verfügbar)
       </Button>
       <p id="sso-unavailable-why" className="text-xs text-center text-muted-foreground -mt-1">
         Dies ist die Demo mit Beispieldaten. Die Adresse des Produktivsystems ist für diese Version nicht hinterlegt
@@ -84,7 +84,7 @@ function SsoLogin() {
         <CardContent className="grid gap-4">
           {error && (<Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertTitle>Fehler</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>)}
           <Button onClick={go} disabled={busy} className="w-full">
-            {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Mit Microsoft anmelden
+            {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Mit SSO anmelden
           </Button>
           <DemoLink />
         </CardContent>
